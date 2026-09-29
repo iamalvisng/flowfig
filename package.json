@@ -1,7 +1,7 @@
 {
   "name": "flowfig",
   "version": "0.1.0",
-  "description": "Interactive, animated flow figures for React, and animated SVGs from the same spec.",
+  "description": "Your coding agent draws animated diagrams from your code, and flowfig checks them. One animated SVG for a GitHub README, PR or issue, and a React player. Set up Claude Code, Cursor, GitHub Copilot, Codex, Gemini CLI, Windsurf and Kiro with npx flowfig init.",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -13,11 +13,23 @@
   },
   "keywords": [
     "diagram",
-    "flow",
-    "animation",
-    "react",
+    "sequence-diagram",
+    "architecture",
+    "architecture-diagram",
     "svg",
-    "figure"
+    "animation",
+    "ai-agents",
+    "coding-agent",
+    "claude-code",
+    "cursor",
+    "github-copilot",
+    "codex",
+    "gemini-cli",
+    "windsurf",
+    "kiro",
+    "agents-md",
+    "readme",
+    "react"
   ],
   "type": "module",
   "exports": {

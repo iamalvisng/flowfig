@@ -1,9 +1,79 @@
+<div align="center">
+
+<img src="docs/hero.svg" alt="You ask your coding agent for a diagram. The agent reads the code and writes a spec. flowfig check sends a fault back, the agent fixes the spec, and the SVG goes in the README." width="100%"/>
+
 # flowfig
 
-flowfig draws animated diagrams of how software works. You write one JSON spec. flowfig renders the spec as a self-contained
-SVG for READMEs, PRs and docs, or as an interactive React player.
+### Claude Code, Cursor, Copilot, Codex, Gemini CLI, Windsurf and Kiro draw the diagram from your code. flowfig checks it before it goes in your README.
 
-![An order checkout: the map of the parts, and a rail of the messages under it](docs/checkout.svg)
+<p>
+  <a href="https://www.npmjs.com/package/flowfig"><img src="https://img.shields.io/npm/v/flowfig?style=for-the-badge&logo=npm&logoColor=white&label=npm" alt="npm version"/></a>
+  <a href="https://github.com/iamalvisng/flowfig/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/iamalvisng/flowfig/ci.yml?branch=main&style=for-the-badge&logo=github&label=CI" alt="CI status"/></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-20C997?style=for-the-badge" alt="License: MIT"/></a>
+  <img src="https://img.shields.io/badge/node-%3E%3D18-5FA04E?style=for-the-badge&logo=nodedotjs&logoColor=white" alt="Node 18 or later"/>
+  <img src="https://img.shields.io/badge/dependencies-0-0074D9?style=for-the-badge" alt="Zero runtime dependencies"/>
+</p>
+
+</div>
+
+## Quick start
+
+```bash
+npx flowfig init
+```
+
+Then ask your agent: "draw a diagram of how login works in this repo".
+
+`init` writes the flowfig instructions for the agents that your repo uses. The agent reads the code, writes a spec, runs
+`flowfig check`, fixes the faults, and renders the SVG.
+
+## The problem
+
+- A diagram in a repo drifts from the code. No one sees the drift.
+- An agent that you ask for a diagram invents parts that the code does not have.
+- A static picture cannot show the order of the calls or their payloads.
+
+## What flowfig does
+
+- **One command sets up 7 agents.** `npx flowfig init` writes instructions for Claude Code, Cursor, GitHub Copilot, Codex and
+  others through `AGENTS.md`, Gemini CLI, Windsurf and Kiro.
+- **The agent writes JSON, not pictures.** The agent reads the code and writes a JSON spec of the parts, the calls and their
+  order. flowfig does the layout.
+- **`flowfig check` finds the faults a machine can read.** It finds ids that point nowhere, text wider than its box, edges
+  through boxes, overlapping labels, hidden edges, text too small at the README width, and low contrast. The agent reads the
+  faults and fixes the spec.
+- **The output is one animated SVG with no script.** The SVG plays in a GitHub README, PR or issue. It follows the light or dark
+  mode of the reader.
+- **Every SVG carries its own spec.** `npx flowfig --spec figure.svg` prints the spec. Any agent can read a diagram back, change
+  it, and render it again.
+- **Three forms and a React player.** The forms are the map, the map with a lifeline rail for sequences, and the rail alone. The
+  React player adds tabs, pause and hover. The package has zero runtime dependencies. Only the React player needs React.
+
+## flowfig, Mermaid and a hand-drawn image
+
+|                                | flowfig                           | Mermaid                              | Hand-drawn image |
+| ------------------------------ | --------------------------------- | ------------------------------------ | ---------------- |
+| Made by an agent from the code | Yes, with the `init` instructions | Yes, as Mermaid text                 | No               |
+| Checked for faults             | Yes, 11 rules in `flowfig check`  | Syntax errors only                   | No               |
+| Animated                       | Yes, one packet per message       | No                                   | No               |
+| Shows payloads and order       | Yes, on the map and the rail      | Order and text in a sequence diagram | No               |
+| Plays in a GitHub README       | Yes, as an SVG                    | Yes, GitHub renders it               | Yes, as an image |
+| Readable back as source        | Yes, with `--spec`                | Yes, the source is text              | No               |
+| Class and ER diagrams          | No                                | Yes. Mermaid wins this row.          | Yes              |
+
+## Contents
+
+- [Install](#install)
+- [Your first figure](#your-first-figure)
+- [Three forms](#three-forms)
+- [The spec](#the-spec)
+- [Check a figure](#check-a-figure)
+- [Use in React](#use-in-react)
+- [Use from Node](#use-from-node)
+- [Use with your coding agent](#use-with-your-coding-agent)
+- [What flowfig does not draw](#what-flowfig-does-not-draw)
+- [License](#license)
+- [Development](#development)
 
 ## Install
 
@@ -72,7 +142,11 @@ The map:
 
 ![A request that misses the cache, then hits the cache](docs/cached-request.svg)
 
-The map with the rail is the checkout figure at the top of this page. The rail draws one row for each message, with its payload.
+The map with the rail:
+
+![An order checkout: the map of the parts, and a rail of the messages under it](docs/checkout.svg)
+
+The rail draws one row for each message, with its payload.
 Hops in one beat share a parallel band. An `async` hop has a dashed arrow and an `async` tag.
 
 The rail only, from the same checkout spec:
@@ -302,12 +376,6 @@ of the file. A second run also replaces a whole file that `init` wrote. If a who
 `init` skips the file. `init` also skips a section file that has a start marker and no end marker.
 
 `npx flowfig docs` prints the full guide as Markdown.
-
-An agent can use flowfig well for these reasons:
-
-- The spec is plain JSON. An agent writes it with no drawing tool.
-- Each SVG from the CLI carries its own spec. `npx flowfig --spec figure.svg` prints the spec, so an agent can edit an old figure.
-- `flowfig check` gives the faults as JSON with `--json`, exit codes, and a counts line. A script or an agent can read all three.
 
 ## What flowfig does not draw
 
