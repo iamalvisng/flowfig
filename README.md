@@ -1,8 +1,6 @@
 <div align="center">
 
-<img src="docs/hero.svg" alt="You ask your coding agent for a diagram. The agent reads the code and writes a spec. flowfig check sends a fault back, the agent fixes the spec, and the SVG goes in the README." width="100%"/>
-
-# flowfig
+<h1><img src="docs/logo.svg" alt="flowfig" height="80"/></h1>
 
 ### Claude Code, Cursor, Copilot, Codex, Gemini CLI, Windsurf and Kiro draw the diagram from your code. flowfig checks it before it goes in your README.
 
@@ -13,6 +11,8 @@
   <img src="https://img.shields.io/badge/node-%3E%3D18-5FA04E?style=for-the-badge&logo=nodedotjs&logoColor=white" alt="Node 18 or later"/>
   <img src="https://img.shields.io/badge/dependencies-0-0074D9?style=for-the-badge" alt="Zero runtime dependencies"/>
 </p>
+
+<img src="docs/hero.svg" alt="You ask your coding agent for a diagram. The agent reads the code and writes a spec. flowfig check sends a fault back, the agent fixes the spec, and the SVG goes in the README." width="100%"/>
 
 </div>
 
