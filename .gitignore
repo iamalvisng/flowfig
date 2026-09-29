@@ -10,3 +10,4 @@ dist
 CLAUDE.md
 .mcp.json
 docs/superpowers/
+.ignore
