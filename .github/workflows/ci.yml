@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # 22 is the floor: the tests and the repo scripts need Node to strip the types.
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run format:check
+      - run: npm run svg -- check cached-request --strict
+      - run: npm run svg -- check checkout --strict
+      - run: bash scripts/pack-smoke.sh
+      - run: REACT=18 bash scripts/pack-smoke.sh

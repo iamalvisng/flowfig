@@ -1,0 +1,68 @@
+{
+  "name": "flowfig",
+  "version": "0.1.0",
+  "description": "Interactive, animated flow figures for React, and animated SVGs from the same spec.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/iamalvisng/flowfig.git"
+  },
+  "homepage": "https://github.com/iamalvisng/flowfig#readme",
+  "bugs": {
+    "url": "https://github.com/iamalvisng/flowfig/issues"
+  },
+  "keywords": [
+    "diagram",
+    "flow",
+    "animation",
+    "react",
+    "svg",
+    "figure"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./svg": {
+      "types": "./dist/svg.d.ts",
+      "default": "./dist/svg.js"
+    }
+  },
+  "bin": {
+    "flowfig": "dist/cli.js"
+  },
+  "sideEffects": false,
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.build.json && chmod +x dist/cli.js",
+    "prepack": "npm run build",
+    "dev": "vite --open",
+    "export": "node scripts/export.mjs",
+    "format:check": "prettier --check .",
+    "svg": "node scripts/figure-svg.mjs",
+    "test": "npm run build && node --test src/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "playwright": "^1.50.0",
+    "prettier": "^3.7.4",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.0"
+  },
+  "files": [
+    "dist"
+  ]
+}
