@@ -28,6 +28,17 @@ An agent with the flowfig instructions made faithful, checked diagrams more ofte
 
 [How we measured](#how-we-measured).
 
+## One command
+
+```bash
+npx flowfig draw "how does login work"
+```
+
+`draw` runs Claude Code on the repo. It gives Claude Code the flowfig guide, a read-only tool set and `npx flowfig`. Claude Code
+writes `how-does-login-work.svg`. Then `draw` checks the figure itself with `check --strict` and `verify`. It prints the result,
+the reply of the agent and the cost of the run. `draw` needs Claude Code on the machine and a login (or `ANTHROPIC_API_KEY`).
+`--out` sets the path, `--model` sets the model and `--max-turns` sets the turn cap (default 40).
+
 ## Quick start
 
 ```bash
