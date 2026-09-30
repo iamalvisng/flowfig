@@ -41,6 +41,12 @@ import {
   LANE_PAD,
   LANE_ROW_GAP,
   isLanesLayout,
+  timelineBeats,
+  timelineLayout,
+  TL_AXIS_H,
+  TL_AXIS_W,
+  TL_BAR_H,
+  TL_ROW_GAP,
   toBeat,
   beatMs,
   STEP_HOLD_MS,
@@ -124,7 +130,7 @@ function layoutCard(c: FigContent, width: number): { rows: Row[]; height: number
   return { rows, height };
 }
 
-type Placed = Rect & { item: FigNode | FigGroup; lane?: true };
+type Placed = Rect & { item: FigNode | FigGroup; lane?: true; tl?: { milestone: boolean } };
 type Sizes = {
   cards: Map<string, FigContent[]>;
   cardH: Map<string, number>;
@@ -165,7 +171,7 @@ function placeLanes(fig: FlowProps, x: number, y: number, s: Sizes, out: Placed[
   const colW = Array.from({ length: Math.max(-1, ...cols.values()) + 1 }, () => 0);
   for (const lane of lanes)
     for (const b of lane.children as FigNode[]) colW[cols.get(b.id)!] = Math.max(colW[cols.get(b.id)!], size(b, s).w);
-  const gutter = Math.max(0, ...lanes.map((l) => textWidth(str(l.label).toUpperCase(), 12))) + FRAME_SIDE * 2;
+  const gutter = gutterOf(lanes);
   const colX = colW.map((_, c) => gutter + colW.slice(0, c).reduce((a, w) => a + w + LANE_GAP, 0));
   const width = gutter + colW.reduce((a, w) => a + w, 0) + LANE_GAP * Math.max(0, colW.length - 1) + FRAME_SIDE;
   const topAt = out.length;
@@ -182,7 +188,36 @@ function placeLanes(fig: FlowProps, x: number, y: number, s: Sizes, out: Placed[
   out[topAt].h = ly - LANE_ROW_GAP - y;
 }
 
+/** The width of the label gutter of lanes and of a timeline: the widest track label plus the frame sides. */
+const gutterOf = (lanes: FigGroup[]) => Math.max(0, ...lanes.map((l) => textWidth(str(l.label).toUpperCase(), 12))) + FRAME_SIDE * 2;
+
+/** A timeline: the axis strip on top, one band per track, and the bars and milestones at the shared layout x. */
+function placeTimeline(fig: FlowProps, x: number, y: number, out: Placed[]): void {
+  const lanes = fig.layout.children as FigGroup[];
+  const gutter = gutterOf(lanes);
+  const lay = timelineLayout(fig, TL_AXIS_W);
+  const width = gutter + TL_AXIS_W + FRAME_SIDE;
+  const topAt = out.length;
+  out.push({ x, y, w: width, h: 0, item: fig.layout });
+  let ly = y + TL_AXIS_H;
+  lanes.forEach((lane, track) => {
+    const rows = lay.rows[track];
+    const h = rows * TL_BAR_H + (rows - 1) * TL_ROW_GAP + LANE_PAD * 2;
+    out.push({ x, y: ly, w: width, h, item: lane, lane: true });
+    for (const it of lay.items) {
+      if (it.track !== track) continue;
+      const node = lane.children.find((k) => !isGroup(k) && k.id === it.id) as FigNode;
+      const top = ly + LANE_PAD + it.row * (TL_BAR_H + TL_ROW_GAP);
+      const bh = it.milestone ? it.w : TL_BAR_H;
+      out.push({ x: x + gutter + it.x, y: top + (TL_BAR_H - bh) / 2, w: it.w, h: bh, item: node, tl: { milestone: it.milestone } });
+    }
+    ly += h + LANE_ROW_GAP;
+  });
+  out[topAt].h = ly - LANE_ROW_GAP - y;
+}
+
 function place(item: FigNode | FigGroup, x: number, y: number, s: Sizes, out: Placed[]): void {
+  if (item === s.fig.layout && s.fig.timeline && isLanesLayout(s.fig.layout)) return placeTimeline(s.fig, x, y, out);
   if (item === s.fig.layout && s.fig.lanes && isLanesLayout(s.fig.layout)) return placeLanes(s.fig, x, y, s, out);
   const { w, h } = size(item, s);
   out.push({ x, y, w, h, item });
@@ -229,7 +264,10 @@ const SYSTEM_FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helv
 export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; scene: Scene } {
   const speed = (opts.speed ?? fig.speed ?? 900) / 1000 / BASE_RATE;
   const pad = opts.padding ?? 24;
-  const steps = fig.steps ?? [];
+  const tl = fig.timeline && isLanesLayout(fig.layout) ? timelineLayout(fig, TL_AXIS_W) : null;
+  // A timeline with no steps of its own walks its dated items in date order.
+  const synthetic = tl != null && !fig.steps?.length;
+  const steps = synthetic ? timelineBeats(fig) : (fig.steps ?? []);
   const beats: Beat[][] = steps.map((s) => s.flow.map(toBeat));
 
   // Every content a box will ever show, so its card can be sized to the biggest one up front.
@@ -257,7 +295,7 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
 
   const placed: Placed[] = [];
   place(fig.layout, pad, pad, sizes, placed);
-  const nodes = placed.filter((p) => !isGroup(p.item)) as (Rect & { item: FigNode })[];
+  const nodes = placed.filter((p) => !isGroup(p.item)) as (Placed & { item: FigNode })[];
   // A node's own width can differ from CARD_WIDTH (`width` in the spec), so re-measure once placed.
   for (const p of nodes) {
     if (!cards.has(p.item.id)) continue;
@@ -281,6 +319,14 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
   // What this layout drew, in scene form. Tags are left out of minFont: short bold capitals, not reading text.
   const fonts = [14, ...(steps.length ? [13.5] : [])];
   const sceneBoxes: SceneBox[] = nodes.map((p) => {
+    if (p.tl) {
+      // A label inside the bar has the bar as room; a label beside the bar has the space to the band edge.
+      const label = str(p.item.label);
+      const inside = !p.tl.milestone && textWidth(label, 13) + 16 <= p.w;
+      const room = inside ? p.w - 16 : placed[0].x + placed[0].w - FRAME_SIDE - (p.x + p.w) - 12;
+      fonts.push(13);
+      return { id: p.item.id, rect: { x: p.x, y: p.y, w: p.w, h: p.h }, texts: [{ text: label, fontSize: 13, room }] };
+    }
     const room = (p.item.shape === 'decision' ? p.w - 70 : p.w) - 16;
     const texts: SceneBox['texts'] = [{ text: str(p.item.label), fontSize: 14, room }];
     if (p.item.sub) {
@@ -453,6 +499,19 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
     }
     const bt = item.tone && TONES[item.tone];
     const stroke = cls(boxAnim(item.id, true, bt));
+    if (p.tl) {
+      const fill0 = bt ? toneTint(bt, 'var(--bg)') : 'var(--bg)';
+      const stroke0 = bt ?? 'var(--border)';
+      const label = str(item.label);
+      const inside = !p.tl.milestone && textWidth(label, 13) + 16 <= p.w;
+      const cx = p.x + p.w / 2,
+        cy = p.y + p.h / 2;
+      const shape = p.tl.milestone
+        ? `<polygon points="${n2(cx)},${n2(p.y)} ${n2(p.x + p.w)},${n2(cy)} ${n2(cx)},${n2(p.y + p.h)} ${n2(p.x)},${n2(cy)}" fill="${fill0}" stroke="${stroke0}"${stroke}/>`
+        : `<rect x="${n2(p.x)}" y="${n2(p.y)}" width="${n2(p.w)}" height="${n2(p.h)}" rx="6" fill="${fill0}" stroke="${stroke0}"${stroke}/>`;
+      const tx = inside ? p.x + 8 : p.x + p.w + 6;
+      return shape + `<text x="${n2(tx)}" y="${n2(cy + 4.5)}" class="bar">${esc(label)}</text>`;
+    }
     const rim = item.shape === 'store' ? cls(boxAnim(item.id, false, bt)) : '';
     const fill0 = bt ? toneTint(bt, 'var(--bg)') : 'var(--bg)';
     const stroke0 = bt ?? 'var(--border)';
@@ -622,6 +681,53 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
     );
   });
 
+  // The timeline axis under the boxes, and the today line over them. The line moves to the start of each beat's item, then home to today.
+  let axisSvg = '',
+    todaySvg = '';
+  if (tl) {
+    const top = placed[0];
+    const x0 = top.x + gutterOf(fig.layout.children as FigGroup[]);
+    const ay = top.y + TL_AXIS_H;
+    fonts.push(11);
+    axisSvg =
+      `<path d="M ${n2(x0)} ${n2(ay - 1)} H ${n2(x0 + TL_AXIS_W)}" stroke="var(--border)"/>` +
+      tl.ticks
+        .map(
+          (k) =>
+            `<path d="M ${n2(x0 + k.x)} ${n2(ay - 5)} V ${n2(ay - 1)}" stroke="var(--border)"/>` +
+            `<text x="${n2(x0 + k.x + 3)}" y="${n2(top.y + 10)}" class="tick">${esc(k.label)}</text>`,
+        )
+        .join('');
+    if (tl.today != null && segs.length) {
+      const home = tl.today;
+      const startOf = new Map(tl.items.map((i) => [i.id, i.x + (i.milestone ? i.w / 2 : 0)]));
+      const RAMP = 0.4; // 400 ms, in wall seconds like FADE
+      const hold = STEP_HOLD_MS / 1000 / BASE_RATE;
+      const pts: [number, number][] = [[0, home]];
+      let at = home;
+      segs.forEach((s, i) => {
+        const id = (beats[s.si][s.bi].light ?? []).find((l) => startOf.has(l));
+        const to = id != null ? startOf.get(id)! : at;
+        const last = i === segs.length - 1 || segs[i + 1].si !== s.si;
+        const end = last ? s.t1 - hold : s.t1; // the step hold starts here
+        pts.push([s.t0, at], [Math.min(s.t0 + RAMP, end), to], [end, to]);
+        at = to;
+        if (last) {
+          pts.push([Math.min(end + RAMP, s.t1), home], [s.t1, home]);
+          at = home;
+        }
+      });
+      const name = `a${seen.size}`;
+      seen.set('today', name);
+      const kf = pts.map(([t, x]) => `${pct(t / total)} { transform: translateX(${n2(x - home)}px) }`).join(' ');
+      css.push(`@keyframes ${name} { ${kf} }\n.${name} { animation: ${name} ${n2(total)}s infinite linear; }`);
+      const lx = x0 + home;
+      todaySvg =
+        `<g${cls(name)}><path d="M ${n2(lx)} ${n2(top.y + 12)} V ${n2(top.y + top.h)}" stroke="var(--accent)" stroke-width="1.5"/>` +
+        `<text x="${n2(lx + 3)}" y="${n2(top.y + 22)}" class="today">today</text></g>`;
+    }
+  }
+
   const bounds = placed[0];
   const arcs = fig.edges.some((e) => e.around);
   const capLines = [...new Set(captions)].flatMap((c) => wrap(c, Math.max(560, bounds.w), 13.5).length);
@@ -640,12 +746,13 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
   const railX = rail ? (W - rail.width) / 2 : 0;
 
   // The step label and its narration, both switching with the beats.
-  const labels = rail
-    ? []
-    : steps.map((_, si) => {
-        const on = segs.map((s) => s.si === si);
-        return `<text x="${n2(W / 2)}" y="${n2(H - capH + 16)}" opacity="0"${cls('steplabel', anim(on, 'opacity: 1', 'opacity: 0', 's'))}>${esc(str(steps[si].label))}</text>`;
-      });
+  const labels =
+    rail || synthetic
+      ? []
+      : steps.map((_, si) => {
+          const on = segs.map((s) => s.si === si);
+          return `<text x="${n2(W / 2)}" y="${n2(H - capH + 16)}" opacity="0"${cls('steplabel', anim(on, 'opacity: 1', 'opacity: 0', 's'))}>${esc(str(steps[si].label))}</text>`;
+        });
   const said = [...new Set(captions)].map((text) => {
     const on = captions.map((c) => c === text);
     const lines = wrap(text, Math.max(560, bounds.w), 13.5);
@@ -760,6 +867,9 @@ svg { ${vars(t0, '#eef5fd')} }
 .row { fill: var(--fg); font-size: 11px; }
 .row.mono { font-size: 10.5px; font-family: ui-monospace, Menlo, monospace; }
 .muted { fill: var(--muted); }
+.bar { fill: var(--fg); font-size: 13px; font-weight: 500; }
+.tick { fill: var(--muted); font-size: 11px; }
+.today { fill: var(--accent); font-size: 11px; font-weight: 600; }
 .tag { font-size: 9px; font-weight: 600; letter-spacing: .03em; text-anchor: middle; }
 .mark { fill: var(--accent); font-size: 11px; font-weight: 600; text-anchor: end; }
 .chip { fill: ${ON_ACCENT}; font-size: 11.5px; text-anchor: middle; }
@@ -777,9 +887,11 @@ ${
   only
     ? ''
     : `<g transform="translate(${n2(shift)} ${arcs ? 44 : 0})">
+${axisSvg}
 ${boxes.filter(Boolean).join('\n')}
 ${edgeSvg.join('\n')}
 ${packets.join('\n')}
+${todaySvg}
 </g>
 `
 }${railSvg}

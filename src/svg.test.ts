@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { toSvg, render, check } from './svg.ts';
-import { DARK, BASE_RATE, STEP_HOLD_MS, beatMs, type FlowProps } from './model.ts';
+import { timelineLayout, TL_AXIS_W, TL_BAR_H, DARK, BASE_RATE, STEP_HOLD_MS, beatMs, type FlowProps } from './model.ts';
 import { layoutRail, railState, RAIL } from './rail.ts';
 
 const fig: FlowProps = {
@@ -691,4 +691,74 @@ test('marks: a start dot and an end ring sit in the gap, and the scene is unchan
   );
   assert.ok(a.svg.includes(`<circle cx="${cx}" cy="${+(end.y + end.h / 2).toFixed(2)}" r="4" fill="var(--accent)"/>`));
   assert.ok(!b.svg.includes('r="6.25"'));
+});
+
+const tlFig: FlowProps = {
+  timeline: true,
+  today: '2026-10-14',
+  layout: {
+    direction: 'column',
+    children: [
+      {
+        id: 'prod',
+        label: 'Product',
+        children: [
+          { id: 'spec', label: 'Spec', from: '2026-10-05', to: '2026-10-16' },
+          { id: 'build', label: 'Build', from: '2026-10-19', to: '2026-11-06' },
+        ],
+      },
+      { id: 'launch', label: 'Launch', children: [{ id: 'ga', label: 'GA', from: '2026-11-09' }] },
+    ],
+  },
+  edges: [{ from: 'spec', to: 'build' }],
+};
+const n1 = (v: number) => Math.round(v * 10) / 10;
+
+test('timeline: the axis has the week ticks, the bars sit at the layout x and a milestone is a diamond', () => {
+  const { svg, scene } = render(tlFig);
+  const lay = timelineLayout(tlFig, TL_AXIS_W);
+  for (const k of lay.ticks) assert.ok(svg.includes(`>${k.label}</text>`), k.label);
+  assert.equal(svg.match(/class="tick"/g)?.length, lay.ticks.length);
+  const spec = scene.boxes.find((b) => b.id === 'spec')!;
+  const item = lay.items.find((i) => i.id === 'spec')!;
+  assert.equal(spec.rect.w, item.w);
+  assert.equal(spec.rect.h, TL_BAR_H);
+  assert.ok(svg.includes(`width="${n1(item.w)}" height="${TL_BAR_H}" rx="6"`), 'bar rect');
+  assert.equal(svg.match(/<polygon /g)?.length, 1, 'one diamond');
+  assert.deepEqual(scene.boxes.map((b) => b.id).sort(), ['build', 'ga', 'spec']);
+  assert.ok(scene.boxes.every((b) => b.texts[0].fontSize === 13));
+});
+
+test('timeline: the today line moves to each item and home in the step hold; the steps come from the dates', () => {
+  const svg = toSvg(tlFig);
+  assert.ok(svg.includes('class="today">today<'));
+  const line = svg.match(/<g class="(a\d+)"><path [^>]*stroke="var\(--accent\)" stroke-width="1.5"/)!;
+  const kf = svg.match(new RegExp(`@keyframes ${line[1]} \\{[^\\n]*\\}\\n`))![0];
+  assert.ok(kf.includes('translateX(0px)'), 'home at the start and end');
+  assert.ok(/translateX\(-\d/.test(kf), 'a beat moves the line left of today');
+  assert.ok(svg.includes('Spec') && !svg.includes('>timeline</text>'), 'the synthetic step has no label');
+});
+
+test('timeline: an item with a bad date is skipped and the output has no NaN; check on a valid timeline has no error', () => {
+  const bad: FlowProps = {
+    ...tlFig,
+    layout: {
+      direction: 'column',
+      children: [
+        {
+          id: 't',
+          label: 'T',
+          children: [
+            { id: 'x', label: 'X', from: '2026-13-45', to: '2026-10-02' },
+            { id: 'spec', label: 'Spec', from: '2026-10-05', to: '2026-10-16' },
+          ],
+        },
+      ],
+    },
+    edges: [{ from: 'x', to: 'spec' }],
+  };
+  const { svg, scene } = render(bad);
+  assert.ok(!svg.includes('NaN'));
+  assert.ok(!scene.boxes.some((b) => b.id === 'x'));
+  assert.equal(check(tlFig).filter((f) => f.severity === 'error').length, 0);
 });
