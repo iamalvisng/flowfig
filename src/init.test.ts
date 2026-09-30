@@ -241,6 +241,8 @@ test('registerMcp merges one entry and keeps every other key and server', () => 
   assert.deepEqual(Object.keys(next), ['theme', 'mcpServers', 'other']);
   assert.deepEqual(Object.keys(next.mcpServers), ['graft', 'flowfig']);
   assert.equal(registerMcp(claude, registerMcp(claude, old)), registerMcp(claude, old));
+  const custom = JSON.stringify({ mcpServers: { flowfig: { command: 'node', args: ['x'], env: { A: '1' } } } });
+  assert.equal(registerMcp(claude, custom), custom);
   assert.equal(registerMcp(claude, '{ not json'), undefined);
   assert.equal(registerMcp(claude, JSON.stringify({ mcpServers: [] })), undefined);
   const copilot = AGENTS.find((a) => a.id === 'copilot')!;
@@ -285,6 +287,19 @@ test('--global registers the Claude server in ~/.claude.json and keeps the rest 
     const j = JSON.parse(readFileSync(join(home, '.claude.json'), 'utf8'));
     assert.equal(j.numStartups, 3);
     assert.deepEqual(Object.keys(j.mcpServers), ['graft', 'flowfig']);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('--global --dry-run writes nothing and prints would', () => {
+  const home = tmp();
+  try {
+    const r = run(['init', '--global', '--dry-run'], home, { HOME: home, USERPROFILE: home });
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stdout, /would create .*\.claude\.json/);
+    assert.equal(existsSync(join(home, '.claude.json')), false);
+    assert.equal(existsSync(join(home, '.claude')), false);
   } finally {
     rmSync(home, { recursive: true, force: true });
   }

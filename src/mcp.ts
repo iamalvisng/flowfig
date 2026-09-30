@@ -62,24 +62,38 @@ export const TOOLS = [
 ];
 
 class Bad extends Error {} // bad params: a JSON-RPC error, not a tool result
+class Fault extends Error {} // a path that cannot be read or written: a tool result with isError
 
 const ok = (text: string, isError = false): Result =>
   isError ? { content: [{ type: 'text', text }], isError: true } : { content: [{ type: 'text', text }] };
 const spec = (v: unknown, name: string) => {
+  if (typeof v !== 'string' && (typeof v !== 'object' || v === null)) throw new Bad(`${name}: spec must be an object or a path`);
   try {
-    return loadSpec(v as string | object);
+    return loadSpec(v);
   } catch (e) {
-    throw new Bad(`${name}: ${(e as Error).message}`);
+    // The message of a path failure already starts with the path.
+    throw typeof v === 'string' ? new Fault((e as Error).message) : new Bad(`${name}: ${(e as Error).message}`);
   }
 };
 const need = (args: Record<string, unknown>, tool: string, keys: string[]) => {
   for (const k of keys) if (args[k] == null) throw new Bad(`${tool}: ${k} is required`);
+};
+/** A present argument must have its type; a number must be positive. */
+const types = (args: Record<string, unknown>, tool: string, want: Record<string, 'number' | 'string' | 'boolean'>) => {
+  for (const [k, t] of Object.entries(want)) {
+    const v = args[k];
+    if (v == null) continue;
+    if (typeof v !== t || (t === 'number' && !((v as number) > 0 && Number.isFinite(v)))) {
+      throw new Bad(`${tool}: ${k} must be ${t === 'number' ? 'a positive number' : `a ${t}`}`);
+    }
+  }
 };
 
 function run(name: string, args: Record<string, unknown>): Result {
   if (name === 'docs') return ok(GUIDE);
   if (name === 'check' || name === 'render') {
     need(args, name, name === 'render' ? ['spec', 'out'] : ['spec']);
+    types(args, name, { width: 'number', minText: 'number', out: 'string', strict: 'boolean' });
     const props = spec(args.spec, name);
     const opts = { width: args.width as number | undefined, minText: args.minText as number | undefined };
     const findings = sortFindings(check(props, opts), args.strict === true);
@@ -88,18 +102,32 @@ function run(name: string, args: Record<string, unknown>): Result {
     if (name === 'check' || errors) return ok(lines.join('\n'), errors);
     const out = String(args.out);
     const svg = svgWithSpec(props);
-    mkdirSync(dirname(out), { recursive: true });
-    writeFileSync(out, svg);
+    try {
+      mkdirSync(dirname(out), { recursive: true });
+      writeFileSync(out, svg);
+    } catch (e) {
+      throw new Fault(`${out}: ${(e as Error).message}`);
+    }
     return ok([...lines, `${out} — ${(svg.length / 1024).toFixed(1)} kB`].join('\n'));
   }
   if (name === 'verify') {
     need(args, name, ['paths']);
-    if (!Array.isArray(args.paths)) throw new Bad('verify: paths must be an array');
+    if (!Array.isArray(args.paths) || args.paths.some((p) => typeof p !== 'string'))
+      throw new Bad('verify: paths must be an array of strings');
+    types(args, name, { root: 'string', strict: 'boolean' });
     const root = args.root == null ? process.cwd() : String(args.root);
     const lines: string[] = [];
     let errors = 0;
     for (const p of args.paths as string[]) {
-      const props = spec(p, 'verify');
+      let props;
+      try {
+        props = spec(p, 'verify');
+      } catch (e) {
+        if (!(e instanceof Fault)) throw e;
+        errors++;
+        lines.push(`${'error'.padEnd(8)} ${'missing-file'.padEnd(18)} ${e.message}`);
+        continue;
+      }
       const findings = sortFindings([...check(props), ...verify(props, { root })], args.strict === true);
       errors += findings.filter((f) => f.severity === 'error').length;
       lines.push(...findings.map((f) => `${f.severity.padEnd(8)} ${f.rule.padEnd(18)} ${p}: ${f.message}`));
@@ -125,12 +153,13 @@ export function handle(message: unknown): Response | undefined {
   const { id, method, params } = message as { id?: unknown; method?: unknown; params?: Record<string, unknown> };
   const notification = id === undefined;
   if (typeof method !== 'string') return notification ? undefined : fail(id, -32600, 'invalid request');
+  if (notification) return undefined; // a notification gets no reply, and a call sent as one does not run
   const info = { name: 'flowfig', version: VERSION };
   try {
     switch (method) {
       case 'initialize':
         return reply(id, {
-          protocolVersion: (params?.protocolVersion as string) ?? '2025-11-25',
+          protocolVersion: typeof params?.protocolVersion === 'string' ? params.protocolVersion : '2025-11-25',
           capabilities: { tools: {} },
           serverInfo: info,
         });
@@ -151,10 +180,11 @@ export function handle(message: unknown): Response | undefined {
         return reply(id, run(name, (params?.arguments as Record<string, unknown>) ?? {}));
       }
       default:
-        return notification ? undefined : fail(id, -32601, `method not found: ${method}`);
+        return fail(id, -32601, `method not found: ${method}`);
     }
   } catch (e) {
     if (e instanceof Bad) return fail(id, -32602, e.message);
+    if (e instanceof Fault) return reply(id, ok(e.message, true));
     return fail(id, -32603, (e as Error).message);
   }
 }

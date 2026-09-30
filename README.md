@@ -410,7 +410,7 @@ On a terminal, `init` shows a picker. The picker selects the agents that the rep
 | `--agents <ids>` | Write for these agents, for example `--agents claude,cursor`. |
 | `--all-agents`   | Write for all 7 agents.                                       |
 | `-y`, `--yes`    | Write for the agents that the repo uses, with no picker.      |
-| `--global`       | Write only the Claude Code skill, to your home directory.     |
+| `--global`       | Write the Claude skill and the MCP entry to your home folder. |
 | `--dry-run`      | Print what `init` would write, and write nothing.             |
 | `--no-mcp`       | Do not register the MCP server.                               |
 | `--list-agents`  | Print the agent ids.                                          |
