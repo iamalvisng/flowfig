@@ -301,7 +301,7 @@ test('a beat lasts long enough to read its caption. The packet crosses in speed'
   const n2 = (v: number) => Math.round(v * 10) / 10;
   assert.ok(svg.includes(`dur="${n2(total)}s"`), String(n2(total)));
   const motion = svg.match(/keyTimes="0;([\d.]+);([\d.]+);1"/)!;
-  assert.equal(Number(motion[2]), n2(speed / 1000 / BASE_RATE / total));
+  assert.equal(Number(motion[2]), Math.round((speed / 1000 / BASE_RATE / total) * 10000) / 10000);
   const beatEnd = beatMs({ hops: [], say }, speed) / 1000 / BASE_RATE / total;
   const op = svg.match(/@keyframes p0 \{[^}]*\}[^}]*\{ opacity: 1 \} ([\d.]+)%,100%/)!;
   assert.ok(Math.abs(Number(op[1]) - beatEnd * 100) < 0.1, op[1]);
@@ -313,5 +313,23 @@ test('opts.speed sets the travel and the beat length', () => {
   const n2 = (v: number) => Math.round(v * 10) / 10;
   assert.ok(svg.includes(`dur="${n2(total)}s"`), String(n2(total)));
   const motion = svg.match(/keyTimes="0;([\d.]+);([\d.]+);1"/)!;
-  assert.equal(Number(motion[2]), n2(400 / 1000 / BASE_RATE / total));
+  assert.equal(Number(motion[2]), Math.round((400 / 1000 / BASE_RATE / total) * 10000) / 10000);
+});
+
+test('a long loop keeps a real travel window in keyTimes: the packet moves, it does not jump', () => {
+  const say = 'one two three four five six seven eight nine ten';
+  const fig: FlowProps = {
+    layout: {
+      children: [
+        { id: 'a', label: 'A' },
+        { id: 'b', label: 'B' },
+      ],
+    },
+    edges: [{ id: 'e', from: 'a', to: 'b' }],
+    steps: [{ label: 's', flow: Array.from({ length: 8 }, () => ({ edges: 'e', say })) }],
+  };
+  const svg = toSvg(fig);
+  const times = [...svg.matchAll(/keyTimes="0;([\d.]+);([\d.]+);1"/g)].map((m) => [Number(m[1]), Number(m[2])]);
+  assert.ok(times.length >= 8);
+  for (const [t0, t1] of times) assert.ok(t1 - t0 > 0.005, `${t0} ${t1}`);
 });
