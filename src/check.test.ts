@@ -152,3 +152,10 @@ test('a quiet edge that no beat uses is an error, and one that a beat uses is fi
   assert.deepEqual(checkSpec(used), []);
   assert.deepEqual(rules(checkSpec({ ...quiet, steps: undefined })), ['hidden-edge']);
 });
+
+test('a source with a bad form is a warning; a good one is not', () => {
+  const bad = { ...fig, edges: [{ ...fig.edges[0], source: 'src/a.ts#' }] };
+  assert.deepEqual(rules(checkSpec(bad)), ['bad-source']);
+  const good = { ...fig, edges: [{ ...fig.edges[0], source: 'src/a.ts#f' }] };
+  assert.deepEqual(checkSpec(good), []);
+});

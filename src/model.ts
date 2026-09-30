@@ -16,6 +16,8 @@ export type FigNode = {
   lines?: number;
   /** Width in px. Overrides the width the layout picks. */
   width?: number;
+  /** The code this draws, `path` or `path#symbol`, relative to the repo root. `flowfig verify` checks it. */
+  source?: string;
 };
 /** A frame that lays out its children in a row or a column. Groups can hold groups. */
 export type FigGroup = {
@@ -46,6 +48,8 @@ export type FigEdge = {
   around?: 'above' | 'below';
   /** Draws the edge only while a step uses it. Use it for long edges that would cut across everything. */
   quiet?: boolean;
+  /** The code this draws, `path` or `path#symbol`, relative to the repo root. `flowfig verify` checks it. */
+  source?: string;
 };
 /** One packet on one edge. A string is the edge `id`. */
 export type FigHop =
@@ -59,6 +63,8 @@ export type FigHop =
       data?: ReactNode;
       /** Marks a message that does not wait for an answer. The rail draws it dashed, with an `async` tag. Default: `false`. */
       async?: boolean;
+      /** The code this draws, `path` or `path#symbol`, relative to the repo root. `flowfig verify` checks it. */
+      source?: string;
     };
 /** One moment of a step. No edges means a pause. */
 export type FigBeat = {
@@ -128,7 +134,7 @@ export type FlowProps = {
 export type Figure = { title: string; source?: string; props: FlowProps };
 
 /** A beat with its hops spelled out: every hop has an edge id and a direction. */
-export type Beat = Omit<FigBeat, 'edges'> & { hops: { edge: string; back: boolean; data?: ReactNode; async?: boolean }[] };
+export type Beat = Omit<FigBeat, 'edges'> & { hops: { edge: string; back: boolean; data?: ReactNode; async?: boolean; source?: string }[] };
 export const toBeat = (b: FigHop | FigHop[] | FigBeat): Beat => {
   const isBeat = typeof b === 'object' && !Array.isArray(b) && !('edge' in b);
   const { edges, ...rest }: FigBeat = isBeat ? b : { edges: b };
