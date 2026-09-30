@@ -7,10 +7,12 @@ import {
   TONES,
   edgeId,
   isGroup,
+  laneColumns,
   nodes,
   str,
   toBeat,
   type FigGroup,
+  type FigNode,
   type FigTheme,
   type FlowProps,
 } from './model.ts';
@@ -64,6 +66,27 @@ export function checkSpec(fig: FlowProps): Finding[] {
   // A link with a bad form never verifies, so say so here, where the spec is checked.
   for (const [who, source] of owners(fig))
     if (source != null && !parseSource(source)) out.push(warn('bad-source', [], `${who}: source "${source}" is not path or path#symbol`));
+  if (fig.lanes) {
+    const top = fig.layout;
+    const lanes =
+      top.direction === 'column' && top.children.every((c) => isGroup(c) && c.label != null && c.children.every((k) => !isGroup(k)));
+    if (!lanes) out.push(err('lanes-need-column', [], 'lanes need a column group of labeled groups, one per lane, with boxes only inside'));
+    else {
+      const cols = laneColumns(fig);
+      for (const lane of top.children as FigGroup[]) {
+        const at = new Map<number, string>();
+        for (const n of lane.children as FigNode[]) {
+          const c = cols.get(n.id)!;
+          const other = at.get(c);
+          if (other != null)
+            out.push(
+              warn('lane-column-taken', [other, n.id], `boxes "${other}" and "${n.id}" share column ${c} in lane "${str(lane.label)}"`),
+            );
+          at.set(c, n.id);
+        }
+      }
+    }
+  }
   return out;
 }
 

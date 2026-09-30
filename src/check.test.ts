@@ -188,3 +188,74 @@ test('a custom muted color with low contrast on a tone tint is an error', () => 
     JSON.stringify(f),
   );
 });
+
+const lanesFig: FlowProps = {
+  lanes: true,
+  layout: {
+    direction: 'column',
+    children: [
+      {
+        label: 'Customer',
+        children: [
+          { id: 'ask', label: 'Request refund' },
+          { id: 'get', label: 'Get money' },
+        ],
+      },
+      {
+        label: 'Support',
+        children: [
+          { id: 'check', label: 'Check order' },
+          { id: 'reject', label: 'Reject' },
+        ],
+      },
+      {
+        label: 'Finance',
+        children: [
+          { id: 'pay', label: 'Issue refund' },
+          { id: 'audit', label: 'Audit', at: 1 },
+        ],
+      },
+    ],
+  },
+  edges: [
+    { id: 'a', from: 'ask', to: 'check' },
+    { id: 'b', from: 'check', to: 'pay' },
+    { id: 'c', from: 'pay', to: 'get' },
+    { id: 'r', from: 'check', to: 'reject' },
+  ],
+  steps: [
+    { label: 'ok', flow: ['a', 'b', { edge: 'c', back: true }] },
+    { label: 'no', flow: ['a', 'r'] },
+  ],
+};
+
+test('lanes need a column of labeled groups; two boxes of one lane in one column is a warning', () => {
+  const row = { ...lanesFig, layout: { ...lanesFig.layout, direction: 'row' as const } };
+  assert.deepEqual(rules(checkSpec(row)), ['lanes-need-column']);
+  const nested = {
+    ...lanesFig,
+    layout: { direction: 'column' as const, children: [{ label: 'A', children: [{ label: 'B', children: [{ id: 'x', label: 'X' }] }] }] },
+    edges: [],
+    steps: [],
+  };
+  assert.deepEqual(rules(checkSpec(nested)), ['lanes-need-column']);
+  const taken = {
+    ...lanesFig,
+    layout: {
+      ...lanesFig.layout,
+      children: [
+        {
+          label: 'One',
+          children: [
+            { id: 'p', label: 'P', at: 0 },
+            { id: 'q', label: 'Q', at: 0 },
+          ],
+        },
+      ],
+    },
+    edges: [],
+    steps: [],
+  };
+  assert.deepEqual(rules(checkSpec(taken)), ['lane-column-taken']);
+  assert.deepEqual(checkSpec(lanesFig), []);
+});

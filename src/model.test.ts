@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { beatMs, decisions, edgeId, groupGap, isRows, nodes, readMs, toBeat } from './model.ts';
+import { laneColumns, beatMs, decisions, edgeId, groupGap, isRows, nodes, readMs, toBeat } from './model.ts';
+import type { FlowProps } from './model.ts';
 
 test('toBeat reads every way a beat can be written', () => {
   assert.deepEqual(toBeat('a->b'), { hops: [{ edge: 'a->b', back: false }] });
@@ -81,4 +82,50 @@ test('beatMs gives an explicit ms as written', () => {
   assert.equal(beatMs({ hops: [], say }, 900), 900 + 2800);
   assert.equal(beatMs({ hops: [], say, ms: 5000 }, 900), 5000);
   assert.equal(beatMs({ hops: [], say, ms: 100 }, 900), 100);
+});
+
+const lanesFig: FlowProps = {
+  lanes: true,
+  layout: {
+    direction: 'column',
+    children: [
+      {
+        label: 'Customer',
+        children: [
+          { id: 'ask', label: 'Request refund' },
+          { id: 'get', label: 'Get money' },
+        ],
+      },
+      {
+        label: 'Support',
+        children: [
+          { id: 'check', label: 'Check order' },
+          { id: 'reject', label: 'Reject' },
+        ],
+      },
+      {
+        label: 'Finance',
+        children: [
+          { id: 'pay', label: 'Issue refund' },
+          { id: 'audit', label: 'Audit', at: 1 },
+        ],
+      },
+    ],
+  },
+  edges: [
+    { id: 'a', from: 'ask', to: 'check' },
+    { id: 'b', from: 'check', to: 'pay' },
+    { id: 'c', from: 'pay', to: 'get' },
+    { id: 'r', from: 'check', to: 'reject' },
+  ],
+  steps: [
+    { label: 'ok', flow: ['a', 'b', { edge: 'c', back: true }] },
+    { label: 'no', flow: ['a', 'r'] },
+  ],
+};
+
+test('laneColumns gives each box its first appearance in the steps, back hops to-first, then the rest, then at', () => {
+  const cols = laneColumns(lanesFig);
+  // a: ask(0) check(1); b: pay(2); c back: get(3) then pay (seen); step no: reject(4); audit is in no step: 5, but at=1 wins
+  assert.deepEqual(Object.fromEntries(cols), { ask: 0, check: 1, pay: 2, get: 3, reject: 4, audit: 1 });
 });
