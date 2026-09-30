@@ -644,6 +644,7 @@ ${said.join('\n')}
         return [
           {
             id: `rail:${row.n}`,
+            step: row.step,
             from: rail!.columns[row.from].id,
             to: rail!.columns[row.to].id,
             curve: [p, p, q, q] as [Pt, Pt, Pt, Pt],

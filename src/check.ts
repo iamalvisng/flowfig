@@ -82,7 +82,7 @@ export function checkScene(scene: Scene, { width = 830, minText = 10 }: CheckOpt
   const labeled = scene.edges.filter((e) => e.label);
   labeled.forEach((e, i) => {
     for (const f of labeled.slice(i + 1))
-      if (overlap(e.label!, f.label!, 1))
+      if ((e.step == null || f.step == null || e.step === f.step) && overlap(e.label!, f.label!, 1))
         out.push(err('label-overlap', [e.id, f.id], `the labels of edges "${e.id}" and "${f.id}" overlap`));
     for (const b of scene.boxes)
       if (overlap(e.label!, b.rect, 1)) out.push(err('label-overlap', [e.id, b.id], `the label of edge "${e.id}" covers box "${b.id}"`));
