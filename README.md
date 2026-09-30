@@ -309,6 +309,8 @@ fails when the file or the symbol is gone. The action runs `verify` on every fig
 the new image for each SVG the PR changes, with the spec changes as a list, and it names each figure whose linked code the PR
 changes.
 
+A process figure for a team links its boxes to the SOP document, not to code: `"source": "docs/sop/refunds.md#step-3-approve-the-refund"`. The symbol is the heading as a GitHub anchor. If the heading is gone, `verify` fails.
+
 ```yaml
 permissions:
   contents: read

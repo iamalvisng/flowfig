@@ -8,6 +8,13 @@ export function parseSource(s: string): { path: string; symbol?: string } | null
   return m[2] ? { path: m[1], symbol: m[2] } : { path: m[1] };
 }
 
+/** The GitHub anchor of a heading: lower case, only letters, digits, spaces and hyphens, spaces to hyphens. */
+export const headingSlug = (text: string): string =>
+  text
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N} -]/gu, '')
+    .replace(/ /g, '-');
+
 export type Link = { owner: string; source: string; path: string; symbol?: string };
 
 /** Every box, edge and hop with its raw `source`, well-formed or not. The one owner list that `links` and `checkSpec` share. */

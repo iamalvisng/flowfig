@@ -65,6 +65,7 @@ If the code does not show a fact, leave the fact out. Do not guess a part, a nam
 Each fact becomes a box, an edge, a beat, a \`data\` card or a \`show\` row. Use the real names from the code as labels, and
 real example data from the code or its tests. Keep each fact that you leave out, with the reason, for the reply.
 Give each box and edge that draws code a \`source\`, from the fact list: \`"src/auth/login.ts#verifyPassword"\`. A store or an outside part may have none.
+A box that draws a step from a document links to that document: \`"docs/sop/refunds.md#step-3-approve-the-refund"\`, the heading as a GitHub anchor. \`verify\` checks it the same way.
 
 Mermaid mapping:
 

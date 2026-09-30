@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { links, parseSource, verify } from './verify.ts';
+import { headingSlug, links, parseSource, verify } from './verify.ts';
 import type { FlowProps } from './model.ts';
 
 test('parseSource reads a path and an optional symbol', () => {
@@ -83,4 +83,25 @@ test('links lists every well-formed link with its owner', () => {
     { owner: 'edge "e"', source: 'y.ts', path: 'y.ts' },
     { owner: 'hop on "e"', source: 'z.ts#g', path: 'z.ts', symbol: 'g' },
   ]);
+});
+
+test('a Markdown heading is a valid symbol; a code file gets the word search only', () => {
+  const files = { 'docs/sop.md': '## Step 3: Approve the refund\n### Notes\n', 'src/a.ts': '// ## Step 3\n' };
+  withRepo(files, (root) => {
+    const run = (s: string) => rules(verify(figWith(s), { root }));
+    assert.deepEqual(run('docs/sop.md#step-3-approve-the-refund'), []);
+    assert.deepEqual(run('docs/sop.md#notes'), []);
+    assert.deepEqual(run('docs/sop.md#step-4'), ['missing-symbol']);
+    assert.deepEqual(run('src/a.ts#step-3'), ['missing-symbol']);
+  });
+});
+
+test('headingSlug follows the GitHub anchor rule', () => {
+  assert.equal(headingSlug('Step 3: Approve the refund'), 'step-3-approve-the-refund');
+  assert.equal(headingSlug('Notes'), 'notes');
+  assert.equal(headingSlug('A/B test (v2)'), 'ab-test-v2');
+});
+
+test('parseSource reads a Markdown path with an anchor', () => {
+  assert.deepEqual(parseSource('docs/a.md#step-3'), { path: 'docs/a.md', symbol: 'step-3' });
 });

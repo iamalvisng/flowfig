@@ -2,10 +2,10 @@
 import { readFileSync, statSync } from 'node:fs';
 import { isAbsolute, relative, resolve } from 'node:path';
 import type { FlowProps } from './model.ts';
-import { links } from './source.ts';
+import { headingSlug, links } from './source.ts';
 import type { Finding } from './scene.ts';
 
-export { parseSource, owners, links, type Link } from './source.ts';
+export { parseSource, headingSlug, owners, links, type Link } from './source.ts';
 
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -17,6 +17,13 @@ function read(full: string): string | null {
     return null;
   }
 }
+
+/** True if a heading line of the Markdown text has this slug. */
+const hasHeading = (text: string, slug: string) =>
+  text.split('\n').some((line) => {
+    const m = /^#{1,6}\s+(.*?)\s*#*\s*$/.exec(line);
+    return m != null && headingSlug(m[1]) === slug;
+  });
 
 /** The links against the files under `root`. A path outside the root is a missing file: the figure names the repo, not the disk. */
 export function verify(fig: FlowProps, { root = process.cwd() }: { root?: string } = {}): Finding[] {
@@ -31,7 +38,11 @@ export function verify(fig: FlowProps, { root = process.cwd() }: { root?: string
     if (!files.has(full)) files.set(full, outside ? null : read(full));
     const text = files.get(full);
     if (text == null) out.push({ rule: 'missing-file', severity: 'error', ids: [], message: `${l.owner} -> ${l.source}: file not found` });
-    else if (l.symbol && !new RegExp(`(^|[^\\w$])${escape(l.symbol)}(?![\\w$])`).test(text))
+    else if (
+      l.symbol &&
+      !new RegExp(`(^|[^\\w$])${escape(l.symbol)}(?![\\w$])`).test(text) &&
+      !(/\.(md|markdown)$/i.test(l.path) && hasHeading(text, l.symbol))
+    )
       out.push({ rule: 'missing-symbol', severity: 'error', ids: [], message: `${l.owner} -> ${l.source}: symbol not found` });
   }
   return out;
