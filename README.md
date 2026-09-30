@@ -96,6 +96,7 @@ Then ask your agent: "draw a diagram of how login works in this repo".
 - [The spec](#the-spec)
 - [Check a figure](#check-a-figure)
 - [Verify in CI](#verify-in-ci)
+- [For teams](#for-teams)
 - [MCP server](#mcp-server)
 - [Use in React](#use-in-react)
 - [Use from Node](#use-from-node)
@@ -339,6 +340,13 @@ steps:
     with:
       figures: 'docs/**/*.svg' # default **/*.svg
 ```
+
+## For teams
+
+A process is a diagram too. `lanes: true` draws one lane per role and the steps left to right in time order. Each step
+links to a heading in the SOP, so `verify` fails when the SOP changes under the diagram.
+
+![The refund process across Customer, Support and Finance](docs/refund-process.svg)
 
 ## MCP server
 
