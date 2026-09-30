@@ -32,7 +32,7 @@ flowfig draws how something works: parts, the messages between them, and the ord
 | A sequence diagram only                    | \`"rail": "only"\`.                                                                           |
 | A state lifecycle, a state machine         | One box per state, one edge per transition, labeled with its event. One step per path. Mark each end state, for example with \`sub: "end state"\`. |
 | A flowchart with branches                  | \`shape: "decision"\` for each branch. One step per path.                                     |
-| A process across roles (a ticket, an order, a refund) | \`lanes: true\`. One labeled group per role, in a \`column\` group. Put each step in the lane of the role that does it. Link each step with \`source\` to the SOP heading. |
+| A process across roles (a ticket, an order, a refund) | \`lanes: true\`. One labeled group per role, in a \`column\` group. Put each step in the lane of the role that does it. Link each step with \`source\` to the SOP heading. About four time columns fit at 830 px: merge steps, give the outcomes of one decision the same \`at\`, or split the figure. |
 
 flowfig does not draw class or ER diagrams (fields, types, cardinality), Gantt charts, timelines with dates, charts of numbers,
 or mind maps. If the user asks for one of these, say that flowfig does not draw it, suggest Mermaid (\`classDiagram\`,
@@ -160,7 +160,7 @@ Every other item is a box.
 | \`label\`   | Required. The title in the box.                                                                           |
 | \`sub\`     | A smaller line under the label.                                                                           |
 | \`shape\`   | \`"box"\` (default), \`"decision"\` (a diamond) or \`"store"\` (a database cylinder for data at rest).          |
-| \`at\`      | In a \`lanes\` figure: the time column of the box, 0 first. Default: the step where the box first appears.  |
+| \`at\`      | In a \`lanes\` figure: the time column of the box, 0 first. Default: the order in which the steps first reach the box. |
 | \`width\`   | Width in px. This overrides the width that the layout picks.                                              |
 | \`source\`  | The code this draws: \`path\` or \`path#symbol\`, relative to the repo root. \`flowfig verify\` checks it.  |
 | \`lines\`   | The least number of text lines that a content card keeps. The card still grows to fit its content.        |
