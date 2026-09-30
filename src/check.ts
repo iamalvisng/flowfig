@@ -1,6 +1,19 @@
 // The rules behind `flowfig check`. They never draw and never measure: a renderer gives a Scene, and these read it. So one rule set
 // covers the SVG (estimated text) and the React player (measured text), and any later view that gives a scene.
-import { DARK, LIGHT, ON_ACCENT, edgeId, isGroup, nodes, str, toBeat, type FigGroup, type FigTheme, type FlowProps } from './model.ts';
+import {
+  DARK,
+  LIGHT,
+  ON_ACCENT,
+  TONES,
+  edgeId,
+  isGroup,
+  nodes,
+  str,
+  toBeat,
+  type FigGroup,
+  type FigTheme,
+  type FlowProps,
+} from './model.ts';
 import type { Finding, Scene } from './scene.ts';
 import type { Pt, Rect } from './geometry.ts';
 import { textWidth } from './text.ts';
@@ -141,11 +154,11 @@ const PAIRS = [
   ['muted', 'tint'],
 ] as const;
 
-/** The active-box tint: 10 % accent over the surface, mixed per channel like the CSS color-mix. */
-function tintOf(t: Colors): string {
-  const [a, s] = [rgb(t.accent), rgb(t.surface)];
-  if (!a || !s) return t.surface; // an unreadable color is reported by its own pairs
-  return `rgb(${a.map((v, i) => 0.1 * v + 0.9 * s[i]).join(',')})`;
+/** A color mixed over a base at pct %, per channel like the CSS color-mix. The default is the active-box tint: 10 % accent over the surface. */
+function tintOf(t: Colors, color = t.accent, base = t.surface, pct = 10): string {
+  const [a, s] = [rgb(color), rgb(base)];
+  if (!a || !s) return base; // an unreadable color is reported by its own pairs
+  return `rgb(${a.map((v, i) => (pct / 100) * v + (1 - pct / 100) * s[i]).join(',')})`;
 }
 
 /** Text the reader cannot read: each text and background pair, in light, dark and any custom theme, needs 4.5:1 (WCAG AA). */
@@ -168,6 +181,16 @@ export function checkTheme(theme: FigTheme = {}): Finding[] {
       if (r == null) {
         for (const c of [a, t[bg]]) if (!rgb(c)) unread.add(c);
       } else if (r < 4.5) out.push(err('low-contrast', [], `${name} theme: ${fg} on ${bg} has contrast ${r}:1 (minimum 4.5:1)`));
+    }
+    // A toned box shows fg and muted text on its tone tint: 8 % over bg (off, trail) and 10 % over surface (active).
+    for (const [tname, tone] of Object.entries(TONES)) {
+      for (const bg of [tintOf(t, tone, t.bg, 8), tintOf(t, tone, t.surface, 10)]) {
+        for (const fg of ['fg', 'muted'] as const) {
+          const r = contrast(t[fg], bg);
+          if (r != null && r < 4.5)
+            out.push(err('low-contrast', [], `${name} theme: ${fg} on the ${tname} box tint has contrast ${r}:1 (minimum 4.5:1)`));
+        }
+      }
     }
   }
   for (const c of unread) out.push(warn('color-not-checked', [], `cannot read the color "${c}", so its contrast is not checked`));

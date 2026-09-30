@@ -177,7 +177,7 @@ export const TONES: Record<FigTone, string> = {
   gray: '#8b949e',
 };
 /** A tone as a fill under white text: darker, so the text keeps its contrast. */
-export const toneFill = (c: string) => `color-mix(in srgb, ${c} 68%, #000)`;
+export const toneFill = (c: string) => `color-mix(in srgb, ${c} 64%, #000)`;
 /** The light tint of a tone over a background: the fill of a toned box. */
 export const toneTint = (c: string, bg: string, pct = 8) => `color-mix(in srgb, ${c} ${pct}%, ${bg})`;
 /** The width of an edge-label pill in px: the label text plus its padding. The rail uses it for a payload, so both look the same. */

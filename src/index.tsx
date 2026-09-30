@@ -722,7 +722,7 @@ export function Flow({ layout, edges, steps = [], theme, speed = 900, autoplay =
                         markerHeight="7"
                         orient="auto-start-reverse"
                       >
-                        <path d="M 0 1 L 9 5 L 0 9 z" fill={k === 'on' ? v('accent') : v('muted')} />
+                        <path d="M 0 1 L 9 5 L 0 9 z" fill="context-stroke" />
                       </marker>
                     ))}
                   </defs>
