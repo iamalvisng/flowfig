@@ -286,7 +286,7 @@ test('the SVG applies fig.theme, the theme font, and lets opts.theme win', () =>
   assert.ok(!toSvg(themed, { theme: { accent: '#00ff00' } }).includes('#ff0000'));
 });
 
-test('a beat lasts long enough to read its caption; the packet crosses in speed', () => {
+test('a beat lasts long enough to read its caption. The packet crosses in speed', () => {
   const say = 'one two three four five six seven eight nine ten';
   const two: FlowProps = {
     ...fig,
@@ -305,4 +305,13 @@ test('a beat lasts long enough to read its caption; the packet crosses in speed'
   const beatEnd = beatMs({ hops: [], say }, speed) / 1000 / BASE_RATE / total;
   const op = svg.match(/@keyframes p0 \{[^}]*\}[^}]*\{ opacity: 1 \} ([\d.]+)%,100%/)!;
   assert.ok(Math.abs(Number(op[1]) - beatEnd * 100) < 0.1, op[1]);
+});
+
+test('opts.speed sets the travel and the beat length', () => {
+  const svg = toSvg({ ...fig, speed: 1000, steps: [{ label: 'a', flow: [{ edges: 'call' }] }] }, { speed: 400 });
+  const total = (400 + STEP_HOLD_MS) / 1000 / BASE_RATE;
+  const n2 = (v: number) => Math.round(v * 10) / 10;
+  assert.ok(svg.includes(`dur="${n2(total)}s"`), String(n2(total)));
+  const motion = svg.match(/keyTimes="0;([\d.]+);([\d.]+);1"/)!;
+  assert.equal(Number(motion[2]), n2(400 / 1000 / BASE_RATE / total));
 });

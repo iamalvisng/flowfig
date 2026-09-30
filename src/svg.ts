@@ -273,7 +273,7 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
   beats.forEach((stepBeats, si) => {
     stepBeats.forEach((b, bi) => {
       const last = bi === stepBeats.length - 1;
-      const dur = beatMs(b, fig.speed ?? 900) / 1000 / BASE_RATE;
+      const dur = beatMs(b, opts.speed ?? fig.speed ?? 900) / 1000 / BASE_RATE;
       const hold = last ? STEP_HOLD_MS / 1000 / BASE_RATE : 0;
       b.hops.forEach((h, lane) => {
         if (byId[h.edge]) hops.push({ si, bi, lane, edge: h.edge, back: h.back, data: h.data, t0: t, t1: t + speed, tEnd: t + dur });
@@ -449,7 +449,7 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
     return hidden ? `<g opacity="0"${shown}>${path}${label}</g>` : path + label;
   });
 
-  // A packet per hop: it waits offstage, crosses its edge during its beat, then leaves. Any `data`
+  // A packet per hop: it waits offstage, crosses its edge in `speed`, rests at the end of the edge to the end of its beat, then leaves. Any `data`
   // rides above it in a chip, which is how the figure says what is moving.
   const packets = hops.map((h, i) => {
     const t0 = h.t0 / total,
