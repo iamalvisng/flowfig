@@ -68,6 +68,7 @@ Then ask your agent: "draw a diagram of how login works in this repo".
 - [Three forms](#three-forms)
 - [The spec](#the-spec)
 - [Check a figure](#check-a-figure)
+- [Verify in CI](#verify-in-ci)
 - [Use in React](#use-in-react)
 - [Use from Node](#use-from-node)
 - [Use with your coding agent](#use-with-your-coding-agent)
@@ -280,6 +281,29 @@ A render runs the same check first. If the check finds an error, the render writ
 
 In React, `<Flow check />` runs the same rules on the layout that the browser drew. The player prints each fault with
 `console.warn`.
+
+## Verify in CI
+
+A box, an edge or a hop can name the code it draws: `"source": "src/auth/login.ts#verifyPassword"`. `npx flowfig verify docs/login.svg`
+fails when the file or the symbol is gone. The action runs `verify` on every figure in a pull request. It comments the old and
+the new image for each SVG the PR changes, with the spec changes as a list, and it names each figure whose linked code the PR
+changes.
+
+```yaml
+permissions:
+  contents: read
+  pull-requests: write
+steps:
+  - uses: actions/checkout@v4
+    with:
+      fetch-depth: 0
+  - uses: actions/setup-node@v4
+    with:
+      node-version: 22
+  - uses: iamalvisng/flowfig@v0.2.0
+    with:
+      figures: 'docs/**/*.svg' # default **/*.svg
+```
 
 ## Use in React
 

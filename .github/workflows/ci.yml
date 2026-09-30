@@ -26,3 +26,21 @@ jobs:
       - run: npm run svg -- check checkout --strict
       - run: bash scripts/pack-smoke.sh
       - run: REACT=18 bash scripts/pack-smoke.sh
+
+  figures:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci && npm run build && npm link
+      - uses: ./
+        with:
+          figures: 'docs/*.svg'
