@@ -34,10 +34,14 @@ An agent with the flowfig instructions made faithful, checked diagrams more ofte
 npx flowfig draw "how does login work"
 ```
 
-`draw` runs Claude Code on the repo. It gives Claude Code the flowfig guide, a read-only tool set and `npx flowfig`. Claude Code
-writes `how-does-login-work.svg`. Then `draw` checks the figure itself with `check --strict` and `verify`. It prints the result,
-the reply of the agent and the cost of the run. `draw` needs Claude Code on the machine and a login (or `ANTHROPIC_API_KEY`).
-`--out` sets the path, `--model` sets the model and `--max-turns` sets the turn cap (default 40).
+`draw` runs Claude Code on the repo. It gives Claude Code the flowfig guide, `npx flowfig` and the tools Read, Glob and Grep.
+The permission mode is `acceptEdits`, so Claude Code can write files. `draw` disallows the tools Edit, MultiEdit and
+NotebookEdit. Claude Code writes the spec `how-does-login-work.json`, then renders `how-does-login-work.svg`. Then `draw`
+checks the figure itself with `check --strict` and `verify`, and removes the spec file. If the agent writes no new figure,
+`draw` exits 1 and shows the tool calls that the permission rules denied. `draw` prints the result, the reply of the agent
+and the cost of the run. `draw` needs Claude Code on the machine and a login. `draw` does not run on Windows yet.
+`--out` sets the path (it must end in `.svg`), `--model` sets the model, `--max-turns` sets the turn cap (default 40) and
+`--json` prints `{ out, reply, cost, session, findings }` for scripts.
 
 ## Quick start
 
