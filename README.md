@@ -69,6 +69,7 @@ Then ask your agent: "draw a diagram of how login works in this repo".
 - [The spec](#the-spec)
 - [Check a figure](#check-a-figure)
 - [Verify in CI](#verify-in-ci)
+- [MCP server](#mcp-server)
 - [Use in React](#use-in-react)
 - [Use from Node](#use-from-node)
 - [Use with your coding agent](#use-with-your-coding-agent)
@@ -309,6 +310,20 @@ steps:
       figures: 'docs/**/*.svg' # default **/*.svg
 ```
 
+## MCP server
+
+`npx flowfig mcp` serves the tools `docs`, `check`, `render`, `verify` and `diff` over stdio, for an agent with no shell.
+`render` writes the SVG file and returns the check lines and the path, so no SVG text goes through the model.
+
+`npx flowfig init` registers the server for Claude Code (`.mcp.json`), Cursor (`.cursor/mcp.json`), GitHub Copilot
+(`.vscode/mcp.json`), Gemini CLI (`.gemini/settings.json`) and Kiro (`.kiro/settings/mcp.json`). It merges one entry into
+the file and keeps every other server. `--no-mcp` skips this step. If you formatted the file with other spacing, the first
+run rewrites it once. For any other client, add:
+
+```json
+{ "mcpServers": { "flowfig": { "command": "npx", "args": ["flowfig", "mcp"] } } }
+```
+
 ## Use in React
 
 ```tsx
@@ -363,6 +378,8 @@ writeFileSync('first.svg', toSvg(spec));
 - `check(spec, options)` returns the findings. It also takes `width` and `minText`.
 - `render(spec, options)` returns `{ svg, scene }`. The scene is the layout that the check reads. Its shape can change.
 
+`flowfig/verify` is for Node only. It exports `verify`, `links`, `owners` and `parseSource`, the same checks as `flowfig verify`.
+
 `toSvg` does not put the spec in the SVG. Only the CLI adds the spec, which `--spec` reads back.
 
 ## Use with your coding agent
@@ -395,6 +412,7 @@ On a terminal, `init` shows a picker. The picker selects the agents that the rep
 | `-y`, `--yes`    | Write for the agents that the repo uses, with no picker.      |
 | `--global`       | Write only the Claude Code skill, to your home directory.     |
 | `--dry-run`      | Print what `init` would write, and write nothing.             |
+| `--no-mcp`       | Do not register the MCP server.                               |
 | `--list-agents`  | Print the agent ids.                                          |
 
 With no terminal and no `-y`, `--agents` or `--all-agents`, `init` prints the agent ids and exits with code 2.
