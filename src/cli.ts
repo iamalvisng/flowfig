@@ -8,6 +8,7 @@
  *   flowfig --spec out.svg               # print back the spec the SVG carries
  *   flowfig check <input> [--json]       # list the faults; the input can also be an SVG this wrote
  *   flowfig verify <input>... [--root dir]   # check that the code each figure links to still exists
+ *   flowfig diff <old> <new> [--json|--md]   # list the spec changes between two figures
  *   flowfig docs                         # print the full guide (Markdown)
  *   flowfig init [dir]                   # write flowfig instructions for the coding agents of a repo
  *
@@ -21,6 +22,7 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { GUIDE } from './guide.ts';
 import { runInit } from './init.ts';
+import { diff, formatDiff } from './diff.ts';
 import { counts, type FlowProps } from './model.ts';
 import { check, toSvg, type Finding } from './svg.ts';
 import { links, verify, type Link } from './verify.ts';
@@ -29,6 +31,7 @@ const USAGE = `usage: flowfig <-|spec.json|figure.ts> [out.svg]   render a figur
        flowfig check <-|spec.json|figure.ts|figure.svg>   list the faults; the input can be an SVG this wrote
        flowfig --spec figure.svg                          print the spec the SVG carries
        flowfig verify <input>... [--root <dir>] [--json] [--strict]   check the code links of one or more figures
+       flowfig diff <old> <new> [--json|--md]   list the spec changes between two figures
        flowfig docs                                       print the guide (Markdown)
        flowfig init [dir] [--agents <ids>] [-y] [--global] [--dry-run]   write flowfig instructions for the coding agents of a repo
 flags for render and check: --strict (warnings are errors), --json, --width <px>, --min-text <px>, --no-check (render only)`;
@@ -132,6 +135,18 @@ if (args[0] === 'verify') {
     console.log(`${n(errors, 'error')}, ${n(findings.length - errors, 'warning')}`);
   }
   process.exit(errors ? 1 : 0);
+}
+
+if (args[0] === 'diff') {
+  args.shift();
+  const json = flag('--json'),
+    md = flag('--md');
+  const unknown = args.find((a) => a.startsWith('-') && a !== '-');
+  if (unknown) usage(`unknown flag ${unknown}`);
+  if (args.length !== 2) usage('diff needs two figures: flowfig diff <old> <new> [--json|--md]');
+  const changes = diff(await load(args[0]), await load(args[1]));
+  console.log(json ? JSON.stringify(changes, null, 2) : formatDiff(changes, md ? 'md' : 'text'));
+  process.exit(0);
 }
 
 const command = args[0] === 'check' ? args.shift()! : 'render';

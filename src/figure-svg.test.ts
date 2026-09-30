@@ -292,3 +292,24 @@ test('verify on an SVG with no spec exits 2 with a message', () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('diff prints the spec changes between two figures, as text, Markdown or JSON', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'figure-svg-'));
+  try {
+    const next = { props: { ...SPEC.props, edges: [{ id: 'w', from: 'a', to: 'b', label: 'read' }] } };
+    writeFileSync(join(dir, 'old.json'), JSON.stringify(SPEC));
+    writeFileSync(join(dir, 'new.json'), JSON.stringify(next));
+    execFileSync('node', [cli, join(dir, 'new.json'), join(dir, 'new.svg')]);
+    const text = run(['diff', join(dir, 'old.json'), join(dir, 'new.svg')]);
+    assert.equal(text.status, 0, text.stderr);
+    assert.equal(text.stdout.trim(), 'edge changed: w (label "write" -> "read")');
+    const md = run(['diff', join(dir, 'old.json'), join(dir, 'new.json'), '--md']);
+    assert.equal(md.stdout.trim(), '- edge changed: `w` (label "write" -> "read")');
+    const json = run(['diff', join(dir, 'old.json'), join(dir, 'new.json'), '--json']);
+    assert.equal(JSON.parse(json.stdout)[0].kind, 'edge');
+    assert.equal(run(['diff', join(dir, 'old.json'), join(dir, 'old.json')]).stdout.trim(), 'no change in the spec');
+    assert.equal(run(['diff', join(dir, 'old.json')]).status, 2);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
