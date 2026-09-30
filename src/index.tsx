@@ -363,11 +363,19 @@ export function Flow({ layout, edges, steps = [], theme, speed = 900, autoplay =
           c.style.opacity = hops[j].data == null ? '0' : '1';
         }
       });
-      // A box is active from the packet's arrival until the beat ends; the class toggle skips React.
-      const arrived = new Set(f >= 1 ? hops.map((h) => (h.back ? edgeOf[h.edge]?.from : edgeOf[h.edge]?.to)) : []);
-      root.current
-        ?.querySelectorAll<HTMLElement>('[data-fig]')
-        .forEach((n) => n.classList.toggle(ACTIVE, arrived.has(n.dataset.fig ?? '')));
+      // A box is active from the packet arrival to the end of the step hold. The tick toggles the class and skips React.
+      const arrived = new Set(f >= 1 ? beats[i].hops.map((h) => (h.back ? edgeOf[h.edge]?.from : edgeOf[h.edge]?.to)) : []);
+      root.current?.querySelectorAll<HTMLElement>('[data-fig]').forEach((n) => {
+        const on = arrived.has(n.dataset.fig ?? '');
+        if (on === n.classList.contains(ACTIVE)) return;
+        if (!on) return void n.classList.remove(ACTIVE); // the transition fades the box
+        // The box turns active at once: no transition while the class arrives.
+        const keep = n.style.transition;
+        n.style.transition = 'none';
+        n.classList.add(ACTIVE);
+        void n.offsetWidth;
+        n.style.transition = keep;
+      });
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
@@ -497,7 +505,7 @@ export function Flow({ layout, edges, steps = [], theme, speed = 900, autoplay =
           borderRadius: store ? '50% / 12px' : 10,
           fontSize: 14,
           fontWeight: 500,
-          transition: 'border-color .4s, background .4s, box-shadow .4s, border-width .4s, opacity .25s',
+          transition: 'border-color .4s, background .4s, box-shadow .4s, border-width .4s, padding .4s, opacity .25s',
           cursor: 'default',
         }}
       >
@@ -628,7 +636,7 @@ export function Flow({ layout, edges, steps = [], theme, speed = 900, autoplay =
       </button>
       <style>
         {'@keyframes flowfig-in{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}' +
-          // 2 px border, tint and glow; the padding shrinks by 1 px so the box keeps its size and the edges stay put
+          // The active box has a 2 px border, a tint and a glow. The padding shrinks by 1 px. The box size stays the same, so the edges keep their route.
           `.${ACTIVE}:not([data-diamond]){--ff-b:1px;border-width:2px!important;background:color-mix(in srgb, ${v('accent')} 10%, ${v('surface')})!important;box-shadow:${glow}!important}` +
           `.${ACTIVE} polygon{fill:color-mix(in srgb, ${v('accent')} 10%, ${v('surface')});stroke:${v('accent')};stroke-width:2px}`}
       </style>

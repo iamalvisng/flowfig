@@ -135,8 +135,18 @@ test('the built-in light and dark themes pass', () => {
 
 test('a custom theme with low contrast is an error', () => {
   const f = checkTheme({ muted: '#bbbbbb' });
-  assert.deepEqual(rules(f), ['low-contrast']);
+  // muted fails on bg and on the tint
+  assert.deepEqual(rules(f), ['low-contrast', 'low-contrast']);
   assert.match(f[0].message, /custom theme: muted on bg/);
+});
+
+test('a dark custom theme on a light surface gives low contrast on the active tint', () => {
+  const f = checkTheme({ fg: '#ffffff', bg: '#111111', muted: '#dddddd', surface: '#eeeeee' });
+  assert.ok(
+    f.some((x) => x.rule === 'low-contrast' && /fg on tint/.test(x.message)),
+    JSON.stringify(f),
+  );
+  assert.deepEqual(checkTheme(), []);
 });
 
 test('colors the rule cannot read and a custom font are warnings', () => {

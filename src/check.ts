@@ -137,7 +137,16 @@ const PAIRS = [
   ['muted', 'bg'],
   ['fg', 'surface'],
   ['text', 'accent'],
+  ['fg', 'tint'],
+  ['muted', 'tint'],
 ] as const;
+
+/** The active-box tint: 10 % accent over the surface, mixed per channel like the CSS color-mix. */
+function tintOf(t: Colors): string {
+  const [a, s] = [rgb(t.accent), rgb(t.surface)];
+  if (!a || !s) return t.surface; // an unreadable color is reported by its own pairs
+  return `rgb(${a.map((v, i) => 0.1 * v + 0.9 * s[i]).join(',')})`;
+}
 
 /** Text the reader cannot read: each text and background pair, in light, dark and any custom theme, needs 4.5:1 (WCAG AA). */
 export function checkTheme(theme: FigTheme = {}): Finding[] {
@@ -151,7 +160,8 @@ export function checkTheme(theme: FigTheme = {}): Finding[] {
   ];
   if (custom) sets.push(['custom', { ...LIGHT, ...Object.fromEntries(Object.entries(theme).filter(([, v]) => v != null)) } as Colors]);
   const unread = new Set<string>();
-  for (const [name, t] of sets)
+  for (const [name, base] of sets) {
+    const t = { ...base, tint: tintOf(base) };
     for (const [fg, bg] of PAIRS) {
       const a = fg === 'text' ? ON_ACCENT : t[fg];
       const r = contrast(a, t[bg]);
@@ -159,6 +169,7 @@ export function checkTheme(theme: FigTheme = {}): Finding[] {
         for (const c of [a, t[bg]]) if (!rgb(c)) unread.add(c);
       } else if (r < 4.5) out.push(err('low-contrast', [], `${name} theme: ${fg} on ${bg} has contrast ${r}:1 (minimum 4.5:1)`));
     }
+  }
   for (const c of unread) out.push(warn('color-not-checked', [], `cannot read the color "${c}", so its contrast is not checked`));
   return out;
 }
