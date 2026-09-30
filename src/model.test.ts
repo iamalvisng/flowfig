@@ -243,8 +243,9 @@ test('today is the x of its date and grows the range on both sides', () => {
   assert.equal(before.start, dayOf('2026-09-14'));
   assert.equal(before.today, ((dayOf('2026-09-20')! - before.start) / (before.end - before.start + 1)) * 210);
   assert.equal(at('2026-11-10').end, dayOf('2026-11-15'));
-  // No today: the line stops at the last date.
-  assert.ok(Math.abs(timelineLayout(oct, 210).today! - 15 * 10) < 1e-9);
+  // No today: no marker. The playhead rests at the last date.
+  assert.equal(timelineLayout(oct, 210).today, null);
+  assert.ok(Math.abs(timelineLayout(oct, 210).last! - 15 * 10) < 1e-9);
 });
 
 test('one item, or every item on one day, gives a one-week range with finite numbers', () => {
@@ -263,7 +264,7 @@ test('one item, or every item on one day, gives a one-week range with finite num
       l.ticks.map((t) => t.label),
       ['W41'],
     );
-    for (const n of [l.today!, ...l.items.flatMap((i) => [i.x, i.w])]) assert.ok(Number.isFinite(n));
+    for (const n of [l.last!, ...l.items.flatMap((i) => [i.x, i.w])]) assert.ok(Number.isFinite(n));
   }
 });
 
