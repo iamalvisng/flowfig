@@ -17,10 +17,10 @@ import { fileURLToPath } from 'node:url';
 register('./figure-loader.mjs', import.meta.url); // lets a figure file load without its JSX entry
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const args = process.argv.slice(2);
-const at = args[0] === 'check' ? 1 : 0; // where the input sits
+const at = ['check', 'verify', 'diff'].includes(args[0]) ? 1 : 0; // where the input sits
 
 // A bare name is a figure slug; anything else goes to the CLI as it is. A render gets a default output path, unless one follows.
-if (args[at] && !['docs', 'init', 'help'].includes(args[at]) && /^\w[\w-]*$/.test(args[at])) {
+if (args[at] && !['docs', 'init', 'help', 'verify'].includes(args[at]) && /^\w[\w-]*$/.test(args[at])) {
   const slug = args[at];
   args[at] = join(root, 'figures', `${slug}.ts`);
   if (!at && !(args[1] && !args[1].startsWith('--'))) args.splice(1, 0, `${slug}.svg`);

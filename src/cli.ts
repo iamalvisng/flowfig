@@ -7,6 +7,7 @@
  *   flowfig figure.ts out.svg            # a module whose default export is a spec
  *   flowfig --spec out.svg               # print back the spec the SVG carries
  *   flowfig check <input> [--json]       # list the faults; the input can also be an SVG this wrote
+ *   flowfig verify <input>... [--root dir]   # check that the code each figure links to still exists
  *   flowfig docs                         # print the full guide (Markdown)
  *   flowfig init [dir]                   # write flowfig instructions for the coding agents of a repo
  *
@@ -20,12 +21,14 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { GUIDE } from './guide.ts';
 import { runInit } from './init.ts';
-import { counts } from './model.ts';
+import { counts, type FlowProps } from './model.ts';
 import { check, toSvg, type Finding } from './svg.ts';
+import { links, verify, type Link } from './verify.ts';
 
 const USAGE = `usage: flowfig <-|spec.json|figure.ts> [out.svg]   render a figure; a spec on stdin with -
        flowfig check <-|spec.json|figure.ts|figure.svg>   list the faults; the input can be an SVG this wrote
        flowfig --spec figure.svg                          print the spec the SVG carries
+       flowfig verify <input>... [--root <dir>] [--json] [--strict]   check the code links of one or more figures
        flowfig docs                                       print the guide (Markdown)
        flowfig init [dir] [--agents <ids>] [-y] [--global] [--dry-run]   write flowfig instructions for the coding agents of a repo
 flags for render and check: --strict (warnings are errors), --json, --width <px>, --min-text <px>, --no-check (render only)`;
@@ -78,6 +81,59 @@ if (args[0] === '--spec') {
   process.exit(0);
 }
 
+/** A spec from stdin, a JSON file, an SVG this wrote, or a module. Exit 2 with a message on any failure. */
+async function load(input: string): Promise<FlowProps> {
+  let loaded;
+  try {
+    loaded =
+      input === '-'
+        ? JSON.parse(readFileSync(0, 'utf8'))
+        : input.endsWith('.json')
+          ? JSON.parse(readFileSync(input, 'utf8'))
+          : input.endsWith('.svg')
+            ? JSON.parse(specOf(readFileSync(input, 'utf8'), input))
+            : (await import(pathToFileURL(resolve(input)).href)).default;
+  } catch (e) {
+    usage(`${input}: ${(e as Error).message}`);
+  }
+  const props = loaded?.props ?? loaded;
+  if (!props?.layout) usage(`${input}: no figure props (expected { props: { layout, edges, steps } })`);
+  if (!Array.isArray(props.edges)) usage(`${input}: edges must be an array (use [] for none)`);
+  if (props.steps?.some((s: { flow?: unknown }) => !Array.isArray(s?.flow))) usage(`${input}: each step needs a flow array`);
+  return props;
+}
+
+if (args[0] === 'verify') {
+  args.shift();
+  const json = flag('--json'),
+    strict = flag('--strict');
+  const at = args.indexOf('--root');
+  const root = at === -1 ? process.cwd() : (args.splice(at, 2)[1] ?? usage('--root needs a folder'));
+  const unknown = args.find((a) => a.startsWith('-') && a !== '-');
+  if (unknown) usage(`unknown flag ${unknown}`);
+  if (!args.length) usage('verify needs at least one figure');
+  const findings: (Finding & { figure: string })[] = [];
+  const all: (Link & { figure: string })[] = [];
+  for (const input of args) {
+    const props = await load(input);
+    const found = [...check(props), ...verify(props, { root })].map((f) => ({
+      ...f,
+      figure: input,
+      ...(strict ? { severity: 'error' as const } : {}),
+    }));
+    findings.push(...found);
+    all.push(...links(props).map((l) => ({ ...l, figure: input })));
+  }
+  const errors = findings.filter((f) => f.severity === 'error').length;
+  if (json) console.log(JSON.stringify({ findings, links: all }, null, 2));
+  else {
+    const n = (k: number, word: string) => `${k} ${word}${k === 1 ? '' : 's'}`;
+    for (const f of findings) console.log(`${f.severity.padEnd(8)} ${f.rule.padEnd(18)} ${f.figure}: ${f.message}`);
+    console.log(`${n(errors, 'error')}, ${n(findings.length - errors, 'warning')}`);
+  }
+  process.exit(errors ? 1 : 0);
+}
+
 const command = args[0] === 'check' ? args.shift()! : 'render';
 const json = flag('--json'),
   strict = flag('--strict'),
@@ -88,23 +144,7 @@ if (unknown) usage(`unknown flag ${unknown}`);
 const [input, out] = args;
 if (!input) usage(USAGE);
 
-let loaded;
-try {
-  loaded =
-    input === '-'
-      ? JSON.parse(readFileSync(0, 'utf8'))
-      : input.endsWith('.json')
-        ? JSON.parse(readFileSync(input, 'utf8'))
-        : input.endsWith('.svg')
-          ? JSON.parse(specOf(readFileSync(input, 'utf8'), input))
-          : (await import(pathToFileURL(resolve(input)).href)).default;
-} catch (e) {
-  usage(`${input}: ${(e as Error).message}`);
-}
-const props = loaded?.props ?? loaded;
-if (!props?.layout) usage(`${input}: no figure props (expected { props: { layout, edges, steps } })`);
-if (!Array.isArray(props.edges)) usage(`${input}: edges must be an array (use [] for none)`);
-if (props.steps?.some((s: { flow?: unknown }) => !Array.isArray(s?.flow))) usage(`${input}: each step needs a flow array`);
+const props = await load(input);
 
 const findings: Finding[] = skip
   ? []
