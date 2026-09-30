@@ -67,7 +67,9 @@ const vars = (t: Record<'accent' | 'fg' | 'muted' | 'bg' | 'surface' | 'border',
 const content = (c: FigContent): FigRow[] | string => (isRows(c) ? c : str(c));
 const esc = (s: string) => s.replace(/[<>&"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' })[c]!);
 const n2 = (v: number) => Math.round(v * 10) / 10;
-const pct = (v: number) => n2(v * 100) + '%';
+// Keyframe times are fractions of a loop that can last a minute: one decimal would round a 0.7 s hop away, and the packet would jump.
+const n4 = (v: number) => Math.round(v * 10000) / 10000;
+const pct = (v: number) => Math.round(v * 10000) / 100 + '%';
 
 /** Break a string into lines that fit `width`, keeping the newlines it already has. */
 function wrap(s: string, width: number, fontSize: number, mono = false): string[] {
@@ -474,7 +476,7 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
     })();
     return (
       `<g${cls(name)} opacity="0"><circle r="10" fill="var(--accent)" opacity="0.2"/><circle r="4.5" fill="var(--accent)"/>${chip}` +
-      `<animateMotion dur="${n2(total)}s" repeatCount="indefinite" keyTimes="0;${n2(t0)};${n2(t1)};1" keyPoints="${h.back ? '1;1;0;0' : '0;0;1;1'}" calcMode="linear">` +
+      `<animateMotion dur="${n2(total)}s" repeatCount="indefinite" keyTimes="0;${n4(t0)};${n4(t1)};1" keyPoints="${h.back ? '1;1;0;0' : '0;0;1;1'}" calcMode="linear">` +
       `<mpath href="#p-${esc(h.edge)}" xlink:href="#p-${esc(h.edge)}"/></animateMotion></g>`
     );
   });
