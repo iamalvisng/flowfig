@@ -1,0 +1,26 @@
+name: flowfig
+description: Verify the code links of every flowfig figure, and comment the diagram diff on a pull request.
+inputs:
+  figures:
+    description: A glob for the SVGs to check. Only an SVG with a flowfig spec inside counts.
+    default: '**/*.svg'
+  comment:
+    description: Post one comment on the pull request with the diagram diff and the verify faults.
+    default: 'true'
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: if [ ! -x node_modules/.bin/flowfig ]; then npm i --no-save flowfig@0.2.0; fi
+      working-directory: ${{ github.workspace }}
+    - shell: bash
+      env:
+        FIGURES: ${{ inputs.figures }}
+        COMMENT: ${{ inputs.comment }}
+        GH_TOKEN: ${{ github.token }}
+        BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        PR: ${{ github.event.pull_request.number }}
+        REPO: ${{ github.repository }}
+        FORK: ${{ github.event.pull_request.head.repo.fork }}
+      run: bash "${{ github.action_path }}/action/comment.sh"
