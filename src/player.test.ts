@@ -93,3 +93,12 @@ test("rail: 'only' draws the rail rows, the tabs and no map", () => {
   assert.doesNotMatch(html, /data-fig=/);
   assert.match(html, /role="tablist"/);
 });
+
+test('a lit box has the trail look on load, and the style holds the active look', () => {
+  const html = render(fig);
+  // trail: 1 px accent border, no glow
+  assert.ok(html.includes('border:1px solid var(--fig-accent'), 'trail border');
+  assert.ok(!html.replace(/<style>.*?<\/style>/, '').includes('0 0 0 3px'), 'no glow on the trail');
+  // active: the class the tick toggles has a 2 px border and the glow
+  assert.match(html, /\.flowfig-active[^{]*\{[^}]*border-width:2px[^}]*box-shadow:0 0 0 3px/);
+});

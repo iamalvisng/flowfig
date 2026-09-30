@@ -60,8 +60,8 @@ const FRAME_TOP = 37,
   FRAME_BOTTOM = 18;
 
 // The card-on fills are fixed colors that approximate the player's 8% accent tint, so the SVG needs no color-mix.
-const vars = (t: Record<'accent' | 'fg' | 'muted' | 'bg' | 'surface' | 'border', string>, cardOn: string) =>
-  `--accent:${t.accent}; --fg:${t.fg}; --muted:${t.muted}; --bg:${t.bg}; --surface:${t.surface}; --border:${t.border}; --card-on:${cardOn};`;
+const vars = (t: Record<'accent' | 'fg' | 'muted' | 'bg' | 'surface' | 'border', string>, cardOn: string, tint: string) =>
+  `--accent:${t.accent}; --fg:${t.fg}; --muted:${t.muted}; --bg:${t.bg}; --surface:${t.surface}; --border:${t.border}; --card-on:${cardOn}; --tint:${tint};`;
 
 /** What a card actually holds: rows, or its text. Only text survives outside React. */
 const content = (c: FigContent): FigRow[] | string => (isRows(c) ? c : str(c));
@@ -265,12 +265,14 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
     bi: number;
     lane: number;
     edge: string;
+    dest: string;
     back: boolean;
     data?: unknown;
     t0: number;
     t1: number;
     tEnd: number;
   }[] = [];
+  const edgeOf = Object.fromEntries(fig.edges.map((e, i) => [ids[i], e]));
   let t = 0;
   beats.forEach((stepBeats, si) => {
     stepBeats.forEach((b, bi) => {
@@ -278,7 +280,19 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
       const dur = beatMs(b, opts.speed ?? fig.speed ?? 900) / 1000 / BASE_RATE;
       const hold = last ? STEP_HOLD_MS / 1000 / BASE_RATE : 0;
       b.hops.forEach((h, lane) => {
-        if (byId[h.edge]) hops.push({ si, bi, lane, edge: h.edge, back: h.back, data: h.data, t0: t, t1: t + speed, tEnd: t + dur });
+        if (byId[h.edge])
+          hops.push({
+            si,
+            bi,
+            lane,
+            edge: h.edge,
+            dest: h.back ? edgeOf[h.edge].from : edgeOf[h.edge].to,
+            back: h.back,
+            data: h.data,
+            t0: t,
+            t1: t + speed,
+            tEnd: t + dur,
+          });
       });
       segs.push({ t0: t, t1: t + dur + hold, si, bi });
       t += dur + hold;
@@ -337,6 +351,40 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
     return seen.get(key)!;
   };
 
+  /**
+   * The look of one box over the loop: off, trail (visited) or active (the packet arrived, until the beat ends).
+   * Frames hold each look and ramp back to the trail look over FADE, so `linear` timing fades the change.
+   */
+  const FADE = 0.4 / BASE_RATE;
+  const LOOKS = {
+    off: ['var(--bg)', 'var(--border)', 1, 'drop-shadow(0 0 0 transparent)'],
+    trail: ['var(--bg)', 'var(--accent)', 1, 'drop-shadow(0 0 0 transparent)'],
+    active: ['var(--tint)', 'var(--accent)', 2, 'drop-shadow(0 0 4px var(--accent))'],
+  } as const;
+  const boxAnim = (id: string, shape: boolean): string => {
+    const pieces: { a: number; b: number; look: keyof typeof LOOKS }[] = [];
+    segs.forEach((s, i) => {
+      if (!litNodes[i].has(id)) return void pieces.push({ a: s.t0, b: s.t1, look: 'off' });
+      const arrive = Math.min(...hops.filter((h) => h.dest === id && h.si === s.si && h.bi === s.bi).map((h) => h.t1), s.t1);
+      if (arrive > s.t0) pieces.push({ a: s.t0, b: arrive, look: 'trail' });
+      if (arrive < s.t1) pieces.push({ a: arrive, b: s.t1, look: 'active' });
+    });
+    if (pieces.every((q) => q.look === 'off')) return '';
+    const kf = pieces.map((q, k) => {
+      const ramp = q.look === 'trail' && pieces[k - 1]?.look === 'active' ? Math.min(FADE, (q.b - q.a) / 2) : 0;
+      const [fill, stroke, width, filter] = LOOKS[q.look];
+      const css = `${shape ? `fill: ${fill}; ` : ''}stroke: ${stroke}; stroke-width: ${width}${shape ? `; filter: ${filter}` : ''}`;
+      return `${pct((q.a + ramp) / total)},${pct(q.b / total - 0.0001)} { ${css} }`;
+    });
+    const key = (shape ? 'B' : 'R') + kf.join(' ');
+    if (!seen.has(key)) {
+      const name = `a${seen.size}`;
+      seen.set(key, name);
+      css.push(`@keyframes ${name} { ${kf.join(' ')} }\n.${name} { animation: ${name} ${n2(total)}s infinite linear; }`);
+    }
+    return seen.get(key)!;
+  };
+
   const boxes = placed.map((p) => {
     const { item } = p;
     if (isGroup(item)) {
@@ -348,8 +396,8 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
         `/><text x="${n2(p.x + FRAME_SIDE)}" y="${n2(p.y + 20)}" class="frame">${esc(str(item.label).toUpperCase())}</text>`
       );
     }
-    const on = segs.map((_, i) => litNodes[i].has(item.id));
-    const stroke = cls(anim(on, 'stroke: var(--accent)', 'stroke: var(--border)', 'n'));
+    const stroke = cls(boxAnim(item.id, true));
+    const rim = cls(boxAnim(item.id, false));
     const cx = p.x + p.w / 2;
     const contents = cards.get(item.id);
     const cardTop = p.y + p.h - 10 - (contents ? cardH.get(item.id)! : 0);
@@ -359,7 +407,7 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
         ? `<polygon points="${n2(cx)},${n2(p.y)} ${n2(p.x + p.w)},${n2(p.y + p.h / 2)} ${n2(cx)},${n2(p.y + p.h)} ${n2(p.x)},${n2(p.y + p.h / 2)}" fill="var(--bg)" stroke="var(--border)"${stroke}/>`
         : item.shape === 'store'
           ? `<path d="M${n2(p.x)} ${n2(p.y + 12)} a ${n2(p.w / 2)} 12 0 0 1 ${n2(p.w)} 0 v ${n2(p.h - 24)} a ${n2(p.w / 2)} 12 0 0 1 ${n2(-p.w)} 0 z" fill="var(--bg)" stroke="var(--border)"${stroke}/>` +
-            `<path d="M${n2(p.x)} ${n2(p.y + 12)} a ${n2(p.w / 2)} 12 0 0 0 ${n2(p.w)} 0" fill="none" stroke="var(--border)"${stroke}/>`
+            `<path d="M${n2(p.x)} ${n2(p.y + 12)} a ${n2(p.w / 2)} 12 0 0 0 ${n2(p.w)} 0" fill="none" stroke="var(--border)"${rim}/>`
           : `<rect x="${n2(p.x)}" y="${n2(p.y)}" width="${n2(p.w)}" height="${n2(p.h)}" rx="10" fill="var(--bg)" stroke="var(--border)"${stroke}/>`;
     const label = `<text x="${n2(cx)}" y="${n2(labelY)}" class="label">${esc(str(item.label))}</text>`;
     const sub = item.sub ? `<text x="${n2(cx)}" y="${n2(labelY + SUB_LINE)}" class="sub">${esc(str(item.sub))}</text>` : '';
@@ -604,8 +652,8 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
   const { font, ...t0 } = { ...LIGHT, ...fig.theme, ...opts.theme };
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${n2(W)}" height="${n2(H)}" viewBox="0 0 ${n2(W)} ${n2(H)}" font-family="${esc(font ?? SYSTEM_FONT)}">
 <style>
-svg { ${vars(t0, '#eef5fd')} }
-@media (prefers-color-scheme: dark) { svg { ${vars(DARK, '#1d2733')} } }
+svg { ${vars(t0, '#eef5fd', '#e3efff')} }
+@media (prefers-color-scheme: dark) { svg { ${vars(DARK, '#1d2733', '#1a2a40')} } }
 .label { fill: var(--fg); font-size: 14px; font-weight: 500; text-anchor: middle; }
 .sub { fill: var(--muted); font-size: 12px; text-anchor: middle; }
 .frame { fill: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: .04em; }

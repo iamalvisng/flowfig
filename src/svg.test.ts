@@ -333,3 +333,49 @@ test('a long loop keeps a real travel window in keyTimes: the packet moves, it d
   assert.ok(times.length >= 8);
   for (const [t0, t1] of times) assert.ok(t1 - t0 > 0.005, `${t0} ${t1}`);
 });
+
+test('a box turns active when the packet arrives, and fades back to trail after the beat ends', () => {
+  const say = 'one two three four five six seven eight nine ten';
+  const abc: FlowProps = {
+    speed: 900,
+    layout: {
+      children: [
+        { id: 'a', label: 'A' },
+        { id: 'b', label: 'B' },
+        { id: 'c', label: 'C' },
+      ],
+    },
+    edges: [
+      { id: 'ab', from: 'a', to: 'b' },
+      { id: 'bc', from: 'b', to: 'c' },
+    ],
+    steps: [
+      {
+        label: 's',
+        flow: [
+          { edges: 'ab', say },
+          { edges: 'bc', say },
+        ],
+      },
+    ],
+  };
+  const svg = toSvg(abc);
+  const travel = 900 / 1000 / BASE_RATE;
+  const beat = beatMs({ hops: [], say }, 900) / 1000 / BASE_RATE;
+  const total = 2 * beat + STEP_HOLD_MS / 1000 / BASE_RATE;
+  const p = (s: number) => Math.round((s / total) * 10000) / 100 + '%';
+  const eps = (s: number) => Math.round((s / total - 0.0001) * 10000) / 100 + '%';
+  const blocks = [...svg.matchAll(/@keyframes a\d+ \{ ([^\n]*) \}\n\.a\d+ \{[^}]*linear/g)].map((m) => m[1]);
+  const active = 'fill: var(--tint); stroke: var(--accent); stroke-width: 2';
+  const trail = 'fill: var(--bg); stroke: var(--accent); stroke-width: 1';
+  const off = 'fill: var(--bg); stroke: var(--border); stroke-width: 1';
+  // b: trail until the packet arrives (not the beat start), active to the beat end, then a 400 ms ramp back to trail
+  const b = `0%,${eps(travel)} { ${trail}`;
+  const frame = blocks.find((k) => k.includes(b))!;
+  assert.ok(frame.includes(`${p(travel)},${eps(beat)} { ${active}`), frame);
+  assert.ok(frame.includes(`${p(beat + 0.4 / BASE_RATE)},${eps(total)} { ${trail}`), frame);
+  // c: off during beat 1, active from the arrival in beat 2
+  const c = blocks.find((k) => k.startsWith(`0%,${eps(beat)} { ${off}`))!;
+  assert.ok(c.includes(`${p(beat + travel)},${eps(total)} { ${active}`), c);
+  assert.ok(svg.includes('--tint:'));
+});

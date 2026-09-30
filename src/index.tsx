@@ -37,6 +37,7 @@ export { LIGHT, DARK } from './model.ts';
 const DEFAULTS: Required<FigTheme> = { ...LIGHT, font: 'inherit' };
 const v = (k: keyof FigTheme) => `var(--fig-${k}, ${DEFAULTS[k]})`;
 const MONO = 'var(--ifm-font-family-monospace, ui-monospace, SFMono-Regular, Menlo, monospace)';
+const ACTIVE = 'flowfig-active'; // the box a packet has just reached
 const glow = `0 0 0 3px color-mix(in srgb, ${v('accent')} 18%, transparent)`;
 
 const cardBody = (c: FigContent): ReactNode => {
@@ -309,7 +310,8 @@ export function Flow({ layout, edges, steps = [], theme, speed = 900, autoplay =
   // Play the step's beats: each moves its packets (and their data cards) along its edges, then the next step starts.
   useEffect(() => {
     const gs = dots.current,
-      cs = chips.current;
+      cs = chips.current,
+      edgeOf = Object.fromEntries(edges.map((e, i) => [ids[i], e]));
     if (clock.current.beats !== beats) {
       // A rail click can open another step at a later beat; start the clock at that beat, not at 0.
       const j = jump.current ?? 0;
@@ -361,11 +363,17 @@ export function Flow({ layout, edges, steps = [], theme, speed = 900, autoplay =
           c.style.opacity = hops[j].data == null ? '0' : '1';
         }
       });
+      // A box is active from the packet's arrival until the beat ends; the class toggle skips React.
+      const arrived = new Set(f >= 1 ? hops.map((h) => (h.back ? edgeOf[h.edge]?.from : edgeOf[h.edge]?.to)) : []);
+      root.current
+        ?.querySelectorAll<HTMLElement>('[data-fig]')
+        .forEach((n) => n.classList.toggle(ACTIVE, arrived.has(n.dataset.fig ?? '')));
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => {
       cancelAnimationFrame(raf);
+      root.current?.querySelectorAll(`.${ACTIVE}`).forEach((n) => n.classList.remove(ACTIVE));
       gs.forEach((g) => g && (g.style.opacity = '0'));
       cs.forEach((c) => c && (c.style.opacity = '0'));
     };
@@ -463,6 +471,7 @@ export function Flow({ layout, edges, steps = [], theme, speed = 900, autoplay =
       <div
         key={item.id}
         data-fig={item.id}
+        data-diamond={diamond || undefined}
         onMouseEnter={() => setHover(item.id)}
         onMouseLeave={() => setHover(null)}
         style={{
@@ -476,17 +485,19 @@ export function Flow({ layout, edges, steps = [], theme, speed = 900, autoplay =
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'center',
-          padding: diamond ? '22px 34px' : `${store ? 24 : 10}px ${card ? 10 : 16}px 10px`,
+          padding: diamond
+            ? '22px 34px'
+            : `calc(${store ? 24 : 10}px - var(--ff-b, 0px)) calc(${card ? 10 : 16}px - var(--ff-b, 0px)) calc(10px - var(--ff-b, 0px))`,
           textAlign: 'center',
           background: diamond ? undefined : v('bg'),
           color: v('fg'),
           border: diamond ? undefined : `1px solid ${lit ? v('accent') : v('border')}`,
-          boxShadow: diamond ? undefined : lit ? glow : '0 1px 2px rgba(0,0,0,.06)',
+          boxShadow: diamond ? undefined : '0 1px 2px rgba(0,0,0,.06)',
           opacity: focus && !lit ? 0.7 : 1,
           borderRadius: store ? '50% / 12px' : 10,
           fontSize: 14,
           fontWeight: 500,
-          transition: 'border-color .25s, box-shadow .25s, opacity .25s',
+          transition: 'border-color .4s, background .4s, box-shadow .4s, border-width .4s, opacity .25s',
           cursor: 'default',
         }}
       >
@@ -509,7 +520,7 @@ export function Flow({ layout, edges, steps = [], theme, speed = 900, autoplay =
               stroke={lit ? v('accent') : v('border')}
               strokeWidth={lit ? 1.6 : 1}
               vectorEffect="non-scaling-stroke"
-              style={{ transition: 'stroke .25s' }}
+              style={{ transition: 'stroke .4s, fill .4s, stroke-width .4s' }}
             />
           </svg>
         )}
@@ -615,7 +626,12 @@ export function Flow({ layout, edges, steps = [], theme, speed = 900, autoplay =
       >
         <Icon d={full ? 'M4 4l8 8M12 4l-8 8' : 'M9 3h4v4M7 13H3V9M13 3L9 7M3 13l4-4'} />
       </button>
-      <style>{'@keyframes flowfig-in{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}'}</style>
+      <style>
+        {'@keyframes flowfig-in{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}' +
+          // 2 px border, tint and glow; the padding shrinks by 1 px so the box keeps its size and the edges stay put
+          `.${ACTIVE}:not([data-diamond]){--ff-b:1px;border-width:2px!important;background:color-mix(in srgb, ${v('accent')} 10%, ${v('surface')})!important;box-shadow:${glow}!important}` +
+          `.${ACTIVE} polygon{fill:color-mix(in srgb, ${v('accent')} 10%, ${v('surface')});stroke:${v('accent')};stroke-width:2px}`}
+      </style>
       {!noMap && (
         <>
           {/* The canvas: a dotted grid that runs to the figure's edges, with a line under it. */}
