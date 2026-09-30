@@ -32,7 +32,10 @@ const messages = (fig: FlowProps) =>
     (fig.steps ?? [])
       .flatMap((s) =>
         s.flow.flatMap((b) =>
-          toBeat(b).hops.map((h) => `${str(s.label)}: ${h.edge}${h.back ? ' back' : ''}${h.data != null ? ` "${str(h.data)}"` : ''}`),
+          toBeat(b).hops.map(
+            (h) =>
+              `${str(s.label)}: ${h.edge}${h.back ? ' back' : ''}${h.data != null ? ` "${str(h.data)}"` : ''}${h.tone ? ` [${h.tone}]` : ''}`,
+          ),
         ),
       )
       .map((id) => [id, id]),
@@ -50,7 +53,7 @@ export function diff(before: FlowProps, after: FlowProps): Change[] {
   const edges = (f: FlowProps) => new Map(f.edges.map((e) => [edgeId(e), e]));
   const steps = (f: FlowProps) => new Map((f.steps ?? []).map((s) => [str(s.label), s]));
   const out = [
-    ...compare('box', boxes(before), boxes(after), (a, b) => fields(a, b, ['label', 'sub', 'shape', 'source', 'group'])),
+    ...compare('box', boxes(before), boxes(after), (a, b) => fields(a, b, ['label', 'sub', 'shape', 'tone', 'source', 'group'])),
     ...compare<FigEdge>('edge', edges(before), edges(after), (a, b) => fields(a, b, ['from', 'to', 'label', 'source'])),
     ...compare('step', steps(before), steps(after), () => []),
     ...compare('message', messages(before), messages(after), () => []),

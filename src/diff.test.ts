@@ -79,3 +79,16 @@ test('formatDiff prints one line per change, as text or Markdown', () => {
   assert.equal(formatDiff(c, 'md'), '- edge removed: `b->c`\n- message removed: `read: b->c`');
   assert.equal(formatDiff([], 'md'), '- no change in the spec');
 });
+
+test('a hop tone and a box tone are changes', () => {
+  const toned: FlowProps = {
+    ...base,
+    layout: { children: [{ id: 'a', label: 'Client', tone: 'red' }, ...base.layout.children.slice(1)] },
+    steps: [{ label: 'read', flow: ['q', 'b->c', { edge: 'q', back: true, data: '200', tone: 'green' }] }, base.steps![1]],
+  };
+  assert.deepEqual(diff(base, toned), [
+    { kind: 'box', op: 'changed', id: 'a', detail: 'tone (none) -> "red"' },
+    { kind: 'message', op: 'removed', id: 'read: q back "200"' },
+    { kind: 'message', op: 'added', id: 'read: q back "200" [green]' },
+  ]);
+});

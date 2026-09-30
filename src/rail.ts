@@ -1,7 +1,7 @@
 // The rail: a figure's steps as a compact lifeline diagram under the map. The map shows where each part runs; the rail shows when each
 // message goes, in which direction, and with what payload. One pure layout, so the SVG and the React player draw the same numbers.
 import type { Rect } from './geometry.ts';
-import { edgeId, isGroup, labelPillW, str, toBeat, type FigGroup, type FigNode, type FlowProps } from './model.ts';
+import { edgeId, isGroup, labelPillW, str, toBeat, type FigGroup, type FigNode, type FigTone, type FlowProps } from './model.ts';
 import { textWidth } from './text.ts';
 
 // band: the band-label line; cols: the column-label row; bandInset: a band's inset from its outer column edges, so two adjacent
@@ -42,6 +42,7 @@ export type RailRow =
       to: number;
       text: string;
       async: boolean;
+      tone?: FigTone;
       pill?: { x: number; w: number };
       group?: number;
     };
@@ -81,7 +82,7 @@ export function layoutRail(fig: FlowProps, mapWidth: number): Rail | null {
   // The messages first: they decide which columns exist.
   // Filter hops on both: the edge must exist, and both its endpoints must be in the layout.
   // checkSpec reports the missing id; the rail must not fail on it.
-  type Msg = { step: number; beat: number; edge: string; back: boolean; text: string; async: boolean };
+  type Msg = { step: number; beat: number; edge: string; back: boolean; text: string; async: boolean; tone?: FigTone };
   const perStep: Msg[][][] = steps.map((s, si) =>
     s.flow.map(toBeat).map((b, bi) =>
       b.hops
@@ -97,6 +98,7 @@ export function layoutRail(fig: FlowProps, mapWidth: number): Rail | null {
           back: h.back,
           text: str(h.data) || str(edges.get(h.edge)!.label),
           async: h.async === true,
+          tone: h.tone,
         })),
     ),
   );
@@ -184,7 +186,20 @@ export function layoutRail(fig: FlowProps, mapWidth: number): Rail | null {
         const mid = (columns[from].x + columns[to].x) / 2;
         const pill = m.text ? { x: mid - labelPillW(m.text) / 2, w: labelPillW(m.text) } : undefined;
         if (group != null) groups[group].rows.push(rows.length);
-        rows.push({ kind: 'message', step: si, beat: m.beat, n: ++n, edge: m.edge, from, to, text: m.text, async: m.async, pill, group });
+        rows.push({
+          kind: 'message',
+          step: si,
+          beat: m.beat,
+          n: ++n,
+          edge: m.edge,
+          from,
+          to,
+          text: m.text,
+          async: m.async,
+          tone: m.tone,
+          pill,
+          group,
+        });
       }
     }
   });

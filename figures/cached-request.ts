@@ -37,7 +37,7 @@ const props: Figure['props'] = {
       flow: [
         { edges: { edge: 'req', data: 'GET /users/42' }, show: { client: [USER] }, say: 'The browser asks for user 42.' },
         {
-          edges: 'get',
+          edges: { edge: 'get', tone: 'orange' },
           show: { cache: [{ text: 'users:42', mono: true, mark: 'miss' }] },
           say: 'The API server checks the cache first. The cache has no entry.',
         },
@@ -61,7 +61,7 @@ const props: Figure['props'] = {
       flow: [
         { edges: { edge: 'req', data: 'GET /users/42' }, show: { client: [USER] }, say: 'The browser asks for user 42 again.' },
         {
-          edges: 'get',
+          edges: { edge: 'get', tone: 'green' },
           show: { cache: [{ text: 'users:42', mono: true, mark: 'hit' }] },
           say: 'The cache has the entry now.',
         },

@@ -27,6 +27,8 @@ import {
   EDGE_ON,
   LIGHT,
   TONES,
+  toneFill,
+  toneTint,
   labelPillW,
   ON_ACCENT,
   str,
@@ -43,6 +45,7 @@ import {
   type FigNode,
   type FigRow,
   type FigTheme,
+  type FigTone,
   type FlowProps,
 } from './model.ts';
 
@@ -268,6 +271,7 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
     dest: string;
     back: boolean;
     data?: unknown;
+    tone?: string;
     t0: number;
     t1: number;
     tEnd: number;
@@ -289,6 +293,7 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
             dest: h.back ? edgeOf[h.edge].from : edgeOf[h.edge].to,
             back: h.back,
             data: h.data,
+            tone: h.tone && TONES[h.tone],
             t0: t,
             t1: t + speed,
             tEnd: t + dur,
@@ -339,8 +344,8 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
   };
 
   /** Like `anim`, for a property that takes a different value in each segment (a row that moves as phases fold). */
-  const frames = (values: string[], prefix: string): string => {
-    if (!segs.length || values.every((v) => v === values[0])) return '';
+  const frames = (values: string[], prefix: string, base = values[0]): string => {
+    if (!segs.length || values.every((v) => v === base)) return '';
     const key = prefix + values.join('|');
     if (!seen.has(key)) {
       const name = `a${seen.size}`;
@@ -358,29 +363,35 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
    * FADE is in timeline seconds, which are wall seconds.
    */
   const FADE = 0.4;
-  const LOOKS = {
-    off: ['var(--bg)', 'var(--border)', 1, 'drop-shadow(0 0 0 transparent)'],
-    trail: ['var(--bg)', 'var(--accent)', 1, 'drop-shadow(0 0 0 transparent)'],
-    active: ['var(--tint)', 'var(--accent)', 2, 'drop-shadow(0 0 4px var(--accent))'],
-  } as const;
-  const boxAnim = (id: string, shape: boolean): string => {
-    const pieces: { a: number; b: number; look: keyof typeof LOOKS; ramp?: number }[] = [];
+  // A box tone is a permanent state: a 1 px border and a light tint in the off and trail looks. The active look uses the hop tone, else the box tone.
+  const looks = (look: 'off' | 'trail' | 'active', boxTone?: string, hopTone?: string) => {
+    const tint = boxTone ? toneTint(boxTone, 'var(--bg)') : 'var(--bg)';
+    if (look === 'off') return [tint, boxTone ?? 'var(--border)', 1, 'drop-shadow(0 0 0 transparent)'] as const;
+    if (look === 'trail') return [tint, boxTone ?? 'var(--accent)', 1, 'drop-shadow(0 0 0 transparent)'] as const;
+    const c = hopTone ?? boxTone;
+    return c
+      ? ([toneTint(c, 'var(--surface)', 10), c, 2, `drop-shadow(0 0 4px ${c})`] as const)
+      : (['var(--tint)', 'var(--accent)', 2, 'drop-shadow(0 0 4px var(--accent))'] as const);
+  };
+  const boxAnim = (id: string, shape: boolean, boxTone?: string): string => {
+    const pieces: { a: number; b: number; look: 'off' | 'trail' | 'active'; hop?: string; ramp?: number }[] = [];
     segs.forEach((s, i) => {
       if (!litNodes[i].has(id)) return void pieces.push({ a: s.t0, b: s.t1, look: 'off' });
-      const arrive = Math.min(...hops.filter((h) => h.dest === id && h.si === s.si && h.bi === s.bi).map((h) => h.t1), s.t1);
+      const here = hops.filter((h) => h.dest === id && h.si === s.si && h.bi === s.bi);
+      const arrive = Math.min(...here.map((h) => h.t1), s.t1);
       if (arrive > s.t0) pieces.push({ a: s.t0, b: arrive, look: 'trail' });
-      if (arrive < s.t1) pieces.push({ a: arrive, b: s.t1, look: 'active' });
+      if (arrive < s.t1) pieces.push({ a: arrive, b: s.t1, look: 'active', hop: here.find((h) => h.tone)?.tone });
     });
-    if (pieces.every((q) => q.look === 'off')) return '';
+    if (!pieces.length || (!boxTone && pieces.every((q) => q.look === 'off'))) return '';
     // The last frame is active: the fade ends at 100 %, so the loop wraps with no jump.
     const end = pieces.at(-1)!;
     if (end.look === 'active') {
       end.b -= FADE;
-      pieces.push({ a: end.b, b: end.b + FADE, look: pieces[0].look, ramp: FADE - 0.0002 * total });
+      pieces.push({ a: end.b, b: end.b + FADE, look: pieces[0].look, hop: pieces[0].hop, ramp: FADE - 0.0002 * total });
     }
     const kf = pieces.map((q, k) => {
       const ramp = q.ramp ?? (q.look !== 'active' && pieces[k - 1]?.look === 'active' ? Math.min(FADE, (q.b - q.a) / 2) : 0);
-      const [fill, stroke, width, filter] = LOOKS[q.look];
+      const [fill, stroke, width, filter] = looks(q.look, boxTone, q.hop);
       const css = `${shape ? `fill: ${fill}; ` : ''}stroke: ${stroke}; stroke-width: ${width}${shape ? `; filter: ${filter}` : ''}`;
       return `${pct((q.a + ramp) / total)},${pct(q.b / total - 0.0001)} { ${css} }`;
     });
@@ -404,19 +415,22 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
         `/><text x="${n2(p.x + FRAME_SIDE)}" y="${n2(p.y + 20)}" class="frame">${esc(str(item.label).toUpperCase())}</text>`
       );
     }
-    const stroke = cls(boxAnim(item.id, true));
-    const rim = item.shape === 'store' ? cls(boxAnim(item.id, false)) : '';
+    const bt = item.tone && TONES[item.tone];
+    const stroke = cls(boxAnim(item.id, true, bt));
+    const rim = item.shape === 'store' ? cls(boxAnim(item.id, false, bt)) : '';
+    const fill0 = bt ? toneTint(bt, 'var(--bg)') : 'var(--bg)';
+    const stroke0 = bt ?? 'var(--border)';
     const cx = p.x + p.w / 2;
     const contents = cards.get(item.id);
     const cardTop = p.y + p.h - 10 - (contents ? cardH.get(item.id)! : 0);
     const labelY = item.shape === 'store' ? p.y + 24 + 13 : contents ? p.y + 10 + 13 : p.y + p.h / 2 + (item.sub ? -2 : 5);
     const shape =
       item.shape === 'decision'
-        ? `<polygon points="${n2(cx)},${n2(p.y)} ${n2(p.x + p.w)},${n2(p.y + p.h / 2)} ${n2(cx)},${n2(p.y + p.h)} ${n2(p.x)},${n2(p.y + p.h / 2)}" fill="var(--bg)" stroke="var(--border)"${stroke}/>`
+        ? `<polygon points="${n2(cx)},${n2(p.y)} ${n2(p.x + p.w)},${n2(p.y + p.h / 2)} ${n2(cx)},${n2(p.y + p.h)} ${n2(p.x)},${n2(p.y + p.h / 2)}" fill="${fill0}" stroke="${stroke0}"${stroke}/>`
         : item.shape === 'store'
-          ? `<path d="M${n2(p.x)} ${n2(p.y + 12)} a ${n2(p.w / 2)} 12 0 0 1 ${n2(p.w)} 0 v ${n2(p.h - 24)} a ${n2(p.w / 2)} 12 0 0 1 ${n2(-p.w)} 0 z" fill="var(--bg)" stroke="var(--border)"${stroke}/>` +
-            `<path d="M${n2(p.x)} ${n2(p.y + 12)} a ${n2(p.w / 2)} 12 0 0 0 ${n2(p.w)} 0" fill="none" stroke="var(--border)"${rim}/>`
-          : `<rect x="${n2(p.x)}" y="${n2(p.y)}" width="${n2(p.w)}" height="${n2(p.h)}" rx="10" fill="var(--bg)" stroke="var(--border)"${stroke}/>`;
+          ? `<path d="M${n2(p.x)} ${n2(p.y + 12)} a ${n2(p.w / 2)} 12 0 0 1 ${n2(p.w)} 0 v ${n2(p.h - 24)} a ${n2(p.w / 2)} 12 0 0 1 ${n2(-p.w)} 0 z" fill="${fill0}" stroke="${stroke0}"${stroke}/>` +
+            `<path d="M${n2(p.x)} ${n2(p.y + 12)} a ${n2(p.w / 2)} 12 0 0 0 ${n2(p.w)} 0" fill="none" stroke="${stroke0}"${rim}/>`
+          : `<rect x="${n2(p.x)}" y="${n2(p.y)}" width="${n2(p.w)}" height="${n2(p.h)}" rx="10" fill="${fill0}" stroke="${stroke0}"${stroke}/>`;
     const label = `<text x="${n2(cx)}" y="${n2(labelY)}" class="label">${esc(str(item.label))}</text>`;
     const sub = item.sub ? `<text x="${n2(cx)}" y="${n2(labelY + SUB_LINE)}" class="sub">${esc(str(item.sub))}</text>` : '';
     return shape + label + sub + (contents ? card(p as Rect & { item: FigNode }, cardTop, contents) : '');
@@ -488,7 +502,19 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
     const on = segs.map((_, i) => litEdges[i].has(r.id));
     const hidden = e.quiet && !on.every(Boolean);
     const shown = hidden ? cls(anim(on, 'opacity: 1', 'opacity: 0', 'q')) : '';
-    const lit = cls(anim(on, `stroke: var(--accent); stroke-width: ${EDGE_ON}`, `stroke: var(--muted); stroke-width: ${EDGE_OFF}`, 'e'));
+    // A toned hop colors its edge for its own beat only; the trail after it is the accent.
+    const tone = segs.map(
+      ({ si, bi }) => (beats[si][bi].hops.find((h) => h.edge === r.id && h.tone)?.tone ?? undefined) as FigTone | undefined,
+    );
+    const col = tone.map((x) => (x ? TONES[x] : 'var(--accent)'));
+    const off = `stroke: var(--muted); stroke-width: ${EDGE_OFF}`;
+    const lit = cls(
+      frames(
+        on.map((x, i) => (x ? `stroke: ${col[i]}; stroke-width: ${EDGE_ON}` : off)),
+        'e',
+        off,
+      ),
+    );
     const path = `<path id="p-${esc(r.id)}" d="${r.d}" fill="none" stroke="var(--muted)" stroke-width="${EDGE_OFF}" marker-end="url(#arrow)"${lit}/>`;
     // A quiet edge is only drawn while a step uses it, so wrap the whole thing rather than the stroke.
     const label =
@@ -500,7 +526,15 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
             fonts.push(11);
             return (
               `<rect x="${n2(r.mid.x - lw / 2)}" y="${n2(r.mid.y - 9)}" width="${n2(lw)}" height="18" rx="9" fill="var(--bg)" stroke="var(--border)"` +
-              cls(anim(on, 'fill: var(--accent); stroke: var(--accent)', 'fill: var(--bg); stroke: var(--border)', 'l')) +
+              cls(
+                frames(
+                  on.map((x, i) =>
+                    x ? `fill: ${tone[i] ? toneFill(col[i]) : col[i]}; stroke: ${col[i]}` : 'fill: var(--bg); stroke: var(--border)',
+                  ),
+                  'l',
+                  'fill: var(--bg); stroke: var(--border)',
+                ),
+              ) +
               `/><text x="${n2(r.mid.x)}" y="${n2(r.mid.y + 4)}"${cls('edgelabel', anim(on, `fill: ${ON_ACCENT}`, 'fill: var(--muted)', 'x'))}>${esc(str(e.label))}</text>`
             );
           })();
@@ -526,12 +560,12 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
       const w = Math.max(...lines.map((l) => textWidth(l, 11.5))) + 18;
       const boxH = lines.length * 15 + 8;
       return (
-        `<rect x="${n2(-w / 2)}" y="${n2(-boxH - 12)}" width="${n2(w)}" height="${n2(boxH)}" rx="8" fill="var(--accent)"/>` +
+        `<rect x="${n2(-w / 2)}" y="${n2(-boxH - 12)}" width="${n2(w)}" height="${n2(boxH)}" rx="8" fill="${h.tone ? toneFill(h.tone) : 'var(--accent)'}"/>` +
         lines.map((l, li) => `<text x="0" y="${n2(-boxH - 12 + 15 * li + 15)}" class="chip">${esc(l)}</text>`).join('')
       );
     })();
     return (
-      `<g${cls(name)} opacity="0"><circle r="10" fill="var(--accent)" opacity="0.2"/><circle r="4.5" fill="var(--accent)"/>${chip}` +
+      `<g${cls(name)} opacity="0"><circle r="10" fill="${h.tone ?? 'var(--accent)'}" opacity="0.2"/><circle r="4.5" fill="${h.tone ?? 'var(--accent)'}"/>${chip}` +
       `<animateMotion dur="${n2(total)}s" repeatCount="indefinite" keyTimes="0;${n4(t0)};${n4(t1)};1" keyPoints="${h.back ? '1;1;0;0' : '0;0;1;1'}" calcMode="linear">` +
       `<mpath href="#p-${esc(h.edge)}" xlink:href="#p-${esc(h.edge)}"/></animateMotion></g>`
     );
@@ -633,7 +667,8 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
           const next = segs.map((s) => s.si < row.step || (s.si === row.step && s.bi < row.beat));
           const [x1, x2] = [rail.columns[row.from].x, rail.columns[row.to].x];
           const ly = y + RAIL.row / 2;
-          const lit = anim(now, `stroke: var(--accent); stroke-width: ${EDGE_ON}`, `stroke: var(--muted); stroke-width: ${EDGE_OFF}`, 'e');
+          const col = row.tone ? TONES[row.tone] : 'var(--accent)';
+          const lit = anim(now, `stroke: ${col}; stroke-width: ${EDGE_ON}`, `stroke: var(--muted); stroke-width: ${EDGE_OFF}`, 'e' + col);
           const tagW = ASYNC_TAG_W;
           // The tag sits on the tail side of the pill, so it never hides the arrowhead.
           const tagX = !row.pill ? (x1 + x2) / 2 - tagW / 2 : x2 > x1 ? row.pill.x - tagW - 4 : row.pill.x + row.pill.w + 4;
@@ -643,7 +678,7 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
               `<text x="${n2(tagX + tagW / 2)}" y="${n2(ly + 3)}" class="tag" fill="${TONES.gray}">ASYNC</text>`
             : '';
           const pill = row.pill
-            ? `<rect x="${n2(row.pill.x)}" y="${n2(ly - 9)}" width="${n2(row.pill.w)}" height="18" rx="9" fill="var(--bg)" stroke="var(--border)"${cls(anim(now, 'fill: var(--accent); stroke: var(--accent)', 'fill: var(--bg); stroke: var(--border)', 'l'))}/>` +
+            ? `<rect x="${n2(row.pill.x)}" y="${n2(ly - 9)}" width="${n2(row.pill.w)}" height="18" rx="9" fill="var(--bg)" stroke="var(--border)"${cls(anim(now, `fill: ${row.tone ? toneFill(col) : col}; stroke: ${col}`, 'fill: var(--bg); stroke: var(--border)', 'l' + col))}/>` +
               `<text x="${n2(row.pill.x + row.pill.w / 2)}" y="${n2(ly + 4)}"${cls('edgelabel', anim(now, `fill: ${ON_ACCENT}`, 'fill: var(--muted)', 'x'))}>${esc(row.text)}</text>`
             : '';
           parts.push(
