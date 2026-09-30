@@ -57,8 +57,8 @@ export function checkSpec(fig: FlowProps): Finding[] {
     for (const b of s.flow.map(toBeat)) {
       for (const h of b.hops)
         if (!knownEdges.has(h.edge)) out.push(err('unknown-id', [h.edge], `${where} moves along edge "${h.edge}", which does not exist`));
-      for (const id of [...Object.keys(b.show ?? {}), ...(b.light ?? [])])
-        if (!known.has(id)) out.push(err('unknown-id', [id], `${where}: show or light names box "${id}", which does not exist`));
+      for (const id of [...Object.keys(b.show ?? {}), ...(b.light ?? []), ...(b.focus ?? [])])
+        if (!known.has(id)) out.push(err('unknown-id', [id], `${where}: show, light or focus names box "${id}", which does not exist`));
     }
   });
   const used = new Set((fig.steps ?? []).flatMap((s) => s.flow.flatMap((b) => toBeat(b).hops.map((h) => h.edge))));
@@ -94,6 +94,16 @@ export function checkSpec(fig: FlowProps): Finding[] {
       ] as const)
         if (v != null && d == null) out.push(err('bad-date', [n.id], `box "${n.id}": ${name} "${v}" is not a real YYYY-MM-DD date`));
       if (f != null && t != null && t < f) out.push(err('bad-date', [n.id], `box "${n.id}": to ${n.to} is before from ${n.from}`));
+    }
+    // A dependent item starts after its source ends. A milestone ends the day it starts.
+    const span = new Map(
+      nodes(fig.layout).map((n) => [n.id, [n.from && dayOf(n.from), (n.to && dayOf(n.to)) ?? (n.from && dayOf(n.from))] as const]),
+    );
+    for (const e of fig.edges) {
+      const start = span.get(e.to)?.[0];
+      const end = span.get(e.from)?.[1];
+      if (start != null && end != null && start < end)
+        out.push(warn('timeline-dependency-order', [e.from, e.to], `"${e.to}" starts before "${e.from}" ends`));
     }
     if (fig.today != null && dayOf(fig.today) == null) out.push(err('bad-date', [], `today "${fig.today}" is not a real YYYY-MM-DD date`));
   } else if (fig.lanes) {

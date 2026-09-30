@@ -16,7 +16,7 @@ const props: Figure['props'] = {
         children: [
           { id: 'invoice', label: 'Invoice redesign', from: '2026-10-05', to: '2026-10-23', source: `${doc}#invoice-redesign` },
           { id: 'plan', label: 'Self-serve plan change', from: '2026-11-16', to: '2026-12-11', source: `${doc}#self-serve-plan-change` },
-          { id: 'usage', label: 'Usage-based pricing', from: '2026-10-26', to: '2026-11-27', source: `${doc}#usage-based-pricing` },
+          { id: 'usage', label: 'Usage-based pricing', from: '2026-11-02', to: '2026-11-27', source: `${doc}#usage-based-pricing` },
         ],
       },
       {

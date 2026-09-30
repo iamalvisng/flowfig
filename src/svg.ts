@@ -402,7 +402,12 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
   );
   const litEdges = segs.map(({ si, bi }) => new Set(beats[si].slice(0, bi + 1).flatMap((b) => b.hops.map((h) => h.edge))));
   const litNodes = segs.map((seg, i) => {
-    const on = new Set<string>([...(steps[seg.si].nodes ?? []), ...Object.keys(shownAt[i]), ...(beats[seg.si][seg.bi].light ?? [])]);
+    const on = new Set<string>([
+      ...(steps[seg.si].nodes ?? []),
+      ...Object.keys(shownAt[i]),
+      ...(beats[seg.si][seg.bi].light ?? []),
+      ...(beats[seg.si][seg.bi].focus ?? []),
+    ]);
     fig.edges.forEach((e, ei) => {
       if (litEdges[i].has(ids[ei])) on.add(e.from).add(e.to);
     });
@@ -454,6 +459,7 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
    * FADE is in timeline seconds, which are wall seconds.
    */
   const FADE = 0.4;
+  const RAMP = 0.4; // the today line moves in 400 ms, in wall seconds like FADE
   // A box tone is a permanent state: a 1 px border and a light tint in the off and trail looks. The active look uses the hop tone, else the box tone.
   const looks = (look: 'off' | 'trail' | 'active', boxTone?: string, hopTone?: string) => {
     const tint = boxTone ? toneTint(boxTone, 'var(--bg)') : 'var(--bg)';
@@ -469,7 +475,9 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
     segs.forEach((s, i) => {
       if (!litNodes[i].has(id)) return void pieces.push({ a: s.t0, b: s.t1, look: 'off' });
       const here = hops.filter((h) => h.dest === id && h.si === s.si && h.bi === s.bi);
-      const arrive = Math.min(...here.map((h) => h.t1), s.t1);
+      // A focused box turns active at the beat start; in a timeline, when the today line arrives.
+      const focused = beats[s.si][s.bi].focus?.includes(id);
+      const arrive = Math.min(...here.map((h) => h.t1), focused ? Math.min(s.t0 + (tl ? RAMP : 0), s.t1) : s.t1, s.t1);
       if (arrive > s.t0) pieces.push({ a: s.t0, b: arrive, look: 'trail' });
       if (arrive < s.t1) pieces.push({ a: arrive, b: s.t1, look: 'active', hop: here.find((h) => h.tone)?.tone });
     });
@@ -710,7 +718,6 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
     if (tl.today != null && segs.length) {
       const home = tl.today;
       const startOf = new Map(tl.items.map((i) => [i.id, i.x + (i.milestone ? i.w / 2 : 0)]));
-      const RAMP = 0.4; // 400 ms, in wall seconds like FADE
       const hold = STEP_HOLD_MS / 1000 / BASE_RATE;
       const pts: [number, number][] = [[0, home]];
       let at = home;

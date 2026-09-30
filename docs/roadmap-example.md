@@ -10,7 +10,7 @@ Today is 2026-10-19.
 
 ### Usage-based pricing
 
-2026-10-26 to 2026-11-27. Needs the metering pipeline.
+2026-11-02 to 2026-11-27. Needs the metering pipeline.
 
 ### Self-serve plan change
 

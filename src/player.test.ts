@@ -217,6 +217,7 @@ test('timeline: the server markup has the bars, the axis ticks and the today lin
   assert.ok(html.includes('data-fig-axis') && html.includes('>W41<'), 'axis ticks');
   assert.ok(html.includes('data-fig-today') && html.includes('>today<'), 'today line');
   assert.ok(html.includes('data-diamond="true"'), 'milestone');
+  assert.ok(!html.includes('class="flowfig-active'), 'the focus look comes from the tick, so the server markup has no active box');
   assert.ok(html.includes('aria-label="Pause"') && !html.includes('role="tablist"'), 'play control, no tabs');
   assert.ok(
     render({ ...tlFig, steps: [{ label: 'walk', flow: [{ light: ['spec'] }] }] }).includes('role="tablist"'),
