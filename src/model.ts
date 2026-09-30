@@ -20,6 +20,8 @@ export type FigNode = {
   at?: number;
   /** A permanent state color for the box, such as a failing part. It gives a 1 px border and a light tint. An arrival with no hop tone uses it too. */
   tone?: FigTone;
+  /** A lifecycle mark: `start` draws a filled dot before the box, `end` a ringed dot after it. No layout change. */
+  mark?: 'start' | 'end';
   /** The code this draws, `path` or `path#symbol`, relative to the repo root. `flowfig verify` checks it. */
   source?: string;
 };
