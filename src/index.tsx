@@ -15,6 +15,8 @@ import {
   LIGHT,
   TONES,
   ON_ACCENT,
+  toneFill,
+  toneTint,
   decisions,
   edgeId,
   groupGap,
@@ -38,7 +40,9 @@ const DEFAULTS: Required<FigTheme> = { ...LIGHT, font: 'inherit' };
 const v = (k: keyof FigTheme) => `var(--fig-${k}, ${DEFAULTS[k]})`;
 const MONO = 'var(--ifm-font-family-monospace, ui-monospace, SFMono-Regular, Menlo, monospace)';
 const ACTIVE = 'flowfig-active'; // the box a packet has just reached
-const glow = `0 0 0 3px color-mix(in srgb, ${v('accent')} 18%, transparent)`;
+// The active box reads --ff-hop (the tone of the hop that arrived), then --ff-box (the tone of the box), then the accent.
+const hue = `var(--ff-hop, var(--ff-box, ${v('accent')}))`;
+const glow = `0 0 0 3px color-mix(in srgb, ${hue} 18%, transparent)`;
 
 const cardBody = (c: FigContent): ReactNode => {
   if (c == null) return '—';
@@ -354,19 +358,32 @@ export function Flow({ layout, edges, steps = [], theme, speed = 900, autoplay =
           return;
         }
         const pt = p.getPointAtLength((hops[j].back ? 1 - eased : eased) * p.getTotalLength());
+        const tone = hops[j].tone && TONES[hops[j].tone!];
         if (g) {
           g.setAttribute('transform', `translate(${pt.x} ${pt.y})`);
           g.style.opacity = '1';
+          g.style.color = tone ?? v('accent');
         }
         if (c) {
+          c.style.background = tone ? toneFill(tone) : v('accent');
           c.style.transform = `translate(${pt.x}px, ${pt.y}px) translate(-50%, calc(-100% - 12px))`;
           c.style.opacity = hops[j].data == null ? '0' : '1';
         }
       });
       // A box is active from the packet arrival to the end of the step hold. The tick toggles the class and skips React.
-      const arrived = new Set(f >= 1 ? beats[i].hops.map((h) => (h.back ? edgeOf[h.edge]?.from : edgeOf[h.edge]?.to)) : []);
+      const arrived = new Map<string | undefined, string | undefined>();
+      if (f >= 1)
+        for (const h of beats[i].hops) {
+          const to = h.back ? edgeOf[h.edge]?.from : edgeOf[h.edge]?.to;
+          arrived.set(to, arrived.get(to) ?? (h.tone && TONES[h.tone]));
+        }
       root.current?.querySelectorAll<HTMLElement>('[data-fig]').forEach((n) => {
         const on = arrived.has(n.dataset.fig ?? '');
+        if (on) {
+          const tone = arrived.get(n.dataset.fig);
+          if (tone) n.style.setProperty('--ff-hop', tone);
+          else n.style.removeProperty('--ff-hop');
+        }
         if (on === n.classList.contains(ACTIVE)) return;
         if (!on) return void n.classList.remove(ACTIVE); // the transition fades the box
         // The box turns active at once: no transition while the class arrives.
@@ -404,6 +421,11 @@ export function Flow({ layout, edges, steps = [], theme, speed = 900, autoplay =
   edges.forEach((e, i) => {
     if (litEdges.has(ids[i])) litNodes.add(e.from).add(e.to);
   });
+  // A toned hop colors its edge for its own beat only; the trail after it is the accent.
+  const hopTone = (edge: string) => {
+    const t = cur?.hops.find((h) => h.edge === edge && h.tone)?.tone;
+    return t && TONES[t];
+  };
   const goTo = (step: number, b: number) => {
     setPlaying(true);
     if (step === active) {
@@ -475,6 +497,7 @@ export function Flow({ layout, edges, steps = [], theme, speed = 900, autoplay =
     const diamond = item.shape === 'decision';
     const store = item.shape === 'store';
     const card = carded.has(item.id);
+    const bt = item.tone && TONES[item.tone];
     return (
       <div
         key={item.id}
@@ -497,9 +520,10 @@ export function Flow({ layout, edges, steps = [], theme, speed = 900, autoplay =
             ? '22px 34px'
             : `calc(${store ? 24 : 10}px - var(--ff-b, 0px)) calc(${card ? 10 : 16}px - var(--ff-b, 0px)) calc(10px - var(--ff-b, 0px))`,
           textAlign: 'center',
-          background: diamond ? undefined : v('bg'),
+          background: diamond ? undefined : bt ? toneTint(bt, v('bg')) : v('bg'),
           color: v('fg'),
-          border: diamond ? undefined : `1px solid ${lit ? v('accent') : v('border')}`,
+          border: diamond ? undefined : `1px solid ${bt ?? (lit ? v('accent') : v('border'))}`,
+          ...(bt && { '--ff-box': bt }),
           boxShadow: diamond ? undefined : '0 1px 2px rgba(0,0,0,.06)',
           opacity: focus && !lit ? 0.7 : 1,
           borderRadius: store ? '50% / 12px' : 10,
@@ -524,8 +548,8 @@ export function Flow({ layout, edges, steps = [], theme, speed = 900, autoplay =
           >
             <polygon
               points="50,0 100,50 50,100 0,50"
-              fill={v('bg')}
-              stroke={lit ? v('accent') : v('border')}
+              fill={bt ? toneTint(bt, v('bg')) : v('bg')}
+              stroke={bt ?? (lit ? v('accent') : v('border'))}
               strokeWidth={lit ? 1.6 : 1}
               vectorEffect="non-scaling-stroke"
               style={{ transition: 'stroke .4s, fill .4s, stroke-width .4s' }}
@@ -543,7 +567,7 @@ export function Flow({ layout, edges, steps = [], theme, speed = 900, autoplay =
               height: 24,
               boxSizing: 'border-box',
               borderRadius: '50%',
-              border: `1px solid ${lit ? v('accent') : v('border')}`,
+              border: `1px solid ${bt ?? (lit ? v('accent') : v('border'))}`,
               transition: 'border-color .25s',
             }}
           />
@@ -637,8 +661,8 @@ export function Flow({ layout, edges, steps = [], theme, speed = 900, autoplay =
       <style>
         {'@keyframes flowfig-in{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}' +
           // The active box has a 2 px border, a tint and a glow. The padding shrinks by 1 px. The box size stays the same, so the edges keep their route.
-          `.${ACTIVE}:not([data-diamond]){--ff-b:1px;border-width:2px!important;background:color-mix(in srgb, ${v('accent')} 10%, ${v('surface')})!important;box-shadow:${glow}!important}` +
-          `.${ACTIVE} polygon{fill:color-mix(in srgb, ${v('accent')} 10%, ${v('surface')});stroke:${v('accent')};stroke-width:2px}`}
+          `.${ACTIVE}:not([data-diamond]){--ff-b:1px;border-width:2px!important;background:color-mix(in srgb, ${hue} 10%, ${v('surface')})!important;box-shadow:${glow}!important;border-color:${hue}!important}` +
+          `.${ACTIVE} polygon{fill:color-mix(in srgb, ${hue} 10%, ${v('surface')});stroke:${hue};stroke-width:2px}`}
       </style>
       {!noMap && (
         <>
@@ -704,6 +728,7 @@ export function Flow({ layout, edges, steps = [], theme, speed = 900, autoplay =
                   </defs>
                   {routed.map((r) => {
                     const on = litEdges.has(r.id);
+                    const tone = hopTone(r.id);
                     const hidden = !on && edges[ids.indexOf(r.id)].quiet;
                     return (
                       <path
@@ -713,7 +738,7 @@ export function Flow({ layout, edges, steps = [], theme, speed = 900, autoplay =
                         }}
                         d={r.d}
                         fill="none"
-                        stroke={on ? v('accent') : v('muted')}
+                        stroke={on ? (tone ?? v('accent')) : v('muted')}
                         strokeWidth={on ? EDGE_ON : EDGE_OFF}
                         strokeOpacity={hidden ? 0 : focus && !on ? 0.35 : 1}
                         markerEnd={hidden ? undefined : `url(#fig-arrow-${on ? 'on' : 'off'})`}
@@ -727,10 +752,10 @@ export function Flow({ layout, edges, steps = [], theme, speed = 900, autoplay =
                       ref={(g) => {
                         dots.current[j] = g;
                       }}
-                      style={{ opacity: 0 }}
+                      style={{ opacity: 0, color: v('accent') }}
                     >
-                      <circle r={10} fill={v('accent')} opacity={0.2} />
-                      <circle r={4.5} fill={v('accent')} />
+                      <circle r={10} fill="currentColor" opacity={0.2} />
+                      <circle r={4.5} fill="currentColor" />
                     </g>
                   ))}
                 </svg>
@@ -766,6 +791,7 @@ export function Flow({ layout, edges, steps = [], theme, speed = 900, autoplay =
                   const e = edges[ids.indexOf(r.id)];
                   if (e.label == null) return null;
                   const on = litEdges.has(r.id);
+                  const tone = hopTone(r.id);
                   return (
                     <div
                       key={r.id}
@@ -781,9 +807,9 @@ export function Flow({ layout, edges, steps = [], theme, speed = 900, autoplay =
                         borderRadius: 999,
                         whiteSpace: 'nowrap',
                         pointerEvents: 'none',
-                        background: on ? v('accent') : v('bg'),
+                        background: on ? (tone ? toneFill(tone) : v('accent')) : v('bg'),
                         color: on ? ON_ACCENT : v('muted'),
-                        border: `1px solid ${on ? v('accent') : v('border')}`,
+                        border: `1px solid ${on ? (tone ?? v('accent')) : v('border')}`,
                         opacity: !on && e.quiet ? 0 : focus && !on ? 0.6 : 1,
                         fontFamily: MONO,
                         transition: 'background .25s, color .25s, opacity .25s',
@@ -868,6 +894,7 @@ export function Flow({ layout, edges, steps = [], theme, speed = 900, autoplay =
                 (hover != null && [rail.columns[row.from].id, rail.columns[row.to].id].includes(hover));
               const [x1, x2] = [rail.columns[row.from].x, rail.columns[row.to].x];
               const ly = y + RAIL.row / 2;
+              const tone = state === 'now' && row.tone ? TONES[row.tone] : undefined;
               const g = row.group != null ? rail.groups[row.group] : null;
               return (
                 <g
@@ -895,7 +922,7 @@ export function Flow({ layout, edges, steps = [], theme, speed = 900, autoplay =
                   <path
                     d={`M ${x1} ${ly} H ${x2}`}
                     fill="none"
-                    stroke={on ? v('accent') : v('muted')}
+                    stroke={on ? (tone ?? v('accent')) : v('muted')}
                     strokeWidth={on ? EDGE_ON : EDGE_OFF}
                     strokeDasharray={row.async ? '4 3' : undefined}
                     markerEnd="url(#flowfig-rail-arrow)"
@@ -932,8 +959,8 @@ export function Flow({ layout, edges, steps = [], theme, speed = 900, autoplay =
                         width={row.pill.w}
                         height={18}
                         rx={9}
-                        fill={on ? v('accent') : v('bg')}
-                        stroke={on ? v('accent') : v('border')}
+                        fill={on ? (tone ? toneFill(tone) : v('accent')) : v('bg')}
+                        stroke={on ? (tone ?? v('accent')) : v('border')}
                       />
                       <text
                         x={row.pill.x + row.pill.w / 2}

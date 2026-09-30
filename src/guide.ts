@@ -160,6 +160,7 @@ Every other item is a box.
 | \`width\`   | Width in px. This overrides the width that the layout picks.                                              |
 | \`source\`  | The code this draws: \`path\` or \`path#symbol\`, relative to the repo root. \`flowfig verify\` checks it.  |
 | \`lines\`   | The least number of text lines that a content card keeps. The card still grows to fit its content.        |
+| \`tone\`    | A permanent state color for the box (a failing part, a deprecated service). Same values.                  |
 
 ### edges
 
@@ -189,6 +190,7 @@ The beat fields:
   - \`back: true\` runs the packet from the \`to\` box to the \`from\` box.
   - \`data\` is a small card that moves with the packet.
   - \`async: true\` marks a message that does not wait for an answer. The rail draws it dashed, with an \`async\` tag.
+  - \`tone\`: colors the packet, the edge and the box it arrives at for this beat: \`green\` success or hit, \`orange\` warning, miss or retry, \`red\` error or a rejected input, \`gray\` idle or skipped, \`purple\` async or background. Default: the accent.
 - \`say\`: the caption for the beat.
 - \`show\`: \`{ boxId: [row, ...] }\`. This fills the content card of each named box. The card keeps the rows until the step ends.
 - \`light\`: ids of boxes to highlight for this beat.

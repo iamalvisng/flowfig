@@ -102,3 +102,17 @@ test('a lit box has the trail look on load, and the style holds the active look'
   // active: the class the tick toggles has a 2 px border and the glow
   assert.match(html, /\.flowfig-active[^{]*\{[^}]*border-width:2px[^}]*box-shadow:0 0 0 3px/);
 });
+
+test('a toned box has the tone border and tint in the server markup', () => {
+  const html = render({
+    ...fig,
+    layout: {
+      children: [
+        { id: 'client', label: 'Browser', tone: 'red' },
+        { id: 'db', label: 'Database' },
+      ],
+    },
+  });
+  assert.ok(html.includes('border:1px solid #ef4444'), 'tone border');
+  assert.ok(html.includes('color-mix(in srgb, #ef4444 8%'), 'tone tint');
+});

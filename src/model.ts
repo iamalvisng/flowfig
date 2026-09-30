@@ -16,6 +16,8 @@ export type FigNode = {
   lines?: number;
   /** Width in px. Overrides the width the layout picks. */
   width?: number;
+  /** A permanent state color for the box, such as a failing part. It gives a 1 px border and a light tint. An arrival with no hop tone uses it too. */
+  tone?: FigTone;
   /** The code this draws, `path` or `path#symbol`, relative to the repo root. `flowfig verify` checks it. */
   source?: string;
 };
@@ -61,6 +63,8 @@ export type FigHop =
       back?: boolean;
       /** A small card that rides along with the packet. */
       data?: ReactNode;
+      /** Colors the packet, its data card, the edge and the box it arrives at, for this beat. The trail after the beat stays the accent. Default: the accent. */
+      tone?: FigTone;
       /** Marks a message that does not wait for an answer. The rail draws it dashed, with an `async` tag. Default: `false`. */
       async?: boolean;
       /** The code this draws, `path` or `path#symbol`, relative to the repo root. `flowfig verify` checks it. */
@@ -94,8 +98,8 @@ export type FigRow = {
   /** Draws the text in a monospace font. Default: `false`. */
   mono?: boolean;
 };
-/** The color of a row tag. Each tone is a fixed color. */
-export type FigTone = 'blue' | 'purple' | 'green' | 'orange' | 'gray';
+/** The color of a row tag, a hop or a box. Each tone is a fixed color. */
+export type FigTone = 'blue' | 'purple' | 'green' | 'orange' | 'red' | 'gray';
 /** What a content card shows: rows, or anything React can render. */
 export type FigContent = FigRow[] | ReactNode;
 /** One story the figure can tell. The player shows one tab for each step. */
@@ -134,7 +138,9 @@ export type FlowProps = {
 export type Figure = { title: string; source?: string; props: FlowProps };
 
 /** A beat with its hops spelled out: every hop has an edge id and a direction. */
-export type Beat = Omit<FigBeat, 'edges'> & { hops: { edge: string; back: boolean; data?: ReactNode; async?: boolean; source?: string }[] };
+export type Beat = Omit<FigBeat, 'edges'> & {
+  hops: { edge: string; back: boolean; data?: ReactNode; tone?: FigTone; async?: boolean; source?: string }[];
+};
 export const toBeat = (b: FigHop | FigHop[] | FigBeat): Beat => {
   const isBeat = typeof b === 'object' && !Array.isArray(b) && !('edge' in b);
   const { edges, ...rest }: FigBeat = isBeat ? b : { edges: b };
@@ -167,8 +173,13 @@ export const TONES: Record<FigTone, string> = {
   purple: '#8b5cf6',
   green: '#10b981',
   orange: '#f59e0b',
+  red: '#ef4444',
   gray: '#8b949e',
 };
+/** A tone as a fill under white text: darker, so the text keeps its contrast. */
+export const toneFill = (c: string) => `color-mix(in srgb, ${c} 68%, #000)`;
+/** The light tint of a tone over a background: the fill of a toned box. */
+export const toneTint = (c: string, bg: string, pct = 8) => `color-mix(in srgb, ${c} ${pct}%, ${bg})`;
 /** The width of an edge-label pill in px: the label text plus its padding. The rail uses it for a payload, so both look the same. */
 export const labelPillW = (label: string) => textWidth(label, 11, true) + 14;
 /** The width of the `async` tag in px. */

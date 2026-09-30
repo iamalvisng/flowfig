@@ -429,3 +429,49 @@ test('the active look lasts through the step hold, for a back hop and for two ho
   // c is off in step 2: it ramps from active to off over 400 ms after the step ends
   assert.ok(boxFrames(svg, 'C').includes(`${p(step + 0.4)},${eps(step + beat + hold)} { ${OFF_LOOK}`));
 });
+
+test('a red hop colors the packet, the lit edge and the arrival look; the trail stays accent', () => {
+  const red = chain(
+    [
+      {
+        label: 's',
+        flow: [
+          { edges: { edge: 'ab', tone: 'red', data: 'no' }, say },
+          { edges: 'bc', say },
+        ],
+      },
+    ],
+    [
+      { id: 'ab', from: 'a', to: 'b' },
+      { id: 'bc', from: 'b', to: 'c' },
+    ],
+    ['a', 'b', 'c'],
+  );
+  const svg = toSvg(red);
+  assert.ok(svg.includes('<circle r="4.5" fill="#ef4444"/>'), 'packet');
+  assert.ok(svg.includes('rx="8" fill="color-mix(in srgb, #ef4444 68%, #000)"'), 'data card');
+  assert.match(svg, /\{ stroke: #ef4444; stroke-width: 2 \}/, 'lit edge');
+  const b = boxFrames(svg, 'B');
+  assert.ok(b.includes('stroke: #ef4444; stroke-width: 2; filter: drop-shadow(0 0 4px #ef4444)'), 'active look');
+  assert.ok(b.includes('stroke: var(--accent); stroke-width: 1'), 'trail stays accent');
+  // the edge of the plain hop stays accent
+  assert.ok(svg.includes('{ stroke: var(--accent); stroke-width: 2 }'), 'plain edge');
+});
+
+test('a box with a tone has its border and tint in the off look', () => {
+  const svg = toSvg({
+    layout: {
+      children: [
+        { id: 'a', label: 'A' },
+        { id: 'b', label: 'B' },
+        { id: 'c', label: 'C', tone: 'gray' },
+      ],
+    },
+    edges: [{ from: 'a', to: 'b' }],
+    steps: [{ label: 's', flow: ['a->b'] }],
+  });
+  const c = boxFrames(svg, 'C');
+  assert.ok(c.includes('fill: color-mix(in srgb, #8b949e 8%, var(--bg)); stroke: #8b949e; stroke-width: 1'), c);
+  assert.ok(svg.includes('stroke="#8b949e"'), 'static border');
+  assert.ok(toSvg({ layout: { children: [{ id: 'a', label: 'A', tone: 'gray' }] }, edges: [] }).includes('stroke="#8b949e"'), 'no steps');
+});
