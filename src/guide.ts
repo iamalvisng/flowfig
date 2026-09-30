@@ -19,7 +19,7 @@ A spec has three forms.
 
 Use the rail for a sequence of messages: a request lifecycle, an API call chain, or a Mermaid \`sequenceDiagram\`. Put each message on
 an edge. Put each phase in a step. Put messages that run at the same time in one beat. Mark a message that does not wait for an
-answer with \`"async": true\`.
+answer with \`"async": true\`: every send to a queue or a topic, every emitted event, and every call the caller does not await.
 
 ## Scope: what flowfig draws and what it does not
 
@@ -292,6 +292,7 @@ flowfig does not draw class or ER diagrams, Gantt charts or charts of numbers. F
    JSON in the heredoc. Fix every fault by changing the layout first (rows, \`around\`, the gap). Never remove a fact to pass
    the check; if you must remove one, name it in the reply. If \`small-text\` appears, use two rows or split the figure; keep
    the real names; do not change \`--width\`. Give each box and edge that draws code a \`source\` (\`file#symbol\`) from the fact list.
+   Mark every send to a queue or a topic, every emitted event, and every call the caller does not await with \`async: true\`.
 5. Run \`npx flowfig --spec out.svg\` and compare it with the fact list: each edge must go from the caller to the callee that the
    fact names. Fix each gap. Then run \`npx flowfig verify out.svg\` from the repo root and fix each fault.
 6. If you can open a browser, look at the SVG at two moments of the loop. If you cannot, write "not looked at" in the reply.
