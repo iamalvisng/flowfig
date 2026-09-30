@@ -92,3 +92,11 @@ test('a hop tone and a box tone are changes', () => {
     { kind: 'message', op: 'added', id: 'read: q back "200" [green]' },
   ]);
 });
+
+test('a mark change is a box change', () => {
+  const after = structuredClone(base);
+  (after.layout as { children: { mark?: string }[] }).children[0].mark = 'start';
+  const out = diff(base, after);
+  assert.equal(out.length, 1);
+  assert.equal(out[0].kind, 'box');
+});

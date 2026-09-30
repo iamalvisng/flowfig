@@ -469,7 +469,16 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
           : `<rect x="${n2(p.x)}" y="${n2(p.y)}" width="${n2(p.w)}" height="${n2(p.h)}" rx="10" fill="${fill0}" stroke="${stroke0}"${stroke}/>`;
     const label = `<text x="${n2(cx)}" y="${n2(labelY)}" class="label">${esc(str(item.label))}</text>`;
     const sub = item.sub ? `<text x="${n2(cx)}" y="${n2(labelY + SUB_LINE)}" class="sub">${esc(str(item.sub))}</text>` : '';
-    return shape + label + sub + (contents ? card(p as Rect & { item: FigNode }, cardTop, contents) : '');
+    // The mark sits in the gap beside the box, so it changes no size and adds nothing to the scene.
+    const dot = bt ?? 'var(--accent)';
+    const my = n2(p.y + p.h / 2);
+    const mark =
+      item.mark === 'start'
+        ? `<circle cx="${n2(p.x - 12)}" cy="${my}" r="5" fill="${dot}"/>`
+        : item.mark === 'end'
+          ? `<circle cx="${n2(p.x + p.w + 12)}" cy="${my}" r="6.25" fill="none" stroke="${dot}" stroke-width="1.5"/><circle cx="${n2(p.x + p.w + 12)}" cy="${my}" r="4" fill="${dot}"/>`
+          : '';
+    return shape + label + sub + mark + (contents ? card(p as Rect & { item: FigNode }, cardTop, contents) : '');
   });
 
   /** The dashed content card: one group per content it will ever hold, each visible on its own beats. */

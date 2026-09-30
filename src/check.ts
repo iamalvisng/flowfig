@@ -68,6 +68,11 @@ export function checkSpec(fig: FlowProps): Finding[] {
   // A link with a bad form never verifies, so say so here, where the spec is checked.
   for (const [who, source] of owners(fig))
     if (source != null && !parseSource(source)) out.push(warn('bad-source', [], `${who}: source "${source}" is not path or path#symbol`));
+  const marks = nodes(fig.layout).map((n) => n.mark);
+  const starts = marks.filter((m) => m === 'start').length;
+  const ends = marks.filter((m) => m === 'end').length;
+  if (starts > 1 || (starts && !ends))
+    out.push(warn('mark-count', [], `a lifecycle has one start and at least one end: ${starts} start, ${ends} end`));
   if (fig.lanes) {
     const top = fig.layout;
     if (!isLanesLayout(top))

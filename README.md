@@ -335,6 +335,10 @@ links to a heading in the SOP, so `verify` fails when the SOP changes under the 
 
 ![The refund process across Customer, Support and Finance](docs/refund-process.svg)
 
+A state lifecycle marks the first state with `mark: "start"` and each final state with `mark: "end"`.
+
+![An order status lifecycle with a start dot and two end rings](docs/order-status.svg)
+
 ## MCP server
 
 `npx flowfig mcp` serves the tools `docs`, `check`, `render`, `verify` and `diff` over stdio, for an agent with no shell.

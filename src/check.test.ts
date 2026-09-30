@@ -271,3 +271,16 @@ test('lanes: a box at the top gives lanes-need-column, and bad-at gives an error
     assert.ok(rules(checkSpec({ ...bad, edges: [], steps: [] })).includes('bad-at'));
   }
 });
+
+test('mark-count: two starts and a start with no end are warnings; one start and two ends is not', () => {
+  const withMarks = (...marks: ('start' | 'end' | undefined)[]): FlowProps => ({
+    ...fig,
+    layout: { children: marks.map((mark, i) => ({ id: `n${i}`, label: 'N', mark })) },
+    edges: [],
+    steps: [],
+  });
+  const count = (f: FlowProps) => checkSpec(f).filter((x) => x.rule === 'mark-count');
+  assert.equal(count(withMarks('start', 'start', 'end'))[0].message, 'a lifecycle has one start and at least one end: 2 start, 1 end');
+  assert.equal(count(withMarks('start', undefined))[0].severity, 'warning');
+  assert.deepEqual(count(withMarks('start', 'end', 'end')), []);
+});

@@ -656,3 +656,39 @@ test('lanes: a box at the top draws the normal layout and check reports the rule
   };
   assert.ok(!render(bad).svg.includes('NaN'));
 });
+
+test('marks: a start dot and an end ring sit in the gap, and the scene is unchanged', () => {
+  const marked: FlowProps = {
+    ...fig,
+    layout: {
+      children: [
+        { id: 'checkout', label: 'Checkout', mark: 'start' },
+        { id: 'store', label: 'Orders', shape: 'store', mark: 'end' },
+      ],
+    },
+  };
+  const plain: FlowProps = {
+    ...marked,
+    layout: {
+      children: [
+        { id: 'checkout', label: 'Checkout' },
+        { id: 'store', label: 'Orders', shape: 'store' },
+      ],
+    },
+  };
+  const a = render(marked);
+  const b = render(plain);
+  assert.deepEqual(a.scene, b.scene);
+  const [box, end] = a.scene.boxes.map((b) => b.rect);
+  assert.ok(
+    a.svg.includes(`<circle cx="${+(box.x - 12).toFixed(2)}" cy="${+(box.y + box.h / 2).toFixed(2)}" r="5" fill="var(--accent)"/>`),
+  );
+  const cx = +(end.x + end.w + 12).toFixed(2);
+  assert.ok(
+    a.svg.includes(
+      `<circle cx="${cx}" cy="${+(end.y + end.h / 2).toFixed(2)}" r="6.25" fill="none" stroke="var(--accent)" stroke-width="1.5"/>`,
+    ),
+  );
+  assert.ok(a.svg.includes(`<circle cx="${cx}" cy="${+(end.y + end.h / 2).toFixed(2)}" r="4" fill="var(--accent)"/>`));
+  assert.ok(!b.svg.includes('r="6.25"'));
+});

@@ -655,6 +655,28 @@ export function Flow({
             }}
           />
         )}
+        {item.mark && (
+          // the mark sits in the gap; the box border is 1 px, so the offsets add 1
+          <span
+            aria-hidden
+            style={{
+              position: 'absolute',
+              top: '50%',
+              transform: 'translateY(-50%)',
+              boxSizing: 'border-box',
+              borderRadius: '50%',
+              ...(item.mark === 'start'
+                ? { left: -18, width: 10, height: 10, background: bt ?? v('accent') }
+                : {
+                    right: -20,
+                    width: 14,
+                    height: 14,
+                    border: `1.5px solid ${bt ?? v('accent')}`,
+                    background: `radial-gradient(circle, ${bt ?? v('accent')} 0 4px, transparent 4.5px)`,
+                  }),
+            }}
+          />
+        )}
         <div>{item.label}</div>
         {item.sub != null && <div style={{ fontSize: 12, fontWeight: 400, color: v('muted'), marginTop: 2 }}>{item.sub}</div>}
         {card && (

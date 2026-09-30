@@ -175,3 +175,18 @@ test('lanes: the last time column keeps 18 px on the right, and a box at the top
   assert.match(html, /padding:24px 56px 24px 0[^>]*><div data-fig="check"/);
   assert.doesNotThrow(() => render({ lanes: true, layout: { direction: 'row', children: [{ id: 'a', label: 'A' }] }, edges: [] }));
 });
+
+test('marks: the server markup has a start dot and an end ring', () => {
+  const html = render({
+    ...fig,
+    layout: {
+      children: [
+        { id: 'client', label: 'Browser', mark: 'start' },
+        { id: 'db', label: 'Database', mark: 'end' },
+      ],
+    },
+  });
+  assert.ok(html.includes('left:-18px;width:10px;height:10px'));
+  assert.ok(html.includes('right:-20px;width:14px;height:14px'));
+  assert.ok(!render(fig).includes('width:14px;height:14px'));
+});

@@ -30,7 +30,7 @@ flowfig draws how something works: parts, the messages between them, and the ord
 | An architecture, a data flow, a pipeline   | The map. Group parts by service, network or trust boundary. \`store\` for data at rest.       |
 | A request lifecycle, a call chain          | The map with \`"rail": true\`. One message per hop, with its real payload in \`data\`.          |
 | A sequence diagram only                    | \`"rail": "only"\`.                                                                           |
-| A state lifecycle, a state machine         | One box per state, one edge per transition, labeled with its event. One step per path. Mark each end state, for example with \`sub: "end state"\`. |
+| A state lifecycle, a state machine         | One box per state, one edge per transition, labeled with its event. One step per path. Mark the first state with \`mark: "start"\` and each final state with \`mark: "end"\`. |
 | A flowchart with branches                  | \`shape: "decision"\` for each branch. One step per path.                                     |
 | A process across roles (a ticket, an order, a refund) | \`lanes: true\`. One labeled group per role, in a \`column\` group. Put each step in the lane of the role that does it. Link each step with \`source\` to the SOP heading. About four time columns fit at 830 px: merge steps, give the outcomes of one decision the same \`at\`, or split the figure. |
 
@@ -165,6 +165,7 @@ Every other item is a box.
 | \`source\`  | The code this draws: \`path\` or \`path#symbol\`, relative to the repo root. \`flowfig verify\` checks it.  |
 | \`lines\`   | The least number of text lines that a content card keeps. The card still grows to fit its content.        |
 | \`tone\`    | The state color of the box: a 1 px border and a light tint. Use \`blue\`, \`purple\`, \`green\`, \`orange\`, \`red\` or \`gray\`.                  |
+| \`mark\`    | \`"start"\` or \`"end"\` | A lifecycle mark: a filled dot before a start state, a ringed dot after an end state. |
 
 ### edges
 
