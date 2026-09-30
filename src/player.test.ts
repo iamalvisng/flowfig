@@ -168,3 +168,10 @@ test('lanes: the player renders a grid with one band per lane and a grid column 
   assert.match(html, /grid-column:\s*3[^>]*><div data-fig="audit"/);
   assert.match(html, /Customer/);
 });
+
+test('lanes: the last time column keeps 18 px on the right, and a box at the top does not crash', () => {
+  const html = render(lanesFig);
+  assert.match(html, /padding:24px 18px 24px 0[^>]*><div data-fig="reject"/);
+  assert.match(html, /padding:24px 56px 24px 0[^>]*><div data-fig="check"/);
+  assert.doesNotThrow(() => render({ lanes: true, layout: { direction: 'row', children: [{ id: 'a', label: 'A' }] }, edges: [] }));
+});

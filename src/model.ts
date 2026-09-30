@@ -135,7 +135,7 @@ export type FlowProps = {
   check?: boolean;
   /** Draw the steps as a lifeline rail under the map: one row for each message, with its payload. `'only'` draws the rail without the map. Default: `false`. */
   rail?: boolean | 'only';
-  /** Draw the layout as swimlanes: a `column` group of labeled groups, one per role, with the boxes in time order left to right. Default: `false`. */
+  /** Draw the layout as swimlanes: a `column` group of labeled groups, one per role, with the boxes in time order left to right. Default: off. */
   lanes?: true;
 };
 /** A figure file's default export: a title, a source note and the props. */
@@ -211,9 +211,17 @@ export const beatMs = (b: Beat, speed: number): number => b.ms ?? speed + readMs
 /** The hold at the end of each step, before the next step starts. */
 export const STEP_HOLD_MS = 2000;
 export const nodes = (g: FigGroup): FigNode[] => g.children.flatMap((c) => (isGroup(c) ? nodes(c) : [c]));
-/** Lane layout constants, shared by both renderers: the gap between time columns, and the padding inside a lane. */
+/** Lane layout constants, shared by both renderers: the gap between time columns, the padding inside a lane, and the gap between lanes. */
 export const LANE_GAP = 56,
-  LANE_PAD = 16;
+  LANE_PAD = 24,
+  LANE_ROW_GAP = 20;
+
+/** True if the layout can draw as lanes: a `column` group whose every child is a labeled group with boxes only. */
+export const isLanesLayout = (g: FigGroup): boolean =>
+  g.direction === 'column' && g.children.every((c) => isGroup(c) && c.label != null && c.children.every((k) => !isGroup(k)));
+
+/** True if `at` is a usable time column: an integer of 0 or more. */
+export const validAt = (at: unknown): at is number => typeof at === 'number' && Number.isInteger(at) && at >= 0;
 
 /** The time column of each box in a lanes figure: its first appearance in the steps (from, then to; a back hop to, then from),
  * then the boxes no step touches in layout order. `at` overrides. Two boxes may share a column. */
@@ -231,7 +239,7 @@ export function laneColumns(fig: FlowProps): Map<string, number> {
         for (const id of h.back ? [e.to, e.from] : [e.from, e.to]) seen(id);
       }
   for (const n of nodes(fig.layout)) seen(n.id);
-  for (const n of nodes(fig.layout)) if (n.at != null) cols.set(n.id, n.at);
+  for (const n of nodes(fig.layout)) if (validAt(n.at)) cols.set(n.id, n.at);
   return cols;
 }
 const labeledGroups = (g: FigGroup): number => (g.label ? 1 : 0) + g.children.reduce((n, c) => n + (isGroup(c) ? labeledGroups(c) : 0), 0);

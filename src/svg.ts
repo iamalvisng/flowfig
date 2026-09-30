@@ -39,6 +39,8 @@ import {
   laneColumns,
   LANE_GAP,
   LANE_PAD,
+  LANE_ROW_GAP,
+  isLanesLayout,
   toBeat,
   beatMs,
   STEP_HOLD_MS,
@@ -175,13 +177,13 @@ function placeLanes(fig: FlowProps, x: number, y: number, s: Sizes, out: Placed[
     const h = inner + LANE_PAD * 2;
     out.push({ x, y: ly, w: width, h, item: lane, lane: true });
     for (const k of kids) out.push({ x: x + colX[cols.get(k.b.id)!], y: ly + LANE_PAD + (inner - k.h) / 2, w: k.w, h: k.h, item: k.b });
-    ly += h;
+    ly += h + LANE_ROW_GAP;
   }
-  out[topAt].h = ly - y;
+  out[topAt].h = ly - LANE_ROW_GAP - y;
 }
 
 function place(item: FigNode | FigGroup, x: number, y: number, s: Sizes, out: Placed[]): void {
-  if (item === s.fig.layout && s.fig.lanes) return placeLanes(s.fig, x, y, s, out);
+  if (item === s.fig.layout && s.fig.lanes && isLanesLayout(s.fig.layout)) return placeLanes(s.fig, x, y, s, out);
   const { w, h } = size(item, s);
   out.push({ x, y, w, h, item });
   if (!isGroup(item)) return;

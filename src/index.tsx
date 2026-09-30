@@ -25,6 +25,8 @@ import {
   laneColumns,
   LANE_GAP,
   LANE_PAD,
+  LANE_ROW_GAP,
+  isLanesLayout,
   nodes,
   toBeat,
   beatMs,
@@ -244,7 +246,7 @@ export function Flow({
     ro.observe(box);
     el.querySelectorAll('[data-fig]').forEach((n) => ro.observe(n));
     return () => ro.disconnect();
-  }, [edges, ids, layout, tips, noMap]);
+  }, [edges, ids, layout, tips, noMap, lanes]);
 
   // The same rules as `flowfig check`, on what the browser actually drew: real fonts, real wrapping. Each fault prints once.
   const reported = useRef(new Set<string>());
@@ -454,7 +456,7 @@ export function Flow({
   const vars = Object.fromEntries(Object.entries(theme ?? {}).map(([k, val]) => [`--fig-${k}`, val])) as CSSProperties;
 
   const renderItem = (item: FigNode | FigGroup, depth: number): ReactNode => {
-    if (lanes && item === layout) {
+    if (lanes && item === layout && isLanesLayout(layout)) {
       const cols = laneColumns({ layout, edges, steps, lanes });
       const n = Math.max(0, ...cols.values()) + 1;
       return (
@@ -462,8 +464,8 @@ export function Flow({
           style={{
             display: 'grid',
             gridTemplateColumns: `max-content repeat(${n}, max-content)`,
-            columnGap: LANE_GAP,
-            rowGap: 0,
+            columnGap: 0,
+            rowGap: LANE_ROW_GAP,
             position: 'relative',
           }}
         >
@@ -479,6 +481,8 @@ export function Flow({
                     gridRow: li + 1,
                     background: v('surface'),
                     border: `1px solid ${lit ? v('accent') : v('border')}`,
+                    boxShadow: lit ? glow : undefined,
+                    transition: 'border-color .25s, box-shadow .25s',
                     borderRadius: 14,
                     zIndex: 0,
                   }}
@@ -489,7 +493,7 @@ export function Flow({
                     gridRow: li + 1,
                     alignSelf: 'center',
                     zIndex: 1,
-                    padding: `${LANE_PAD}px 18px`,
+                    padding: '0 18px',
                     fontSize: 12,
                     fontWeight: 600,
                     letterSpacing: '.04em',
@@ -502,7 +506,14 @@ export function Flow({
                 {(lane.children as FigNode[]).map((b) => (
                   <div
                     key={b.id}
-                    style={{ gridColumn: cols.get(b.id)! + 2, gridRow: li + 1, alignSelf: 'center', zIndex: 1, padding: `${LANE_PAD}px 0` }}
+                    style={{
+                      gridColumn: cols.get(b.id)! + 2,
+                      gridRow: li + 1,
+                      alignSelf: 'center',
+                      zIndex: 1,
+                      // The last time column keeps the frame side, as in the SVG.
+                      padding: `${LANE_PAD}px ${cols.get(b.id) === n - 1 ? 18 : LANE_GAP}px ${LANE_PAD}px 0`,
+                    }}
                   >
                     {renderItem(b, 1)}
                   </div>

@@ -259,3 +259,15 @@ test('lanes need a column of labeled groups; two boxes of one lane in one column
   assert.deepEqual(rules(checkSpec(taken)), ['lane-column-taken']);
   assert.deepEqual(checkSpec(lanesFig), []);
 });
+
+test('lanes: a box at the top gives lanes-need-column, and bad-at gives an error', () => {
+  const top = { ...lanesFig, layout: { direction: 'column' as const, children: [{ id: 'a', label: 'A' }] }, edges: [], steps: [] };
+  assert.deepEqual(rules(checkSpec(top)), ['lanes-need-column']);
+  for (const at of [-1, 0.5]) {
+    const bad = {
+      ...lanesFig,
+      layout: { direction: 'column' as const, children: [{ label: 'One', children: [{ id: 'p', label: 'P', at }] }] },
+    };
+    assert.ok(rules(checkSpec({ ...bad, edges: [], steps: [] })).includes('bad-at'));
+  }
+});

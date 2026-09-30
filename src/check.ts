@@ -7,6 +7,8 @@ import {
   TONES,
   edgeId,
   isGroup,
+  isLanesLayout,
+  validAt,
   laneColumns,
   nodes,
   str,
@@ -68,9 +70,8 @@ export function checkSpec(fig: FlowProps): Finding[] {
     if (source != null && !parseSource(source)) out.push(warn('bad-source', [], `${who}: source "${source}" is not path or path#symbol`));
   if (fig.lanes) {
     const top = fig.layout;
-    const lanes =
-      top.direction === 'column' && top.children.every((c) => isGroup(c) && c.label != null && c.children.every((k) => !isGroup(k)));
-    if (!lanes) out.push(err('lanes-need-column', [], 'lanes need a column group of labeled groups, one per lane, with boxes only inside'));
+    if (!isLanesLayout(top))
+      out.push(err('lanes-need-column', [], 'lanes need a column group of labeled groups, one per lane, with boxes only inside'));
     else {
       const cols = laneColumns(fig);
       for (const lane of top.children as FigGroup[]) {
@@ -87,6 +88,8 @@ export function checkSpec(fig: FlowProps): Finding[] {
       }
     }
   }
+  for (const n of nodes(fig.layout))
+    if (n.at != null && !validAt(n.at)) out.push(err('bad-at', [n.id], `box "${n.id}": at ${n.at} is not an integer of 0 or more`));
   return out;
 }
 

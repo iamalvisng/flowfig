@@ -641,3 +641,18 @@ test('lanes: an empty lane still draws, a decision widens its column, and the ra
   assert.ok(w('check') > w('ask'));
   assert.equal(check(fig).filter((f) => f.severity === 'error').length, 0);
 });
+
+test('lanes: a box at the top draws the normal layout and check reports the rule; the bands do not touch', () => {
+  const top: FlowProps = { lanes: true, layout: { direction: 'row', children: [{ id: 'a', label: 'A' }] }, edges: [] };
+  assert.ok(check(top).some((f) => f.rule === 'lanes-need-column'));
+  const { scene } = render(lanesFig);
+  const y = (id: string) => scene.boxes.find((b) => b.id === id)!.rect.y;
+  assert.ok(y('check') - y('ask') > 20 + 2 * 24); // a lane band plus the gap between bands
+  const bad: FlowProps = {
+    ...lanesFig,
+    layout: { direction: 'column', children: [{ label: 'One', children: [{ id: 'p', label: 'P', at: -1 }] }] },
+    edges: [],
+    steps: [],
+  };
+  assert.ok(!render(bad).svg.includes('NaN'));
+});
