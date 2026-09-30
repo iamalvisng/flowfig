@@ -36,6 +36,9 @@ import {
   groupGap,
   isGroup,
   isRows,
+  laneColumns,
+  LANE_GAP,
+  LANE_PAD,
   toBeat,
   beatMs,
   STEP_HOLD_MS,
@@ -119,8 +122,14 @@ function layoutCard(c: FigContent, width: number): { rows: Row[]; height: number
   return { rows, height };
 }
 
-type Placed = Rect & { item: FigNode | FigGroup };
-type Sizes = { cards: Map<string, FigContent[]>; cardH: Map<string, number>; minH: (id: string) => number; gap: (g: FigGroup) => number };
+type Placed = Rect & { item: FigNode | FigGroup; lane?: true };
+type Sizes = {
+  cards: Map<string, FigContent[]>;
+  cardH: Map<string, number>;
+  minH: (id: string) => number;
+  gap: (g: FigGroup) => number;
+  fig: FlowProps;
+};
 
 function nodeWidth(item: FigNode, carded: boolean): number {
   if (item.width != null) return item.width;
@@ -147,7 +156,32 @@ function size(item: FigNode | FigGroup, s: Sizes): { w: number; h: number } {
   return item.label != null ? { w: inner.w + FRAME_SIDE * 2, h: inner.h + FRAME_TOP + FRAME_BOTTOM } : inner;
 }
 
+/** Swimlanes: the bands span the width, the label sits in a left gutter, and a box sits at its time column. */
+function placeLanes(fig: FlowProps, x: number, y: number, s: Sizes, out: Placed[]): void {
+  const lanes = fig.layout.children as FigGroup[];
+  const cols = laneColumns(fig);
+  const colW = Array.from({ length: Math.max(-1, ...cols.values()) + 1 }, () => 0);
+  for (const lane of lanes)
+    for (const b of lane.children as FigNode[]) colW[cols.get(b.id)!] = Math.max(colW[cols.get(b.id)!], size(b, s).w);
+  const gutter = Math.max(0, ...lanes.map((l) => textWidth(str(l.label).toUpperCase(), 12))) + FRAME_SIDE * 2;
+  const colX = colW.map((_, c) => gutter + colW.slice(0, c).reduce((a, w) => a + w + LANE_GAP, 0));
+  const width = gutter + colW.reduce((a, w) => a + w, 0) + LANE_GAP * Math.max(0, colW.length - 1) + FRAME_SIDE;
+  const topAt = out.length;
+  out.push({ x, y, w: width, h: 0, item: fig.layout });
+  let ly = y;
+  for (const lane of lanes) {
+    const kids = (lane.children as FigNode[]).map((b) => ({ b, ...size(b, s) }));
+    const inner = Math.max(LABEL_LINE + 20, ...kids.map((k) => k.h));
+    const h = inner + LANE_PAD * 2;
+    out.push({ x, y: ly, w: width, h, item: lane, lane: true });
+    for (const k of kids) out.push({ x: x + colX[cols.get(k.b.id)!], y: ly + LANE_PAD + (inner - k.h) / 2, w: k.w, h: k.h, item: k.b });
+    ly += h;
+  }
+  out[topAt].h = ly - y;
+}
+
 function place(item: FigNode | FigGroup, x: number, y: number, s: Sizes, out: Placed[]): void {
+  if (item === s.fig.layout && s.fig.lanes) return placeLanes(s.fig, x, y, s, out);
   const { w, h } = size(item, s);
   out.push({ x, y, w, h, item });
   if (!isGroup(item)) return;
@@ -212,7 +246,7 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
     return n > 2 ? n * 30 : 0;
   };
   const cardH = new Map<string, number>();
-  const sizes: Sizes = { cards, cardH, minH, gap: (g) => groupGap(g, fig.edges) };
+  const sizes: Sizes = { cards, cardH, minH, gap: (g) => groupGap(g, fig.edges), fig };
   for (const [id, contents] of cards) {
     const width = CARD_WIDTH; // refined below once the node's own width is known
     const widths = [width];
@@ -411,8 +445,8 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
       const on = item.id ? segs.map((_, i) => litNodes[i].has(item.id!)) : [];
       return (
         `<rect x="${n2(p.x)}" y="${n2(p.y)}" width="${n2(p.w)}" height="${n2(p.h)}" rx="14" fill="var(--surface)" stroke="var(--border)"` +
-        cls(anim(on, 'stroke: var(--accent)', 'stroke: var(--border)', 'n')) +
-        `/><text x="${n2(p.x + FRAME_SIDE)}" y="${n2(p.y + 20)}" class="frame">${esc(str(item.label).toUpperCase())}</text>`
+        cls(p.lane && 'lane', anim(on, 'stroke: var(--accent)', 'stroke: var(--border)', 'n')) +
+        `/><text x="${n2(p.x + FRAME_SIDE)}" y="${n2(p.lane ? p.y + p.h / 2 + 4 : p.y + 20)}" class="frame">${esc(str(item.label).toUpperCase())}</text>`
       );
     }
     const bt = item.tone && TONES[item.tone];
