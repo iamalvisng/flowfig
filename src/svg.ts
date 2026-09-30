@@ -35,6 +35,8 @@ import {
   isGroup,
   isRows,
   toBeat,
+  beatMs,
+  STEP_HOLD_MS,
   type Beat,
   type FigContent,
   type FigGroup,
@@ -256,17 +258,28 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
 
   // The timeline: every beat of every step, in order, with the player's hold at the end of each step.
   const segs: Seg[] = [];
-  const hops: { si: number; bi: number; lane: number; edge: string; back: boolean; data?: unknown; t0: number; t1: number }[] = [];
+  const hops: {
+    si: number;
+    bi: number;
+    lane: number;
+    edge: string;
+    back: boolean;
+    data?: unknown;
+    t0: number;
+    t1: number;
+    tEnd: number;
+  }[] = [];
   let t = 0;
   beats.forEach((stepBeats, si) => {
     stepBeats.forEach((b, bi) => {
-      const dur = (b.ms ?? fig.speed ?? 900) / 1000 / BASE_RATE;
       const last = bi === stepBeats.length - 1;
+      const dur = beatMs(b, fig.speed ?? 900) / 1000 / BASE_RATE;
+      const hold = last ? STEP_HOLD_MS / 1000 / BASE_RATE : 0;
       b.hops.forEach((h, lane) => {
-        if (byId[h.edge]) hops.push({ si, bi, lane, edge: h.edge, back: h.back, data: h.data, t0: t, t1: t + dur });
+        if (byId[h.edge]) hops.push({ si, bi, lane, edge: h.edge, back: h.back, data: h.data, t0: t, t1: t + speed, tEnd: t + dur });
       });
-      segs.push({ t0: t, t1: t + dur + (last ? speed * 1.5 : 0), si, bi });
-      t += dur + (last ? speed * 1.5 : 0);
+      segs.push({ t0: t, t1: t + dur + hold, si, bi });
+      t += dur + hold;
     });
   });
   const total = t || 1;
@@ -440,10 +453,11 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
   // rides above it in a chip, which is how the figure says what is moving.
   const packets = hops.map((h, i) => {
     const t0 = h.t0 / total,
-      t1 = h.t1 / total;
+      t1 = h.t1 / total,
+      tEnd = h.tEnd / total;
     const name = `p${i}`;
     css.push(
-      `@keyframes ${name} { 0%,${pct(t0)} { opacity: 0 } ${pct(t0 + 0.0001)},${pct(t1 - 0.0001)} { opacity: 1 } ${pct(t1)},100% { opacity: 0 } }\n` +
+      `@keyframes ${name} { 0%,${pct(t0)} { opacity: 0 } ${pct(t0 + 0.0001)},${pct(tEnd - 0.0001)} { opacity: 1 } ${pct(tEnd)},100% { opacity: 0 } }\n` +
         `.${name} { animation: ${name} ${n2(total)}s infinite step-end; }`,
     );
     const chip = (() => {
