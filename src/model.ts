@@ -16,6 +16,8 @@ export type FigNode = {
   lines?: number;
   /** Width in px. Overrides the width the layout picks. */
   width?: number;
+  /** In a `lanes` figure: the time column of the box, 0-based. Default: the box's first appearance in the steps. */
+  at?: number;
   /** A permanent state color for the box, such as a failing part. It gives a 1 px border and a light tint. An arrival with no hop tone uses it too. */
   tone?: FigTone;
   /** The code this draws, `path` or `path#symbol`, relative to the repo root. `flowfig verify` checks it. */
@@ -133,6 +135,8 @@ export type FlowProps = {
   check?: boolean;
   /** Draw the steps as a lifeline rail under the map: one row for each message, with its payload. `'only'` draws the rail without the map. Default: `false`. */
   rail?: boolean | 'only';
+  /** Draw the layout as swimlanes: a `column` group of labeled groups, one per role, with the boxes in time order left to right. Default: `false`. */
+  lanes?: true;
 };
 /** A figure file's default export: a title, a source note and the props. */
 export type Figure = { title: string; source?: string; props: FlowProps };
@@ -207,6 +211,29 @@ export const beatMs = (b: Beat, speed: number): number => b.ms ?? speed + readMs
 /** The hold at the end of each step, before the next step starts. */
 export const STEP_HOLD_MS = 2000;
 export const nodes = (g: FigGroup): FigNode[] => g.children.flatMap((c) => (isGroup(c) ? nodes(c) : [c]));
+/** Lane layout constants, shared by both renderers: the gap between time columns, and the padding inside a lane. */
+export const LANE_GAP = 56,
+  LANE_PAD = 16;
+
+/** The time column of each box in a lanes figure: its first appearance in the steps (from, then to; a back hop to, then from),
+ * then the boxes no step touches in layout order. `at` overrides. Two boxes may share a column. */
+export function laneColumns(fig: FlowProps): Map<string, number> {
+  const byId = new Map(fig.edges.map((e) => [edgeId(e), e]));
+  const cols = new Map<string, number>();
+  const seen = (id: string) => {
+    if (!cols.has(id)) cols.set(id, cols.size);
+  };
+  for (const s of fig.steps ?? [])
+    for (const b of s.flow.map(toBeat))
+      for (const h of b.hops) {
+        const e = byId.get(h.edge);
+        if (!e) continue;
+        for (const id of h.back ? [e.to, e.from] : [e.from, e.to]) seen(id);
+      }
+  for (const n of nodes(fig.layout)) seen(n.id);
+  for (const n of nodes(fig.layout)) if (n.at != null) cols.set(n.id, n.at);
+  return cols;
+}
 const labeledGroups = (g: FigGroup): number => (g.label ? 1 : 0) + g.children.reduce((n, c) => n + (isGroup(c) ? labeledGroups(c) : 0), 0);
 /** The part counts of a spec, for the line that `flowfig check` prints. An agent copies the line into its reply. */
 export const counts = (p: FlowProps) => ({
