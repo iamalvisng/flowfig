@@ -795,3 +795,26 @@ test('timeline: the roadmap demo has no label over another item in a row', async
     }
   assert.equal(check(fig).filter((f) => f.severity === 'error').length, 0);
 });
+
+test('timeline: a bar holds the active look during its beat and the trail after', () => {
+  const svg = toSvg(tlFig);
+  const spec = svg.match(/<rect [^>]*height="\d+" rx="6"[^>]*class="(a\d+)"/)![1]; // the first bar in date order is Spec
+  const kf = svg.match(new RegExp(`@keyframes ${spec} \\{([^\\n]*)\\}\\n`))![1];
+  const frames = kf.split(/\} ?(?=[\d.]+%)/);
+  const look = (f: string) => (f.includes('stroke-width: 2') ? 'active' : f.includes('stroke: var(--accent)') ? 'trail' : 'off');
+  const seq = frames.map(look);
+  assert.ok(
+    frames.some((f) => f.includes('fill: var(--tint)') && f.includes('stroke-width: 2')),
+    'tint and 2 px border',
+  );
+  assert.deepEqual(seq.slice(0, 2), ['trail', 'active'], 'the look starts after the today line ramp');
+  assert.ok(seq.includes('trail') && seq.lastIndexOf('trail') > seq.indexOf('active'), 'the trail follows the beat');
+});
+
+test('timeline: in the roadmap demo each dependency path starts at an x not right of its end', async () => {
+  const { default: demo } = await import('../figures/roadmap.ts');
+  const svg = toSvg({ ...demo.props, timeline: true } as FlowProps);
+  const paths = [...svg.matchAll(/<path id="p-[^"]*" d="M ([\d.-]+) [\d.-]+ C [^"]*? ([\d.-]+) [\d.-]+"/g)];
+  assert.ok(paths.length > 0, 'the demo has dependency paths');
+  for (const [d, x0, x1] of paths) assert.ok(+x0 <= +x1, `backward curve: ${d}`);
+});

@@ -280,7 +280,7 @@ test('an item with a bad from is left out of the layout and the beats', () => {
     timelineLayout(f, 300).items.map((i) => i.id),
     ['b'],
   );
-  assert.deepEqual(timelineBeats(f)[0].flow, [{ light: ['b'], say: 'b, 7 Oct' }]);
+  assert.deepEqual(timelineBeats(f)[0].flow, [{ focus: ['b'], light: ['b'], say: 'b, 7 Oct' }]);
 });
 
 test('timelineBeats has one beat per item in date order, saying the label, the dates and the sub', () => {
@@ -294,9 +294,9 @@ test('timelineBeats has one beat per item in date order, saying the label, the d
   const [step] = timelineBeats(f);
   assert.equal(step.label, 'timeline');
   assert.deepEqual(step.flow, [
-    { light: ['b'], say: 'b, 5 Oct · kickoff' },
-    { light: ['a'], say: 'a, 9 Oct to 10 Oct' },
-    { light: ['c'], say: 'c, 9 Oct' },
+    { focus: ['b'], light: ['b'], say: 'b, 5 Oct · kickoff' },
+    { focus: ['a'], light: ['b', 'a'], say: 'a, 9 Oct to 10 Oct' },
+    { focus: ['c'], light: ['b', 'a', 'c'], say: 'c, 9 Oct' },
   ]);
 });
 

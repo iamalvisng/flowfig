@@ -32,7 +32,7 @@ flowfig draws how something works: parts, the messages between them, and the ord
 | A sequence diagram only                    | \`"rail": "only"\`.                                                                           |
 | A state lifecycle, a state machine         | One box per state, one edge per transition, labeled with its event. One step per path. Mark the first state with \`mark: "start"\` and each final state with \`mark: "end"\`. |
 | A flowchart with branches                  | \`shape: "decision"\` for each branch. One step per path.                                     |
-| A roadmap or a timeline | \`timeline: true\`. One labeled group per track, in a \`column\` group. Items with \`from\` and \`to\` (dates), a milestone with \`from\` only, an edge for a dependency, \`today\` for the line. |
+| A roadmap or a timeline | \`timeline: true\`. One labeled group per track, in a \`column\` group. Items with \`from\` and \`to\` (dates), a milestone with \`from\` only, an edge for a dependency, \`today\` for the line. A dependent item starts after its source ends. |
 | A process across roles (a ticket, an order, a refund) | \`lanes: true\`. One labeled group per role, in a \`column\` group. Put each step in the lane of the role that does it. Link each step with \`source\` to the SOP heading. About four time columns fit at 830 px: merge steps, give the outcomes of one decision the same \`at\`, or split the figure. |
 
 flowfig draws a roadmap or a timeline with dates (\`timeline: true\`), and converts a Mermaid \`gantt\` to it. flowfig does not

@@ -427,6 +427,8 @@ export function Flow({
           const to = h.back ? edgeOf[h.edge]?.from : edgeOf[h.edge]?.to;
           arrived.set(to, arrived.get(to) ?? (h.tone && TONES[h.tone]));
         }
+      // A focused box turns active at the beat start; in a timeline, when the today line arrives.
+      if (t - start >= (tl ? 400 * BASE_RATE : 0)) for (const id of beats[i].focus ?? []) if (!arrived.has(id)) arrived.set(id, undefined);
       root.current?.querySelectorAll<HTMLElement>('[data-fig]').forEach((n) => {
         const on = arrived.has(n.dataset.fig ?? '');
         if (on) {

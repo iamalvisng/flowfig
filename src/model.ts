@@ -88,6 +88,8 @@ export type FigBeat = {
   show?: Record<string, FigContent>;
   /** Ids of boxes to highlight for this beat, without a packet or a content card. */
   light?: string[];
+  /** Ids of boxes that take the active look for this beat: a 2 px border, a tint and a glow. The boxes in `light` keep the trail look. */
+  focus?: string[];
   /** How long the beat lasts in ms. The packet crosses in `speed`; the rest is a hold. An explicit `ms` wins as written. Default: `speed` plus the time to read `say`. */
   ms?: number;
 };
@@ -352,12 +354,12 @@ export function timelineLayout(fig: FlowProps, axisWidth: number): TimelineLayou
 const fmt = (d: number) => `${dateOf(d).getUTCDate()} ${MONTHS[dateOf(d).getUTCMonth()]}`;
 /** One step, "timeline", with one beat for each dated item in date order. The beat lights the item and says "label, d MMM to d MMM" (a milestone: "label, d MMM"), then " · sub". */
 export function timelineBeats(fig: FlowProps): FigStep[] {
-  const flow: FigBeat[] = datedItems(fig)
-    .sort((a, b) => a.from - b.from)
-    .map((i) => ({
-      light: [i.id],
-      say: `${str(i.label.label)}, ${fmt(i.from)}${i.to != null ? ` to ${fmt(i.to)}` : ''}${i.label.sub != null ? ` · ${str(i.label.sub)}` : ''}`,
-    }));
+  const items = datedItems(fig).sort((a, b) => a.from - b.from);
+  const flow: FigBeat[] = items.map((i, k) => ({
+    focus: [i.id],
+    light: items.slice(0, k + 1).map((p) => p.id),
+    say: `${str(i.label.label)}, ${fmt(i.from)}${i.to != null ? ` to ${fmt(i.to)}` : ''}${i.label.sub != null ? ` · ${str(i.label.sub)}` : ''}`,
+  }));
   return [{ label: 'timeline', flow }];
 }
 const labeledGroups = (g: FigGroup): number => (g.label ? 1 : 0) + g.children.reduce((n, c) => n + (isGroup(c) ? labeledGroups(c) : 0), 0);
