@@ -116,3 +116,55 @@ test('a toned box has the tone border and tint in the server markup', () => {
   assert.ok(html.includes('border:1px solid #ef4444'), 'tone border');
   assert.ok(html.includes('color-mix(in srgb, #ef4444 8%'), 'tone tint');
 });
+
+const lanesFig: FlowProps = {
+  lanes: true,
+  layout: {
+    direction: 'column',
+    children: [
+      {
+        id: 'customer',
+        label: 'Customer',
+        children: [
+          { id: 'ask', label: 'Request refund' },
+          { id: 'get', label: 'Get money' },
+        ],
+      },
+      {
+        id: 'support',
+        label: 'Support',
+        children: [
+          { id: 'check', label: 'Check order' },
+          { id: 'reject', label: 'Reject' },
+        ],
+      },
+      {
+        id: 'finance',
+        label: 'Finance',
+        children: [
+          { id: 'pay', label: 'Issue refund' },
+          { id: 'audit', label: 'Audit', at: 1 },
+        ],
+      },
+    ],
+  },
+  edges: [
+    { id: 'a', from: 'ask', to: 'check' },
+    { id: 'b', from: 'check', to: 'pay' },
+    { id: 'c', from: 'pay', to: 'get' },
+    { id: 'r', from: 'check', to: 'reject' },
+  ],
+  steps: [
+    { label: 'ok', flow: ['a', 'b', { edge: 'c', back: true }] },
+    { label: 'no', flow: ['a', 'r'] },
+  ],
+};
+
+test('lanes: the player renders a grid with one band per lane and a grid column per box', () => {
+  const html = render(lanesFig);
+  assert.match(html, /grid-template-columns:\s*max-content repeat\(\d+,\s*max-content\)/);
+  assert.equal((html.match(/data-fig-lane/g) ?? []).length, 3);
+  assert.match(html, /grid-column:\s*3[^>]*><div data-fig="check"/);
+  assert.match(html, /grid-column:\s*3[^>]*><div data-fig="audit"/);
+  assert.match(html, /Customer/);
+});
