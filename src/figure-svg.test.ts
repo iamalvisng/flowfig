@@ -345,3 +345,10 @@ test('diff prints the spec changes between two figures, as text, Markdown or JSO
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('verify passes on the refund process demo against its SOP', () => {
+  const root = dirname(dirname(fileURLToPath(import.meta.url)));
+  const r = spawnSync('node', [cli, 'verify', 'docs/refund-process.svg'], { cwd: root, encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.match(r.stdout, /0 errors/);
+});
