@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { route, type Pt, type Rect, type Routed } from './geometry.ts';
 import { foldedLabel, groupBox, layoutRail, railState, RAIL } from './rail.ts';
 import { checkScene, checkSpec, checkTheme } from './check.ts';
@@ -22,6 +22,9 @@ import {
   groupGap,
   isGroup,
   isRows,
+  laneColumns,
+  LANE_GAP,
+  LANE_PAD,
   nodes,
   toBeat,
   beatMs,
@@ -110,7 +113,17 @@ const cardBody = (c: FigContent): ReactNode => {
  * The interactive player for one figure: tabs for the steps, play and pause, speed, hover and full screen.
  * Give it a `FlowProps` spec. Use `toSvg` from `flowfig/svg` for a static animated SVG instead.
  */
-export function Flow({ layout, edges, steps = [], theme, speed = 900, autoplay = true, check = false, rail: withRail = false }: FlowProps) {
+export function Flow({
+  layout,
+  edges,
+  steps = [],
+  theme,
+  speed = 900,
+  autoplay = true,
+  check = false,
+  rail: withRail = false,
+  lanes,
+}: FlowProps) {
   const root = useRef<HTMLDivElement>(null);
   const outer = useRef<HTMLDivElement>(null);
   const [fit, setFit] = useState({ scale: 1, height: 0 });
@@ -441,6 +454,65 @@ export function Flow({ layout, edges, steps = [], theme, speed = 900, autoplay =
   const vars = Object.fromEntries(Object.entries(theme ?? {}).map(([k, val]) => [`--fig-${k}`, val])) as CSSProperties;
 
   const renderItem = (item: FigNode | FigGroup, depth: number): ReactNode => {
+    if (lanes && item === layout) {
+      const cols = laneColumns({ layout, edges, steps, lanes });
+      const n = Math.max(0, ...cols.values()) + 1;
+      return (
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: `max-content repeat(${n}, max-content)`,
+            columnGap: LANE_GAP,
+            rowGap: 0,
+            position: 'relative',
+          }}
+        >
+          {(layout.children as FigGroup[]).map((lane, li) => {
+            const lit = lane.id != null && litNodes.has(lane.id);
+            return (
+              <Fragment key={lane.id ?? String(lane.label)}>
+                <div
+                  data-fig={lane.id}
+                  data-fig-lane=""
+                  style={{
+                    gridColumn: '1 / -1',
+                    gridRow: li + 1,
+                    background: v('surface'),
+                    border: `1px solid ${lit ? v('accent') : v('border')}`,
+                    borderRadius: 14,
+                    zIndex: 0,
+                  }}
+                />
+                <div
+                  style={{
+                    gridColumn: 1,
+                    gridRow: li + 1,
+                    alignSelf: 'center',
+                    zIndex: 1,
+                    padding: `${LANE_PAD}px 18px`,
+                    fontSize: 12,
+                    fontWeight: 600,
+                    letterSpacing: '.04em',
+                    textTransform: 'uppercase',
+                    color: v('muted'),
+                  }}
+                >
+                  {lane.label}
+                </div>
+                {(lane.children as FigNode[]).map((b) => (
+                  <div
+                    key={b.id}
+                    style={{ gridColumn: cols.get(b.id)! + 2, gridRow: li + 1, alignSelf: 'center', zIndex: 1, padding: `${LANE_PAD}px 0` }}
+                  >
+                    {renderItem(b, 1)}
+                  </div>
+                ))}
+              </Fragment>
+            );
+          })}
+        </div>
+      );
+    }
     if (isGroup(item)) {
       const lit = item.id != null && litNodes.has(item.id);
       const framed = item.label != null;
