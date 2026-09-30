@@ -5,7 +5,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { AGENTS, detect, renderList, toggle } from './init.ts';
+import { AGENTS, MCP_ENTRY, detect, registerMcp, renderList, toggle } from './init.ts';
 import { SKILL_DESCRIPTION } from './guide.ts';
 
 const cli = join(dirname(dirname(fileURLToPath(import.meta.url))), 'scripts', 'figure-svg.mjs');
@@ -226,6 +226,66 @@ test('--global -y writes only the Claude skill under HOME, and no file in the di
     assert.equal(run(['init', '--global', '--agents', 'cursor'], dir, env).status, 2);
   } finally {
     rmSync(dir, { recursive: true, force: true });
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('registerMcp merges one entry and keeps every other key and server', () => {
+  const claude = AGENTS.find((a) => a.id === 'claude')!;
+  assert.equal(
+    registerMcp(claude, undefined),
+    JSON.stringify({ mcpServers: { flowfig: { ...MCP_ENTRY, type: 'stdio' } } }, null, 2) + '\n',
+  );
+  const old = JSON.stringify({ theme: 'dark', mcpServers: { graft: { command: 'graft', args: ['mcp'] } }, other: [1] }, null, 2);
+  const next = JSON.parse(registerMcp(claude, old)!);
+  assert.deepEqual(Object.keys(next), ['theme', 'mcpServers', 'other']);
+  assert.deepEqual(Object.keys(next.mcpServers), ['graft', 'flowfig']);
+  assert.equal(registerMcp(claude, registerMcp(claude, old)), registerMcp(claude, old));
+  assert.equal(registerMcp(claude, '{ not json'), undefined);
+  assert.equal(registerMcp(claude, JSON.stringify({ mcpServers: [] })), undefined);
+  const copilot = AGENTS.find((a) => a.id === 'copilot')!;
+  assert.deepEqual(JSON.parse(registerMcp(copilot, undefined)!), { servers: { flowfig: { ...MCP_ENTRY, type: 'stdio' } } });
+  const gemini = AGENTS.find((a) => a.id === 'gemini')!;
+  assert.deepEqual(JSON.parse(registerMcp(gemini, undefined)!), { mcpServers: { flowfig: MCP_ENTRY } });
+});
+
+test('init writes the MCP file for each agent that has one, and --no-mcp or --dry-run writes none', () => {
+  const dir = tmp();
+  try {
+    const r = run(['init', '--agents', 'claude,cursor,copilot,gemini,kiro,windsurf,agents', dir], dir);
+    assert.equal(r.status, 0, r.stderr);
+    for (const f of ['.mcp.json', '.cursor/mcp.json', '.vscode/mcp.json', '.gemini/settings.json', '.kiro/settings/mcp.json'])
+      assert.ok(existsSync(join(dir, f)), f);
+    assert.deepEqual(JSON.parse(readFileSync(join(dir, '.vscode/mcp.json'), 'utf8')).servers.flowfig, { ...MCP_ENTRY, type: 'stdio' });
+    assert.match(r.stdout, /created {3}.*\.mcp\.json/);
+    assert.match(r.stdout, /note {6}windsurf: add/);
+    const again = run(['init', '--agents', 'claude', dir], dir);
+    assert.match(again.stdout, /unchanged .*\.mcp\.json/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+  const dir2 = tmp();
+  try {
+    run(['init', '--agents', 'claude', '--no-mcp', dir2], dir2);
+    assert.equal(existsSync(join(dir2, '.mcp.json')), false);
+    const dry = run(['init', '--agents', 'claude', '--dry-run', dir2], dir2);
+    assert.match(dry.stdout, /would create .*\.mcp\.json/);
+    assert.equal(existsSync(join(dir2, '.mcp.json')), false);
+  } finally {
+    rmSync(dir2, { recursive: true, force: true });
+  }
+});
+
+test('--global registers the Claude server in ~/.claude.json and keeps the rest of that file', () => {
+  const home = tmp();
+  try {
+    writeFileSync(join(home, '.claude.json'), JSON.stringify({ numStartups: 3, mcpServers: { graft: { command: 'graft' } } }));
+    const r = run(['init', '--global'], home, { HOME: home, USERPROFILE: home });
+    assert.equal(r.status, 0, r.stderr);
+    const j = JSON.parse(readFileSync(join(home, '.claude.json'), 'utf8'));
+    assert.equal(j.numStartups, 3);
+    assert.deepEqual(Object.keys(j.mcpServers), ['graft', 'flowfig']);
+  } finally {
     rmSync(home, { recursive: true, force: true });
   }
 });

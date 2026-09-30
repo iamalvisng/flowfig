@@ -20,7 +20,13 @@ type Agent = {
   /** Text before the marked block in a whole file. */
   head?: string;
   note?: string;
+  /** The MCP config file the agent reads, and the top-level key that holds the servers. `type` adds `"type": "stdio"`. */
+  mcp?: { file: string; key: 'mcpServers' | 'servers'; type?: true; global?: string };
+  /** Shown in place of the MCP file when init cannot write the config. */
+  mcpNote?: string;
 };
+
+export const MCP_ENTRY = { command: 'npx', args: ['flowfig', 'mcp'] };
 
 export const AGENTS: Agent[] = [
   {
@@ -29,6 +35,7 @@ export const AGENTS: Agent[] = [
     marks: ['.claude/', 'CLAUDE.md'],
     file: '.claude/skills/figure/SKILL.md',
     kind: 'whole',
+    mcp: { file: '.mcp.json', key: 'mcpServers', type: true, global: '.claude.json' },
     head: `---\nname: figure\ndescription: ${JSON.stringify(SKILL_DESCRIPTION)}\nuser_invocable: true\n---\n\n`,
   },
   { id: 'agents', name: 'AGENTS.md', marks: ['AGENTS.md'], file: 'AGENTS.md', kind: 'section', note: 'Codex, Amp, Jules, ...' },
@@ -38,6 +45,7 @@ export const AGENTS: Agent[] = [
     marks: ['.cursor/', '.cursorrules'],
     file: '.cursor/rules/flowfig.mdc',
     kind: 'whole',
+    mcp: { file: '.cursor/mcp.json', key: 'mcpServers', type: true, global: '.cursor/mcp.json' },
     head: '---\ndescription: Draw diagrams and flow figures with flowfig\nalwaysApply: false\n---\n\n',
   },
   {
@@ -46,10 +54,32 @@ export const AGENTS: Agent[] = [
     marks: ['.github/copilot-instructions.md'],
     file: '.github/copilot-instructions.md',
     kind: 'section',
+    mcp: { file: '.vscode/mcp.json', key: 'servers', type: true },
   },
-  { id: 'gemini', name: 'Gemini CLI', marks: ['GEMINI.md', '.gemini/'], file: 'GEMINI.md', kind: 'section' },
-  { id: 'windsurf', name: 'Windsurf', marks: ['.windsurf/', '.windsurfrules'], file: '.windsurf/rules/flowfig.md', kind: 'whole' },
-  { id: 'kiro', name: 'Kiro', marks: ['.kiro/'], file: '.kiro/steering/flowfig.md', kind: 'whole' },
+  {
+    id: 'gemini',
+    name: 'Gemini CLI',
+    marks: ['GEMINI.md', '.gemini/'],
+    file: 'GEMINI.md',
+    kind: 'section',
+    mcp: { file: '.gemini/settings.json', key: 'mcpServers', global: '.gemini/settings.json' },
+  },
+  {
+    id: 'windsurf',
+    name: 'Windsurf',
+    marks: ['.windsurf/', '.windsurfrules'],
+    file: '.windsurf/rules/flowfig.md',
+    kind: 'whole',
+    mcpNote: 'add {"command":"npx","args":["flowfig","mcp"]} to the MCP config by hand',
+  },
+  {
+    id: 'kiro',
+    name: 'Kiro',
+    marks: ['.kiro/'],
+    file: '.kiro/steering/flowfig.md',
+    kind: 'whole',
+    mcp: { file: '.kiro/settings/mcp.json', key: 'mcpServers', global: '.kiro/settings/mcp.json' },
+  },
 ];
 
 /** The ids of the agents that the repo at `dir` already uses. */
@@ -95,6 +125,23 @@ export function place(a: Agent, old: string | undefined): string | undefined {
   return old + (old.endsWith('\n\n') ? '' : old.endsWith('\n') ? '\n' : '\n\n') + mine;
 }
 
+/** The MCP file with the flowfig entry merged in, or `undefined` when the file is not a JSON object that can hold it. */
+export function registerMcp(a: Agent, old: string | undefined): string | undefined {
+  if (!a.mcp) return undefined;
+  let json: Record<string, unknown>;
+  try {
+    json = old === undefined ? {} : JSON.parse(old);
+  } catch {
+    return undefined;
+  }
+  if (typeof json !== 'object' || json === null || Array.isArray(json)) return undefined;
+  const servers = json[a.mcp.key] ?? {};
+  if (typeof servers !== 'object' || servers === null || Array.isArray(servers)) return undefined;
+  const entry = a.mcp.type ? { ...MCP_ENTRY, type: 'stdio' } : MCP_ENTRY;
+  json[a.mcp.key] = { ...(servers as object), flowfig: entry };
+  return JSON.stringify(json, null, 2) + '\n';
+}
+
 const HINT = 'run with -y or --agents <ids>';
 
 /** Run `flowfig init`. Returns the exit code. */
@@ -105,7 +152,8 @@ export async function runInit(argv: string[]): Promise<number> {
     all = flag('--all-agents'),
     yes = flag('-y', '--yes'),
     global = flag('--global'),
-    dry = flag('--dry-run');
+    dry = flag('--dry-run'),
+    noMcp = flag('--no-mcp');
   let ids: string[] | undefined;
   const at = args.indexOf('--agents');
   if (at !== -1) ids = (args.splice(at, 2)[1] ?? '').split(',').filter(Boolean);
@@ -154,6 +202,27 @@ export async function runInit(argv: string[]): Promise<number> {
       }
     }
     console.log(`${status.padEnd(9)} ${path}`);
+    if (noMcp) continue;
+    if (a.mcpNote) {
+      console.log(`note      ${a.id}: ${a.mcpNote}`);
+      continue;
+    }
+    if (!a.mcp || (global && !a.mcp.global)) continue;
+    const mcpPath = global ? join(homedir(), a.mcp.global!) : join(dir, a.mcp.file);
+    const oldMcp = existsSync(mcpPath) ? readFileSync(mcpPath, 'utf8') : undefined;
+    const nextMcp = registerMcp(a, oldMcp);
+    let mcpStatus: string;
+    if (nextMcp === undefined) mcpStatus = `skipped (not a JSON object with ${a.mcp.key})`;
+    else if (nextMcp === oldMcp) mcpStatus = 'unchanged';
+    else {
+      mcpStatus = oldMcp === undefined ? 'created' : 'updated';
+      if (dry) mcpStatus = `would ${mcpStatus === 'created' ? 'create' : 'update'}`;
+      else {
+        mkdirSync(dirname(mcpPath), { recursive: true });
+        writeFileSync(mcpPath, nextMcp);
+      }
+    }
+    console.log(`${mcpStatus.padEnd(9)} ${mcpPath}`);
   }
   return 0;
 }
