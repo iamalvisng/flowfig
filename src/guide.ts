@@ -158,6 +158,7 @@ Every other item is a box.
 | \`sub\`     | A smaller line under the label.                                                                           |
 | \`shape\`   | \`"box"\` (default), \`"decision"\` (a diamond) or \`"store"\` (a database cylinder for data at rest).          |
 | \`width\`   | Width in px. This overrides the width that the layout picks.                                              |
+| \`source\`  | The code this draws: \`path\` or \`path#symbol\`, relative to the repo root. \`flowfig verify\` checks it.  |
 | \`lines\`   | The least number of text lines that a content card keeps. The card still grows to fit its content.        |
 
 ### edges
@@ -169,6 +170,7 @@ An edge has these fields.
 - \`label\`: text on the edge, drawn as a small pill.
 - \`around\`: \`"above"\` or \`"below"\`. This routes the edge over or under the boxes in between (loops, skip-ahead edges).
 - \`quiet\`: if \`true\`, the SVG draws the edge only while a step uses it.
+- \`source\`: the code this edge draws, as \`path\` or \`path#symbol\`. \`flowfig verify\` checks it.
 
 ### steps
 
@@ -183,7 +185,7 @@ boxes to highlight for the whole step).
 
 The beat fields:
 
-- \`edges\`: an edge id, a hop object, or an array of these. A hop object is \`{ edge, back?, data?, async? }\`.
+- \`edges\`: an edge id, a hop object, or an array of these. A hop object is \`{ edge, back?, data?, async?, source? }\`.
   - \`back: true\` runs the packet from the \`to\` box to the \`from\` box.
   - \`data\` is a small card that moves with the packet.
   - \`async: true\` marks a message that does not wait for an answer. The rail draws it dashed, with an \`async\` tag.
@@ -251,6 +253,8 @@ npx flowfig - out.svg < spec.json      # render a spec from stdin
 npx flowfig spec.json out.svg          # render a spec file
 npx flowfig figure.ts out.svg          # render a module whose default export is a spec
 npx flowfig check <input> [--json]     # list the faults. The input can also be an SVG that flowfig wrote.
+npx flowfig verify <input>...          # check that the code each source names still exists
+npx flowfig diff <old> <new>           # list what changed in the spec between two figures
 npx flowfig --spec out.svg             # print the spec that an SVG carries
 npx flowfig docs                       # print this guide
 npx flowfig init                       # write these instructions for the coding agents of a repo

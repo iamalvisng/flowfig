@@ -40,6 +40,10 @@
     "./svg": {
       "types": "./dist/svg.d.ts",
       "default": "./dist/svg.js"
+    },
+    "./verify": {
+      "types": "./dist/verify.d.ts",
+      "default": "./dist/verify.js"
     }
   },
   "bin": {

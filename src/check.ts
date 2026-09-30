@@ -4,7 +4,7 @@ import { DARK, LIGHT, ON_ACCENT, edgeId, isGroup, nodes, str, toBeat, type FigGr
 import type { Finding, Scene } from './scene.ts';
 import type { Pt, Rect } from './geometry.ts';
 import { textWidth } from './text.ts';
-import { owners, parseSource } from './verify.ts';
+import { owners, parseSource } from './source.ts';
 
 const err = (rule: string, ids: string[], message: string): Finding => ({ rule, severity: 'error', ids, message });
 const warn = (rule: string, ids: string[], message: string): Finding => ({ rule, severity: 'warning', ids, message });

@@ -160,6 +160,8 @@ Each SVG from the CLI carries its own spec. These commands made the rail-only fi
 npx flowfig --spec docs/checkout.svg > checkout.json   # print the spec in the SVG
 # edit checkout.json: set "props.rail" to "only"
 npx flowfig checkout.json docs/checkout-rail-only.svg
+npx flowfig verify docs/checkout.svg                    # check that each source still exists
+npx flowfig diff old.svg docs/checkout.svg              # list what changed in the spec
 ```
 
 ## The spec
@@ -169,14 +171,15 @@ full reference, run `npx flowfig docs`.
 
 ### Boxes
 
-| Field   | Meaning                                                           | Default     |
-| ------- | ----------------------------------------------------------------- | ----------- |
-| `id`    | The name that edges and steps use. It must be unique.             | required    |
-| `label` | The title in the box.                                             | required    |
-| `sub`   | A smaller line under the label.                                   | none        |
-| `shape` | `"box"`, `"decision"` (a diamond) or `"store"` (a data cylinder). | `"box"`     |
-| `lines` | The least number of text lines that a content card keeps.         | none        |
-| `width` | The width in px. This value replaces the width that layout picks. | from layout |
+| Field    | Meaning                                                                   | Default     |
+| -------- | ------------------------------------------------------------------------- | ----------- |
+| `id`     | The name that edges and steps use. It must be unique.                     | required    |
+| `label`  | The title in the box.                                                     | required    |
+| `sub`    | A smaller line under the label.                                           | none        |
+| `shape`  | `"box"`, `"decision"` (a diamond) or `"store"` (a data cylinder).         | `"box"`     |
+| `source` | The code this draws: `path` or `path#symbol`. `flowfig verify` checks it. | none        |
+| `lines`  | The least number of text lines that a content card keeps.                 | none        |
+| `width`  | The width in px. This value replaces the width that layout picks.         | from layout |
 
 ### Groups
 
@@ -193,14 +196,15 @@ full reference, run `npx flowfig docs`.
 
 ### Edges
 
-| Field    | Meaning                                                                 | Default    |
-| -------- | ----------------------------------------------------------------------- | ---------- |
-| `from`   | The id of the box or group where the edge starts.                       | required   |
-| `to`     | The id of the box or group where the edge ends.                         | required   |
-| `id`     | The name that beats use.                                                | `from->to` |
-| `label`  | The text on the edge.                                                   | none       |
-| `around` | `"above"` or `"below"` routes the edge over or under the boxes between. | none       |
-| `quiet`  | `true` draws the edge only while a step uses it.                        | `false`    |
+| Field    | Meaning                                                                        | Default    |
+| -------- | ------------------------------------------------------------------------------ | ---------- |
+| `from`   | The id of the box or group where the edge starts.                              | required   |
+| `to`     | The id of the box or group where the edge ends.                                | required   |
+| `id`     | The name that beats use.                                                       | `from->to` |
+| `label`  | The text on the edge.                                                          | none       |
+| `around` | `"above"` or `"below"` routes the edge over or under the boxes between.        | none       |
+| `quiet`  | `true` draws the edge only while a step uses it.                               | `false`    |
+| `source` | The code this edge draws: `path` or `path#symbol`. `flowfig verify` checks it. | none       |
 
 ### Steps
 
@@ -217,13 +221,13 @@ Each step is one story. The player shows one tab for each step. With no steps, t
 
 A beat is an edge id, an array of edge ids that run at the same time, or an object:
 
-| Field   | Meaning                                                                            | Default        |
-| ------- | ---------------------------------------------------------------------------------- | -------------- |
-| `edges` | One hop or an array of hops. A hop is an edge id or `{ edge, back, data, async }`. | none (a pause) |
-| `say`   | The line of narration for the beat.                                                | none           |
-| `show`  | `{ boxId: content }` fills the content card of a box until the step ends.          | none           |
-| `light` | The ids of the boxes to highlight for this beat only.                              | none           |
-| `ms`    | The length of the beat in ms.                                                      | `speed` (900)  |
+| Field   | Meaning                                                                                    | Default        |
+| ------- | ------------------------------------------------------------------------------------------ | -------------- |
+| `edges` | One hop or an array of hops. A hop is an edge id or `{ edge, back, data, async, source }`. | none (a pause) |
+| `say`   | The line of narration for the beat.                                                        | none           |
+| `show`  | `{ boxId: content }` fills the content card of a box until the step ends.                  | none           |
+| `light` | The ids of the boxes to highlight for this beat only.                                      | none           |
+| `ms`    | The length of the beat in ms.                                                              | `speed` (900)  |
 
 In a hop, `back: true` runs the packet from `to` to `from`. `data` is a small card on the packet. `async: true` marks a message
 that does not wait for an answer.
