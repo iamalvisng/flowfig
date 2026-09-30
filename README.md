@@ -458,8 +458,9 @@ of the file. A second run also replaces a whole file that `init` wrote. If a who
 
 ## What flowfig does not draw
 
-flowfig draws parts, the messages between the parts, and their order. flowfig does not draw class diagrams, ER diagrams, Gantt
-charts, timelines with dates, charts of numbers or mind maps. Use Mermaid or a chart library for those.
+flowfig draws parts, the messages between the parts, and their order. flowfig draws a roadmap or a timeline with dates (`timeline: true`),
+and converts a Mermaid `gantt` to it. flowfig does not draw class diagrams, ER diagrams, charts of numbers or mind maps. Use Mermaid
+or a chart library for those.
 
 ## License
 

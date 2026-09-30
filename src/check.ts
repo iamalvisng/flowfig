@@ -145,6 +145,7 @@ export function checkScene(scene: Scene, { width = 830, minText = 10 }: CheckOpt
         out.push(err('text-overflow', [b.id], `box "${b.id}": "${t.text}" needs ${Math.ceil(need)} px, has ${Math.floor(t.room)} px`));
     }
   for (const e of scene.edges) {
+    if (e.behind) continue;
     const pts = Array.from({ length: 33 }, (_, i) => at(e.curve, i / 32));
     for (const b of scene.boxes)
       if (b.id !== e.from && b.id !== e.to && pts.some((p) => inside(p, b.rect, 2)))

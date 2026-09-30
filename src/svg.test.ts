@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { toSvg, render, check } from './svg.ts';
+import { textWidth } from './text.ts';
 import { timelineLayout, TL_AXIS_W, TL_BAR_H, DARK, BASE_RATE, STEP_HOLD_MS, beatMs, type FlowProps } from './model.ts';
 import { layoutRail, railState, RAIL } from './rail.ts';
 
@@ -761,4 +762,36 @@ test('timeline: an item with a bad date is skipped and the output has no NaN; ch
   assert.ok(!svg.includes('NaN'));
   assert.ok(!scene.boxes.some((b) => b.id === 'x'));
   assert.equal(check(tlFig).filter((f) => f.severity === 'error').length, 0);
+});
+
+test('timeline: a dependency leaves the right end of the from bar, enters the left end of the to bar, and runs behind the bars', () => {
+  const { svg, scene } = render(tlFig);
+  const [e] = scene.edges;
+  const a = scene.boxes.find((b) => b.id === 'spec')!.rect,
+    b = scene.boxes.find((x) => x.id === 'build')!.rect;
+  assert.equal(e.behind, true);
+  assert.equal(e.curve[0].x, a.x + a.w);
+  assert.equal(e.curve[3].x, b.x);
+  assert.ok(svg.indexOf('id="p-') < svg.indexOf('rx="6"'), 'the edge comes before the bars');
+  // A deep-stacked pair that share days still leaves right and enters left.
+  const same = render({ ...tlFig, edges: [{ from: 'build', to: 'spec' }] }).scene.edges[0];
+  assert.equal(same.curve[0].x, b.x + b.w);
+});
+
+test('timeline: the roadmap demo has no label over another item in a row', async () => {
+  const { default: demo } = await import('../figures/roadmap.ts');
+  const fig = { ...demo.props, timeline: true } as FlowProps;
+  const { scene } = render(fig);
+  const lay = timelineLayout(fig, TL_AXIS_W);
+  const spans = scene.boxes.map((b) => {
+    const it = lay.items.find((i) => i.id === b.id)!;
+    const end = it.labelInside ? b.rect.x + b.rect.w : b.rect.x + b.rect.w + 6 + textWidth(b.texts[0].text, 13);
+    return { id: b.id, y: b.rect.y + b.rect.h / 2, x0: b.rect.x, x1: end };
+  });
+  for (const p of spans)
+    for (const q of spans) {
+      if (p.id >= q.id || Math.abs(p.y - q.y) > 1) continue;
+      assert.ok(p.x1 + 8 <= q.x0 || q.x1 + 8 <= p.x0, `${p.id} and ${q.id} overlap`);
+    }
+  assert.equal(check(fig).filter((f) => f.severity === 'error').length, 0);
 });

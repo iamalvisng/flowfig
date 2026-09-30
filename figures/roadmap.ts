@@ -11,15 +11,6 @@ const props: Figure['props'] = {
     direction: 'column',
     children: [
       {
-        id: 'launch',
-        label: 'Launch',
-        children: [
-          { id: 'beta', label: 'Beta', tone: 'purple', from: '2026-11-30', source: `${doc}#beta-with-20-customers` },
-          { id: 'page', label: 'Price page', from: '2026-12-07', to: '2026-12-11', source: `${doc}#pricing-page-update` },
-          { id: 'ga', label: 'GA', tone: 'purple', from: '2026-12-15', source: `${doc}#general-availability` },
-        ],
-      },
-      {
         id: 'product',
         label: 'Product',
         children: [
@@ -34,6 +25,15 @@ const props: Figure['props'] = {
         children: [
           { id: 'metering', label: 'Metering pipeline', from: '2026-10-05', to: '2026-10-30', source: `${doc}#metering-pipeline` },
           { id: 'ledger', label: 'Ledger migration', from: '2026-11-02', to: '2026-12-04', source: `${doc}#ledger-migration` },
+        ],
+      },
+      {
+        id: 'launch',
+        label: 'Launch',
+        children: [
+          { id: 'beta', label: 'Beta', tone: 'purple', from: '2026-11-30', source: `${doc}#beta-with-20-customers` },
+          { id: 'page', label: 'Price page', from: '2026-12-07', to: '2026-12-11', source: `${doc}#pricing-page-update` },
+          { id: 'ga', label: 'GA', tone: 'purple', from: '2026-12-15', source: `${doc}#general-availability` },
         ],
       },
     ],
