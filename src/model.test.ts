@@ -1,6 +1,21 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { laneColumns, beatMs, decisions, edgeId, groupGap, isRows, nodes, readMs, toBeat } from './model.ts';
+import {
+  dayOf,
+  timelineLayout,
+  timelineBeats,
+  TL_DIAMOND,
+  TL_MIN_BAR,
+  laneColumns,
+  beatMs,
+  decisions,
+  edgeId,
+  groupGap,
+  isRows,
+  nodes,
+  readMs,
+  toBeat,
+} from './model.ts';
 import type { FlowProps } from './model.ts';
 
 test('toBeat reads every way a beat can be written', () => {
@@ -128,4 +143,157 @@ test('laneColumns gives each box its first appearance in the steps, back hops to
   const cols = laneColumns(lanesFig);
   // a: ask(0) check(1); b: pay(2); c back: get(3) then pay (seen); step no: reject(4); audit is in no step: 5, but at=1 wins
   assert.deepEqual(Object.fromEntries(cols), { ask: 0, check: 1, pay: 2, get: 3, reject: 4, audit: 1 });
+});
+
+const tl = (items: Record<string, unknown>[][], extra: Partial<FlowProps> = {}): FlowProps => ({
+  timeline: true,
+  layout: {
+    direction: 'column',
+    children: items.map((t, i) => ({ label: `T${i}`, children: t.map((n) => ({ label: String(n.id), ...n })) as never })),
+  },
+  edges: [],
+  ...extra,
+});
+// 2026-10-05 is a Monday, 2026-10-11 a Sunday.
+const oct = tl([[{ id: 'a', from: '2026-10-07', to: '2026-10-20' }]]);
+
+test('dayOf reads real ISO dates only', () => {
+  assert.equal(dayOf('1970-01-01'), 0);
+  assert.equal(dayOf('1970-01-11'), 10);
+  assert.equal(dayOf('2026-02-29'), null);
+  assert.equal(dayOf('2026-02-30'), null);
+  assert.equal(dayOf('2026-2-3'), null);
+  assert.equal(dayOf('soon'), null);
+  assert.equal(dayOf('2026-13-01'), null);
+});
+
+test('timelineLayout rounds the range to Monday and Sunday, and places bars', () => {
+  const l = timelineLayout(oct, 300);
+  assert.equal(l.start, dayOf('2026-10-05'));
+  assert.equal(l.end, dayOf('2026-10-25'));
+  // 21 days in 300 px.
+  const day = 300 / 21;
+  assert.ok(Math.abs(l.items[0].x - 2 * day) < 1e-9);
+  assert.ok(Math.abs(l.items[0].w - 14 * day) < 1e-9);
+  assert.deepEqual(l.rows, [1]);
+  assert.deepEqual(
+    l.ticks.map((t) => t.label),
+    ['W41', 'W42', 'W43'],
+  );
+  assert.equal(l.ticks[0].x, 0);
+});
+
+test('the week tick follows ISO 8601 at a year boundary', () => {
+  // 2026-01-01 is a Thursday, so the week of Monday 2025-12-29 is W1 of 2026.
+  const l = timelineLayout(tl([[{ id: 'a', from: '2025-12-30', to: '2026-01-02' }]]), 100);
+  assert.equal(l.ticks[0].label, 'W1');
+});
+
+test('a range over 16 weeks has month ticks', () => {
+  const l = timelineLayout(tl([[{ id: 'a', from: '2026-10-05', to: '2027-05-03' }]]), 600);
+  assert.deepEqual(
+    l.ticks.slice(0, 3).map((t) => t.label),
+    ['Nov', 'Dec', 'Jan'],
+  );
+  assert.ok(l.ticks.every((t) => t.x > 0));
+});
+
+test('a short bar gets the least width; a milestone is a diamond centered on its day', () => {
+  const l = timelineLayout(
+    tl([
+      [
+        { id: 'a', from: '2026-10-05', to: '2026-10-05' },
+        { id: 'm', from: '2026-10-07' },
+        { id: 'z', from: '2026-11-30', to: '2026-12-06' },
+      ],
+    ]),
+    700,
+  );
+  assert.equal(l.items[0].w, TL_MIN_BAR);
+  const m = l.items[1];
+  assert.equal(m.milestone, true);
+  assert.equal(m.w, TL_DIAMOND);
+  assert.ok(Math.abs(m.x + TL_DIAMOND / 2 - (2 * 700) / 63) < 1e-9);
+});
+
+test('two overlapping bars stack; a bar that starts the day the other ends stacks too; a later bar reuses row 0', () => {
+  const l = timelineLayout(
+    tl([
+      [
+        { id: 'a', from: '2026-10-05', to: '2026-10-09' },
+        { id: 'b', from: '2026-10-09', to: '2026-10-12' },
+        { id: 'c', from: '2026-10-13', to: '2026-10-14' },
+      ],
+    ]),
+    600,
+  );
+  assert.deepEqual(
+    l.items.map((i) => i.row),
+    [0, 1, 0],
+  );
+  assert.deepEqual(l.rows, [2]);
+});
+
+test('today is the x of its date and grows the range on both sides', () => {
+  const at = (today: string) => timelineLayout({ ...oct, today }, 210);
+  assert.equal(at('2026-10-05').today, 0);
+  const before = at('2026-09-20');
+  assert.equal(before.start, dayOf('2026-09-14'));
+  assert.equal(before.today, ((dayOf('2026-09-20')! - before.start) / (before.end - before.start + 1)) * 210);
+  assert.equal(at('2026-11-10').end, dayOf('2026-11-15'));
+  // No today: the line stops at the last date.
+  assert.ok(Math.abs(timelineLayout(oct, 210).today! - 15 * 10) < 1e-9);
+});
+
+test('one item, or every item on one day, gives a one-week range with finite numbers', () => {
+  for (const f of [
+    tl([[{ id: 'a', from: '2026-10-07' }]]),
+    tl([
+      [
+        { id: 'a', from: '2026-10-07', to: '2026-10-07' },
+        { id: 'b', from: '2026-10-07' },
+      ],
+    ]),
+  ]) {
+    const l = timelineLayout(f, 350);
+    assert.equal(l.end - l.start, 6);
+    assert.deepEqual(
+      l.ticks.map((t) => t.label),
+      ['W41'],
+    );
+    for (const n of [l.today!, ...l.items.flatMap((i) => [i.x, i.w])]) assert.ok(Number.isFinite(n));
+  }
+});
+
+test('a figure with no dated item has an empty layout and a null today', () => {
+  const l = timelineLayout(tl([[{ id: 'a' }, { id: 'b', from: 'x' }]]), 300);
+  assert.deepEqual(l.items, []);
+  assert.equal(l.today, null);
+  assert.ok(Number.isFinite(l.start) && Number.isFinite(l.end));
+});
+
+test('an item with a bad from is left out of the layout and the beats', () => {
+  const f = tl([[{ id: 'a', from: '2026-02-30' }, { id: 'b', from: '2026-10-07' }, { id: 'c' }]]);
+  assert.deepEqual(
+    timelineLayout(f, 300).items.map((i) => i.id),
+    ['b'],
+  );
+  assert.deepEqual(timelineBeats(f)[0].flow, [{ light: ['b'], say: 'b' }]);
+});
+
+test('timelineBeats has one beat per item in date order, saying the sub or the label', () => {
+  const f = tl([
+    [{ id: 'a', from: '2026-10-09', to: '2026-10-10' }],
+    [
+      { id: 'b', from: '2026-10-05', sub: 'kickoff' },
+      { id: 'c', from: '2026-10-09' },
+    ],
+  ]);
+  const [step] = timelineBeats(f);
+  assert.equal(step.label, 'timeline');
+  assert.deepEqual(step.flow, [
+    { light: ['b'], say: 'kickoff' },
+    { light: ['a'], say: 'a' },
+    { light: ['c'], say: 'c' },
+  ]);
 });

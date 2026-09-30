@@ -100,3 +100,11 @@ test('a mark change is a box change', () => {
   assert.equal(out.length, 1);
   assert.equal(out[0].kind, 'box');
 });
+
+test('a from or to change is a box change', () => {
+  const a: FlowProps = { layout: { children: [{ id: 'x', label: 'X', from: '2026-10-05', to: '2026-10-09' }] }, edges: [] };
+  const b: FlowProps = { layout: { children: [{ id: 'x', label: 'X', from: '2026-10-06', to: '2026-10-09' }] }, edges: [] };
+  assert.deepEqual(diff(a, b), [{ kind: 'box', op: 'changed', id: 'x', detail: 'from "2026-10-05" -> "2026-10-06"' }]);
+  const c: FlowProps = { layout: { children: [{ id: 'x', label: 'X', from: '2026-10-05' }] }, edges: [] };
+  assert.equal(diff(a, c)[0].detail, 'to "2026-10-09" -> (none)');
+});
