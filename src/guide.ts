@@ -90,8 +90,10 @@ command writes no SVG and lists the faults. Fix each fault and render again.
 
 - Fix a layout fault by changing the layout first: put parts in rows or columns, route an edge \`around\`, or change a gap.
   Never remove a fact from the fact list to pass the check. If you must remove one, name it in the reply.
-- If \`small-text\` appears, the figure is too wide. Shorten labels, or split the figure. Use more steps in one figure before
-  you make a second figure. Do not change \`--width\` to pass the check: the reader sees the figure at the real page width.
+- If \`small-text\` appears, the figure is too wide. Put the parts in two rows, move a detail from \`label\` to \`sub\`, or split
+  the figure. Use more steps in one figure before you make a second figure. Keep the real name from the code in the label:
+  \`ReportsController\` stays \`ReportsController\`, not \`Controller\`. Do not change \`--width\` to pass the check: the
+  reader sees the figure at the real page width.
 - Fix every other warning, or tell the user why it stays.
 - Do not use \`--no-check\` to hide a fault.
 
@@ -116,7 +118,8 @@ The reply has these parts, in this order:
    from the read-back spec. Never count from memory;
 3. the scope: the flow you drew, why, and the other flows that exist;
 4. what the figure leaves out, and why;
-5. the check line, exactly as the command printed it, and whether you looked at the SVG.
+5. the two check lines that the render printed, \`0 errors, 0 warnings\` and \`figure: ...\`, copied as printed, and whether
+   you looked at the SVG.
 
 To change an SVG later, print its spec with \`--spec\`, change the spec, and render again.
 
@@ -200,7 +203,11 @@ A row of a content card is \`{ tag?, tone?, text, meta?, mark?, mono? }\`.
 - Give every box a stable \`id\`.
 - Use \`shape: "store"\` for data at rest (a database, a cache, a file, a queue). Use a plain box for a part that does work. Use \`shape: "decision"\` for a branch.
 - Keep one clear main path, left to right. Put side parts in a \`column\` group.
-- Use \`quiet: true\` on a long edge that crosses the picture.
+- Use \`quiet: true\` on a long edge that crosses the picture. A quiet edge needs a beat that uses it, or the check reports
+  \`hidden-edge\`.
+- In a rail, draw an error reply as a hop back on the same edge, with the error in \`data\` (\`{ "edge": "login", "back": true,
+  "data": "401 CREDENTIALS_INVALID" }\`). A call that stays inside one part (a hash check, a guard) is not a message: put it in
+  \`say\` or in a \`show\` row of that part.
 - Keep an SVG to one or two steps. The SVG plays every step in a loop, with no controls.
 - Use the React player, \`<Flow {...props} />\` from \`flowfig\`, for a page that needs tabs, pause or hover.
 
@@ -268,15 +275,16 @@ flowfig does not draw class or ER diagrams, Gantt charts or charts of numbers. F
 3. Write a fact list from the code and from its wiring (config, compose, route and queue files). Write each call as
    \`caller → callee: payload (file:line of the call)\`, in order. Include each async call and every consumer of a queue, each
    branch and error path, and each end state. Leave out what the code does not show.
-4. Write the spec from the fact list, with the real names and data. Render it with \`npx flowfig - out.svg\`. Fix every fault by
-   changing the layout first (rows, \`around\`, the gap). Never remove a fact to pass the check; if you must remove one, name it
-   in the reply. If \`small-text\` appears, split the figure; do not change \`--width\`.
+4. Write the spec from the fact list, with the real names and data. Render it with \`npx flowfig - out.svg <<'SPEC'\` and the
+   JSON in the heredoc. Fix every fault by changing the layout first (rows, \`around\`, the gap). Never remove a fact to pass
+   the check; if you must remove one, name it in the reply. If \`small-text\` appears, use two rows or split the figure; keep
+   the real names; do not change \`--width\`.
 5. Run \`npx flowfig --spec out.svg\` and compare it with the fact list: each edge must go from the caller to the callee that the
    fact names. Fix each gap.
 6. If you can open a browser, look at the SVG at two moments of the loop. If you cannot, write "not looked at" in the reply.
    Never report a look that you did not do.
 7. Reply with: the SVG path; what it shows, with the counts copied from the \`figure:\` line and the names copied from the read-back spec; what it leaves out and why;
-   the check line exactly as the command printed it.
+   the two lines the render printed, \`0 errors, 0 warnings\` and \`figure: ...\`, copied as printed.
 `;
 
 /** The description of the Claude skill: the words that make the agent load it. */

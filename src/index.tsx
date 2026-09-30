@@ -281,6 +281,7 @@ export function Flow({ layout, edges, steps = [], theme, speed = 900, autoplay =
           return [
             {
               id: `rail:${row.n}`,
+              step: row.step,
               from: rail!.columns[row.from].id,
               to: rail!.columns[row.to].id,
               curve: [c, c, c, c] as [Pt, Pt, Pt, Pt],

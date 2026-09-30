@@ -100,6 +100,19 @@ test('labels that overlap each other or a box are errors; labels that only touch
   assert.deepEqual(rules(checkScene(scene({ boxes: [box('c', 30, 190)], edges: [edge('e1', 0)] }))), ['label-overlap']);
 });
 
+test('rail rows of two steps may share a place: the SVG never shows them together', () => {
+  const row = (id: string, step: number) => ({
+    id,
+    from: 'a',
+    to: 'b',
+    curve: line(0, 300, 10, 300),
+    label: { x: 0, y: 200, w: 50, h: 18 },
+    step,
+  });
+  assert.deepEqual(checkScene(scene({ edges: [row('rail:1', 0), row('rail:8', 1)] })), []);
+  assert.deepEqual(rules(checkScene(scene({ edges: [row('rail:1', 0), row('rail:2', 0)] }))), ['label-overlap']);
+});
+
 test('text that scales below the minimum at the target width is a warning', () => {
   assert.deepEqual(checkScene(scene({ width: 800, minFont: 10.5 })), []);
   const f = checkScene(scene({ width: 1200, minFont: 10.5 }));

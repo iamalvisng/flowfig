@@ -23,6 +23,12 @@ import { runInit } from './init.ts';
 import { counts } from './model.ts';
 import { check, toSvg, type Finding } from './svg.ts';
 
+const USAGE = `usage: flowfig <-|spec.json|figure.ts> [out.svg]   render a figure; a spec on stdin with -
+       flowfig check <-|spec.json|figure.ts|figure.svg>   list the faults; the input can be an SVG this wrote
+       flowfig --spec figure.svg                          print the spec the SVG carries
+       flowfig docs                                       print the guide (Markdown)
+       flowfig init [dir] [--agents <ids>] [-y] [--global] [--dry-run]   write flowfig instructions for the coding agents of a repo
+flags for render and check: --strict (warnings are errors), --json, --width <px>, --min-text <px>, --no-check (render only)`;
 const SPEC_OPEN = '<metadata id="figure-spec"><![CDATA[';
 const SPEC_CLOSE = ']]></metadata>';
 /** Bad use, not a bad figure: exit 2 with a message, not a stack trace. A declaration, so TypeScript narrows after a call. */
@@ -47,6 +53,12 @@ function specOf(svg: string, name: string): string {
   return svg.slice(at + SPEC_OPEN.length, svg.indexOf(SPEC_CLOSE, at));
 }
 
+if (!args[0] || ['help', '--help', '-h'].includes(args[0])) {
+  if (args[0]) console.log(USAGE);
+  else usage(USAGE);
+  process.exit(0);
+}
+
 if (args[0] === 'docs') {
   process.stdout.write(GUIDE);
   process.exit(0);
@@ -56,7 +68,13 @@ if (args[0] === 'init') process.exit(await runInit(args.slice(1)));
 
 if (args[0] === '--spec') {
   if (!args[1]) usage('--spec needs the path of an SVG');
-  console.log(specOf(readFileSync(args[1], 'utf8'), args[1]));
+  let svg = '';
+  try {
+    svg = readFileSync(args[1], 'utf8');
+  } catch (e) {
+    usage(`${args[1]}: ${(e as Error).message}`);
+  }
+  console.log(specOf(svg, args[1]));
   process.exit(0);
 }
 
@@ -68,10 +86,7 @@ const opts = { width: value('--width'), minText: value('--min-text') };
 const unknown = args.find((a) => a.startsWith('-') && a !== '-');
 if (unknown) usage(`unknown flag ${unknown}`);
 const [input, out] = args;
-if (!input)
-  usage(
-    'usage: flowfig <-|spec.json|figure.ts> [out.svg]  |  flowfig check <-|spec.json|figure.ts|figure.svg> [--json]  |  flowfig docs  |  flowfig init [dir]',
-  );
+if (!input) usage(USAGE);
 
 let loaded;
 try {
@@ -98,12 +113,13 @@ const findings: Finding[] = skip
       .sort((a, b) => (a.severity === b.severity ? a.rule.localeCompare(b.rule) : a.severity === 'error' ? -1 : 1));
 const errors = findings.filter((f) => f.severity === 'error').length;
 
-/** The findings for a person: one line each, colored only on a terminal. A render prints them to stderr, next to its own output. */
+/** The findings for a person: one line each, colored only on a terminal, then the counts. A render prints them to stderr, next to
+ * its own output. A clean render still prints `0 errors, 0 warnings`: the agent copies that line into its reply. */
 const report = (print: (s: string) => void, tty: boolean | undefined) => {
   const paint = (s: string, code: number) => (tty && !process.env.NO_COLOR ? `\x1b[${code}m${s}\x1b[0m` : s);
   for (const f of findings) print(`${paint(f.severity.padEnd(8), f.severity === 'error' ? 31 : 33)} ${f.rule.padEnd(18)} ${f.message}`);
   const n = (k: number, word: string) => `${k} ${word}${k === 1 ? '' : 's'}`;
-  if (findings.length || print === console.log) print(`${n(errors, 'error')}, ${n(findings.length - errors, 'warning')}`);
+  if (!skip) print(`${n(errors, 'error')}, ${n(findings.length - errors, 'warning')}`);
   const c = counts(props);
   print(
     `figure: ${n(c.boxes, 'box').replace('boxs', 'boxes')}, ${n(c.groups, 'group')}, ${n(c.edges, 'edge')}, ${n(c.steps, 'step')}, ${n(c.messages, 'message')}`,

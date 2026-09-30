@@ -20,7 +20,7 @@ const args = process.argv.slice(2);
 const at = args[0] === 'check' ? 1 : 0; // where the input sits
 
 // A bare name is a figure slug; anything else goes to the CLI as it is. A render gets a default output path, unless one follows.
-if (args[at] && !['docs', 'init'].includes(args[at]) && /^\w[\w-]*$/.test(args[at])) {
+if (args[at] && !['docs', 'init', 'help'].includes(args[at]) && /^\w[\w-]*$/.test(args[at])) {
   const slug = args[at];
   args[at] = join(root, 'figures', `${slug}.ts`);
   if (!at && !(args[1] && !args[1].startsWith('--'))) args.splice(1, 0, `${slug}.svg`);

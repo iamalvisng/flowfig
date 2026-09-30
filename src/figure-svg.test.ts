@@ -116,6 +116,17 @@ test('the example in GUIDE passes check --strict', () => {
   assert.equal(r.status, 0, r.stdout + r.stderr);
 });
 
+test('a clean render prints the counts on stderr, so the reply can copy them', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'figure-svg-'));
+  try {
+    const r = spawnSync('node', [cli, '-', 'out.svg'], { input: JSON.stringify(SPEC), cwd: dir, encoding: 'utf8' });
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stderr, /^0 errors, 0 warnings\nfigure: /m);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('$ patterns in a label or hop data survive the saved spec', () => {
   const dir = mkdtempSync(join(tmpdir(), 'figure-svg-'));
   const out = join(dir, 'out.svg');
@@ -185,6 +196,25 @@ const bad = (args: string[], input = JSON.stringify(SPEC)) => {
     rmSync(dir, { recursive: true, force: true });
   }
 };
+
+test('help, --help and -h print the usage and exit 0; no argument prints it and exits 2', () => {
+  for (const a of ['help', '--help', '-h']) {
+    const r = run([a]);
+    assert.equal(r.status, 0, a);
+    assert.match(r.stdout, /usage: flowfig/);
+    assert.match(r.stdout, /--strict/);
+  }
+  const r = run([]);
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /usage: flowfig/);
+});
+
+test('--spec on a missing file exits 2 with a message, not a stack trace', () => {
+  const r = bad(['--spec', 'missing.svg']);
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /missing.svg: ENOENT/);
+  assert.doesNotMatch(r.stderr, /\bat .*:\d+/);
+});
 
 test('--width and --min-text need a positive number, or the CLI exits 2', () => {
   for (const args of [['--width'], ['--width', 'x'], ['--min-text'], ['--min-text', '0'], ['--width', '--json']]) {
