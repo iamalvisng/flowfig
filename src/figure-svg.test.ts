@@ -352,3 +352,10 @@ test('verify passes on the refund process demo against its SOP', () => {
   assert.equal(r.status, 0, r.stdout + r.stderr);
   assert.match(r.stdout, /0 errors/);
 });
+
+test('verify passes on the roadmap demo against its plan document', () => {
+  const root = dirname(dirname(fileURLToPath(import.meta.url)));
+  const r = spawnSync('node', [cli, 'verify', 'docs/roadmap.svg'], { cwd: root, encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.match(r.stdout, /0 errors/);
+});

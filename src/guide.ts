@@ -32,6 +32,7 @@ flowfig draws how something works: parts, the messages between them, and the ord
 | A sequence diagram only                    | \`"rail": "only"\`.                                                                           |
 | A state lifecycle, a state machine         | One box per state, one edge per transition, labeled with its event. One step per path. Mark the first state with \`mark: "start"\` and each final state with \`mark: "end"\`. |
 | A flowchart with branches                  | \`shape: "decision"\` for each branch. One step per path.                                     |
+| A roadmap or a timeline | \`timeline: true\`. One labeled group per track. Items with \`from\` and \`to\` (dates), a milestone with \`from\` only, an edge for a dependency, \`today\` for the line. |
 | A process across roles (a ticket, an order, a refund) | \`lanes: true\`. One labeled group per role, in a \`column\` group. Put each step in the lane of the role that does it. Link each step with \`source\` to the SOP heading. About four time columns fit at 830 px: merge steps, give the outcomes of one decision the same \`at\`, or split the figure. |
 
 flowfig does not draw class or ER diagrams (fields, types, cardinality), Gantt charts, timelines with dates, charts of numbers,
@@ -138,6 +139,8 @@ To change an SVG later, print its spec with \`--spec\`, change the spec, and ren
 | \`edges\`    | edge[]                  | The arrows between the boxes. Required.                                                        |
 | \`steps\`    | step[]                  | The stories the figure tells. With no steps, the figure is a still map.                        |
 | \`lanes\`    | \`true\`                | Draw the layout as swimlanes: a \`column\` group of labeled groups, one per role. The boxes run left to right in step order. |
+| \`timeline\` | \`true\`               | Draw the layout as a timeline: one labeled group per track, with the boxes placed by their \`from\` and \`to\` dates. |
+| \`today\`    | \`YYYY-MM-DD\`          | In a \`timeline\` figure: the date where the today line stops. Default: the last date of the items. |
 | \`rail\`     | \`true\` or \`"only"\`      | Draw the steps as a lifeline rail under the map. \`"only"\` draws the rail without the map.      |
 | \`speed\`    | number                  | Milliseconds a packet takes to cross one edge. Default: 900.                                   |
 | \`theme\`    | object                  | Colors: \`accent\`, \`fg\`, \`muted\`, \`bg\`, \`surface\`, \`border\`, \`font\`. Each color you omit keeps its built-in value. |
@@ -161,6 +164,8 @@ Every other item is a box.
 | \`sub\`     | A smaller line under the label.                                                                           |
 | \`shape\`   | \`"box"\` (default), \`"decision"\` (a diamond) or \`"store"\` (a database cylinder for data at rest).          |
 | \`at\`      | In a \`lanes\` figure: the time column of the box, 0 first. Default: the order in which the steps first reach the box. |
+| \`from\`    | In a \`timeline\` figure: the start of the item, or the date of a milestone, as YYYY-MM-DD. |
+| \`to\`      | In a \`timeline\` figure: the last day of the item, as YYYY-MM-DD. Without it the box is a milestone. |
 | \`width\`   | Width in px. This overrides the width that the layout picks.                                              |
 | \`source\`  | The code this draws: \`path\` or \`path#symbol\`, relative to the repo root. \`flowfig verify\` checks it.  |
 | \`lines\`   | The least number of text lines that a content card keeps. The card still grows to fit its content.        |
@@ -289,7 +294,7 @@ flowfig does not draw class or ER diagrams, Gantt charts or charts of numbers. F
 2. Pick the scope. If the code has more than one flow, name each flow in the reply, then draw one flow, or draw one structure
    view and call it a structure view. If the user asks for the whole system, draw one top view with groups, or a set of figures
    that together cover every part. Keep each figure to 12 boxes or fewer. For a process that several roles do, use
-   \`lanes: true\`, one labeled group per role.
+   \`lanes: true\`, one labeled group per role. For a plan or a roadmap, read the dates from the document and use \`timeline: true\`.
 3. Write a fact list from the code and from its wiring (config, compose, route and queue files). Write each call as
    \`caller → callee: payload (file:line of the call)\`, in order. Include each async call and every consumer of a queue, each
    branch and error path, and each end state. Leave out what the code does not show.

@@ -341,6 +341,10 @@ steps:
       figures: 'docs/**/*.svg' # default **/*.svg
 ```
 
+A state lifecycle marks the first state with `mark: "start"` and each final state with `mark: "end"`.
+
+![An order status lifecycle with a start dot and two end rings](docs/order-status.svg)
+
 ## For teams
 
 A process is a diagram too. `lanes: true` draws one lane per role and the steps left to right in time order. Each step
@@ -348,9 +352,9 @@ links to a heading in the SOP, so `verify` fails when the SOP changes under the 
 
 ![The refund process across Customer, Support and Finance](docs/refund-process.svg)
 
-A state lifecycle marks the first state with `mark: "start"` and each final state with `mark: "end"`.
+A plan is a figure too. `timeline: true` draws one track per team, with each item as a bar from its `from` date to its `to` date. A milestone has only `from`, and `today` draws the line for now.
 
-![An order status lifecycle with a start dot and two end rings](docs/order-status.svg)
+![A Q4 roadmap with three tracks, milestones and a today line](docs/roadmap.svg)
 
 ## MCP server
 
