@@ -14,6 +14,7 @@ import type { Finding, Scene, SceneBox } from './scene.ts';
 export type { CheckOptions } from './check.ts';
 export type { Finding, Scene } from './scene.ts';
 export type * from './model.ts';
+export { parseSource } from './verify.ts';
 import {
   ASYNC_TAG_W,
   BASE_RATE,

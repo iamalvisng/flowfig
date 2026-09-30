@@ -4,6 +4,7 @@ import { DARK, LIGHT, ON_ACCENT, edgeId, isGroup, nodes, str, toBeat, type FigGr
 import type { Finding, Scene } from './scene.ts';
 import type { Pt, Rect } from './geometry.ts';
 import { textWidth } from './text.ts';
+import { parseSource } from './verify.ts';
 
 const err = (rule: string, ids: string[], message: string): Finding => ({ rule, severity: 'error', ids, message });
 const warn = (rule: string, ids: string[], message: string): Finding => ({ rule, severity: 'warning', ids, message });
@@ -47,6 +48,16 @@ export function checkSpec(fig: FlowProps): Finding[] {
     if (e.quiet && !used.has(edges[i]))
       out.push(err('hidden-edge', [edges[i]], `edge "${edges[i]}" is quiet and no beat uses it, so the figure never shows it`));
   });
+  // A link with a bad form never verifies, so say so here, where the spec is checked.
+  const links: [string, string | undefined][] = [
+    ...nodes(fig.layout).map((n): [string, string | undefined] => [`box "${n.id}"`, n.source]),
+    ...fig.edges.map((e, i): [string, string | undefined] => [`edge "${edges[i]}"`, e.source]),
+    ...(fig.steps ?? []).flatMap((s) =>
+      s.flow.flatMap((b) => toBeat(b).hops.map((h): [string, string | undefined] => [`hop on "${h.edge}"`, h.source])),
+    ),
+  ];
+  for (const [who, source] of links)
+    if (source != null && !parseSource(source)) out.push(warn('bad-source', [], `${who}: source "${source}" is not path or path#symbol`));
   return out;
 }
 
