@@ -64,6 +64,7 @@ If the code does not show a fact, leave the fact out. Do not guess a part, a nam
 
 Each fact becomes a box, an edge, a beat, a \`data\` card or a \`show\` row. Use the real names from the code as labels, and
 real example data from the code or its tests. Keep each fact that you leave out, with the reason, for the reply.
+Give each box and edge that draws code a \`source\`, from the fact list: \`"src/auth/login.ts#verifyPassword"\`. A store or an outside part may have none.
 
 Mermaid mapping:
 
@@ -101,6 +102,8 @@ command writes no SVG and lists the faults. Fix each fault and render again.
 
 Run \`npx flowfig --spec out.svg\`. Compare the spec with the fact list. Check that each edge goes from the caller to the callee
 that its fact names. Add each fact that is missing, fix each wrong edge, and render again.
+
+Run \`npx flowfig verify out.svg\` from the repo root. Fix each \`missing-file\` or \`missing-symbol\`.
 
 ### 6. Look at the SVG
 
@@ -278,9 +281,9 @@ flowfig does not draw class or ER diagrams, Gantt charts or charts of numbers. F
 4. Write the spec from the fact list, with the real names and data. Render it with \`npx flowfig - out.svg <<'SPEC'\` and the
    JSON in the heredoc. Fix every fault by changing the layout first (rows, \`around\`, the gap). Never remove a fact to pass
    the check; if you must remove one, name it in the reply. If \`small-text\` appears, use two rows or split the figure; keep
-   the real names; do not change \`--width\`.
+   the real names; do not change \`--width\`. Give each box and edge that draws code a \`source\` (\`file#symbol\`) from the fact list.
 5. Run \`npx flowfig --spec out.svg\` and compare it with the fact list: each edge must go from the caller to the callee that the
-   fact names. Fix each gap.
+   fact names. Fix each gap. Then run \`npx flowfig verify out.svg\` from the repo root and fix each fault.
 6. If you can open a browser, look at the SVG at two moments of the loop. If you cannot, write "not looked at" in the reply.
    Never report a look that you did not do.
 7. Reply with: the SVG path; what it shows, with the counts copied from the \`figure:\` line and the names copied from the read-back spec; what it leaves out and why;
