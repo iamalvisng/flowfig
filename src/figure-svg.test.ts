@@ -280,6 +280,38 @@ test('verify checks the links of one or more figures against --root', () => {
   }
 });
 
+test('verify reads the source of a spec back out of a rendered SVG', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'figure-svg-'));
+  try {
+    writeFileSync(join(dir, 'a.ts'), 'export const login = 1;');
+    const linked = { props: { ...SPEC.props, edges: [{ id: 'w', from: 'a', to: 'b', label: 'write', source: 'a.ts#login' }] } };
+    const out = join(dir, 'out.svg');
+    execFileSync('node', [cli, '-', out], { input: JSON.stringify(linked) });
+    const ok = run(['verify', out, '--root', dir, '--json']);
+    assert.equal(ok.status, 0, ok.stdout + ok.stderr);
+    assert.equal(JSON.parse(ok.stdout).links.length, 1);
+    rmSync(join(dir, 'a.ts'));
+    assert.equal(run(['verify', out, '--root', dir]).status, 1);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('the browser entries import no Node built-in', () => {
+  const dist = join(dirname(dirname(fileURLToPath(import.meta.url))), 'dist');
+  const seen = new Set<string>();
+  const walk = (file: string) => {
+    if (seen.has(file)) return;
+    seen.add(file);
+    const text = readFileSync(file, 'utf8');
+    assert.doesNotMatch(text, /from ['"]node:(fs|path)['"]/, file);
+    for (const m of text.matchAll(/from ['"](\.[^'"]+)['"]/g)) walk(join(dirname(file), m[1]));
+  };
+  walk(join(dist, 'svg.js'));
+  walk(join(dist, 'index.js'));
+  assert.ok(seen.size > 3);
+});
+
 test('verify on an SVG with no spec exits 2 with a message', () => {
   const dir = mkdtempSync(join(tmpdir(), 'figure-svg-'));
   try {

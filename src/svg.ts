@@ -14,7 +14,7 @@ import type { Finding, Scene, SceneBox } from './scene.ts';
 export type { CheckOptions } from './check.ts';
 export type { Finding, Scene } from './scene.ts';
 export type * from './model.ts';
-export { parseSource, links, verify, type Link } from './verify.ts';
+export { parseSource, links, type Link } from './source.ts';
 export { diff, formatDiff, type Change } from './diff.ts';
 import {
   ASYNC_TAG_W,

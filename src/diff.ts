@@ -1,5 +1,5 @@
 // The spec diff: what a PR changed in a figure, by id. The SVG geometry follows from the spec, so the spec is the diff.
-import { edgeId, nodes, str, toBeat, type FigNode, type FigEdge, type FlowProps } from './model.ts';
+import { edgeId, isGroup, str, toBeat, type FigNode, type FigEdge, type FigGroup, type FlowProps } from './model.ts';
 
 export type Change = {
   kind: 'box' | 'edge' | 'step' | 'message' | 'rail';
@@ -39,11 +39,18 @@ const messages = (fig: FlowProps) =>
   );
 
 export function diff(before: FlowProps, after: FlowProps): Change[] {
-  const boxes = (f: FlowProps) => new Map(nodes(f.layout).map((n) => [n.id, n]));
+  const boxes = (f: FlowProps) => {
+    const m = new Map<string, FigNode & { group?: string }>();
+    // The group is its label, else its id; the top level has none.
+    const walk = (g: FigGroup, parent?: string) =>
+      g.children.forEach((c) => (isGroup(c) ? walk(c, c.label != null ? str(c.label) : c.id) : m.set(c.id, { ...c, group: parent })));
+    walk(f.layout);
+    return m;
+  };
   const edges = (f: FlowProps) => new Map(f.edges.map((e) => [edgeId(e), e]));
   const steps = (f: FlowProps) => new Map((f.steps ?? []).map((s) => [str(s.label), s]));
   const out = [
-    ...compare<FigNode>('box', boxes(before), boxes(after), (a, b) => fields(a, b, ['label', 'sub', 'shape', 'source'])),
+    ...compare('box', boxes(before), boxes(after), (a, b) => fields(a, b, ['label', 'sub', 'shape', 'source', 'group'])),
     ...compare<FigEdge>('edge', edges(before), edges(after), (a, b) => fields(a, b, ['from', 'to', 'label', 'source'])),
     ...compare('step', steps(before), steps(after), () => []),
     ...compare('message', messages(before), messages(after), () => []),

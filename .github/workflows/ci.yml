@@ -40,7 +40,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm ci && npm run build && npm link
+      - run: npm ci && npm run build && mkdir -p node_modules/.bin && ln -sf ../../dist/cli.js node_modules/.bin/flowfig
       - uses: ./
         with:
           figures: 'docs/*.svg'

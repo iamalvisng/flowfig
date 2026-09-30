@@ -55,6 +55,13 @@ test('a figure with no link is a warning; a path outside the root is a missing f
   });
 });
 
+test('a link to a folder is a missing file, not a crash', () => {
+  withRepo({ 'src/a.ts': '', '..x': '' }, (root) => {
+    assert.deepEqual(rules(verify(figWith('src'), { root })), ['missing-file']);
+    assert.deepEqual(verify(figWith('..x'), { root }), []); // a name that starts with two dots is inside the root
+  });
+});
+
 test('links lists every well-formed link with its owner', () => {
   const fig: FlowProps = {
     layout: {

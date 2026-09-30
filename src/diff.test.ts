@@ -63,6 +63,15 @@ test('diff finds boxes, edges, steps, messages and the rail', () => {
   ]);
 });
 
+test('a box that moves to another group is a change', () => {
+  const a = { id: 'a', label: 'A' };
+  const b = { id: 'b', label: 'B' };
+  const at = (children: FlowProps['layout']['children']): FlowProps => ({ layout: { children }, edges: [{ from: 'a', to: 'b' }] });
+  assert.deepEqual(diff(at([a, { label: 'Zone', children: [b] }]), at([{ label: 'Zone', children: [a, b] }])), [
+    { kind: 'box', op: 'changed', id: 'a', detail: 'group (none) -> "Zone"' },
+  ]);
+});
+
 test('formatDiff prints one line per change, as text or Markdown', () => {
   const steps = [{ label: 'read', flow: ['q', { edge: 'q', back: true, data: '200' }] }, base.steps![1]];
   const c = diff(base, { ...base, edges: [base.edges[0]], steps });
