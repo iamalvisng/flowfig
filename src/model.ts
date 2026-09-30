@@ -18,6 +18,10 @@ export type FigNode = {
   width?: number;
   /** In a `lanes` figure: the time column of the box, 0-based. Default: the box's first appearance in the steps. */
   at?: number;
+  /** In a `timeline` figure: the start of the item, or the date of a milestone, as YYYY-MM-DD. */
+  from?: string;
+  /** In a `timeline` figure: the last day of the item, as YYYY-MM-DD. The day counts. Without it the box is a milestone. */
+  to?: string;
   /** A permanent state color for the box, such as a failing part. It gives a 1 px border and a light tint. An arrival with no hop tone uses it too. */
   tone?: FigTone;
   /** A lifecycle mark: `start` draws a filled dot before the box, `end` a ringed dot after it. No layout change. */
@@ -139,6 +143,10 @@ export type FlowProps = {
   rail?: boolean | 'only';
   /** Draw the layout as swimlanes: a `column` group of labeled groups, one per role, with the boxes in time order left to right. Default: off. */
   lanes?: true;
+  /** Draw the layout as a timeline: one labeled group per track, with the boxes placed by their `from` and `to` dates. Default: off. */
+  timeline?: true;
+  /** In a `timeline` figure: the date where the today line stops, as YYYY-MM-DD. Default: the last date of the items. */
+  today?: string;
 };
 /** A figure file's default export: a title, a source note and the props. */
 export type Figure = { title: string; source?: string; props: FlowProps };
@@ -243,6 +251,108 @@ export function laneColumns(fig: FlowProps): Map<string, number> {
   for (const n of nodes(fig.layout)) seen(n.id);
   for (const n of nodes(fig.layout)) if (validAt(n.at)) cols.set(n.id, n.at);
   return cols;
+}
+/** Timeline constants, shared by both renderers: the bar height, the gap between rows, the least bar width, the milestone width,
+ * the axis strip height and the axis width of the SVG. */
+export const TL_BAR_H = 28,
+  TL_ROW_GAP = 8,
+  TL_MIN_BAR = 24,
+  TL_DIAMOND = 14,
+  TL_AXIS_H = 28,
+  TL_AXIS_W = 640;
+
+/** The days since 1970-01-01 (UTC) of a YYYY-MM-DD date. It is null for any other text and for a date that does not exist. */
+export const dayOf = (iso: string): number | null => {
+  const m = typeof iso === 'string' ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso) : null;
+  if (!m) return null;
+  const t = Date.UTC(+m[1], +m[2] - 1, +m[3]);
+  return new Date(t).toISOString().slice(0, 10) === iso ? t / 86400000 : null;
+};
+
+export type TimelineItem = { id: string; track: number; row: number; x: number; w: number; milestone: boolean };
+export type TimelineLayout = {
+  /** The range in days, rounded out to whole weeks: the Monday of the first week and the Sunday of the last week. */
+  start: number;
+  end: number;
+  /** The week ticks (`W41`) or the month ticks (`Oct`). */
+  ticks: { x: number; label: string }[];
+  /** Bars and milestones. `x` and `w` are px inside the axis; `row` is the stack row inside the track. */
+  items: TimelineItem[];
+  /** The row count of each track. */
+  rows: number[];
+  /** The x of the today line. It is null when the figure has no dated item. */
+  today: number | null;
+};
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const dateOf = (day: number) => new Date(day * 86400000);
+// Day 0 is a Thursday, so this is 0 for Monday and 6 for Sunday.
+const weekday = (day: number) => (((day + 3) % 7) + 7) % 7;
+/** The ISO 8601 week number of a day: the week of the year's first Thursday is week 1. */
+const isoWeek = (day: number) => {
+  const thu = day - weekday(day) + 3;
+  const jan1 = Date.UTC(dateOf(thu).getUTCFullYear(), 0, 1) / 86400000;
+  return Math.floor((thu - jan1) / 7) + 1;
+};
+
+/** The boxes with a real `from`, in layout order, with their track (the index of the top-level child) and their days.
+ * A `to` that is not a date, or is before `from`, makes the box a milestone; `checkSpec` reports it. */
+const datedItems = (fig: FlowProps) => {
+  const out: { id: string; track: number; from: number; to: number | null; label: FigNode }[] = [];
+  fig.layout.children.forEach((c, track) =>
+    nodes(isGroup(c) ? c : { children: [c] }).forEach((n) => {
+      const from = n.from == null ? null : dayOf(n.from);
+      if (from == null) return;
+      const to = n.to == null ? null : dayOf(n.to);
+      out.push({ id: n.id, track, from, to: to != null && to >= from ? to : null, label: n });
+    }),
+  );
+  return out;
+};
+
+/** Where each dated item, tick and the today line sit on the axis, `axisWidth` px wide. Both renderers call it. */
+export function timelineLayout(fig: FlowProps, axisWidth: number): TimelineLayout {
+  const items = datedItems(fig);
+  const today = fig.today == null ? null : dayOf(fig.today);
+  const days = [...items.flatMap((i) => [i.from, i.to ?? i.from]), ...(today == null ? [] : [today])];
+  const first = days.length ? Math.min(...days) : 0;
+  const last = days.length ? Math.max(...days) : 0;
+  const start = first - weekday(first);
+  const end = last + (6 - weekday(last));
+  const px = (day: number) => ((day - start) / (end - start + 1)) * axisWidth;
+
+  const ticks: TimelineLayout['ticks'] = [];
+  if ((end - start + 1) / 7 <= 16) for (let d = start; d <= end; d += 7) ticks.push({ x: px(d), label: `W${isoWeek(d)}` });
+  else
+    for (let d = start; d <= end; d++) if (dateOf(d).getUTCDate() === 1) ticks.push({ x: px(d), label: MONTHS[dateOf(d).getUTCMonth()] });
+
+  const rows = fig.layout.children.map(() => 1);
+  const placed: TimelineItem[] = [];
+  const busy: number[][] = fig.layout.children.map(() => []); // per track: the last day of the latest item in each row
+  for (const i of [...items].sort((a, b) => a.from - b.from)) {
+    const stop = i.to ?? i.from;
+    let row = busy[i.track].findIndex((until) => until < i.from);
+    if (row < 0) row = busy[i.track].length;
+    busy[i.track][row] = stop;
+    rows[i.track] = Math.max(rows[i.track], row + 1);
+    placed.push(
+      i.to == null
+        ? { id: i.id, track: i.track, row, x: px(i.from) - TL_DIAMOND / 2, w: TL_DIAMOND, milestone: true }
+        : { id: i.id, track: i.track, row, x: px(i.from), w: Math.max(TL_MIN_BAR, px(i.to + 1) - px(i.from)), milestone: false },
+    );
+  }
+  // Keep the layout order in the result.
+  const order = new Map(items.map((i, k) => [i.id, k]));
+  placed.sort((a, b) => order.get(a.id)! - order.get(b.id)!);
+  return { start, end, ticks, items: placed, rows, today: items.length ? px(today ?? last) : null };
+}
+
+/** One step, "timeline", with one beat for each dated item in date order. The beat lights the item and says its sub or label. */
+export function timelineBeats(fig: FlowProps): FigStep[] {
+  const flow: FigBeat[] = datedItems(fig)
+    .sort((a, b) => a.from - b.from)
+    .map((i) => ({ light: [i.id], say: i.label.sub ?? i.label.label }));
+  return [{ label: 'timeline', flow }];
 }
 const labeledGroups = (g: FigGroup): number => (g.label ? 1 : 0) + g.children.reduce((n, c) => n + (isGroup(c) ? labeledGroups(c) : 0), 0);
 /** The part counts of a spec, for the line that `flowfig check` prints. An agent copies the line into its reply. */

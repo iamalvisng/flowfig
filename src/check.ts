@@ -7,6 +7,7 @@ import {
   TONES,
   edgeId,
   isGroup,
+  dayOf,
   isLanesLayout,
   validAt,
   laneColumns,
@@ -73,7 +74,29 @@ export function checkSpec(fig: FlowProps): Finding[] {
   const ends = marks.filter((m) => m === 'end').length;
   if (starts > 1 || (starts && !ends))
     out.push(warn('mark-count', [], `a lifecycle has one start and at least one end: ${starts} start, ${ends} end`));
-  if (fig.lanes) {
+  if (fig.timeline && fig.lanes)
+    out.push(warn('timeline-and-lanes', [], 'the figure sets timeline and lanes; the renderers draw the timeline and ignore lanes'));
+  if (fig.timeline) {
+    if (!isLanesLayout(fig.layout))
+      out.push(
+        err(
+          'lanes-need-column',
+          [],
+          'a timeline uses the lanes layout: a column group of labeled groups, one per track, with boxes only inside',
+        ),
+      );
+    for (const n of nodes(fig.layout)) {
+      if (n.from == null) out.push(err('timeline-need-from', [n.id], `box "${n.id}" has no from date, and a timeline needs one`));
+      const [f, t] = [n.from == null ? null : dayOf(n.from), n.to == null ? null : dayOf(n.to)];
+      for (const [name, v, d] of [
+        ['from', n.from, f],
+        ['to', n.to, t],
+      ] as const)
+        if (v != null && d == null) out.push(err('bad-date', [n.id], `box "${n.id}": ${name} "${v}" is not a real YYYY-MM-DD date`));
+      if (f != null && t != null && t < f) out.push(err('bad-date', [n.id], `box "${n.id}": to ${n.to} is before from ${n.from}`));
+    }
+    if (fig.today != null && dayOf(fig.today) == null) out.push(err('bad-date', [], `today "${fig.today}" is not a real YYYY-MM-DD date`));
+  } else if (fig.lanes) {
     const top = fig.layout;
     if (!isLanesLayout(top))
       out.push(err('lanes-need-column', [], 'lanes need a column group of labeled groups, one per lane, with boxes only inside'));

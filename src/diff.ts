@@ -53,7 +53,9 @@ export function diff(before: FlowProps, after: FlowProps): Change[] {
   const edges = (f: FlowProps) => new Map(f.edges.map((e) => [edgeId(e), e]));
   const steps = (f: FlowProps) => new Map((f.steps ?? []).map((s) => [str(s.label), s]));
   const out = [
-    ...compare('box', boxes(before), boxes(after), (a, b) => fields(a, b, ['label', 'sub', 'shape', 'tone', 'mark', 'source', 'group'])),
+    ...compare('box', boxes(before), boxes(after), (a, b) =>
+      fields(a, b, ['label', 'sub', 'shape', 'tone', 'mark', 'from', 'to', 'source', 'group']),
+    ),
     ...compare<FigEdge>('edge', edges(before), edges(after), (a, b) => fields(a, b, ['from', 'to', 'label', 'source'])),
     ...compare('step', steps(before), steps(after), () => []),
     ...compare('message', messages(before), messages(after), () => []),

@@ -284,3 +284,42 @@ test('mark-count: two starts and a start with no end are warnings; one start and
   assert.equal(count(withMarks('start', undefined))[0].severity, 'warning');
   assert.deepEqual(count(withMarks('start', 'end', 'end')), []);
 });
+
+const tlFig = (n: Record<string, unknown>, extra: Partial<FlowProps> = {}): FlowProps => ({
+  timeline: true,
+  layout: {
+    direction: 'column',
+    children: [{ label: 'Track', children: [{ id: 'a', label: 'A', from: '2026-10-05', to: '2026-10-09', ...n }] }],
+  },
+  edges: [],
+  ...extra,
+});
+
+test('a correct timeline has no findings', () => {
+  assert.deepEqual(checkSpec(tlFig({}, { today: '2026-10-07' })), []);
+});
+
+test('bad-date: not a date, a date that does not exist, to before from, a bad today', () => {
+  for (const n of [{ from: 'soon' }, { from: '2026-02-30' }, { from: '2026-2-3' }, { to: 'x' }, { to: '2026-10-01' }])
+    assert.deepEqual(rules(checkSpec(tlFig(n))), ['bad-date'], JSON.stringify(n));
+  assert.deepEqual(rules(checkSpec(tlFig({}, { today: '10/07' }))), ['bad-date']);
+});
+
+test('timeline-need-from: a box with no from is an error', () => {
+  const f = checkSpec(tlFig({ from: undefined, to: undefined }));
+  assert.deepEqual(rules(f), ['timeline-need-from']);
+  assert.deepEqual(f[0].ids, ['a']);
+});
+
+test('a timeline needs the lanes layout, and the message names both', () => {
+  const f = checkSpec({ ...tlFig({}), layout: { direction: 'row', children: [{ id: 'a', label: 'A', from: '2026-10-05' }] } });
+  assert.deepEqual(rules(f), ['lanes-need-column']);
+  assert.match(f[0].message, /lanes/);
+  assert.match(f[0].message, /timeline/);
+});
+
+test('timeline and lanes together is a warning', () => {
+  const f = checkSpec(tlFig({}, { lanes: true }));
+  assert.deepEqual(rules(f), ['timeline-and-lanes']);
+  assert.equal(f[0].severity, 'warning');
+});
