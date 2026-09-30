@@ -21,7 +21,7 @@ const props: Figure['props'] = {
         gap: 36,
         children: [
           { id: 'cache', label: 'Cache', sub: 'in memory', shape: 'store', width: 200, source: 'figures/cached-request.ts#cache' },
-          { id: 'db', label: 'Database', sub: 'source of truth', shape: 'store', width: 200 },
+          { id: 'db', label: 'Database', sub: 'source of truth', shape: 'store', width: 200, source: 'figures/cached-request.ts#db' },
         ],
       },
     ],
