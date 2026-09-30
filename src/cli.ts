@@ -10,6 +10,7 @@
  *   flowfig verify <input>... [--root dir]   # check that the code each figure links to still exists
  *   flowfig diff <old> <new> [--json|--md]   # list the spec changes between two figures
  *   flowfig docs                         # print the full guide (Markdown)
+ *   flowfig mcp                                        serve check, render, verify, diff and docs over MCP (stdio)
  *   flowfig init [dir]                   # write flowfig instructions for the coding agents of a repo
  *
  * A render checks first and writes nothing on an error (--no-check skips that). --strict makes warnings errors; --width and
@@ -22,6 +23,7 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { GUIDE } from './guide.ts';
 import { runInit } from './init.ts';
+import { serve } from './mcp.ts';
 import { diff, formatDiff } from './diff.ts';
 import { loadSpec, reportLines, sortFindings, specOf, svgWithSpec } from './load.ts';
 import type { FlowProps } from './model.ts';
@@ -34,6 +36,7 @@ const USAGE = `usage: flowfig <-|spec.json|figure.ts> [out.svg]   render a figur
        flowfig verify <input>... [--root <dir>] [--json] [--strict]   check the code links of one or more figures
        flowfig diff <old> <new> [--json|--md]   list the spec changes between two figures
        flowfig docs                                       print the guide (Markdown)
+       flowfig mcp                                        serve check, render, verify, diff and docs over MCP (stdio)
        flowfig init [dir] [--agents <ids>] [-y] [--global] [--dry-run]   write flowfig instructions for the coding agents of a repo
 flags for render and check: --strict (warnings are errors), --json, --width <px>, --min-text <px>, --no-check (render only)`;
 /** Bad use, not a bad figure: exit 2 with a message, not a stack trace. A declaration, so TypeScript narrows after a call. */
@@ -61,6 +64,11 @@ if (!args[0] || ['help', '--help', '-h'].includes(args[0])) {
 
 if (args[0] === 'docs') {
   process.stdout.write(GUIDE);
+  process.exit(0);
+}
+
+if (args[0] === 'mcp') {
+  await serve(process.stdin, process.stdout);
   process.exit(0);
 }
 
