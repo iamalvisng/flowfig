@@ -20,7 +20,7 @@ const props: Figure['props'] = {
         direction: 'column',
         gap: 36,
         children: [
-          { id: 'cache', label: 'Cache', sub: 'in memory', shape: 'store', width: 200 },
+          { id: 'cache', label: 'Cache', sub: 'in memory', shape: 'store', width: 200, source: 'figures/cached-request.ts#cache' },
           { id: 'db', label: 'Database', sub: 'source of truth', shape: 'store', width: 200 },
         ],
       },
@@ -28,7 +28,7 @@ const props: Figure['props'] = {
   },
   edges: [
     { id: 'req', from: 'client', to: 'api', label: 'request' },
-    { id: 'get', from: 'api', to: 'cache', label: 'get' },
+    { id: 'get', from: 'api', to: 'cache', label: 'get', source: 'figures/cached-request.ts#get' },
     { id: 'query', from: 'api', to: 'db', label: 'query' },
   ],
   steps: [
