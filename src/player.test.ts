@@ -190,3 +190,36 @@ test('marks: the server markup has a start dot and an end ring', () => {
   assert.ok(html.includes('right:-20px;width:14px;height:14px'));
   assert.ok(!render(fig).includes('width:14px;height:14px'));
 });
+
+const tlFig: FlowProps = {
+  timeline: true,
+  today: '2026-10-14',
+  layout: {
+    direction: 'column',
+    children: [
+      {
+        id: 'prod',
+        label: 'Product',
+        children: [
+          { id: 'spec', label: 'Spec', from: '2026-10-05', to: '2026-10-16' },
+          { id: 'build', label: 'Build', from: '2026-10-19', to: '2026-11-06' },
+        ],
+      },
+      { id: 'launch', label: 'Launch', children: [{ id: 'ga', label: 'GA', from: '2026-11-09' }] },
+    ],
+  },
+  edges: [{ from: 'spec', to: 'build' }],
+};
+
+test('timeline: the server markup has the bars, the axis ticks and the today line, and no tab row', () => {
+  const html = render(tlFig);
+  for (const id of ['spec', 'build', 'ga']) assert.ok(html.includes(`data-fig="${id}"`), id);
+  assert.ok(html.includes('data-fig-axis') && html.includes('>W41<'), 'axis ticks');
+  assert.ok(html.includes('data-fig-today') && html.includes('>today<'), 'today line');
+  assert.ok(html.includes('data-diamond="true"'), 'milestone');
+  assert.ok(html.includes('aria-label="Pause"') && !html.includes('role="tablist"'), 'play control, no tabs');
+  assert.ok(
+    render({ ...tlFig, steps: [{ label: 'walk', flow: [{ light: ['spec'] }] }] }).includes('role="tablist"'),
+    'own steps keep the tabs',
+  );
+});

@@ -2,6 +2,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { route, type Pt, type Rect, type Routed } from './geometry.ts';
 import { foldedLabel, groupBox, layoutRail, railState, RAIL } from './rail.ts';
+import { textWidth } from './text.ts';
 import { checkScene, checkSpec, checkTheme } from './check.ts';
 import type { Scene } from './scene.ts';
 import {
@@ -28,6 +29,12 @@ import {
   LANE_ROW_GAP,
   isLanesLayout,
   nodes,
+  timelineBeats,
+  timelineLayout,
+  TL_AXIS_H,
+  TL_AXIS_W,
+  TL_BAR_H,
+  TL_ROW_GAP,
   toBeat,
   beatMs,
   STEP_HOLD_MS,
@@ -44,6 +51,7 @@ export { LIGHT, DARK } from './model.ts';
 const DEFAULTS: Required<FigTheme> = { ...LIGHT, font: 'inherit' };
 const v = (k: keyof FigTheme) => `var(--fig-${k}, ${DEFAULTS[k]})`;
 const MONO = 'var(--ifm-font-family-monospace, ui-monospace, SFMono-Regular, Menlo, monospace)';
+const NONE: never[] = []; // a stable default, so a memo keyed on it does not run every render
 const ACTIVE = 'flowfig-active'; // the box a packet has just reached
 // The active box reads --ff-hop (the tone of the hop that arrived), then --ff-box (the tone of the box), then the accent.
 const hue = `var(--ff-hop, var(--ff-box, ${v('accent')}))`;
@@ -118,14 +126,26 @@ const cardBody = (c: FigContent): ReactNode => {
 export function Flow({
   layout,
   edges,
-  steps = [],
+  steps: stepsIn = NONE,
   theme,
   speed = 900,
   autoplay = true,
   check = false,
   rail: withRail = false,
   lanes,
+  timeline,
+  today,
 }: FlowProps) {
+  const tl = timeline && isLanesLayout(layout);
+  // A timeline with no steps of its own walks its dated items in date order, with no tab row.
+  const synthetic = tl && !stepsIn.length;
+  const steps = useMemo(
+    () => (synthetic ? timelineBeats({ layout, edges, timeline, today }) : stepsIn),
+    [synthetic, layout, edges, timeline, today, stepsIn],
+  );
+  // The width of the timeline area in px: the server draws TL_AXIS_W, and the browser measures the real width after mount.
+  const [axisW, setAxisW] = useState(TL_AXIS_W);
+  const area = useRef<HTMLDivElement>(null);
   const root = useRef<HTMLDivElement>(null);
   const outer = useRef<HTMLDivElement>(null);
   const [fit, setFit] = useState({ scale: 1, height: 0 });
@@ -220,6 +240,7 @@ export function Flow({
       const scale = Math.max(0.5, Math.min(1, box.clientWidth / el.offsetWidth));
       setFit({ scale, height: el.offsetHeight * scale });
       setMapW(el.offsetWidth);
+      if (area.current) setAxisW(area.current.offsetWidth);
       const base = el.getBoundingClientRect();
       const k = base.width / el.offsetWidth; // the scale currently on screen; rects are measured unscaled
       const rects: Record<string, Rect> = {};
@@ -246,7 +267,7 @@ export function Flow({
     ro.observe(box);
     el.querySelectorAll('[data-fig]').forEach((n) => ro.observe(n));
     return () => ro.disconnect();
-  }, [edges, ids, layout, tips, noMap, lanes]);
+  }, [edges, ids, layout, tips, noMap, lanes, tl, axisW]);
 
   // The same rules as `flowfig check`, on what the browser actually drew: real fonts, real wrapping. Each fault prints once.
   const reported = useRef(new Set<string>());
@@ -455,7 +476,181 @@ export function Flow({
 
   const vars = Object.fromEntries(Object.entries(theme ?? {}).map(([k, val]) => [`--fig-${k}`, val])) as CSSProperties;
 
+  const timelineFig = useMemo(
+    () => (tl ? timelineLayout({ layout, edges, timeline, today }, axisW) : null),
+    [tl, layout, edges, timeline, today, axisW],
+  );
+
+  // A bar or a milestone of a timeline: placed by the shared layout, with the look of a box.
+  const renderBar = (n: FigNode, it: { row: number; x: number; w: number; milestone: boolean }) => {
+    const lit = litNodes.has(n.id);
+    const bt = n.tone && TONES[n.tone];
+    const label = String(n.label);
+    const inside = !it.milestone && textWidth(label, 13) + 16 <= it.w;
+    const outside = (
+      <span
+        style={{ position: 'absolute', left: '100%', marginLeft: 6, whiteSpace: 'nowrap', fontSize: 13, fontWeight: 500, color: v('fg') }}
+      >
+        {label}
+      </span>
+    );
+    const top = LANE_PAD + it.row * (TL_BAR_H + TL_ROW_GAP);
+    return (
+      <div
+        key={n.id}
+        data-fig={n.id}
+        data-diamond={it.milestone || undefined}
+        onMouseEnter={() => setHover(n.id)}
+        onMouseLeave={() => setHover(null)}
+        style={{
+          position: 'absolute',
+          left: it.x,
+          top: it.milestone ? top + (TL_BAR_H - it.w) / 2 : top,
+          width: it.w,
+          height: it.milestone ? it.w : TL_BAR_H,
+          boxSizing: 'border-box',
+          display: 'flex',
+          alignItems: 'center',
+          padding: it.milestone ? 0 : '0 calc(8px - var(--ff-b, 0px))',
+          color: v('fg'),
+          background: it.milestone ? undefined : bt ? toneTint(bt, v('bg')) : v('bg'),
+          border: it.milestone ? undefined : `1px solid ${bt ?? (lit ? v('accent') : v('border'))}`,
+          ...(bt && { '--ff-box': bt }),
+          borderRadius: 6,
+          fontSize: 13,
+          fontWeight: 500,
+          whiteSpace: 'nowrap',
+          opacity: focus && !lit ? 0.7 : 1,
+          transition: 'border-color .4s, background .4s, box-shadow .4s, border-width .4s, padding .4s, opacity .25s',
+          cursor: 'default',
+        }}
+      >
+        {it.milestone && (
+          <svg
+            viewBox="0 0 100 100"
+            preserveAspectRatio="none"
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', overflow: 'visible' }}
+          >
+            <polygon
+              points="50,0 100,50 50,100 0,50"
+              fill={bt ? toneTint(bt, v('bg')) : v('bg')}
+              stroke={bt ?? (lit ? v('accent') : v('border'))}
+              strokeWidth={lit ? 1.6 : 1}
+              vectorEffect="non-scaling-stroke"
+              style={{ transition: 'stroke .4s, fill .4s, stroke-width .4s' }}
+            />
+          </svg>
+        )}
+        {inside ? <span style={{ position: 'relative' }}>{label}</span> : outside}
+      </div>
+    );
+  };
+
   const renderItem = (item: FigNode | FigGroup, depth: number): ReactNode => {
+    if (timelineFig && item === layout) {
+      const lanesList = layout.children as FigGroup[];
+      // The today line follows the first dated item the current beat lights, and rests at today otherwise.
+      const startOf = (id: string) => {
+        const it = timelineFig.items.find((i) => i.id === id);
+        return it && it.x + (it.milestone ? it.w / 2 : 0);
+      };
+      const at = (cur?.light ?? []).map(startOf).find((x) => x != null) ?? timelineFig.today ?? 0;
+      const rowsPx = timelineFig.rows.map((r) => r * TL_BAR_H + (r - 1) * TL_ROW_GAP + LANE_PAD * 2);
+      return (
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: `max-content minmax(${TL_AXIS_W}px, 1fr) 18px`,
+            // The axis strip sits over the gap above the first band, as in the SVG.
+            gridTemplateRows: `${TL_AXIS_H - LANE_ROW_GAP}px ${rowsPx.map((h) => h + 'px').join(' ')}`,
+            rowGap: LANE_ROW_GAP,
+            position: 'relative',
+          }}
+        >
+          <div data-fig-axis="" style={{ gridColumn: '2 / 4', gridRow: 1, position: 'relative', height: TL_AXIS_H, alignSelf: 'start' }}>
+            <div style={{ position: 'absolute', left: 0, right: 0, top: TL_AXIS_H - 1, height: 1, background: v('border') }} />
+            {timelineFig.ticks.map((k) => (
+              <Fragment key={k.x}>
+                <div style={{ position: 'absolute', left: k.x, top: TL_AXIS_H - 5, width: 1, height: 4, background: v('border') }} />
+                <div style={{ position: 'absolute', left: k.x + 3, top: 0, fontSize: 11, lineHeight: '13px', color: v('muted') }}>
+                  {k.label}
+                </div>
+              </Fragment>
+            ))}
+          </div>
+          {lanesList.map((lane, li) => {
+            const lit = lane.id != null && litNodes.has(lane.id);
+            return (
+              <Fragment key={lane.id ?? String(lane.label)}>
+                <div
+                  data-fig={lane.id}
+                  data-fig-lane=""
+                  style={{
+                    gridColumn: '1 / -1',
+                    gridRow: li + 2,
+                    background: v('surface'),
+                    border: `1px solid ${lit ? v('accent') : v('border')}`,
+                    boxShadow: lit ? glow : undefined,
+                    transition: 'border-color .25s, box-shadow .25s',
+                    borderRadius: 14,
+                    zIndex: 0,
+                  }}
+                />
+                <div
+                  style={{
+                    gridColumn: 1,
+                    gridRow: li + 2,
+                    alignSelf: 'center',
+                    zIndex: 1,
+                    padding: '0 18px',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    letterSpacing: '.04em',
+                    textTransform: 'uppercase',
+                    color: v('muted'),
+                  }}
+                >
+                  {lane.label}
+                </div>
+                <div ref={li === 0 ? area : undefined} style={{ gridColumn: 2, gridRow: li + 2, position: 'relative', zIndex: 1 }}>
+                  {timelineFig.items
+                    .filter((it) => it.track === li)
+                    .map((it) =>
+                      renderBar(
+                        (lane.children as FigNode[]).find((k) => k.id === it.id)!,
+                        it,
+                      ),
+                    )}
+                </div>
+              </Fragment>
+            );
+          })}
+          {timelineFig.today != null && (
+            <div style={{ gridColumn: '2 / 4', gridRow: '1 / -1', position: 'relative', zIndex: 2, pointerEvents: 'none' }}>
+              <div
+                data-fig-today=""
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  top: 12,
+                  bottom: 0,
+                  width: 1.5,
+                  background: v('accent'),
+                  transform: `translateX(${at}px)`,
+                  transition: 'transform .4s linear',
+                }}
+              >
+                <span
+                  style={{ position: 'absolute', left: 3, top: -1, fontSize: 11, lineHeight: '11px', fontWeight: 600, color: v('accent') }}
+                >
+                  today
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
     if (lanes && item === layout && isLanesLayout(layout)) {
       const cols = laneColumns({ layout, edges, steps, lanes });
       const n = Math.max(0, ...cols.values()) + 1;
@@ -1112,68 +1307,70 @@ export function Flow({
               <Icon d={playing ? 'M5.5 4v8M10.5 4v8' : 'M5 3.5v9l7.5-4.5z'} fill={!playing} />
             </button>
             {/* Tabs in a quiet track; the active one carries a progress line for the step that is playing. */}
-            <div
-              role="tablist"
-              style={{
-                display: 'inline-flex',
-                gap: 2,
-                padding: 3,
-                borderRadius: 10,
-                background: v('surface'),
-                border: `1px solid ${v('border')}`,
-              }}
-            >
-              {steps.map((s, i) => {
-                const on = active === i;
-                return (
-                  <button
-                    key={i}
-                    type="button"
-                    role="tab"
-                    aria-selected={on}
-                    onClick={() => {
-                      clock.current.elapsed = 0; // replay from the start, even when it is already the active step
-                      setActive(i);
-                      setPlaying(true);
-                      setBeat(0);
-                    }}
-                    style={{
-                      position: 'relative',
-                      overflow: 'hidden',
-                      font: 'inherit',
-                      fontFamily: MONO,
-                      fontSize: 12.5,
-                      padding: '5px 14px',
-                      borderRadius: 7,
-                      border: 'none',
-                      cursor: 'pointer',
-                      background: on ? v('bg') : 'transparent',
-                      color: on ? v('fg') : v('muted'),
-                      boxShadow: on ? '0 1px 2px rgba(0,0,0,.08)' : 'none',
-                      transition: 'background .2s, color .2s',
-                    }}
-                  >
-                    {s.label}
-                    {on && (
-                      <div
-                        ref={bar}
-                        style={{
-                          position: 'absolute',
-                          left: 0,
-                          right: 0,
-                          bottom: 0,
-                          height: 2,
-                          background: v('accent'),
-                          transformOrigin: 'left',
-                          transform: 'scaleX(0)',
-                          opacity: playing ? 1 : 0.35,
-                        }}
-                      />
-                    )}
-                  </button>
-                );
-              })}
-            </div>
+            {!synthetic && (
+              <div
+                role="tablist"
+                style={{
+                  display: 'inline-flex',
+                  gap: 2,
+                  padding: 3,
+                  borderRadius: 10,
+                  background: v('surface'),
+                  border: `1px solid ${v('border')}`,
+                }}
+              >
+                {steps.map((s, i) => {
+                  const on = active === i;
+                  return (
+                    <button
+                      key={i}
+                      type="button"
+                      role="tab"
+                      aria-selected={on}
+                      onClick={() => {
+                        clock.current.elapsed = 0; // replay from the start, even when it is already the active step
+                        setActive(i);
+                        setPlaying(true);
+                        setBeat(0);
+                      }}
+                      style={{
+                        position: 'relative',
+                        overflow: 'hidden',
+                        font: 'inherit',
+                        fontFamily: MONO,
+                        fontSize: 12.5,
+                        padding: '5px 14px',
+                        borderRadius: 7,
+                        border: 'none',
+                        cursor: 'pointer',
+                        background: on ? v('bg') : 'transparent',
+                        color: on ? v('fg') : v('muted'),
+                        boxShadow: on ? '0 1px 2px rgba(0,0,0,.08)' : 'none',
+                        transition: 'background .2s, color .2s',
+                      }}
+                    >
+                      {s.label}
+                      {on && (
+                        <div
+                          ref={bar}
+                          style={{
+                            position: 'absolute',
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            height: 2,
+                            background: v('accent'),
+                            transformOrigin: 'left',
+                            transform: 'scaleX(0)',
+                            opacity: playing ? 1 : 0.35,
+                          }}
+                        />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
             <button
               type="button"
               aria-label={`Speed ${rate}×, switch to ${rate === 1 ? 2 : 1}×`}
