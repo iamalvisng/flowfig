@@ -251,3 +251,44 @@ test('a spec with no edges, a step with no flow, a null spec, or --spec with no 
   assert.equal(r.status, 2);
   assert.match(r.stderr, /--spec needs/);
 });
+
+test('verify checks the links of one or more figures against --root', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'figure-svg-'));
+  try {
+    writeFileSync(join(dir, 'a.ts'), 'export const login = 1;');
+    const linked = { props: { ...SPEC.props, edges: [{ id: 'w', from: 'a', to: 'b', label: 'write', source: 'a.ts#login' }] } };
+    writeFileSync(join(dir, 'ok.json'), JSON.stringify(linked));
+    const stale = { props: { ...SPEC.props, edges: [{ id: 'w', from: 'a', to: 'b', label: 'write', source: 'a.ts#logout' }] } };
+    writeFileSync(join(dir, 'stale.json'), JSON.stringify(stale));
+    const ok = run(['verify', join(dir, 'ok.json'), '--root', dir]);
+    assert.equal(ok.status, 0, ok.stdout + ok.stderr);
+    assert.match(ok.stdout, /0 errors, 0 warnings/);
+    const both = run(['verify', join(dir, 'ok.json'), join(dir, 'stale.json'), '--root', dir, '--json']);
+    assert.equal(both.status, 1);
+    const j = JSON.parse(both.stdout);
+    assert.deepEqual(
+      j.findings.map((f: { rule: string; figure: string }) => [f.rule, f.figure.endsWith('stale.json')]),
+      [['missing-symbol', true]],
+    );
+    assert.equal(j.links.length, 2);
+    const none = run(['verify', '-', '--root', dir], JSON.stringify(SPEC));
+    assert.equal(none.status, 0);
+    assert.match(none.stdout, /no-source/);
+    assert.equal(run(['verify', '-', '--root', dir, '--strict'], JSON.stringify(SPEC)).status, 1);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('verify on an SVG with no spec exits 2 with a message', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'figure-svg-'));
+  try {
+    writeFileSync(join(dir, 'plain.svg'), '<svg xmlns="http://www.w3.org/2000/svg"></svg>');
+    const r = run(['verify', join(dir, 'plain.svg')]);
+    assert.equal(r.status, 2);
+    assert.match(r.stderr, /no figure spec/);
+    assert.doesNotMatch(r.stderr, /\bat .*:\d+/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
