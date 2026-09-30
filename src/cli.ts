@@ -12,6 +12,7 @@
  *   flowfig docs                         # print the full guide (Markdown)
  *   flowfig mcp                          # serve check, render, verify, diff and docs over MCP (stdio)
  *   flowfig init [dir]                   # write flowfig instructions for the coding agents of a repo
+ *   flowfig draw "<question>" [--out out.svg]   # ask Claude Code for a figure, then check it
  *
  * A render checks first and writes nothing on an error (--no-check skips that). --strict makes warnings errors; --width and
  * --min-text set the page width and the smallest text the reader should get.
@@ -22,6 +23,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { GUIDE } from './guide.ts';
+import { runDraw } from './draw.ts';
 import { runInit } from './init.ts';
 import { serve } from './mcp.ts';
 import { diff, formatDiff } from './diff.ts';
@@ -38,6 +40,7 @@ const USAGE = `usage: flowfig <-|spec.json|figure.ts> [out.svg]   render a figur
        flowfig docs                                       print the guide (Markdown)
        flowfig mcp                                        serve check, render, verify, diff and docs over MCP (stdio)
        flowfig init [dir] [--agents <ids>] [-y] [--global] [--dry-run] [--no-mcp]   write flowfig instructions for the coding agents of a repo
+       flowfig draw "<question>" [--out <path>] [--model <alias>] [--max-turns <n>]   ask Claude Code for a figure, then check it
 flags for render and check: --strict (warnings are errors), --json, --width <px>, --min-text <px>, --no-check (render only)`;
 /** Bad use, not a bad figure: exit 2 with a message, not a stack trace. A declaration, so TypeScript narrows after a call. */
 function usage(message: string): never {
@@ -75,6 +78,7 @@ if (args[0] === 'mcp') {
 }
 
 if (args[0] === 'init') process.exit(await runInit(args.slice(1)));
+if (args[0] === 'draw') process.exit(await runDraw(args.slice(1)));
 
 if (args[0] === '--spec') {
   if (!args[1]) usage('--spec needs the path of an SVG');
