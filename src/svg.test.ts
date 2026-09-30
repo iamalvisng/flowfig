@@ -562,3 +562,82 @@ test('a toned box that is never lit has no animation', () => {
 test('the arrowhead takes the edge color', () => {
   assert.ok(toSvg(toned).includes('fill="context-stroke"'));
 });
+
+const lanesFig: FlowProps = {
+  lanes: true,
+  layout: {
+    direction: 'column',
+    children: [
+      {
+        label: 'Customer',
+        children: [
+          { id: 'ask', label: 'Request refund' },
+          { id: 'get', label: 'Get money' },
+        ],
+      },
+      {
+        label: 'Support',
+        children: [
+          { id: 'check', label: 'Check order' },
+          { id: 'reject', label: 'Reject' },
+        ],
+      },
+      {
+        label: 'Finance',
+        children: [
+          { id: 'pay', label: 'Issue refund' },
+          { id: 'audit', label: 'Audit', at: 1 },
+        ],
+      },
+    ],
+  },
+  edges: [
+    { id: 'a', from: 'ask', to: 'check' },
+    { id: 'b', from: 'check', to: 'pay' },
+    { id: 'c', from: 'pay', to: 'get' },
+    { id: 'r', from: 'check', to: 'reject' },
+  ],
+  steps: [
+    { label: 'ok', flow: ['a', 'b', { edge: 'c', back: true }] },
+    { label: 'no', flow: ['a', 'r'] },
+  ],
+};
+
+test('lanes: boxes in one time column share x across lanes; the bands span the width; a lane label sits in the gutter', () => {
+  const { scene, svg } = render(lanesFig);
+  const rect = (id: string) => scene.boxes.find((b) => b.id === id)!.rect;
+  assert.equal(rect('check').x, rect('audit').x); // both column 1
+  assert.ok(rect('ask').x < rect('check').x && rect('check').x < rect('pay').x);
+  assert.ok(rect('ask').y < rect('check').y && rect('check').y < rect('pay').y); // lane order top to bottom
+  assert.match(svg, /CUSTOMER/);
+  const bands = [...svg.matchAll(/<rect[^>]*class="lane[ "][^>]*>/g)];
+  assert.equal(bands.length, 3);
+});
+
+test('lanes: an empty lane still draws, a decision widens its column, and the rail works under lanes', () => {
+  const [customer, , finance] = lanesFig.layout.children;
+  const fig: FlowProps = {
+    ...lanesFig,
+    rail: true,
+    layout: {
+      direction: 'column',
+      children: [
+        customer,
+        {
+          label: 'Support',
+          children: [
+            { id: 'check', label: 'Check order', shape: 'decision' },
+            { id: 'reject', label: 'Reject' },
+          ],
+        },
+        finance,
+        { label: 'Empty', children: [] },
+      ],
+    },
+  };
+  const { svg, scene } = render(fig);
+  assert.match(svg, /EMPTY/);
+  const w = (id: string) => scene.boxes.find((b) => b.id === id)!.rect.w;
+  assert.ok(w('check') > w('ask'));
+  assert.equal(check(fig).filter((f) => f.severity === 'error').length, 0);
+});
