@@ -147,7 +147,7 @@ export type FlowProps = {
   lanes?: true;
   /** Draw the layout as a timeline: one labeled group per track, with the boxes placed by their `from` and `to` dates. Default: off. */
   timeline?: true;
-  /** In a `timeline` figure: the date where the today line stops, as YYYY-MM-DD. Default: the last date of the items. */
+  /** In a `timeline` figure: the date of the fixed today marker, as YYYY-MM-DD. With no `today`, the figure has no marker. */
   today?: string;
 };
 /** A figure file's default export: a title, a source note and the props. */
@@ -271,7 +271,17 @@ export const dayOf = (iso: string): number | null => {
   return new Date(t).toISOString().slice(0, 10) === iso ? t / 86400000 : null;
 };
 
-export type TimelineItem = { id: string; track: number; row: number; x: number; w: number; milestone: boolean; labelInside: boolean };
+export type TimelineItem = {
+  id: string;
+  track: number;
+  row: number;
+  x: number;
+  w: number;
+  milestone: boolean;
+  labelInside: boolean;
+  /** The `from` date in the d MMM form, for the playhead label. */
+  date: string;
+};
 export type TimelineLayout = {
   /** The range in days, rounded out to whole weeks: the Monday of the first week and the Sunday of the last week. */
   start: number;
@@ -282,8 +292,11 @@ export type TimelineLayout = {
   items: TimelineItem[];
   /** The row count of each track. */
   rows: number[];
-  /** The x of the today line. It is null when the figure has no dated item. */
+  /** The x of the today marker. It is null when the figure has no valid `today`. */
   today: number | null;
+  /** The x and the d MMM date of the last day: the playhead rests there in the step hold. The x is null when the figure has no dated item. */
+  last: number | null;
+  lastDate: string;
 };
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -343,12 +356,21 @@ export function timelineLayout(fig: FlowProps, axisWidth: number): TimelineLayou
     if (row < 0) row = busy[i.track].length;
     busy[i.track][row] = span;
     rows[i.track] = Math.max(rows[i.track], row + 1);
-    placed.push({ id: i.id, track: i.track, row, x, w, milestone: !bar, labelInside });
+    placed.push({ id: i.id, track: i.track, row, x, w, milestone: !bar, labelInside, date: fmt(i.from) });
   }
   // Keep the layout order in the result.
   const order = new Map(items.map((i, k) => [i.id, k]));
   placed.sort((a, b) => order.get(a.id)! - order.get(b.id)!);
-  return { start, end, ticks, items: placed, rows, today: items.length ? px(today ?? last) : null };
+  return {
+    start,
+    end,
+    ticks,
+    items: placed,
+    rows,
+    today: items.length && today != null ? px(today) : null,
+    last: items.length ? px(last) : null,
+    lastDate: fmt(last),
+  };
 }
 
 const fmt = (d: number) => `${dateOf(d).getUTCDate()} ${MONTHS[dateOf(d).getUTCMonth()]}`;

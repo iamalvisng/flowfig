@@ -730,14 +730,16 @@ test('timeline: the axis has the week ticks, the bars sit at the layout x and a 
   assert.ok(scene.boxes.every((b) => b.texts[0].fontSize === 13));
 });
 
-test('timeline: the today line moves to each item and home in the step hold; the steps come from the dates', () => {
+test('timeline: a fixed dashed today marker and a playhead that moves; the steps come from the dates', () => {
   const svg = toSvg(tlFig);
   assert.ok(svg.includes('class="today">today<'));
+  assert.equal(svg.match(/stroke-dasharray="3 3"/g)?.length, 1, 'one dashed marker');
   const line = svg.match(/<g class="(a\d+)"><path [^>]*stroke="var\(--accent\)" stroke-width="1.5"/)!;
   const kf = svg.match(new RegExp(`@keyframes ${line[1]} \\{[^\\n]*\\}\\n`))![0];
-  assert.ok(kf.includes('translateX(0px)'), 'home at the start and end');
-  assert.ok(/translateX\(-\d/.test(kf), 'a beat moves the line left of today');
+  assert.ok(kf.includes('translateX(0px)'), 'rests at the last date at the start and end');
+  assert.ok(/translateX\(-\d/.test(kf), 'a beat moves the line left of the last date');
   assert.ok(svg.includes('Spec') && !svg.includes('>timeline</text>'), 'the synthetic step has no label');
+  assert.ok(!toSvg({ ...tlFig, today: undefined }).includes('stroke-dasharray="3 3"'), 'no today, no marker');
 });
 
 test('timeline: an item with a bad date is skipped and the output has no NaN; check on a valid timeline has no error', () => {
@@ -811,15 +813,15 @@ test('timeline: a bar holds the active look during its beat and the trail after'
   assert.ok(seq.includes('trail') && seq.lastIndexOf('trail') > seq.indexOf('active'), 'the trail follows the beat');
 });
 
-test('timeline: in the roadmap demo each dependency path starts at an x not right of its end', async () => {
+test('timeline: in the roadmap demo each dependency path has right angles only', async () => {
   const { default: demo } = await import('../figures/roadmap.ts');
   const svg = toSvg({ ...demo.props, timeline: true } as FlowProps);
-  const paths = [...svg.matchAll(/<path id="p-[^"]*" d="M ([\d.-]+) [\d.-]+ C [^"]*? ([\d.-]+) [\d.-]+"/g)];
+  const paths = [...svg.matchAll(/<path id="p-[^"]*" d="([^"]*)"/g)].map((m) => m[1]);
   assert.ok(paths.length > 0, 'the demo has dependency paths');
-  for (const [d, x0, x1] of paths) assert.ok(+x0 <= +x1, `backward curve: ${d}`);
+  for (const d of paths) assert.match(d, /^M [\d.-]+ [\d.-]+ H [\d.-]+ V [\d.-]+ H [\d.-]+$/, `elbow: ${d}`);
 });
 
-test('timeline: the today line follows each focused item and the last ramp returns to 0', async () => {
+test('timeline: the playhead follows each focused item, ends at the range end, and has a date label for each from', async () => {
   const { default: demo } = await import('../figures/roadmap.ts');
   const props = { ...demo.props, timeline: true } as FlowProps;
   const svg = toSvg(props);
@@ -829,5 +831,9 @@ test('timeline: the today line follows each focused item and the last ramp retur
   const froms = new Set(nodes(props.layout).map((n) => n.from));
   assert.ok(new Set(xs).size >= 3, `distinct x: ${[...new Set(xs)]}`);
   assert.ok(new Set(xs).size >= froms.size, 'one x for each distinct from date');
-  assert.equal(xs.at(-1), 0);
+  assert.equal(xs.at(-1), 0, 'the range end');
+  assert.equal(svg.match(/stroke-dasharray="3 3"/g)?.length, 1, 'one today marker');
+  const lay = timelineLayout(props, TL_AXIS_W);
+  const texts = [...svg.matchAll(/class="today a\d+">([^<]*)</g)].map((m) => m[1]);
+  assert.deepEqual(new Set(texts), new Set(lay.items.map((i) => i.date).concat(lay.lastDate)));
 });

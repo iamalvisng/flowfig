@@ -317,7 +317,13 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
   const tips = new Set(placed.filter((p) => !isGroup(p.item) && (p.item.shape === 'decision' || p.tl?.milestone)).map((p) => p.item.id!));
   const ids = fig.edges.map(edgeId);
   const routed = route(
-    fig.edges.map((e, i) => ({ id: ids[i], from: e.from, to: e.to, around: e.around, ...(tl && { sides: ['r', 'l'] as [Side, Side] }) })),
+    fig.edges.map((e, i) => ({
+      id: ids[i],
+      from: e.from,
+      to: e.to,
+      around: e.around,
+      ...(tl && { sides: ['r', 'l'] as [Side, Side], elbow: true }),
+    })),
     rects,
     tips,
   );
@@ -698,7 +704,7 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
     );
   });
 
-  // The timeline axis under the boxes, and the today line over them. The line moves to the start of each beat's item, then home to today.
+  // The timeline axis under the boxes, the fixed today marker and the moving playhead over them.
   let axisSvg = '',
     todaySvg = '';
   if (tl) {
@@ -715,32 +721,58 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
             `<text x="${n2(x0 + k.x + 3)}" y="${n2(top.y + 10)}" class="tick">${esc(k.label)}</text>`,
         )
         .join('');
-    if (tl.today != null && segs.length) {
-      const home = tl.today;
+    const bottom = n2(top.y + top.h);
+    // The today marker is fixed at the figure's `today`.
+    if (tl.today != null) {
+      const tx = x0 + tl.today;
+      todaySvg =
+        `<path d="M ${n2(tx)} ${n2(top.y + 12)} V ${bottom}" stroke="var(--accent)" stroke-opacity="0.6" stroke-width="1" stroke-dasharray="3 3"/>` +
+        `<text x="${n2(tx - 3)}" y="${n2(top.y + 22)}" text-anchor="end" class="today">today</text>`;
+    }
+    // The playhead moves to the start of each beat's item, then to the last date in the step hold.
+    if (tl.last != null && segs.length) {
+      const home = tl.last;
       const startOf = new Map(tl.items.map((i) => [i.id, i.x + (i.milestone ? i.w / 2 : 0)]));
+      const dateOf = new Map(tl.items.map((i) => [i.id, i.date]));
       const hold = STEP_HOLD_MS / 1000 / BASE_RATE;
       const pts: [number, number][] = [[0, home]];
+      const dates: { a: number; b: number; d: string }[] = []; // the label date in each time span
       let at = home;
+      let atDate = tl.lastDate;
       segs.forEach((s, i) => {
         const id = (beats[s.si][s.bi].focus ?? []).find((l) => startOf.has(l));
         const to = id != null ? startOf.get(id)! : at;
+        const date = id != null ? dateOf.get(id)! : atDate;
         const last = i === segs.length - 1 || segs[i + 1].si !== s.si;
         const end = last ? s.t1 - hold : s.t1; // the step hold starts here
         pts.push([s.t0, at], [Math.min(s.t0 + RAMP, end), to], [end, to]);
+        dates.push({ a: s.t0, b: end, d: date });
         at = to;
+        atDate = date;
         if (last) {
           pts.push([Math.min(end + RAMP, s.t1), home], [s.t1, home]);
+          dates.push({ a: end, b: s.t1, d: tl.lastDate });
           at = home;
+          atDate = tl.lastDate;
         }
       });
       const name = `a${seen.size}`;
-      seen.set('today', name);
+      seen.set('playhead', name);
       const kf = pts.map(([t, x]) => `${pct(t / total)} { transform: translateX(${n2(x - home)}px) }`).join(' ');
       css.push(`@keyframes ${name} { ${kf} }\n.${name} { animation: ${name} ${n2(total)}s infinite linear; }`);
       const lx = x0 + home;
-      todaySvg =
-        `<g${cls(name)}><path d="M ${n2(lx)} ${n2(top.y + 12)} V ${n2(top.y + top.h)}" stroke="var(--accent)" stroke-width="1.5"/>` +
-        `<text x="${n2(lx + 3)}" y="${n2(top.y + 22)}" class="today">today</text></g>`;
+      const labels = [...new Set(dates.map((x) => x.d))].map((d) => {
+        const on = dates.map((x) => x.d === d);
+        const key = `d${d}${on.map((x) => (x ? 1 : 0)).join('')}`;
+        if (!seen.has(key)) {
+          const nm = `a${seen.size}`;
+          seen.set(key, nm);
+          const fr = dates.map((x) => `${pct(x.a / total)},${pct(x.b / total - 0.0001)} { opacity: ${x.d === d ? 1 : 0} }`).join(' ');
+          css.push(`@keyframes ${nm} { ${fr} }\n.${nm} { animation: ${nm} ${n2(total)}s infinite step-end; }`);
+        }
+        return `<text x="${n2(lx + 3)}" y="${n2(top.y + 22)}" opacity="0"${cls('today', seen.get(key))}>${esc(d)}</text>`;
+      });
+      todaySvg += `<g${cls(name)}><path d="M ${n2(lx)} ${n2(top.y + 12)} V ${bottom}" stroke="var(--accent)" stroke-width="1.5"/>${labels.join('')}</g>`;
     }
   }
 

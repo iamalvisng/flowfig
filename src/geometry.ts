@@ -4,7 +4,7 @@ export type Pt = { x: number; y: number };
 export type Routed = { id: string; d: string; mid: Pt; curve: [Pt, Pt, Pt, Pt] };
 
 type Around = 'above' | 'below';
-type Pick = { id: string; a: Rect; b: Rect; sa: Side; sb: Side; from: string; to: string; around?: Around };
+type Pick = { id: string; a: Rect; b: Rect; sa: Side; sb: Side; from: string; to: string; around?: Around; elbow?: boolean };
 
 const cx = (r: Rect) => r.x + r.w / 2;
 const cy = (r: Rect) => r.y + r.h / 2;
@@ -13,10 +13,11 @@ const cy = (r: Rect) => r.y + r.h / 2;
 // Boxes stacked on top of each other connect bottom->top, otherwise side->side.
 // Several edges leaving the same side of a box are spread out so they don't overlap,
 // except on `tips` boxes (diamonds), where they all meet at the point.
+// `elbow` draws a right-angle path, from a right end to a left end: its four curve points are the corners.
 // `sides` fixes the two sides an edge uses (a timeline uses right to left).
 // `around` makes an edge leave and enter from the top or bottom, arcing over whatever sits between.
 export function route(
-  edges: { id: string; from: string; to: string; around?: Around; sides?: [Side, Side] }[],
+  edges: { id: string; from: string; to: string; around?: Around; sides?: [Side, Side]; elbow?: boolean }[],
   rects: Record<string, Rect>,
   tips: Set<string> = new Set(),
 ): Routed[] {
@@ -84,6 +85,13 @@ export function route(
   return picks.map((p) => {
     const s = anchor.get(p.id + ':s')!,
       e = anchor.get(p.id + ':e')!;
+    if (p.elbow) {
+      // The vertical run sits at the midpoint x, or 8 px past the start when the gap is under 16 px.
+      const mx = e.x - s.x >= 16 ? (s.x + e.x) / 2 : s.x + 8;
+      const c1 = { x: mx, y: s.y },
+        c2 = { x: mx, y: e.y };
+      return { id: p.id, d: `M ${s.x} ${s.y} H ${mx} V ${e.y} H ${e.x}`, mid: { x: mx, y: (s.y + e.y) / 2 }, curve: [s, c1, c2, e] };
+    }
     if (p.around) {
       // ponytail: arcs 50px past the two ends' boxes; a taller box in between can still be crossed.
       const y = p.around === 'above' ? Math.min(p.a.y, p.b.y) - 50 : Math.max(p.a.y + p.a.h, p.b.y + p.b.h) + 50;

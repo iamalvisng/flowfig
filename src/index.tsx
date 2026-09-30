@@ -268,7 +268,13 @@ export function Flow({
       });
       setRouted(
         route(
-          edges.map((e, i) => ({ id: ids[i], from: e.from, to: e.to, around: e.around, ...(tl && { sides: ['r', 'l'] as [Side, Side] }) })),
+          edges.map((e, i) => ({
+            id: ids[i],
+            from: e.from,
+            to: e.to,
+            around: e.around,
+            ...(tl && { sides: ['r', 'l'] as [Side, Side], elbow: true }),
+          })),
           rects,
           tips,
         ),
@@ -565,13 +571,11 @@ export function Flow({
   const renderItem = (item: FigNode | FigGroup, depth: number): ReactNode => {
     if (timelineFig && item === layout) {
       const lanesList = layout.children as FigGroup[];
-      // The today line follows the first dated item the current beat focuses, and rests at today otherwise.
-      const startOf = (id: string) => {
-        const it = timelineFig.items.find((i) => i.id === id);
-        return it && it.x + (it.milestone ? it.w / 2 : 0);
-      };
-      const home = timelineFig.today ?? 0;
-      const at = holding || still ? home : ((cur?.focus ?? []).map(startOf).find((x) => x != null) ?? home);
+      // The playhead follows the first dated item the current beat focuses, and rests at the last date otherwise.
+      const focused = holding || still ? undefined : timelineFig.items.find((i) => (cur?.focus ?? []).includes(i.id));
+      const home = timelineFig.last ?? 0;
+      const at = focused ? focused.x + (focused.milestone ? focused.w / 2 : 0) : home;
+      const dateText = focused ? focused.date : timelineFig.lastDate;
       const rowsPx = timelineFig.rows.map((r) => r * TL_BAR_H + (r - 1) * TL_ROW_GAP + LANE_PAD * 2);
       return (
         <div
@@ -642,10 +646,28 @@ export function Flow({
               </Fragment>
             );
           })}
-          {timelineFig.today != null && (
+          {timelineFig.last != null && (
             <div style={{ gridColumn: '2 / 4', gridRow: '1 / -1', position: 'relative', zIndex: 2, pointerEvents: 'none' }}>
+              {timelineFig.today != null && (
+                <div data-fig-today="" style={{ position: 'absolute', left: timelineFig.today, top: 12, bottom: 0, width: 0 }}>
+                  <div style={{ position: 'absolute', top: 0, bottom: 0, borderLeft: `1px dashed ${v('accent')}`, opacity: 0.6 }} />
+                  <span
+                    style={{
+                      position: 'absolute',
+                      right: 3,
+                      top: -1,
+                      fontSize: 11,
+                      lineHeight: '11px',
+                      fontWeight: 600,
+                      color: v('accent'),
+                    }}
+                  >
+                    today
+                  </span>
+                </div>
+              )}
               <div
-                data-fig-today=""
+                data-fig-playhead=""
                 style={{
                   position: 'absolute',
                   left: 0,
@@ -660,7 +682,7 @@ export function Flow({
                 <span
                   style={{ position: 'absolute', left: 3, top: -1, fontSize: 11, lineHeight: '11px', fontWeight: 600, color: v('accent') }}
                 >
-                  today
+                  {dateText}
                 </span>
               </div>
             </div>
