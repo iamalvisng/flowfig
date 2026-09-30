@@ -334,22 +334,34 @@ test('a long loop keeps a real travel window in keyTimes: the packet moves, it d
   for (const [t0, t1] of times) assert.ok(t1 - t0 > 0.005, `${t0} ${t1}`);
 });
 
-test('a box turns active when the packet arrives, and fades back to trail after the beat ends', () => {
-  const say = 'one two three four five six seven eight nine ten';
-  const abc: FlowProps = {
-    speed: 900,
-    layout: {
-      children: [
-        { id: 'a', label: 'A' },
-        { id: 'b', label: 'B' },
-        { id: 'c', label: 'C' },
-      ],
-    },
-    edges: [
-      { id: 'ab', from: 'a', to: 'b' },
-      { id: 'bc', from: 'b', to: 'c' },
-    ],
-    steps: [
+const say = 'one two three four five six seven eight nine ten';
+const look = (fill: string, stroke: string, w: number) => `fill: var(--${fill}); stroke: var(--${stroke}); stroke-width: ${w}`;
+const ACTIVE_LOOK = look('tint', 'accent', 2) + '; filter: drop-shadow(0 0 4px var(--accent))';
+const TRAIL_LOOK = look('bg', 'accent', 1) + '; filter: drop-shadow(0 0 0 transparent)';
+const OFF_LOOK = look('bg', 'border', 1) + '; filter: drop-shadow(0 0 0 transparent)';
+/** The keyframes of the box with this label. */
+const boxFrames = (svg: string, label: string) => {
+  const cls = svg.match(new RegExp(`class="(a\\d+)"/><text[^>]*class="label">${label}</text>`))![1];
+  return svg.match(new RegExp(`@keyframes ${cls} \\{ ([^\\n]*) \\}`))![1];
+};
+const chain = (steps: FlowProps['steps'], edges: FlowProps['edges'], ids = ['a', 'b', 'c', 'd']): FlowProps => ({
+  speed: 900,
+  layout: { children: ids.map((id) => ({ id, label: id.toUpperCase() })) },
+  edges,
+  steps,
+});
+const timing = (beats: number, steps = 1) => {
+  const beat = beatMs({ hops: [], say }, 900) / 1000 / BASE_RATE;
+  const hold = STEP_HOLD_MS / 1000 / BASE_RATE;
+  const total = steps * (beats * beat + hold);
+  const p = (s: number) => Math.round((s / total) * 10000) / 100 + '%';
+  const eps = (s: number) => Math.round((s / total - 0.0001) * 10000) / 100 + '%';
+  return { beat, hold, total, p, eps, travel: 900 / 1000 / BASE_RATE };
+};
+
+test('a box turns active when the packet arrives, and the ramp back to trail lasts 400 ms', () => {
+  const abc = chain(
+    [
       {
         label: 's',
         flow: [
@@ -358,24 +370,62 @@ test('a box turns active when the packet arrives, and fades back to trail after 
         ],
       },
     ],
-  };
+    [
+      { id: 'ab', from: 'a', to: 'b' },
+      { id: 'bc', from: 'b', to: 'c' },
+    ],
+    ['a', 'b', 'c'],
+  );
   const svg = toSvg(abc);
-  const travel = 900 / 1000 / BASE_RATE;
-  const beat = beatMs({ hops: [], say }, 900) / 1000 / BASE_RATE;
-  const total = 2 * beat + STEP_HOLD_MS / 1000 / BASE_RATE;
-  const p = (s: number) => Math.round((s / total) * 10000) / 100 + '%';
-  const eps = (s: number) => Math.round((s / total - 0.0001) * 10000) / 100 + '%';
-  const blocks = [...svg.matchAll(/@keyframes a\d+ \{ ([^\n]*) \}\n\.a\d+ \{[^}]*linear/g)].map((m) => m[1]);
-  const active = 'fill: var(--tint); stroke: var(--accent); stroke-width: 2';
-  const trail = 'fill: var(--bg); stroke: var(--accent); stroke-width: 1';
-  const off = 'fill: var(--bg); stroke: var(--border); stroke-width: 1';
-  // b: trail until the packet arrives (not the beat start), active to the beat end, then a 400 ms ramp back to trail
-  const b = `0%,${eps(travel)} { ${trail}`;
-  const frame = blocks.find((k) => k.includes(b))!;
-  assert.ok(frame.includes(`${p(travel)},${eps(beat)} { ${active}`), frame);
-  assert.ok(frame.includes(`${p(beat + 0.4 / BASE_RATE)},${eps(total)} { ${trail}`), frame);
-  // c: off during beat 1, active from the arrival in beat 2
-  const c = blocks.find((k) => k.startsWith(`0%,${eps(beat)} { ${off}`))!;
-  assert.ok(c.includes(`${p(beat + travel)},${eps(total)} { ${active}`), c);
-  assert.ok(svg.includes('--tint:'));
+  const { beat, total, p, eps, travel } = timing(2);
+  // b: trail until the packet arrives, active to the beat end, then a 400 ms ramp to trail
+  const b = boxFrames(svg, 'B');
+  assert.ok(b.startsWith(`0%,${eps(travel)} { ${TRAIL_LOOK}`), b);
+  assert.ok(b.includes(`${p(travel)},${eps(beat)} { ${ACTIVE_LOOK}`), b);
+  assert.ok(b.includes(`${p(beat + 0.4)},${eps(total)} { ${TRAIL_LOOK}`), b);
+  // c: off during beat 1, trail until the arrival in beat 2
+  const c = boxFrames(svg, 'C');
+  assert.ok(c.startsWith(`0%,${eps(beat)} { ${OFF_LOOK}`), c);
+  assert.ok(c.includes(`${p(beat + travel)}`), c);
+  assert.ok(svg.includes('--tint:color-mix(in srgb, var(--accent) 10%, var(--surface))'));
+});
+
+test('the wrap: the last active look ramps to the first look before 100 %', () => {
+  const abc = chain(
+    [{ label: 's', flow: [{ edges: 'ab', say }] }],
+    [
+      { id: 'ab', from: 'a', to: 'b' },
+      { id: 'bc', from: 'b', to: 'c' },
+    ],
+    ['a', 'b', 'c'],
+  );
+  const { beat, hold, total, p, eps, travel } = timing(1);
+  const b = boxFrames(toSvg(abc), 'B');
+  // active through the hold, less the last 400 ms; the ramp to the first look (trail) ends at the loop end
+  assert.ok(b.includes(`${p(travel)},${eps(beat + hold - 0.4)} { ${ACTIVE_LOOK}`), b);
+  assert.ok(b.endsWith(`${p(total * 0.9998)},${eps(total)} { ${TRAIL_LOOK} }`), b);
+  assert.ok(!b.includes('100%'), b);
+});
+
+test('the active look lasts through the step hold, for a back hop and for two hops, then ramps to off', () => {
+  const svg = toSvg(
+    chain(
+      [
+        { label: 's1', flow: [{ edges: ['ab', { edge: 'cd', back: true }], say }] },
+        { label: 's2', flow: [{ edges: 'ab', say }] },
+      ],
+      [
+        { id: 'ab', from: 'a', to: 'b' },
+        { id: 'cd', from: 'c', to: 'd' },
+      ],
+    ),
+  );
+  const { beat, hold, p, eps, travel } = timing(1, 2);
+  const step = beat + hold;
+  // b (a forward hop) and c (the destination of the back hop) are both active until the step ends
+  for (const l of ['B', 'C']) assert.ok(boxFrames(svg, l).includes(`${p(travel)},${eps(step)} { ${ACTIVE_LOOK}`), l);
+  // d is the source of the back hop: it stays trail
+  assert.ok(!boxFrames(svg, 'D').includes('stroke-width: 2'));
+  // c is off in step 2: it ramps from active to off over 400 ms after the step ends
+  assert.ok(boxFrames(svg, 'C').includes(`${p(step + 0.4)},${eps(step + beat + hold)} { ${OFF_LOOK}`));
 });
