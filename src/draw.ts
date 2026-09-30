@@ -1,6 +1,6 @@
 // `flowfig draw`: one command to the first figure. Claude Code reads the repo and renders; draw checks the result itself.
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { AGENT_TEXT } from './guide.ts';
 import { loadSpec, reportLines, sortFindings } from './load.ts';
@@ -8,6 +8,7 @@ import { check } from './svg.ts';
 import { verify } from './verify.ts';
 
 const ALLOWED = 'Read,Glob,Grep,Bash(npx flowfig *)';
+const DISALLOWED = 'Edit,MultiEdit,NotebookEdit';
 const USAGE = 'usage: flowfig draw "<question>" [--out <path>] [--model <alias>] [--max-turns <n>] [--json]';
 
 /** A file name from the question: lower case, letters and digits, joined by -, at most 60 characters. */
@@ -21,9 +22,12 @@ export function slug(question: string): string {
   return s || 'figure';
 }
 
+const specPath = (out: string) => out.replace(/\.svg$/, '.json');
+
 /** The claude argv after the binary. The system prompt carries the agent text, the output path and the folder rule. */
 export function agentArgs(o: { question: string; out: string; cwd: string; maxTurns: number; model?: string }): string[] {
-  const system = `${AGENT_TEXT.trimEnd()}\n\nWrite the SVG to ${o.out} with \`npx flowfig - ${o.out} <<'SPEC'\` and the JSON in the heredoc. Run every command from this folder, ${o.cwd}.`;
+  const spec = specPath(o.out);
+  const system = `${AGENT_TEXT.trimEnd()}\n\nWrite the spec to ${spec} with the Write tool. Then run exactly \`npx flowfig ${spec} ${o.out}\` as one command, alone on its line: no heredoc, no \`;\`, no \`&&\`, no pipe (the permission rule matches one plain command only). Then run \`npx flowfig verify ${o.out}\` the same way. Run every command from this folder, ${o.cwd}.`;
   const args = [
     '-p',
     o.question,
@@ -32,9 +36,11 @@ export function agentArgs(o: { question: string; out: string; cwd: string; maxTu
     '--max-turns',
     String(o.maxTurns),
     '--permission-mode',
-    'dontAsk',
+    'acceptEdits',
     '--allowedTools',
     ALLOWED,
+    '--disallowedTools',
+    DISALLOWED,
     '--append-system-prompt',
     system,
   ];
@@ -71,28 +77,32 @@ export async function runDraw(argv: string[]): Promise<number> {
     throw e;
   }
   const maxTurns = turns === undefined ? 40 : Number(turns);
-  if (!(maxTurns > 0)) return fail('--max-turns needs a positive number', 2);
+  if (!Number.isInteger(maxTurns) || maxTurns < 1) return fail(`draw: --max-turns needs a positive whole number\n${USAGE}`, 2);
   const bad = args.find((a) => a.startsWith('-'));
   if (bad) return fail(`draw: unknown flag ${bad}\n${USAGE}`, 2);
   const question = args.join(' ').trim();
   if (!question) return fail(`draw needs a question\n${USAGE}`, 2);
 
+  if (process.platform === 'win32') return fail('draw does not run on Windows yet', 2);
   const bin = process.env.FLOWFIG_CLAUDE_BIN || 'claude';
-  const shell = process.platform === 'win32';
-  const version = spawnSync(bin, ['--version'], { encoding: 'utf8', shell });
+  const version = spawnSync(bin, ['--version'], { encoding: 'utf8' });
   if (version.error || version.status !== 0) return fail('draw needs Claude Code: npm i -g @anthropic-ai/claude-code', 2);
-  if (!process.env.ANTHROPIC_API_KEY) {
-    const auth = spawnSync(bin, ['auth', 'status'], { encoding: 'utf8', shell });
-    if (auth.status !== 0) return fail('claude is not logged in: run claude once', 2);
-  }
 
   const cwd = process.cwd();
   const out = outArg ?? `${slug(question)}.svg`;
-  mkdirSync(dirname(resolve(cwd, out)), { recursive: true });
+  if (!out.endsWith('.svg')) return fail(`draw: --out needs a .svg path\n${USAGE}`, 2);
+  const full = resolve(cwd, out);
+  try {
+    mkdirSync(dirname(full), { recursive: true });
+  } catch (e) {
+    return fail(`draw: ${(e as Error).message}`, 2);
+  }
+  // A figure from an earlier run must not pass as this run's work: compare the mtime.
+  const mtime = () => (existsSync(full) ? statSync(full).mtimeMs : undefined);
+  const before = mtime();
   const run = spawnSync(bin, agentArgs({ question, out, cwd, maxTurns, model }), {
     cwd,
     encoding: 'utf8',
-    shell,
     stdio: ['ignore', 'pipe', 'inherit'],
     maxBuffer: 64 * 1024 * 1024,
   });
@@ -102,37 +112,56 @@ export async function runDraw(argv: string[]): Promise<number> {
     .reverse()
     .find((l) => l.startsWith('{'));
   let reply = '',
-    cost: number | undefined,
-    session: string | undefined;
+    cost: number | null = null,
+    session: string | null = null,
+    stopped: string | undefined,
+    denials: unknown[] = [];
   try {
     const parsed = JSON.parse(line ?? '');
     reply = String(parsed.result ?? '');
-    cost = typeof parsed.total_cost_usd === 'number' ? parsed.total_cost_usd : undefined;
-    session = typeof parsed.session_id === 'string' ? parsed.session_id : undefined;
+    cost = typeof parsed.total_cost_usd === 'number' ? parsed.total_cost_usd : null;
+    session = typeof parsed.session_id === 'string' ? parsed.session_id : null;
+    if (parsed.is_error === true) stopped = String(parsed.subtype ?? '?');
+    if (Array.isArray(parsed.permission_denials)) denials = parsed.permission_denials;
   } catch {
     process.stderr.write(run.stdout ?? '');
-    return fail(`draw: claude failed (exit ${run.status ?? 'null'})`, 1);
+    const message = `claude failed (exit ${run.status ?? 'null'})`;
+    if (json) console.log(JSON.stringify({ out, reply, cost, session, findings: [], error: message }, null, 2));
+    return fail(`draw: ${message}`, 1);
   }
 
-  const full = resolve(cwd, out);
-  if (!existsSync(full)) {
-    if (!json) console.log(reply);
-    return fail(`draw: the agent wrote no figure at ${out}`, 1);
+  const stop = () => {
+    if (stopped !== undefined) console.error(`draw: claude stopped (${stopped})`);
+  };
+  const after = mtime();
+  if (after === undefined || after === before) {
+    const message = `the agent wrote no figure at ${out}`;
+    if (json) console.log(JSON.stringify({ out, reply, cost, session, findings: [], error: message }, null, 2));
+    else console.log(reply);
+    for (const d of denials as { tool_name?: string; tool_input?: { command?: string; file_path?: string } }[])
+      console.error(`denied: ${d.tool_name ?? '?'} ${d.tool_input?.command ?? d.tool_input?.file_path ?? ''}`.trimEnd());
+    stop();
+    return fail(`draw: ${message}`, 1);
   }
   let props;
   try {
     props = loadSpec(full);
   } catch (e) {
-    return fail(`draw: ${(e as Error).message}`, 1);
+    stop();
+    const message = (e as Error).message;
+    if (json) console.log(JSON.stringify({ out, reply, cost, session, findings: [], error: message }, null, 2));
+    return fail(`draw: ${message}`, 1);
   }
   const findings = sortFindings([...check(props), ...verify(props, { root: cwd })], true);
   const errors = findings.length > 0;
+  if (!errors && stopped === undefined) rmSync(specPath(full), { force: true });
   if (json) console.log(JSON.stringify({ out, reply, cost, session, findings }, null, 2));
   else {
     for (const l of reportLines(props, findings)) console.log(l);
     console.log('');
     console.log(reply);
-    console.log(`agent: claude, $${cost === undefined ? '?' : cost.toFixed(4)}, session ${session ?? '?'}`);
+    console.log(`agent: claude, $${cost === null ? '?' : cost.toFixed(4)}, session ${session ?? '?'}`);
   }
-  return errors ? 1 : 0;
+  stop();
+  return errors || stopped !== undefined ? 1 : 0;
 }
