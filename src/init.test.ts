@@ -1,7 +1,19 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+  existsSync,
+  readdirSync,
+  statSync,
+  symlinkSync,
+  lstatSync,
+  chmodSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -287,6 +299,37 @@ test('--global registers the Claude server in ~/.claude.json and keeps the rest 
     const j = JSON.parse(readFileSync(join(home, '.claude.json'), 'utf8'));
     assert.equal(j.numStartups, 3);
     assert.deepEqual(Object.keys(j.mcpServers), ['graft', 'flowfig']);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('--global keeps the mode of ~/.claude.json', { skip: process.platform === 'win32' }, () => {
+  const home = tmp();
+  try {
+    const f = join(home, '.claude.json');
+    writeFileSync(f, '{}');
+    chmodSync(f, 0o600);
+    const r = run(['init', '--global'], home, { HOME: home, USERPROFILE: home });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(statSync(f).mode & 0o777, 0o600);
+    assert.ok(JSON.parse(readFileSync(f, 'utf8')).mcpServers.flowfig);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('--global writes through a symlinked ~/.claude.json', { skip: process.platform === 'win32' }, () => {
+  const home = tmp();
+  try {
+    const real = join(home, 'real.json');
+    const link = join(home, '.claude.json');
+    writeFileSync(real, '{}');
+    symlinkSync(real, link);
+    const r = run(['init', '--global'], home, { HOME: home, USERPROFILE: home });
+    assert.equal(r.status, 0, r.stderr);
+    assert.ok(lstatSync(link).isSymbolicLink());
+    assert.ok(JSON.parse(readFileSync(real, 'utf8')).mcpServers.flowfig);
   } finally {
     rmSync(home, { recursive: true, force: true });
   }

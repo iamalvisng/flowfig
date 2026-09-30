@@ -1,5 +1,5 @@
 // `flowfig init`: write flowfig instructions for the coding agents of a repo. Pure functions where possible, so the tests need no TTY.
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
@@ -222,9 +222,17 @@ export async function runInit(argv: string[]): Promise<number> {
       else {
         mkdirSync(dirname(mcpPath), { recursive: true });
         // Same-folder temp file, then rename: a crash or a parallel write cannot leave half a file (~/.claude.json holds user settings).
-        const tmp = `${mcpPath}.${process.pid}.tmp`;
-        writeFileSync(tmp, nextMcp);
-        renameSync(tmp, mcpPath);
+        // Resolve a symlink first, so the rename replaces the target and not the link. Copy the old mode to the new file.
+        const real = existsSync(mcpPath) ? realpathSync(mcpPath) : mcpPath;
+        const tmp = `${real}.${process.pid}.tmp`;
+        try {
+          writeFileSync(tmp, nextMcp);
+          if (existsSync(real)) chmodSync(tmp, statSync(real).mode & 0o777);
+          renameSync(tmp, real);
+        } catch (e) {
+          rmSync(tmp, { force: true });
+          throw e;
+        }
       }
     }
     console.log(`${mcpStatus.padEnd(9)} ${mcpPath}`);
