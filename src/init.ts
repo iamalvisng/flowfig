@@ -1,5 +1,5 @@
 // `flowfig init`: write flowfig instructions for the coding agents of a repo. Pure functions where possible, so the tests need no TTY.
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
@@ -137,6 +137,7 @@ export function registerMcp(a: Agent, old: string | undefined): string | undefin
   if (typeof json !== 'object' || json === null || Array.isArray(json)) return undefined;
   const servers = json[a.mcp.key] ?? {};
   if (typeof servers !== 'object' || servers === null || Array.isArray(servers)) return undefined;
+  if ('flowfig' in servers) return old; // the user may have pinned a version or set env: keep the entry
   const entry = a.mcp.type ? { ...MCP_ENTRY, type: 'stdio' } : MCP_ENTRY;
   json[a.mcp.key] = { ...(servers as object), flowfig: entry };
   return JSON.stringify(json, null, 2) + '\n';
@@ -168,7 +169,8 @@ export async function runInit(argv: string[]): Promise<number> {
   const unknown = ids?.find((i) => !AGENTS.some((a) => a.id === i));
   if (unknown) return fail(`init: unknown agent "${unknown}" (ids: ${AGENTS.map((a) => a.id).join(', ')})`);
 
-  if (global && ids?.some((i) => i !== 'claude')) return fail('init: --global writes only the claude skill (use --agents claude)');
+  if (global && ids?.some((i) => i !== 'claude'))
+    return fail('init: --global writes only the Claude skill and the MCP entry (use --agents claude)');
   const detected = detect(dir);
   const auto = new Set(detected.length ? detected : ['agents']);
   let chosen: Set<string>;
@@ -219,7 +221,10 @@ export async function runInit(argv: string[]): Promise<number> {
       if (dry) mcpStatus = `would ${mcpStatus === 'created' ? 'create' : 'update'}`;
       else {
         mkdirSync(dirname(mcpPath), { recursive: true });
-        writeFileSync(mcpPath, nextMcp);
+        // Same-folder temp file, then rename: a crash or a parallel write cannot leave half a file (~/.claude.json holds user settings).
+        const tmp = `${mcpPath}.${process.pid}.tmp`;
+        writeFileSync(tmp, nextMcp);
+        renameSync(tmp, mcpPath);
       }
     }
     console.log(`${mcpStatus.padEnd(9)} ${mcpPath}`);

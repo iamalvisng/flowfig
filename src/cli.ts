@@ -10,7 +10,7 @@
  *   flowfig verify <input>... [--root dir]   # check that the code each figure links to still exists
  *   flowfig diff <old> <new> [--json|--md]   # list the spec changes between two figures
  *   flowfig docs                         # print the full guide (Markdown)
- *   flowfig mcp                                        serve check, render, verify, diff and docs over MCP (stdio)
+ *   flowfig mcp                          # serve check, render, verify, diff and docs over MCP (stdio)
  *   flowfig init [dir]                   # write flowfig instructions for the coding agents of a repo
  *
  * A render checks first and writes nothing on an error (--no-check skips that). --strict makes warnings errors; --width and
@@ -69,6 +69,8 @@ if (args[0] === 'docs') {
 
 if (args[0] === 'mcp') {
   await serve(process.stdin, process.stdout);
+  // A pipe write is asynchronous: wait until the queued response lines are out before the exit.
+  await new Promise((done) => process.stdout.write('', () => done(undefined)));
   process.exit(0);
 }
 
@@ -115,11 +117,7 @@ if (args[0] === 'verify') {
   const all: (Link & { figure: string })[] = [];
   for (const input of args) {
     const props = await load(input);
-    const found = [...check(props), ...verify(props, { root })].map((f) => ({
-      ...f,
-      figure: input,
-      ...(strict ? { severity: 'error' as const } : {}),
-    }));
+    const found = sortFindings([...check(props), ...verify(props, { root })], strict).map((f) => ({ ...f, figure: input }));
     findings.push(...found);
     all.push(...links(props).map((l) => ({ ...l, figure: input })));
   }
