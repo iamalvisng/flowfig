@@ -67,3 +67,18 @@ test('a row gap grows to hold the widest edge label between two of its children'
   assert.equal(groupGap({ ...row, gap: 40 }, [{ from: 'a', to: 'b', label: long }]), 40, 'a set gap stays as set');
   assert.equal(groupGap({ ...row, direction: 'column' }, [{ from: 'a', to: 'b', label: long }]), 28);
 });
+
+test('readMs counts 500 ms plus 300 ms per word', () => {
+  assert.equal(readMs(undefined), 0);
+  assert.equal(readMs(''), 0);
+  assert.equal(readMs('one'), 800);
+  assert.equal(readMs('a b c d e f g h i j'), 3500);
+});
+
+test('beatMs gives an explicit ms as written', () => {
+  const say = 'a b c d e f g h i j';
+  assert.equal(beatMs({ hops: [] }, 900), 900);
+  assert.equal(beatMs({ hops: [], say }, 900), 900 + 3500);
+  assert.equal(beatMs({ hops: [], say, ms: 5000 }, 900), 5000);
+  assert.equal(beatMs({ hops: [], say, ms: 100 }, 900), 100);
+});

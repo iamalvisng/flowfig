@@ -323,7 +323,7 @@ export function Flow({ layout, edges, steps = [], theme, speed = 900, autoplay =
       return void setBeat(beats.length - 1);
     }
     const ends = beats.reduce<number[]>((acc, b) => [...acc, (acc.at(-1) ?? 0) + beatMs(b, speed)], []);
-    const total = ends.at(-1)! + STEP_HOLD_MS; // hold on the last beat before moving on
+    const total = ends.at(-1)! + STEP_HOLD_MS; // The figure holds on the last beat before the next step.
     let raf = 0,
       last = performance.now(),
       shownBeat = -1;
@@ -340,7 +340,7 @@ export function Flow({ layout, edges, steps = [], theme, speed = 900, autoplay =
       const i = next === -1 ? beats.length - 1 : next;
       if (i !== shownBeat) setBeat((shownBeat = i));
       const start = i ? ends[i - 1] : 0;
-      const f = Math.min(1, (t - start) / (speed * 0.8)); // arrive a little early, rest at the end
+      const f = Math.min(1, (t - start) / speed); // the packet crosses in `speed`; the hold gives the rest
       const eased = f < 0.5 ? 2 * f * f : 1 - (-2 * f + 2) ** 2 / 2;
       const hops = t < ends.at(-1)! ? beats[i].hops : [];
       gs.forEach((g, j) => {
