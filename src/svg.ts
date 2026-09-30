@@ -722,7 +722,7 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
       const pts: [number, number][] = [[0, home]];
       let at = home;
       segs.forEach((s, i) => {
-        const id = (beats[s.si][s.bi].light ?? []).find((l) => startOf.has(l));
+        const id = (beats[s.si][s.bi].focus ?? []).find((l) => startOf.has(l));
         const to = id != null ? startOf.get(id)! : at;
         const last = i === segs.length - 1 || segs[i + 1].si !== s.si;
         const end = last ? s.t1 - hold : s.t1; // the step hold starts here

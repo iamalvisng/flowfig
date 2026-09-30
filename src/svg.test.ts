@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { toSvg, render, check } from './svg.ts';
 import { textWidth } from './text.ts';
-import { timelineLayout, TL_AXIS_W, TL_BAR_H, DARK, BASE_RATE, STEP_HOLD_MS, beatMs, type FlowProps } from './model.ts';
+import { timelineLayout, TL_AXIS_W, TL_BAR_H, DARK, BASE_RATE, STEP_HOLD_MS, beatMs, nodes, type FlowProps } from './model.ts';
 import { layoutRail, railState, RAIL } from './rail.ts';
 
 const fig: FlowProps = {
@@ -817,4 +817,17 @@ test('timeline: in the roadmap demo each dependency path starts at an x not righ
   const paths = [...svg.matchAll(/<path id="p-[^"]*" d="M ([\d.-]+) [\d.-]+ C [^"]*? ([\d.-]+) [\d.-]+"/g)];
   assert.ok(paths.length > 0, 'the demo has dependency paths');
   for (const [d, x0, x1] of paths) assert.ok(+x0 <= +x1, `backward curve: ${d}`);
+});
+
+test('timeline: the today line follows each focused item and the last ramp returns to 0', async () => {
+  const { default: demo } = await import('../figures/roadmap.ts');
+  const props = { ...demo.props, timeline: true } as FlowProps;
+  const svg = toSvg(props);
+  const line = svg.match(/<g class="(a\d+)"><path [^>]*stroke="var\(--accent\)" stroke-width="1.5"/)!;
+  const kf = svg.match(new RegExp(`@keyframes ${line[1]} \\{([^\\n]*)\\}\\n`))![1];
+  const xs = [...kf.matchAll(/translateX\((-?[\d.]+)px\)/g)].map((m) => +m[1]);
+  const froms = new Set(nodes(props.layout).map((n) => n.from));
+  assert.ok(new Set(xs).size >= 3, `distinct x: ${[...new Set(xs)]}`);
+  assert.ok(new Set(xs).size >= froms.size, 'one x for each distinct from date');
+  assert.equal(xs.at(-1), 0);
 });

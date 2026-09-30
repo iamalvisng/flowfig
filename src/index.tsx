@@ -565,13 +565,13 @@ export function Flow({
   const renderItem = (item: FigNode | FigGroup, depth: number): ReactNode => {
     if (timelineFig && item === layout) {
       const lanesList = layout.children as FigGroup[];
-      // The today line follows the first dated item the current beat lights, and rests at today otherwise.
+      // The today line follows the first dated item the current beat focuses, and rests at today otherwise.
       const startOf = (id: string) => {
         const it = timelineFig.items.find((i) => i.id === id);
         return it && it.x + (it.milestone ? it.w / 2 : 0);
       };
       const home = timelineFig.today ?? 0;
-      const at = holding || still ? home : ((cur?.light ?? []).map(startOf).find((x) => x != null) ?? home);
+      const at = holding || still ? home : ((cur?.focus ?? []).map(startOf).find((x) => x != null) ?? home);
       const rowsPx = timelineFig.rows.map((r) => r * TL_BAR_H + (r - 1) * TL_ROW_GAP + LANE_PAD * 2);
       return (
         <div
