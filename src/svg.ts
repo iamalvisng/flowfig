@@ -382,7 +382,7 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
       if (arrive > s.t0) pieces.push({ a: s.t0, b: arrive, look: 'trail' });
       if (arrive < s.t1) pieces.push({ a: arrive, b: s.t1, look: 'active', hop: here.find((h) => h.tone)?.tone });
     });
-    if (!pieces.length || (!boxTone && pieces.every((q) => q.look === 'off'))) return '';
+    if (!pieces.length || pieces.every((q) => q.look === 'off')) return '';
     // The last frame is active: the fade ends at 100 %, so the loop wraps with no jump.
     const end = pieces.at(-1)!;
     if (end.look === 'active') {
@@ -508,12 +508,16 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
     );
     const col = tone.map((x) => (x ? TONES[x] : 'var(--accent)'));
     const off = `stroke: var(--muted); stroke-width: ${EDGE_OFF}`;
+    // With no tone the map and the rail share one keyframe (same key); a toned edge needs its own values.
+    const toned = tone.some(Boolean);
     const lit = cls(
-      frames(
-        on.map((x, i) => (x ? `stroke: ${col[i]}; stroke-width: ${EDGE_ON}` : off)),
-        'e',
-        off,
-      ),
+      toned
+        ? frames(
+            on.map((x, i) => (x ? `stroke: ${col[i]}; stroke-width: ${EDGE_ON}` : off)),
+            'e',
+            off,
+          )
+        : anim(on, `stroke: var(--accent); stroke-width: ${EDGE_ON}`, off, 'e'),
     );
     const path = `<path id="p-${esc(r.id)}" d="${r.d}" fill="none" stroke="var(--muted)" stroke-width="${EDGE_OFF}" marker-end="url(#arrow)"${lit}/>`;
     // A quiet edge is only drawn while a step uses it, so wrap the whole thing rather than the stroke.
@@ -527,13 +531,15 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
             return (
               `<rect x="${n2(r.mid.x - lw / 2)}" y="${n2(r.mid.y - 9)}" width="${n2(lw)}" height="18" rx="9" fill="var(--bg)" stroke="var(--border)"` +
               cls(
-                frames(
-                  on.map((x, i) =>
-                    x ? `fill: ${tone[i] ? toneFill(col[i]) : col[i]}; stroke: ${col[i]}` : 'fill: var(--bg); stroke: var(--border)',
-                  ),
-                  'l',
-                  'fill: var(--bg); stroke: var(--border)',
-                ),
+                toned
+                  ? frames(
+                      on.map((x, i) =>
+                        x ? `fill: ${tone[i] ? toneFill(col[i]) : col[i]}; stroke: ${col[i]}` : 'fill: var(--bg); stroke: var(--border)',
+                      ),
+                      'l',
+                      'fill: var(--bg); stroke: var(--border)',
+                    )
+                  : anim(on, 'fill: var(--accent); stroke: var(--accent)', 'fill: var(--bg); stroke: var(--border)', 'l'),
               ) +
               `/><text x="${n2(r.mid.x)}" y="${n2(r.mid.y + 4)}"${cls('edgelabel', anim(on, `fill: ${ON_ACCENT}`, 'fill: var(--muted)', 'x'))}>${esc(str(e.label))}</text>`
             );
@@ -668,7 +674,12 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
           const [x1, x2] = [rail.columns[row.from].x, rail.columns[row.to].x];
           const ly = y + RAIL.row / 2;
           const col = row.tone ? TONES[row.tone] : 'var(--accent)';
-          const lit = anim(now, `stroke: ${col}; stroke-width: ${EDGE_ON}`, `stroke: var(--muted); stroke-width: ${EDGE_OFF}`, 'e' + col);
+          const lit = anim(
+            now,
+            `stroke: ${col}; stroke-width: ${EDGE_ON}`,
+            `stroke: var(--muted); stroke-width: ${EDGE_OFF}`,
+            row.tone ? 'e' + col : 'e',
+          );
           const tagW = ASYNC_TAG_W;
           // The tag sits on the tail side of the pill, so it never hides the arrowhead.
           const tagX = !row.pill ? (x1 + x2) / 2 - tagW / 2 : x2 > x1 ? row.pill.x - tagW - 4 : row.pill.x + row.pill.w + 4;
@@ -678,7 +689,7 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
               `<text x="${n2(tagX + tagW / 2)}" y="${n2(ly + 3)}" class="tag" fill="${TONES.gray}">ASYNC</text>`
             : '';
           const pill = row.pill
-            ? `<rect x="${n2(row.pill.x)}" y="${n2(ly - 9)}" width="${n2(row.pill.w)}" height="18" rx="9" fill="var(--bg)" stroke="var(--border)"${cls(anim(now, `fill: ${row.tone ? toneFill(col) : col}; stroke: ${col}`, 'fill: var(--bg); stroke: var(--border)', 'l' + col))}/>` +
+            ? `<rect x="${n2(row.pill.x)}" y="${n2(ly - 9)}" width="${n2(row.pill.w)}" height="18" rx="9" fill="var(--bg)" stroke="var(--border)"${cls(anim(now, `fill: ${row.tone ? toneFill(col) : col}; stroke: ${col}`, 'fill: var(--bg); stroke: var(--border)', row.tone ? 'l' + col : 'l'))}/>` +
               `<text x="${n2(row.pill.x + row.pill.w / 2)}" y="${n2(ly + 4)}"${cls('edgelabel', anim(now, `fill: ${ON_ACCENT}`, 'fill: var(--muted)', 'x'))}>${esc(row.text)}</text>`
             : '';
           parts.push(
@@ -715,7 +726,7 @@ svg { ${vars(t0, '#eef5fd')} }
 .end { text-anchor: end; }
 ${css.join('\n')}
 </style>
-<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 1 L 9 5 L 0 9 z" fill="var(--muted)"/></marker></defs>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 1 L 9 5 L 0 9 z" fill="context-stroke"/></marker></defs>
 <rect width="100%" height="100%" fill="var(--bg)"/>
 ${
   only

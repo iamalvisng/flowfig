@@ -449,7 +449,7 @@ test('a red hop colors the packet, the lit edge and the arrival look; the trail 
   );
   const svg = toSvg(red);
   assert.ok(svg.includes('<circle r="4.5" fill="#ef4444"/>'), 'packet');
-  assert.ok(svg.includes('rx="8" fill="color-mix(in srgb, #ef4444 68%, #000)"'), 'data card');
+  assert.ok(svg.includes('rx="8" fill="color-mix(in srgb, #ef4444 64%, #000)"'), 'data card');
   assert.match(svg, /\{ stroke: #ef4444; stroke-width: 2 \}/, 'lit edge');
   const b = boxFrames(svg, 'B');
   assert.ok(b.includes('stroke: #ef4444; stroke-width: 2; filter: drop-shadow(0 0 4px #ef4444)'), 'active look');
@@ -467,11 +467,98 @@ test('a box with a tone has its border and tint in the off look', () => {
         { id: 'c', label: 'C', tone: 'gray' },
       ],
     },
-    edges: [{ from: 'a', to: 'b' }],
-    steps: [{ label: 's', flow: ['a->b'] }],
+    edges: [
+      { from: 'a', to: 'b' },
+      { from: 'b', to: 'c' },
+    ],
+    steps: [
+      { label: 's', flow: ['a->b'] },
+      { label: 't', flow: ['b->c'] },
+    ],
   });
   const c = boxFrames(svg, 'C');
   assert.ok(c.includes('fill: color-mix(in srgb, #8b949e 8%, var(--bg)); stroke: #8b949e; stroke-width: 1'), c);
   assert.ok(svg.includes('stroke="#8b949e"'), 'static border');
   assert.ok(toSvg({ layout: { children: [{ id: 'a', label: 'A', tone: 'gray' }] }, edges: [] }).includes('stroke="#8b949e"'), 'no steps');
+});
+
+test('the checkout figure keeps its keyframe count when no tone applies (the map and the rail share keyframes)', async () => {
+  const { default: fig } = await import('../figures/checkout.ts');
+  // 46 is the count in docs/checkout.svg at 6e04605, before tones.
+  assert.equal((toSvg(fig.props).match(/@keyframes/g) ?? []).length, 46);
+});
+
+const toned: FlowProps = {
+  speed: 900,
+  rail: 'only',
+  layout: {
+    children: [
+      { id: 'a', label: 'A' },
+      { id: 'b', label: 'B' },
+      { id: 'c', label: 'C', tone: 'green' },
+      { id: 'd', label: 'D', shape: 'store', tone: 'orange' },
+      { id: 'e', label: 'E', shape: 'decision', tone: 'purple' },
+    ],
+  },
+  edges: [
+    { id: 'ab', from: 'a', to: 'b', label: 'go' },
+    { id: 'bc', from: 'b', to: 'c' },
+    { id: 'bd', from: 'b', to: 'd' },
+    { id: 'be', from: 'b', to: 'e' },
+  ],
+  steps: [
+    {
+      label: 's',
+      flow: [
+        { edges: { edge: 'ab', tone: 'red' }, say },
+        { edges: 'bc', say },
+        { edges: { edge: 'bd', tone: 'gray' }, say },
+        { edges: 'be', say },
+      ],
+    },
+  ],
+};
+
+test('a toned hop colors the rail row line and pill', () => {
+  const svg = toSvg(toned);
+  assert.match(svg, /\{ stroke: #ef4444; stroke-width: 2 \}/, 'rail line');
+  assert.ok(svg.includes('fill: color-mix(in srgb, #ef4444 64%, #000); stroke: #ef4444'), 'rail pill');
+});
+
+test('a toned hop colors the label pill on the map', () => {
+  const svg = toSvg({ ...toned, rail: undefined });
+  assert.ok(svg.includes('fill: color-mix(in srgb, #ef4444 64%, #000); stroke: #ef4444'), 'map pill');
+});
+
+test('the active look falls back to the box tone, and a hop tone wins over it', () => {
+  const svg = toSvg({ ...toned, rail: undefined });
+  assert.ok(boxFrames(svg, 'C').includes('stroke: #10b981; stroke-width: 2; filter: drop-shadow(0 0 4px #10b981)'), 'box tone');
+  assert.ok(boxFrames(svg, 'D').includes('stroke: #8b949e; stroke-width: 2'), 'hop tone (gray) over box tone (orange)');
+  assert.ok(!boxFrames(svg, 'D').includes('drop-shadow(0 0 4px #f59e0b)'), 'box tone not used');
+});
+
+test('a toned store and a toned decision have the tone border in the static markup', () => {
+  const svg = toSvg({ ...toned, rail: undefined });
+  const tones = (svg.match(/stroke="#(f59e0b|a855f7)"/gi) ?? []).length;
+  assert.ok(tones >= 2, `store and decision borders: ${tones}`);
+  assert.ok(svg.includes('stroke: #8b5cf6; stroke-width: 2'), 'decision active look');
+});
+
+test('a toned box that is never lit has no animation', () => {
+  const svg = toSvg({
+    layout: {
+      children: [
+        { id: 'a', label: 'A', tone: 'gray' },
+        { id: 'b', label: 'B' },
+        { id: 'c', label: 'C' },
+      ],
+    },
+    edges: [{ from: 'b', to: 'c' }],
+    steps: [{ label: 's', flow: ['b->c'] }],
+  });
+  assert.ok(!/class="a\d+"\/><text[^>]*class="label">A</.test(svg));
+});
+
+test('the arrowhead takes the edge color', () => {
+  assert.ok(toSvg(toned).includes('fill="context-stroke"'));
 });

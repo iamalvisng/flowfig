@@ -61,7 +61,7 @@ svg { --accent:#0074d9; --fg:#1c1e21; --muted:#606770; --bg:#ffffff; --surface:#
 .a19 { animation: a19 22.8s infinite step-end; }
 @keyframes a20 { 0%,9.62% { stroke: var(--muted); stroke-width: 1.25 } 9.63%,24.3% { stroke: #f59e0b; stroke-width: 2 } 24.31%,36.46% { stroke: var(--accent); stroke-width: 2 } 36.47%,59.02% { stroke: var(--accent); stroke-width: 2 } 59.03%,69.49% { stroke: var(--muted); stroke-width: 1.25 } 69.5%,79.12% { stroke: #10b981; stroke-width: 2 } 79.13%,99.99% { stroke: var(--accent); stroke-width: 2 } }
 .a20 { animation: a20 22.8s infinite step-end; }
-@keyframes a21 { 0%,9.62% { fill: var(--bg); stroke: var(--border) } 9.63%,24.3% { fill: color-mix(in srgb, #f59e0b 68%, #000); stroke: #f59e0b } 24.31%,36.46% { fill: var(--accent); stroke: var(--accent) } 36.47%,59.02% { fill: var(--accent); stroke: var(--accent) } 59.03%,69.49% { fill: var(--bg); stroke: var(--border) } 69.5%,79.12% { fill: color-mix(in srgb, #10b981 68%, #000); stroke: #10b981 } 79.13%,99.99% { fill: var(--accent); stroke: var(--accent) } }
+@keyframes a21 { 0%,9.62% { fill: var(--bg); stroke: var(--border) } 9.63%,24.3% { fill: color-mix(in srgb, #f59e0b 64%, #000); stroke: #f59e0b } 24.31%,36.46% { fill: var(--accent); stroke: var(--accent) } 36.47%,59.02% { fill: var(--accent); stroke: var(--accent) } 59.03%,69.49% { fill: var(--bg); stroke: var(--border) } 69.5%,79.12% { fill: color-mix(in srgb, #10b981 64%, #000); stroke: #10b981 } 79.13%,99.99% { fill: var(--accent); stroke: var(--accent) } }
 .a21 { animation: a21 22.8s infinite step-end; }
 @keyframes a22 { 0%,9.62% { fill: var(--muted) } 9.63%,24.3% { fill: #ffffff } 24.31%,36.46% { fill: #ffffff } 36.47%,59.02% { fill: #ffffff } 59.03%,69.49% { fill: var(--muted) } 69.5%,79.12% { fill: #ffffff } 79.13%,99.99% { fill: #ffffff } }
 .a22 { animation: a22 22.8s infinite step-end; }
@@ -106,7 +106,7 @@ svg { --accent:#0074d9; --fg:#1c1e21; --muted:#606770; --bg:#ffffff; --surface:#
 @keyframes a34 { 0%,9.62% { opacity: 0 } 9.63%,24.3% { opacity: 0 } 24.31%,36.46% { opacity: 0 } 36.47%,59.02% { opacity: 0 } 59.03%,69.49% { opacity: 0 } 69.5%,79.12% { opacity: 0 } 79.13%,99.99% { opacity: 1 } }
 .a34 { animation: a34 22.8s infinite step-end; }
 </style>
-<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 1 L 9 5 L 0 9 z" fill="var(--muted)"/></marker></defs>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 1 L 9 5 L 0 9 z" fill="context-stroke"/></marker></defs>
 <rect width="100%" height="100%" fill="var(--bg)"/>
 <g transform="translate(0 0)">
 <rect x="24" y="127.5" width="166" height="103" rx="10" fill="var(--bg)" stroke="var(--border)" class="a0"/><text x="107" y="150.5" class="label">Browser</text><text x="107" y="165.5" class="sub">the caller</text><rect x="34" y="178.5" width="146" height="42" rx="6" fill="var(--surface)" stroke="var(--border)" stroke-dasharray="3 3" class="a1"/><g opacity="0" class="a2"><rect x="42" y="185.5" width="26.1" height="14" rx="4" fill="#3b82f6" fill-opacity="0.15"/><text x="55" y="196" class="tag" fill="#3b82f6">GET</text><text x="42" y="210.5" class="row mono">/users/42</text></g><g opacity="0" class="a3"><rect x="42" y="185.5" width="26.1" height="14" rx="4" fill="#3b82f6" fill-opacity="0.15"/><text x="55" y="196" class="tag" fill="#3b82f6">GET</text><text x="42" y="210.5" class="row mono">/users/42</text></g>

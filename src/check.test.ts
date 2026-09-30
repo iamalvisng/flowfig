@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { checkSpec, checkScene, checkTheme, contrast } from './check.ts';
-import type { FlowProps } from './model.ts';
+import { TONES, toneFill, type FlowProps } from './model.ts';
 import type { Scene, SceneBox } from './scene.ts';
 import type { Pt } from './geometry.ts';
 
@@ -134,7 +134,7 @@ test('the built-in light and dark themes pass', () => {
 });
 
 test('a custom theme with low contrast is an error', () => {
-  const f = checkTheme({ muted: '#bbbbbb' });
+  const f = checkTheme({ muted: '#bbbbbb' }).filter((x) => !/box tint/.test(x.message));
   // muted fails on bg and on the tint
   assert.deepEqual(rules(f), ['low-contrast', 'low-contrast']);
   assert.match(f[0].message, /custom theme: muted on bg/);
@@ -168,4 +168,23 @@ test('a source with a bad form is a warning; a good one is not', () => {
   assert.deepEqual(rules(checkSpec(bad)), ['bad-source']);
   const good = { ...fig, edges: [{ ...fig.edges[0], source: 'src/a.ts#f' }] };
   assert.deepEqual(checkSpec(good), []);
+});
+
+test('white text on the fill of each tone has contrast 4.5:1', () => {
+  for (const [name, c] of Object.entries(TONES)) {
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16));
+    const m = toneFill(c).match(/(\d+)%/)![1];
+    const k = Number(m) / 100;
+    const fill = `rgb(${r * k},${g * k},${b * k})`;
+    assert.ok(contrast('#ffffff', fill)! >= 4.5, `${name} ${contrast('#ffffff', fill)}`);
+  }
+});
+
+test('a custom muted color with low contrast on a tone tint is an error', () => {
+  // #767676 has 4.54:1 on white; on the 10 % tone tint over the surface it falls below 4.5:1
+  const f = checkTheme({ muted: '#767676', surface: '#ffffff', bg: '#ffffff' });
+  assert.ok(
+    f.some((x) => x.rule === 'low-contrast' && /muted on the \w+ box tint/.test(x.message)),
+    JSON.stringify(f),
+  );
 });

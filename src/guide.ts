@@ -160,7 +160,7 @@ Every other item is a box.
 | \`width\`   | Width in px. This overrides the width that the layout picks.                                              |
 | \`source\`  | The code this draws: \`path\` or \`path#symbol\`, relative to the repo root. \`flowfig verify\` checks it.  |
 | \`lines\`   | The least number of text lines that a content card keeps. The card still grows to fit its content.        |
-| \`tone\`    | A permanent state color for the box (a failing part, a deprecated service). Same values.                  |
+| \`tone\`    | The state color of the box: a 1 px border and a light tint. Use \`blue\`, \`purple\`, \`green\`, \`orange\`, \`red\` or \`gray\`.                  |
 
 ### edges
 
@@ -186,11 +186,14 @@ boxes to highlight for the whole step).
 
 The beat fields:
 
-- \`edges\`: an edge id, a hop object, or an array of these. A hop object is \`{ edge, back?, data?, async?, source? }\`.
+- \`edges\`: an edge id, a hop object, or an array of these. A hop object is \`{ edge, back?, data?, tone?, async?, source? }\`.
   - \`back: true\` runs the packet from the \`to\` box to the \`from\` box.
   - \`data\` is a small card that moves with the packet.
   - \`async: true\` marks a message that does not wait for an answer. The rail draws it dashed, with an \`async\` tag.
-  - \`tone\`: colors the packet, the edge and the box it arrives at for this beat: \`green\` success or hit, \`orange\` warning, miss or retry, \`red\` error or a rejected input, \`gray\` idle or skipped, \`purple\` async or background. Default: the accent.
+  - \`tone\`: the color of this hop for its beat. The packet, the data card, the edge, the label pill and the arrival box take the color. The trail after the beat stays the accent.
+    - \`green\`: a success or a cache hit. \`orange\`: a warning, a miss or a retry. \`red\`: an error or a rejected input.
+    - \`gray\`: idle or skipped. \`purple\`: async or background. \`blue\`: the default row color.
+    - If the hop has no \`tone\`, the arrival box uses its box \`tone\`, then the accent. A hop \`tone\` wins over a box \`tone\`.
 - \`say\`: the caption for the beat.
 - \`show\`: \`{ boxId: [row, ...] }\`. This fills the content card of each named box. The card keeps the rows until the step ends.
 - \`light\`: ids of boxes to highlight for this beat.
@@ -199,7 +202,7 @@ The beat fields:
 A row of a content card is \`{ tag?, tone?, text, meta?, mark?, mono? }\`.
 
 - \`tag\`: a short colored label at the start of the line.
-- \`tone\`: the color of the tag: \`blue\` (default), \`purple\`, \`green\`, \`orange\` or \`gray\`.
+- \`tone\`: the color of the tag: \`blue\` (default), \`purple\`, \`green\`, \`orange\`, \`red\` or \`gray\`.
 - \`text\`: the main text.
 - \`meta\`: muted text after the main text.
 - \`mark\`: a mark at the right end of the line, such as a check or "new".
