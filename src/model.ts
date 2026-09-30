@@ -269,7 +269,7 @@ export const dayOf = (iso: string): number | null => {
   return new Date(t).toISOString().slice(0, 10) === iso ? t / 86400000 : null;
 };
 
-export type TimelineItem = { id: string; track: number; row: number; x: number; w: number; milestone: boolean };
+export type TimelineItem = { id: string; track: number; row: number; x: number; w: number; milestone: boolean; labelInside: boolean };
 export type TimelineLayout = {
   /** The range in days, rounded out to whole weeks: the Monday of the first week and the Sunday of the last week. */
   start: number;
@@ -328,18 +328,20 @@ export function timelineLayout(fig: FlowProps, axisWidth: number): TimelineLayou
 
   const rows = fig.layout.children.map(() => 1);
   const placed: TimelineItem[] = [];
-  const busy: number[][] = fig.layout.children.map(() => []); // per track: the last day of the latest item in each row
+  const busy: number[][] = fig.layout.children.map(() => []); // per track: the px end of the latest item in each row, with its label
+  const GAP = 8; // the least px between two items in a row
   for (const i of [...items].sort((a, b) => a.from - b.from)) {
-    const stop = i.to ?? i.from;
-    let row = busy[i.track].findIndex((until) => until < i.from);
+    const bar = i.to != null;
+    const x = bar ? px(i.from) : px(i.from) - TL_DIAMOND / 2;
+    const w = bar ? Math.max(TL_MIN_BAR, px(i.to! + 1) - px(i.from)) : TL_DIAMOND;
+    const need = textWidth(str(i.label.label), 13);
+    const labelInside = bar && need + 16 <= w;
+    const span = labelInside ? x + w : x + w + 6 + need;
+    let row = busy[i.track].findIndex((until) => until + GAP <= x);
     if (row < 0) row = busy[i.track].length;
-    busy[i.track][row] = stop;
+    busy[i.track][row] = span;
     rows[i.track] = Math.max(rows[i.track], row + 1);
-    placed.push(
-      i.to == null
-        ? { id: i.id, track: i.track, row, x: px(i.from) - TL_DIAMOND / 2, w: TL_DIAMOND, milestone: true }
-        : { id: i.id, track: i.track, row, x: px(i.from), w: Math.max(TL_MIN_BAR, px(i.to + 1) - px(i.from)), milestone: false },
-    );
+    placed.push({ id: i.id, track: i.track, row, x, w, milestone: !bar, labelInside });
   }
   // Keep the layout order in the result.
   const order = new Map(items.map((i, k) => [i.id, k]));
@@ -347,22 +349,30 @@ export function timelineLayout(fig: FlowProps, axisWidth: number): TimelineLayou
   return { start, end, ticks, items: placed, rows, today: items.length ? px(today ?? last) : null };
 }
 
-/** One step, "timeline", with one beat for each dated item in date order. The beat lights the item and says its sub or label. */
+const fmt = (d: number) => `${dateOf(d).getUTCDate()} ${MONTHS[dateOf(d).getUTCMonth()]}`;
+/** One step, "timeline", with one beat for each dated item in date order. The beat lights the item and says "label, d MMM to d MMM" (a milestone: "label, d MMM"), then " · sub". */
 export function timelineBeats(fig: FlowProps): FigStep[] {
   const flow: FigBeat[] = datedItems(fig)
     .sort((a, b) => a.from - b.from)
-    .map((i) => ({ light: [i.id], say: i.label.sub ?? i.label.label }));
+    .map((i) => ({
+      light: [i.id],
+      say: `${str(i.label.label)}, ${fmt(i.from)}${i.to != null ? ` to ${fmt(i.to)}` : ''}${i.label.sub != null ? ` · ${str(i.label.sub)}` : ''}`,
+    }));
   return [{ label: 'timeline', flow }];
 }
 const labeledGroups = (g: FigGroup): number => (g.label ? 1 : 0) + g.children.reduce((n, c) => n + (isGroup(c) ? labeledGroups(c) : 0), 0);
 /** The part counts of a spec, for the line that `flowfig check` prints. An agent copies the line into its reply. */
-export const counts = (p: FlowProps) => ({
-  boxes: nodes(p.layout).length,
-  groups: labeledGroups(p.layout),
-  edges: p.edges.length,
-  steps: (p.steps ?? []).length,
-  messages: (p.steps ?? []).reduce((n, s) => n + s.flow.reduce((m, b) => m + toBeat(b).hops.length, 0), 0),
-});
+export const counts = (p: FlowProps) => {
+  // A timeline with no steps plays one synthetic step.
+  const st = p.timeline && isLanesLayout(p.layout) && !p.steps?.length ? timelineBeats(p) : (p.steps ?? []);
+  return {
+    boxes: nodes(p.layout).length,
+    groups: labeledGroups(p.layout),
+    edges: p.edges.length,
+    steps: st.length,
+    messages: st.reduce((n, s) => n + s.flow.reduce((m, b) => m + toBeat(b).hops.length, 0), 0),
+  };
+};
 
 /** Every id inside a child: its own id, and the ids of all boxes and groups below it. */
 const idsIn = (c: FigNode | FigGroup): string[] => (isGroup(c) ? [...(c.id ? [c.id] : []), ...c.children.flatMap(idsIn)] : [c.id]);

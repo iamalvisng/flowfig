@@ -32,12 +32,12 @@ flowfig draws how something works: parts, the messages between them, and the ord
 | A sequence diagram only                    | \`"rail": "only"\`.                                                                           |
 | A state lifecycle, a state machine         | One box per state, one edge per transition, labeled with its event. One step per path. Mark the first state with \`mark: "start"\` and each final state with \`mark: "end"\`. |
 | A flowchart with branches                  | \`shape: "decision"\` for each branch. One step per path.                                     |
-| A roadmap or a timeline | \`timeline: true\`. One labeled group per track. Items with \`from\` and \`to\` (dates), a milestone with \`from\` only, an edge for a dependency, \`today\` for the line. |
+| A roadmap or a timeline | \`timeline: true\`. One labeled group per track, in a \`column\` group. Items with \`from\` and \`to\` (dates), a milestone with \`from\` only, an edge for a dependency, \`today\` for the line. |
 | A process across roles (a ticket, an order, a refund) | \`lanes: true\`. One labeled group per role, in a \`column\` group. Put each step in the lane of the role that does it. Link each step with \`source\` to the SOP heading. About four time columns fit at 830 px: merge steps, give the outcomes of one decision the same \`at\`, or split the figure. |
 
-flowfig does not draw class or ER diagrams (fields, types, cardinality), Gantt charts, timelines with dates, charts of numbers,
-or mind maps. If the user asks for one of these, say that flowfig does not draw it, suggest Mermaid (\`classDiagram\`,
-\`erDiagram\`, \`gantt\`), and draw nothing with flowfig.
+flowfig draws a roadmap or a timeline with dates (\`timeline: true\`), and converts a Mermaid \`gantt\` to it. flowfig does not
+draw class or ER diagrams (fields, types, cardinality), charts of numbers or mind maps. If the user asks for one of these, say that
+flowfig does not draw it, suggest Mermaid (\`classDiagram\`, \`erDiagram\`), and draw nothing with flowfig.
 
 ## Workflow
 
@@ -286,8 +286,9 @@ Use flowfig when the user wants a diagram of how something works: an architectur
 a call sequence, a state lifecycle, or a flowchart. flowfig also converts a pasted Mermaid flowchart, \`stateDiagram\` or
 \`sequenceDiagram\`.
 
-flowfig does not draw class or ER diagrams, Gantt charts or charts of numbers. For those, tell the user so, suggest Mermaid
-(\`classDiagram\`, \`erDiagram\`, \`gantt\`), and draw nothing with flowfig.
+flowfig draws a roadmap or a timeline with dates (\`timeline: true\`), and converts a Mermaid \`gantt\` to it. flowfig does not
+draw class or ER diagrams or charts of numbers. For those, tell the user so, suggest Mermaid (\`classDiagram\`, \`erDiagram\`),
+and draw nothing with flowfig.
 
 1. Run \`npx flowfig docs\` and read it. If the command fails, stop: tell the user that flowfig is not available, give them
    \`npm install --save-dev flowfig\`, and draw nothing with another tool.
@@ -313,4 +314,4 @@ flowfig does not draw class or ER diagrams, Gantt charts or charts of numbers. F
 
 /** The description of the Claude skill: the words that make the agent load it. */
 export const SKILL_DESCRIPTION =
-  'Use when the user asks for a diagram, figure or animation of how code or a system works: an architecture, a data flow, a pipeline, a request lifecycle, a call sequence, a state lifecycle or a flowchart; when the user pastes a Mermaid flowchart, stateDiagram or sequenceDiagram to convert; or when the user asks for a class, ER or Gantt diagram.';
+  'Use when the user asks for a diagram, figure or animation of how code or a system works: an architecture, a data flow, a pipeline, a request lifecycle, a call sequence, a state lifecycle, a flowchart, a roadmap or a timeline; when the user pastes a Mermaid flowchart, stateDiagram, sequenceDiagram or gantt to convert; or when the user asks for a class or ER diagram.';

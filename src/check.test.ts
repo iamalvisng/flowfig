@@ -83,6 +83,8 @@ test('an edge through a box it does not connect is an error; its own ends are no
   const boxes = [box('a', 0, 0), box('m', 200, 0), box('b', 400, 0)];
   const through = scene({ boxes, edges: [{ id: 'ab', from: 'a', to: 'b', curve: line(100, 20, 400, 20) }] });
   assert.deepEqual(rules(checkScene(through)), ['edge-crosses-box']);
+  const behind = scene({ boxes, edges: [{ id: 'ab', from: 'a', to: 'b', curve: line(100, 20, 400, 20), behind: true }] });
+  assert.deepEqual(checkScene(behind), [], 'an edge behind the boxes crosses none');
   // The same ends, but the control points lift the curve over box m.
   const over: [Pt, Pt, Pt, Pt] = [
     { x: 100, y: 20 },

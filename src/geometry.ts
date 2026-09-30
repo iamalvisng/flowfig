@@ -1,5 +1,5 @@
 export type Rect = { x: number; y: number; w: number; h: number };
-type Side = 'l' | 'r' | 't' | 'b';
+export type Side = 'l' | 'r' | 't' | 'b';
 export type Pt = { x: number; y: number };
 export type Routed = { id: string; d: string; mid: Pt; curve: [Pt, Pt, Pt, Pt] };
 
@@ -13,9 +13,10 @@ const cy = (r: Rect) => r.y + r.h / 2;
 // Boxes stacked on top of each other connect bottom->top, otherwise side->side.
 // Several edges leaving the same side of a box are spread out so they don't overlap,
 // except on `tips` boxes (diamonds), where they all meet at the point.
+// `sides` fixes the two sides an edge uses (a timeline uses right to left).
 // `around` makes an edge leave and enter from the top or bottom, arcing over whatever sits between.
 export function route(
-  edges: { id: string; from: string; to: string; around?: Around }[],
+  edges: { id: string; from: string; to: string; around?: Around; sides?: [Side, Side] }[],
   rects: Record<string, Rect>,
   tips: Set<string> = new Set(),
 ): Routed[] {
@@ -25,17 +26,19 @@ export function route(
       b = rects[e.to];
     if (!a || !b) continue;
     const stacked = a.x < b.x + b.w && b.x < a.x + a.w;
-    const [sa, sb]: Side[] = e.around
-      ? e.around === 'above'
-        ? ['t', 't']
-        : ['b', 'b']
-      : stacked
-        ? a.y < b.y
-          ? ['b', 't']
-          : ['t', 'b']
-        : a.x < b.x
-          ? ['r', 'l']
-          : ['l', 'r'];
+    const [sa, sb]: Side[] = e.sides
+      ? e.sides
+      : e.around
+        ? e.around === 'above'
+          ? ['t', 't']
+          : ['b', 'b']
+        : stacked
+          ? a.y < b.y
+            ? ['b', 't']
+            : ['t', 'b']
+          : a.x < b.x
+            ? ['r', 'l']
+            : ['l', 'r'];
     picks.push({ ...e, a, b, sa, sb });
   }
 

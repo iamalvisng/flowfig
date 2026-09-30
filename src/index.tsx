@@ -1,6 +1,6 @@
 'use client';
 import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { route, type Pt, type Rect, type Routed } from './geometry.ts';
+import { route, type Pt, type Rect, type Routed, type Side } from './geometry.ts';
 import { foldedLabel, groupBox, layoutRail, railState, RAIL } from './rail.ts';
 import { textWidth } from './text.ts';
 import { checkScene, checkSpec, checkTheme } from './check.ts';
@@ -160,6 +160,7 @@ export function Flow({
   const chips = useRef<(HTMLDivElement | null)[]>([]);
   const bar = useRef<HTMLDivElement>(null); // the active tab's progress line
   const [beat, setBeat] = useState(0);
+  const [holding, setHolding] = useState(false); // the step hold: a timeline's today line rests at today
   const paths = useRef<Record<string, SVGPathElement | null>>({});
   const [routed, setRouted] = useState<Routed[]>([]);
   const [active, setActive] = useState<number | null>(steps.length ? 0 : null);
@@ -174,7 +175,19 @@ export function Flow({
   const [hover, setHover] = useState<string | null>(null);
 
   const ids = useMemo(() => edges.map(edgeId), [edges]);
-  const tips = useMemo(() => new Set(decisions(layout)), [layout]);
+  // A milestone is a diamond too, so its edges meet the tips.
+  const tips = useMemo(
+    () =>
+      new Set([
+        ...decisions(layout),
+        ...(tl
+          ? timelineLayout({ layout, edges, timeline, today }, TL_AXIS_W)
+              .items.filter((i) => i.milestone)
+              .map((i) => i.id)
+          : []),
+      ]),
+    [layout, tl, edges, timeline, today],
+  );
   const step = active == null ? null : steps[active];
   const beats = useMemo(() => (step?.flow ?? []).map(toBeat), [step]);
   // Every content each box's card will ever show. The card is sized to the largest, so text never gets cut and nothing jumps.
@@ -255,7 +268,7 @@ export function Flow({
       });
       setRouted(
         route(
-          edges.map((e, i) => ({ id: ids[i], from: e.from, to: e.to, around: e.around })),
+          edges.map((e, i) => ({ id: ids[i], from: e.from, to: e.to, around: e.around, ...(tl && { sides: ['r', 'l'] as [Side, Side] }) })),
           rects,
           tips,
         ),
@@ -314,7 +327,7 @@ export function Flow({
       edges: [
         ...routed.map((r) => {
           const e = edges[ids.indexOf(r.id)];
-          return { id: r.id, from: e.from, to: e.to, curve: r.curve, label: labels[r.id] };
+          return { id: r.id, from: e.from, to: e.to, curve: r.curve, label: labels[r.id], ...(tl && { behind: true as const }) };
         }),
         // A rail pill is a label for label-overlap; its curve is a point at the pill center, so it can cross no box.
         ...(rail?.rows ?? []).flatMap((row) => {
@@ -359,7 +372,7 @@ export function Flow({
       clock.current = { beats, elapsed: beats.slice(0, j).reduce((t, b) => t + beatMs(b, speed), 0) };
       setBeat(j);
     }
-    if (!beats.length || (!noMap && !routed.length)) return;
+    if (!beats.length || (!noMap && !routed.length && !(tl && !edges.length))) return;
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       if (bar.current) bar.current.style.transform = 'none';
       return void setBeat(beats.length - 1);
@@ -381,6 +394,7 @@ export function Flow({
       const next = ends.findIndex((e) => t < e);
       const i = next === -1 ? beats.length - 1 : next;
       if (i !== shownBeat) setBeat((shownBeat = i));
+      setHolding(t >= ends.at(-1)!);
       const start = i ? ends[i - 1] : 0;
       const f = Math.min(1, (t - start) / speed); // the packet crosses in `speed`; the hold gives the rest
       const eased = f < 0.5 ? 2 * f * f : 1 - (-2 * f + 2) ** 2 / 2;
@@ -482,11 +496,11 @@ export function Flow({
   );
 
   // A bar or a milestone of a timeline: placed by the shared layout, with the look of a box.
-  const renderBar = (n: FigNode, it: { row: number; x: number; w: number; milestone: boolean }) => {
+  const renderBar = (n: FigNode, it: { row: number; x: number; w: number; milestone: boolean; labelInside: boolean }) => {
     const lit = litNodes.has(n.id);
     const bt = n.tone && TONES[n.tone];
     const label = String(n.label);
-    const inside = !it.milestone && textWidth(label, 13) + 16 <= it.w;
+    const inside = it.labelInside;
     const outside = (
       <span
         style={{ position: 'absolute', left: '100%', marginLeft: 6, whiteSpace: 'nowrap', fontSize: 13, fontWeight: 500, color: v('fg') }}
@@ -554,7 +568,8 @@ export function Flow({
         const it = timelineFig.items.find((i) => i.id === id);
         return it && it.x + (it.milestone ? it.w / 2 : 0);
       };
-      const at = (cur?.light ?? []).map(startOf).find((x) => x != null) ?? timelineFig.today ?? 0;
+      const home = timelineFig.today ?? 0;
+      const at = holding || still ? home : ((cur?.light ?? []).map(startOf).find((x) => x != null) ?? home);
       const rowsPx = timelineFig.rows.map((r) => r * TL_BAR_H + (r - 1) * TL_ROW_GAP + LANE_PAD * 2);
       return (
         <div
@@ -637,7 +652,7 @@ export function Flow({
                   width: 1.5,
                   background: v('accent'),
                   transform: `translateX(${at}px)`,
-                  transition: 'transform .4s linear',
+                  transition: still ? 'none' : 'transform .4s linear',
                 }}
               >
                 <span
@@ -1008,6 +1023,8 @@ export function Flow({
                     height: '100%',
                     overflow: 'visible',
                     pointerEvents: 'none',
+                    // A timeline dependency runs under the bars (z-index 1) and over the bands (0).
+                    zIndex: tl ? 0 : undefined,
                   }}
                 >
                   <defs>
@@ -1089,7 +1106,7 @@ export function Flow({
                 ))}
                 {routed.map((r) => {
                   const e = edges[ids.indexOf(r.id)];
-                  if (e.label == null) return null;
+                  if (e.label == null || tl) return null;
                   const on = litEdges.has(r.id);
                   const tone = hopTone(r.id);
                   return (

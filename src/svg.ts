@@ -6,7 +6,7 @@
 //
 // Limit: text is measured by character class (src/text.ts) rather than by a browser, so this runs anywhere with plain node.
 // Wrapping is therefore approximate; `flowfig check` uses the same measure, and the player check measures real text.
-import { route, type Pt, type Rect } from './geometry.ts';
+import { route, type Pt, type Rect, type Side } from './geometry.ts';
 import { foldedLabel, groupBox, layoutRail, railState, RAIL, type Rail } from './rail.ts';
 import { textWidth } from './text.ts';
 import { checkScene, checkSpec, checkTheme, type CheckOptions } from './check.ts';
@@ -130,7 +130,7 @@ function layoutCard(c: FigContent, width: number): { rows: Row[]; height: number
   return { rows, height };
 }
 
-type Placed = Rect & { item: FigNode | FigGroup; lane?: true; tl?: { milestone: boolean } };
+type Placed = Rect & { item: FigNode | FigGroup; lane?: true; tl?: { milestone: boolean; labelInside: boolean } };
 type Sizes = {
   cards: Map<string, FigContent[]>;
   cardH: Map<string, number>;
@@ -209,7 +209,14 @@ function placeTimeline(fig: FlowProps, x: number, y: number, out: Placed[]): voi
       const node = lane.children.find((k) => !isGroup(k) && k.id === it.id) as FigNode;
       const top = ly + LANE_PAD + it.row * (TL_BAR_H + TL_ROW_GAP);
       const bh = it.milestone ? it.w : TL_BAR_H;
-      out.push({ x: x + gutter + it.x, y: top + (TL_BAR_H - bh) / 2, w: it.w, h: bh, item: node, tl: { milestone: it.milestone } });
+      out.push({
+        x: x + gutter + it.x,
+        y: top + (TL_BAR_H - bh) / 2,
+        w: it.w,
+        h: bh,
+        item: node,
+        tl: { milestone: it.milestone, labelInside: it.labelInside },
+      });
     }
     ly += h + LANE_ROW_GAP;
   });
@@ -307,10 +314,10 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
 
   const rects: Record<string, Rect> = {};
   for (const p of placed) if (p.item.id) rects[p.item.id] = p;
-  const tips = new Set(placed.filter((p) => !isGroup(p.item) && p.item.shape === 'decision').map((p) => p.item.id!));
+  const tips = new Set(placed.filter((p) => !isGroup(p.item) && (p.item.shape === 'decision' || p.tl?.milestone)).map((p) => p.item.id!));
   const ids = fig.edges.map(edgeId);
   const routed = route(
-    fig.edges.map((e, i) => ({ id: ids[i], from: e.from, to: e.to, around: e.around })),
+    fig.edges.map((e, i) => ({ id: ids[i], from: e.from, to: e.to, around: e.around, ...(tl && { sides: ['r', 'l'] as [Side, Side] }) })),
     rects,
     tips,
   );
@@ -320,10 +327,12 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
   const fonts = [14, ...(steps.length ? [13.5] : [])];
   const sceneBoxes: SceneBox[] = nodes.map((p) => {
     if (p.tl) {
-      // A label inside the bar has the bar as room; a label beside the bar has the space to the band edge.
+      // A label inside the bar has the bar as room; a label beside the bar has the space to the next item of its row, or to the band edge.
       const label = str(p.item.label);
-      const inside = !p.tl.milestone && textWidth(label, 13) + 16 <= p.w;
-      const room = inside ? p.w - 16 : placed[0].x + placed[0].w - FRAME_SIDE - (p.x + p.w) - 12;
+      const mine = tl!.items.find((i) => i.id === p.item.id)!;
+      const next = tl!.items.filter((i) => i.track === mine.track && i.row === mine.row && i.x > mine.x).map((i) => p.x - mine.x + i.x - 8);
+      const limit = Math.min(placed[0].x + placed[0].w - FRAME_SIDE, ...next);
+      const room = p.tl.labelInside ? p.w - 16 : limit - (p.x + p.w) - 6;
       fonts.push(13);
       return { id: p.item.id, rect: { x: p.x, y: p.y, w: p.w, h: p.h }, texts: [{ text: label, fontSize: 13, room }] };
     }
@@ -503,7 +512,7 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
       const fill0 = bt ? toneTint(bt, 'var(--bg)') : 'var(--bg)';
       const stroke0 = bt ?? 'var(--border)';
       const label = str(item.label);
-      const inside = !p.tl.milestone && textWidth(label, 13) + 16 <= p.w;
+      const inside = p.tl.labelInside;
       const cx = p.x + p.w / 2,
         cy = p.y + p.h / 2;
       const shape = p.tl.milestone
@@ -626,7 +635,7 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
     const path = `<path id="p-${esc(r.id)}" d="${r.d}" fill="none" stroke="var(--muted)" stroke-width="${EDGE_OFF}" marker-end="url(#arrow)"${lit}/>`;
     // A quiet edge is only drawn while a step uses it, so wrap the whole thing rather than the stroke.
     const label =
-      e.label == null
+      e.label == null || tl
         ? ''
         : (() => {
             const lw = labelPillW(str(e.label));
@@ -888,8 +897,10 @@ ${
     ? ''
     : `<g transform="translate(${n2(shift)} ${arcs ? 44 : 0})">
 ${axisSvg}
-${boxes.filter(Boolean).join('\n')}
-${edgeSvg.join('\n')}
+${tl ? boxes.filter((b, i) => b && isGroup(placed[i].item)).join('\n') : ''}
+${tl ? edgeSvg.join('\n') : ''}
+${boxes.filter((b, i) => b && !(tl && isGroup(placed[i].item))).join('\n')}
+${tl ? '' : edgeSvg.join('\n')}
 ${packets.join('\n')}
 ${todaySvg}
 </g>
@@ -906,7 +917,7 @@ ${said.join('\n')}
     edges: [
       ...(only ? [] : routed).map((r) => {
         const e = fig.edges[ids.indexOf(r.id)];
-        return { id: r.id, from: e.from, to: e.to, curve: r.curve, label: labelRects[r.id] };
+        return { id: r.id, from: e.from, to: e.to, curve: r.curve, label: labelRects[r.id], ...(tl && { behind: true as const }) };
       }),
       // Each rail payload is a label too, in its own open-phase position, so label-overlap covers the rail.
       ...(rail?.rows ?? []).flatMap((row, i) => {

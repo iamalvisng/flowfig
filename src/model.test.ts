@@ -1,9 +1,11 @@
+import { textWidth } from './text.ts';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   dayOf,
   timelineLayout,
   timelineBeats,
+  counts,
   TL_DIAMOND,
   TL_MIN_BAR,
   laneColumns,
@@ -278,10 +280,10 @@ test('an item with a bad from is left out of the layout and the beats', () => {
     timelineLayout(f, 300).items.map((i) => i.id),
     ['b'],
   );
-  assert.deepEqual(timelineBeats(f)[0].flow, [{ light: ['b'], say: 'b' }]);
+  assert.deepEqual(timelineBeats(f)[0].flow, [{ light: ['b'], say: 'b, 7 Oct' }]);
 });
 
-test('timelineBeats has one beat per item in date order, saying the sub or the label', () => {
+test('timelineBeats has one beat per item in date order, saying the label, the dates and the sub', () => {
   const f = tl([
     [{ id: 'a', from: '2026-10-09', to: '2026-10-10' }],
     [
@@ -292,8 +294,37 @@ test('timelineBeats has one beat per item in date order, saying the sub or the l
   const [step] = timelineBeats(f);
   assert.equal(step.label, 'timeline');
   assert.deepEqual(step.flow, [
-    { light: ['b'], say: 'kickoff' },
-    { light: ['a'], say: 'a' },
-    { light: ['c'], say: 'c' },
+    { light: ['b'], say: 'b, 5 Oct · kickoff' },
+    { light: ['a'], say: 'a, 9 Oct to 10 Oct' },
+    { light: ['c'], say: 'c, 9 Oct' },
   ]);
+});
+
+test('a label beside a bar takes room: a milestone the next day gets a second row; a far item shares the row', () => {
+  const l = timelineLayout(
+    tl([
+      [
+        { id: 'Kickoff', from: '2026-10-05', to: '2026-10-05' },
+        { id: 'm', from: '2026-10-06' },
+        { id: 'z', from: '2026-11-30' },
+      ],
+    ]),
+    700,
+  );
+  assert.deepEqual(
+    l.items.map((i) => [i.row, i.labelInside]),
+    [
+      [0, false],
+      [1, false],
+      [0, false],
+    ],
+  );
+  // Two items share a row only when their spans (label included) are 8 px apart.
+  const end = (i: (typeof l.items)[number]) => i.x + i.w + 6 + textWidth(i.id, 13);
+  assert.ok(l.items[2].x >= end(l.items[0]) + 8);
+});
+
+test('counts reads the synthetic step of a timeline with no steps', () => {
+  const c = counts(tl([[{ id: 'a', from: '2026-10-05', to: '2026-10-09' }]]));
+  assert.deepEqual([c.steps, c.messages], [1, 0]);
 });
