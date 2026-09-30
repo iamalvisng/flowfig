@@ -37,7 +37,7 @@ const USAGE = `usage: flowfig <-|spec.json|figure.ts> [out.svg]   render a figur
        flowfig diff <old> <new> [--json|--md]   list the spec changes between two figures
        flowfig docs                                       print the guide (Markdown)
        flowfig mcp                                        serve check, render, verify, diff and docs over MCP (stdio)
-       flowfig init [dir] [--agents <ids>] [-y] [--global] [--dry-run]   write flowfig instructions for the coding agents of a repo
+       flowfig init [dir] [--agents <ids>] [-y] [--global] [--dry-run] [--no-mcp]   write flowfig instructions for the coding agents of a repo
 flags for render and check: --strict (warnings are errors), --json, --width <px>, --min-text <px>, --no-check (render only)`;
 /** Bad use, not a bad figure: exit 2 with a message, not a stack trace. A declaration, so TypeScript narrows after a call. */
 function usage(message: string): never {
