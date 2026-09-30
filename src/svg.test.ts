@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { toSvg, render, check } from './svg.ts';
-import { DARK, type FlowProps } from './model.ts';
+import { DARK, BASE_RATE, STEP_HOLD_MS, beatMs, type FlowProps } from './model.ts';
 import { layoutRail, railState, RAIL } from './rail.ts';
 
 const fig: FlowProps = {
@@ -284,4 +284,25 @@ test('the SVG applies fig.theme, the theme font, and lets opts.theme win', () =>
   assert.ok(svg.includes('font-family="Georgia"'));
   assert.ok(toSvg(themed, { theme: { accent: '#00ff00' } }).includes('#00ff00'));
   assert.ok(!toSvg(themed, { theme: { accent: '#00ff00' } }).includes('#ff0000'));
+});
+
+test('a beat lasts long enough to read its caption; the packet crosses in speed', () => {
+  const say = 'one two three four five six seven eight nine ten';
+  const two: FlowProps = {
+    ...fig,
+    steps: [
+      { label: 'a', flow: [{ edges: 'call', say }] },
+      { label: 'b', flow: [{ edges: 'call' }] },
+    ],
+  };
+  const svg = toSvg(two);
+  const speed = 1000;
+  const total = (beatMs({ hops: [], say }, speed) + speed + 2 * STEP_HOLD_MS) / 1000 / BASE_RATE;
+  const n2 = (v: number) => Math.round(v * 10) / 10;
+  assert.ok(svg.includes(`dur="${n2(total)}s"`), String(n2(total)));
+  const motion = svg.match(/keyTimes="0;([\d.]+);([\d.]+);1"/)!;
+  assert.equal(Number(motion[2]), n2(speed / 1000 / BASE_RATE / total));
+  const beatEnd = beatMs({ hops: [], say }, speed) / 1000 / BASE_RATE / total;
+  const op = svg.match(/@keyframes p0 \{[^}]*\}[^}]*\{ opacity: 1 \} ([\d.]+)%,100%/)!;
+  assert.ok(Math.abs(Number(op[1]) - beatEnd * 100) < 0.1, op[1]);
 });

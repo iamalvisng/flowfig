@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { decisions, edgeId, groupGap, isRows, nodes, toBeat } from './model.ts';
+import { beatMs, decisions, edgeId, groupGap, isRows, nodes, readMs, toBeat } from './model.ts';
 
 test('toBeat reads every way a beat can be written', () => {
   assert.deepEqual(toBeat('a->b'), { hops: [{ edge: 'a->b', back: false }] });

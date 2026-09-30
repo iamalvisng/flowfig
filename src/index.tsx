@@ -22,6 +22,8 @@ import {
   isRows,
   nodes,
   toBeat,
+  beatMs,
+  STEP_HOLD_MS,
   type FigContent,
   type FigGroup,
   type FigNode,
@@ -312,7 +314,7 @@ export function Flow({ layout, edges, steps = [], theme, speed = 900, autoplay =
       // A rail click can open another step at a later beat; start the clock at that beat, not at 0.
       const j = jump.current ?? 0;
       jump.current = null;
-      clock.current = { beats, elapsed: beats.slice(0, j).reduce((t, b) => t + (b.ms ?? speed), 0) };
+      clock.current = { beats, elapsed: beats.slice(0, j).reduce((t, b) => t + beatMs(b, speed), 0) };
       setBeat(j);
     }
     if (!beats.length || (!noMap && !routed.length)) return;
@@ -320,8 +322,8 @@ export function Flow({ layout, edges, steps = [], theme, speed = 900, autoplay =
       if (bar.current) bar.current.style.transform = 'none';
       return void setBeat(beats.length - 1);
     }
-    const ends = beats.reduce<number[]>((acc, b) => [...acc, (acc.at(-1) ?? 0) + (b.ms ?? speed)], []);
-    const total = ends.at(-1)! + speed * 1.5; // hold on the last beat before moving on
+    const ends = beats.reduce<number[]>((acc, b) => [...acc, (acc.at(-1) ?? 0) + beatMs(b, speed)], []);
+    const total = ends.at(-1)! + STEP_HOLD_MS; // hold on the last beat before moving on
     let raf = 0,
       last = performance.now(),
       shownBeat = -1;
@@ -338,7 +340,7 @@ export function Flow({ layout, edges, steps = [], theme, speed = 900, autoplay =
       const i = next === -1 ? beats.length - 1 : next;
       if (i !== shownBeat) setBeat((shownBeat = i));
       const start = i ? ends[i - 1] : 0;
-      const f = Math.min(1, (t - start) / ((beats[i].ms ?? speed) * 0.8)); // arrive a little early, rest at the end
+      const f = Math.min(1, (t - start) / (speed * 0.8)); // arrive a little early, rest at the end
       const eased = f < 0.5 ? 2 * f * f : 1 - (-2 * f + 2) ** 2 / 2;
       const hops = t < ends.at(-1)! ? beats[i].hops : [];
       gs.forEach((g, j) => {
@@ -389,7 +391,7 @@ export function Flow({ layout, edges, steps = [], theme, speed = 900, autoplay =
   const goTo = (step: number, b: number) => {
     setPlaying(true);
     if (step === active) {
-      clock.current.elapsed = beats.slice(0, b).reduce((t, x) => t + (x.ms ?? speed), 0);
+      clock.current.elapsed = beats.slice(0, b).reduce((t, x) => t + beatMs(x, speed), 0);
       setBeat(b);
     } else {
       jump.current = b;
