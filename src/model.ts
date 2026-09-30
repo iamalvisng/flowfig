@@ -186,15 +186,15 @@ export const ON_ACCENT = '#ffffff';
 
 /** Only text survives outside React: a React element has no string form. */
 export const str = (n: unknown): string => (typeof n === 'string' || typeof n === 'number' ? String(n) : '');
-/** The time a reader needs for a caption line: 500 ms plus 300 ms per word. The result is 0 for no text. */
+/** The time a reader needs for a caption line: 400 ms plus 240 ms per word. The result is 0 for no text. */
 export const readMs = (say: unknown): number => {
   const w = str(say).split(/\s+/).filter(Boolean).length;
-  return w ? 500 + 300 * w : 0;
+  return w ? 400 + 240 * w : 0;
 };
 /** How long a beat lasts. An explicit `ms` wins as written. Else the beat lasts `speed` plus the time to read `say`. */
 export const beatMs = (b: Beat, speed: number): number => b.ms ?? speed + readMs(b.say);
 /** The hold at the end of each step, before the next step starts. */
-export const STEP_HOLD_MS = 2500;
+export const STEP_HOLD_MS = 2000;
 export const nodes = (g: FigGroup): FigNode[] => g.children.flatMap((c) => (isGroup(c) ? nodes(c) : [c]));
 const labeledGroups = (g: FigGroup): number => (g.label ? 1 : 0) + g.children.reduce((n, c) => n + (isGroup(c) ? labeledGroups(c) : 0), 0);
 /** The part counts of a spec, for the line that `flowfig check` prints. An agent copies the line into its reply. */
