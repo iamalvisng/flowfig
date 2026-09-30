@@ -23,8 +23,9 @@ import { pathToFileURL } from 'node:url';
 import { GUIDE } from './guide.ts';
 import { runInit } from './init.ts';
 import { diff, formatDiff } from './diff.ts';
-import { counts, type FlowProps } from './model.ts';
-import { check, toSvg, type Finding } from './svg.ts';
+import { loadSpec, reportLines, sortFindings, specOf, svgWithSpec } from './load.ts';
+import type { FlowProps } from './model.ts';
+import { check, type Finding } from './svg.ts';
 import { links, verify, type Link } from './verify.ts';
 
 const USAGE = `usage: flowfig <-|spec.json|figure.ts> [out.svg]   render a figure; a spec on stdin with -
@@ -35,8 +36,6 @@ const USAGE = `usage: flowfig <-|spec.json|figure.ts> [out.svg]   render a figur
        flowfig docs                                       print the guide (Markdown)
        flowfig init [dir] [--agents <ids>] [-y] [--global] [--dry-run]   write flowfig instructions for the coding agents of a repo
 flags for render and check: --strict (warnings are errors), --json, --width <px>, --min-text <px>, --no-check (render only)`;
-const SPEC_OPEN = '<metadata id="figure-spec"><![CDATA[';
-const SPEC_CLOSE = ']]></metadata>';
 /** Bad use, not a bad figure: exit 2 with a message, not a stack trace. A declaration, so TypeScript narrows after a call. */
 function usage(message: string): never {
   console.error(message);
@@ -53,11 +52,6 @@ const value = (name: string) => {
   const n = Number(args.splice(i, 2)[1] || NaN);
   return n > 0 && Number.isFinite(n) ? n : usage(`${name} needs a positive number`);
 };
-function specOf(svg: string, name: string): string {
-  const at = svg.indexOf(SPEC_OPEN);
-  if (at === -1) usage(`${name}: no figure spec inside this SVG`);
-  return svg.slice(at + SPEC_OPEN.length, svg.indexOf(SPEC_CLOSE, at));
-}
 
 if (!args[0] || ['help', '--help', '-h'].includes(args[0])) {
   if (args[0]) console.log(USAGE);
@@ -80,30 +74,24 @@ if (args[0] === '--spec') {
   } catch (e) {
     usage(`${args[1]}: ${(e as Error).message}`);
   }
-  console.log(specOf(svg, args[1]));
+  try {
+    console.log(specOf(svg, args[1]));
+  } catch (e) {
+    usage((e as Error).message);
+  }
   process.exit(0);
 }
 
 /** A spec from stdin, a JSON file, an SVG this wrote, or a module. Exit 2 with a message on any failure. */
 async function load(input: string): Promise<FlowProps> {
-  let loaded;
   try {
-    loaded =
-      input === '-'
-        ? JSON.parse(readFileSync(0, 'utf8'))
-        : input.endsWith('.json')
-          ? JSON.parse(readFileSync(input, 'utf8'))
-          : input.endsWith('.svg')
-            ? JSON.parse(specOf(readFileSync(input, 'utf8'), input))
-            : (await import(pathToFileURL(resolve(input)).href)).default;
+    if (input.endsWith('.json') || input.endsWith('.svg')) return loadSpec(input);
+    if (input === '-') return loadSpec(JSON.parse(readFileSync(0, 'utf8')), input);
+    return loadSpec((await import(pathToFileURL(resolve(input)).href)).default, input);
   } catch (e) {
-    usage(`${input}: ${(e as Error).message}`);
+    const m = (e as Error).message;
+    return usage(m.startsWith(`${input}: `) ? m : `${input}: ${m}`);
   }
-  const props = loaded?.props ?? loaded;
-  if (!props?.layout) usage(`${input}: no figure props (expected { props: { layout, edges, steps } })`);
-  if (!Array.isArray(props.edges)) usage(`${input}: edges must be an array (use [] for none)`);
-  if (props.steps?.some((s: { flow?: unknown }) => !Array.isArray(s?.flow))) usage(`${input}: each step needs a flow array`);
-  return props;
 }
 
 if (args[0] === 'verify') {
@@ -161,24 +149,16 @@ if (!input) usage(USAGE);
 
 const props = await load(input);
 
-const findings: Finding[] = skip
-  ? []
-  : check(props, opts)
-      .map((f) => (strict ? { ...f, severity: 'error' as const } : f))
-      .sort((a, b) => (a.severity === b.severity ? a.rule.localeCompare(b.rule) : a.severity === 'error' ? -1 : 1));
+const findings: Finding[] = skip ? [] : sortFindings(check(props, opts), strict);
 const errors = findings.filter((f) => f.severity === 'error').length;
 
 /** The findings for a person: one line each, colored only on a terminal, then the counts. A render prints them to stderr, next to
  * its own output. A clean render still prints `0 errors, 0 warnings`: the agent copies that line into its reply. */
 const report = (print: (s: string) => void, tty: boolean | undefined) => {
-  const paint = (s: string, code: number) => (tty && !process.env.NO_COLOR ? `\x1b[${code}m${s}\x1b[0m` : s);
-  for (const f of findings) print(`${paint(f.severity.padEnd(8), f.severity === 'error' ? 31 : 33)} ${f.rule.padEnd(18)} ${f.message}`);
-  const n = (k: number, word: string) => `${k} ${word}${k === 1 ? '' : 's'}`;
-  if (!skip) print(`${n(errors, 'error')}, ${n(findings.length - errors, 'warning')}`);
-  const c = counts(props);
-  print(
-    `figure: ${n(c.boxes, 'box').replace('boxs', 'boxes')}, ${n(c.groups, 'group')}, ${n(c.edges, 'edge')}, ${n(c.steps, 'step')}, ${n(c.messages, 'message')}`,
-  );
+  // The severity field is 8 characters wide, so the painted field keeps the same width.
+  const paint = (s: string) =>
+    tty && !process.env.NO_COLOR ? s.replace(/^(error {3}|warning )/, (w) => `\x1b[${w[0] === 'e' ? 31 : 33}m${w}\x1b[0m`) : s;
+  for (const line of reportLines(props, findings, !skip)) print(paint(line));
 };
 
 if (command === 'check') {
@@ -191,8 +171,6 @@ report(console.error, process.stderr.isTTY);
 if (errors) process.exit(1);
 const dest = out ?? (input === '-' ? 'figure.svg' : input.replace(/\.[^./\\]+$/, '') + '.svg');
 // The spec rides along in <metadata>: an SVG is then its own source, and no JSON has to be kept.
-// `]]>` would close the CDATA early; it cannot appear in JSON-encoded text, but be sure.
-const spec = JSON.stringify({ props }).replaceAll(']]>', ']]\\u003e');
-const withSpec = toSvg(props).replace(/(<svg[^>]*>\n?)/, (tag) => `${tag}${SPEC_OPEN}${spec}${SPEC_CLOSE}\n`);
+const withSpec = svgWithSpec(props);
 writeFileSync(dest, withSpec);
 console.log(`${dest} — ${(withSpec.length / 1024).toFixed(1)} kB`);
