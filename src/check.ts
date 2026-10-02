@@ -102,8 +102,8 @@ export function checkSpec(fig: FlowProps): Finding[] {
     for (const e of fig.edges) {
       const start = span.get(e.to)?.[0];
       const end = span.get(e.from)?.[1];
-      if (start != null && end != null && start < end)
-        out.push(warn('timeline-dependency-order', [e.from, e.to], `"${e.to}" starts before "${e.from}" ends`));
+      if (start != null && end != null && start <= end)
+        out.push(warn('timeline-dependency-order', [e.from, e.to], `"${e.to}" does not start after "${e.from}" ends`));
     }
     if (fig.today != null && dayOf(fig.today) == null) out.push(err('bad-date', [], `today "${fig.today}" is not a real YYYY-MM-DD date`));
   } else if (fig.lanes) {

@@ -66,3 +66,18 @@ test('every route carries the four points its path is drawn from', () => {
     assert.equal(r.d, `M ${s.x} ${s.y} C ${c1.x} ${c1.y}, ${c2.x} ${c2.y}, ${e.x} ${e.y}`);
   }
 });
+
+test('elbow: with a gap under 16 px, the last run still enters the target going forward', () => {
+  for (const gap of [12, 8, 0, -20]) {
+    const rects = { a: { x: 0, y: 0, w: 100, h: 28 }, b: { x: 100 + gap, y: 40, w: 100, h: 28 } };
+    const [r] = route([{ id: 'e', from: 'a', to: 'b', sides: ['r', 'l'], elbow: true }], rects);
+    const m = r.d.match(/H ([\d.-]+) V [\d.-]+ H ([\d.-]+)$/);
+    assert.ok(m, `gap ${gap}: ${r.d}`);
+    assert.equal(Number(m[2]) - Number(m[1]), 8, `gap ${gap}: the last run goes 8 px forward: ${r.d}`);
+  }
+  const [wide] = route([{ id: 'e', from: 'a', to: 'b', sides: ['r', 'l'], elbow: true }], {
+    a: { x: 0, y: 0, w: 100, h: 28 },
+    b: { x: 140, y: 40, w: 100, h: 28 },
+  });
+  assert.equal(wide.d, 'M 100 14 H 120 V 54 H 140');
+});

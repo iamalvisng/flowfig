@@ -837,3 +837,18 @@ test('timeline: the playhead follows each focused item, ends at the range end, a
   const texts = [...svg.matchAll(/class="today a\d+">([^<]*)</g)].map((m) => m[1]);
   assert.deepEqual(new Set(texts), new Set(lay.items.map((i) => i.date).concat(lay.lastDate)));
 });
+
+test('focus outside a timeline: the focused box is active from the beat start, with no trail first', () => {
+  const svg = toSvg({
+    layout: {
+      children: [
+        { id: 'a', label: 'A' },
+        { id: 'b', label: 'B' },
+      ],
+    },
+    edges: [{ from: 'a', to: 'b' }],
+    steps: [{ label: 's', flow: [{ focus: ['a'] }, { focus: ['b'] }] }],
+  } as FlowProps);
+  const first = svg.match(/@keyframes a0 \{ ([^}]*\}?)/)![1];
+  assert.match(first, /^0%,[\d.]+% \{ fill: var\(--tint\); stroke: var\(--accent\); stroke-width: 2;/);
+});

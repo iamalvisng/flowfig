@@ -326,7 +326,7 @@ test('timeline and lanes together is a warning', () => {
   assert.equal(f[0].severity, 'warning');
 });
 
-test('timeline-dependency-order: an item that starts before its source ends is a warning', () => {
+test('timeline-dependency-order: an item that starts on or before its source end is a warning', () => {
   const two = (from: string): FlowProps => ({
     timeline: true,
     layout: {
@@ -346,7 +346,10 @@ test('timeline-dependency-order: an item that starts before its source ends is a
   const f = checkSpec(two('2026-10-08'));
   assert.deepEqual(rules(f), ['timeline-dependency-order']);
   assert.equal(f[0].severity, 'warning');
-  assert.equal(f[0].message, '"b" starts before "a" ends');
+  assert.equal(f[0].message, '"b" does not start after "a" ends');
+  // The bar of "a" covers its last day, so a start on that day is not after the end.
+  assert.deepEqual(rules(checkSpec(two('2026-10-09'))), ['timeline-dependency-order']);
+  assert.deepEqual(checkSpec(two('2026-10-10')), []);
   assert.deepEqual(checkSpec(two('2026-10-12')), []);
 });
 
