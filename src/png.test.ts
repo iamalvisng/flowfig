@@ -69,3 +69,15 @@ test('decodePng throws on a bad signature and on a PNG it does not support', () 
   assert.throws(() => decodePng(png(1, 1, 6, [0, 0, 0, 0], [0], 16)), /unsupported PNG: bit depth 16/);
   assert.throws(() => decodePng(png(1, 1, 3, [0, 0, 0], [0])), /unsupported PNG: color type 3/);
 });
+
+test('decodePng throws on an interlaced PNG, on no IHDR and on image data that is too short', () => {
+  const ok = png(1, 1, 6, [1, 2, 3, 4], [0]);
+  const interlaced = Buffer.from(ok);
+  interlaced[28] = 1; // the interlace byte of the IHDR body
+  assert.throws(() => decodePng(interlaced), /unsupported PNG: interlace 1/);
+  const none = Buffer.concat([ok.subarray(0, 8), Buffer.from([0, 0, 0, 0, 73, 69, 78, 68, 0, 0, 0, 0])]); // the signature, then IEND
+  assert.throws(() => decodePng(none), /not a PNG: no IHDR chunk/);
+  const tall = Buffer.from(ok);
+  tall.writeUInt32BE(5, 20); // the height: the data holds one row
+  assert.throws(() => decodePng(tall), /not a PNG: the image data is too short/);
+});

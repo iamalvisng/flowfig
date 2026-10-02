@@ -142,10 +142,11 @@ test('send settles by id, an error reply rejects, and once gets the event of its
 
 test('a command with no reply rejects after the timeout', { skip: !posix }, async () => {
   const dir = fake();
-  const { cdp, close } = await launch(join(dir, 'chrome'), join(dir, 'profile'), 1500);
+  // A long launch timeout: under the parallel suite the fake browser can start slowly. Each command has its own short timeout.
+  const { cdp, close } = await launch(join(dir, 'chrome'), join(dir, 'profile'), 10_000);
   try {
-    await assert.rejects(cdp.send('Silent'), /Silent: no reply in 1.5 s/);
-    await assert.rejects(cdp.once('Never.event'), /Never.event: no reply in 1.5 s/);
+    await assert.rejects(cdp.send('Silent', {}, undefined, 300), /Silent: no reply in 0.3 s/);
+    await assert.rejects(cdp.once('Never.event', undefined, 300), /Never.event: no reply in 0.3 s/);
   } finally {
     await close();
     rmSync(dir, { recursive: true, force: true });
