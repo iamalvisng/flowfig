@@ -81,3 +81,9 @@ test('elbow: with a gap under 16 px, the last run still enters the target going 
   });
   assert.equal(wide.d, 'M 100 14 H 120 V 54 H 140');
 });
+
+test('elbow: boxes on one row draw a straight forward line, with no detour', () => {
+  const rects = { a: { x: 0, y: 0, w: 100, h: 28 }, b: { x: 108, y: 0, w: 100, h: 28 } };
+  const [r] = route([{ id: 'e', from: 'a', to: 'b', sides: ['r', 'l'], elbow: true }], rects);
+  assert.equal(r.d, 'M 100 14 H 108');
+});
