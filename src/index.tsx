@@ -680,7 +680,16 @@ export function Flow({
                 }}
               >
                 <span
-                  style={{ position: 'absolute', left: 3, top: -1, fontSize: 11, lineHeight: '11px', fontWeight: 600, color: v('accent') }}
+                  style={{
+                    position: 'absolute',
+                    left: 3,
+                    top: -1,
+                    fontSize: 11,
+                    lineHeight: '11px',
+                    fontWeight: 600,
+                    whiteSpace: 'nowrap',
+                    color: v('accent'),
+                  }}
                 >
                   {dateText}
                 </span>
