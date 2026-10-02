@@ -204,9 +204,10 @@ if (args[0] === 'gif') {
     `${file} — ${frames} frame${frames === 1 ? '' : 's'}, ${(frames / fps).toFixed(1)} s, ${(bytes / 1048576).toFixed(1)} MB`;
 
   const temp = mkdtempSync(join(tmpdir(), 'flowfig-gif-'));
-  let close = async () => {};
+  // A Ctrl-C can come while the browser starts, so cleanup waits for the start before it stops the browser.
+  let launching: ReturnType<typeof launch> | undefined;
   const cleanup = async () => {
-    await close();
+    await (await launching?.catch(() => undefined))?.close();
     // The retries cover Windows, where the browser can hold a file lock for a short time after the exit.
     rmSync(temp, { recursive: true, force: true, maxRetries: 3 });
   };
@@ -220,8 +221,8 @@ if (args[0] === 'gif') {
   try {
     const page = join(temp, 'page.html');
     writeFileSync(page, pageHtml(svg, basename(path)));
-    const browser = await launch(found.path, join(temp, 'profile'));
-    close = browser.close;
+    launching = launch(found.path, join(temp, 'profile'));
+    const browser = await launching;
     const viewport = { width: Math.ceil(Number(size[1])), height: Math.ceil(Number(size[2])) };
     const { pngs } = await captureFrames(browser.cdp, page, { ...viewport, scale, fps, dark });
     const wait = delays(pngs.length, fps);
