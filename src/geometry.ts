@@ -91,6 +91,10 @@ export function route(
       const mx = e.x - s.x >= 16 ? (s.x + e.x) / 2 : s.x + 8;
       const c1 = { x: mx, y: s.y },
         c2 = { x: mx, y: e.y };
+      if (e.x - s.x < 16 && s.y === e.y) {
+        // One row: a straight line, since a detour would only double back.
+        return { id: p.id, d: `M ${s.x} ${s.y} H ${e.x}`, mid: { x: (s.x + e.x) / 2, y: s.y }, curve: [s, s, e, e] };
+      }
       if (e.x - s.x < 16) {
         const ex = e.x - 8,
           my = (s.y + e.y) / 2;

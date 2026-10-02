@@ -220,7 +220,6 @@ export const readMs = (say: unknown): number => {
 };
 /** How long a beat lasts. An explicit `ms` wins as written. Else the beat lasts `speed` plus the time to read `say`. */
 export const beatMs = (b: Beat, speed: number): number => b.ms ?? speed + readMs(b.say);
-/** The hold at the end of each step, before the next step starts. */
 /** The item the playhead rests on at beat `i`: the first dated id in the latest focus up to `i`, or undefined for home. */
 export const playheadItem = <T extends { id: string }>(items: T[], beats: { focus?: string[] }[], i: number): T | undefined => {
   for (let k = Math.min(i, beats.length - 1); k >= 0; k--) {
@@ -234,6 +233,7 @@ export const playheadItem = <T extends { id: string }>(items: T[], beats: { focu
 export const dateLabelRaised = (x: number, today: number | null | undefined, w: number, todayW: number): boolean =>
   today != null && x + 3 < today - 3 && x + 3 + w > today - 3 - todayW;
 
+/** The hold at the end of each step, before the next step starts. */
 export const STEP_HOLD_MS = 2000;
 export const nodes = (g: FigGroup): FigNode[] => g.children.flatMap((c) => (isGroup(c) ? nodes(c) : [c]));
 /** Lane layout constants, shared by both renderers: the gap between time columns, the padding inside a lane, and the gap between lanes. */

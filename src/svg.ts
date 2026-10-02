@@ -740,7 +740,6 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
       const pts: [number, number][] = [[0, home]];
       const dates: { a: number; b: number; d: string; x: number }[] = []; // the label date in each time span
       let at = home;
-      let atDate = tl.lastDate;
       segs.forEach((s, i) => {
         const item = playheadItem(tl.items, beats[s.si], s.bi);
         const to = item ? startOf.get(item.id)! : home;
@@ -750,12 +749,10 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
         pts.push([s.t0, at], [Math.min(s.t0 + RAMP, end), to], [end, to]);
         dates.push({ a: s.t0, b: end, d: date, x: to });
         at = to;
-        atDate = date;
         if (last) {
           pts.push([Math.min(end + RAMP, s.t1), home], [s.t1, home]);
           dates.push({ a: end, b: s.t1, d: tl.lastDate, x: home });
           at = home;
-          atDate = tl.lastDate;
         }
       });
       const name = `a${seen.size}`;
@@ -773,7 +770,7 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
           css.push(`@keyframes ${nm} { ${fr} }\n.${nm} { animation: ${nm} ${n2(total)}s infinite step-end; }`);
         }
         // A label that would meet "today" moves to the tick row.
-        const raised = dateLabelRaised(dates.find((x) => x.d === d)!.x, tl.today, textWidth(d, 11, true), textWidth('today', 11, true));
+        const raised = dateLabelRaised(dates.find((x) => x.d === d)!.x, tl.today, textWidth(d, 11), textWidth('today', 11));
         return `<text x="${n2(lx + 3)}" y="${n2(top.y + (raised ? 10 : 22))}" opacity="0"${cls('today', seen.get(key))}>${esc(d)}</text>`;
       });
       todaySvg += `<g${cls(name)}><path d="M ${n2(lx)} ${n2(top.y + 12)} V ${bottom}" stroke="var(--accent)" stroke-width="1.5"/>${labels.join('')}</g>`;

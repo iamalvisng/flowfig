@@ -685,7 +685,7 @@ export function Flow({
                   style={{
                     position: 'absolute',
                     left: 3,
-                    top: dateLabelRaised(at, timelineFig.today, textWidth(dateText, 11, true), textWidth('today', 11, true)) ? -13 : -1,
+                    top: dateLabelRaised(at, timelineFig.today, textWidth(dateText, 11), textWidth('today', 11)) ? -13 : -1,
                     fontSize: 11,
                     lineHeight: '11px',
                     fontWeight: 600,
