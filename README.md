@@ -16,6 +16,30 @@
 
 </div>
 
+## Use it
+
+Set up your repo:
+
+```bash
+npx flowfig init
+```
+
+Then start a new agent session. In Claude Code, run:
+
+```
+/figure how does login work
+```
+
+With any agent, ask in plain words:
+
+```
+draw a diagram of how login works in this repo
+use flowfig to draw the checkout flow as a sequence
+draw the refund process with a lane for each team
+```
+
+The agent writes an SVG. Open the SVG in a browser to see the animation.
+
 ## One command
 
 ```bash
@@ -30,17 +54,6 @@ checks the figure itself with `check --strict` and `verify`, and removes the spe
 and the cost of the run. `draw` needs Claude Code on the machine and a login. `draw` does not run on Windows yet.
 `--out` sets the path (it must end in `.svg`), `--model` sets the model, `--max-turns` sets the turn cap (default 40) and
 `--json` prints `{ out, reply, cost, session, findings }` for scripts.
-
-## Quick start
-
-```bash
-npx flowfig init
-```
-
-Then ask your agent: "draw a diagram of how login works in this repo".
-
-`init` writes the flowfig instructions for the agents that your repo uses. The agent reads the code, writes a spec, runs
-`flowfig check`, fixes the faults, and renders the SVG.
 
 ## The problem
 
