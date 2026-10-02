@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -268,6 +268,37 @@ test('Ctrl-C stops the run, stops the browser and removes the temp folder', { sk
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// A private TMPDIR makes the temp folder and the browser command line belong to this run only.
+for (const delay of [50, 300]) {
+  test(`Ctrl-C ${delay} ms after the browser start begins leaves no browser and no temp folder`, { skip }, async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'gif-e2e-'));
+    const priv = join(dir, 'tmp');
+    mkdirSync(priv);
+    const left = () => readdirSync(priv).filter((n) => n.startsWith('flowfig-gif-'));
+    const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
+    const browsers = () => spawnSync('pgrep', ['-f', priv]).status === 0;
+    try {
+      const svg = render(dir, 'one', ONE);
+      const child = spawn(process.execPath, [cli, 'gif', svg, '--fps', '50'], { stdio: 'ignore', env: { ...process.env, TMPDIR: priv } });
+      const exited = new Promise((done) => child.once('exit', (code, signal) => done(code ?? signal)));
+      // The handler is set in the same tick as the temp folder, so wait for the folder (slow machines start late).
+      for (let i = 0; i < 200 && left().length === 0; i++) await sleep(25);
+      assert.equal(left().length, 1, 'the run made no temp folder');
+      await sleep(delay);
+      child.kill('SIGINT');
+      assert.equal(await exited, 130);
+      assert.equal(existsSync(join(dir, 'one.gif')), false);
+      assert.deepEqual(left(), []);
+      // The kill of the browser group can take a moment to show.
+      for (let i = 0; i < 100 && browsers(); i++) await sleep(50);
+      assert.equal(browsers(), false, 'a browser of this run still runs');
+    } finally {
+      spawnSync('pkill', ['-9', '-f', priv]);
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+}
 
 test('gif --step 1 writes <name>-step1.gif and keeps <name>.gif', { skip }, () => {
   const dir = mkdtempSync(join(tmpdir(), 'gif-e2e-'));
