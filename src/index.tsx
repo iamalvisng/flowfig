@@ -38,6 +38,8 @@ import {
   toBeat,
   beatMs,
   STEP_HOLD_MS,
+  playheadItem,
+  dateLabelRaised,
   type FigContent,
   type FigGroup,
   type FigNode,
@@ -474,7 +476,7 @@ export function Flow({
       ? [edges[hoverEdgeIdx].from, edges[hoverEdgeIdx].to]
       : hover
         ? [hover]
-        : [...(step?.nodes ?? []), ...Object.keys(shown), ...(cur?.light ?? [])],
+        : [...(step?.nodes ?? []), ...Object.keys(shown), ...(cur?.light ?? []), ...(cur?.focus ?? [])],
   );
   edges.forEach((e, i) => {
     if (litEdges.has(ids[i])) litNodes.add(e.from).add(e.to);
@@ -571,8 +573,8 @@ export function Flow({
   const renderItem = (item: FigNode | FigGroup, depth: number): ReactNode => {
     if (timelineFig && item === layout) {
       const lanesList = layout.children as FigGroup[];
-      // The playhead follows the first dated item the current beat focuses, and rests at the last date otherwise.
-      const focused = holding || still ? undefined : timelineFig.items.find((i) => (cur?.focus ?? []).includes(i.id));
+      // The playhead follows the latest dated focus in the step, and rests at the last date before one and in the hold.
+      const focused = holding || still ? undefined : playheadItem(timelineFig.items, beats, beat);
       const home = timelineFig.last ?? 0;
       const at = focused ? focused.x + (focused.milestone ? focused.w / 2 : 0) : home;
       const dateText = focused ? focused.date : timelineFig.lastDate;
@@ -683,7 +685,7 @@ export function Flow({
                   style={{
                     position: 'absolute',
                     left: 3,
-                    top: -1,
+                    top: dateLabelRaised(at, timelineFig.today, textWidth(dateText, 11, true), textWidth('today', 11, true)) ? -13 : -1,
                     fontSize: 11,
                     lineHeight: '11px',
                     fontWeight: 600,
