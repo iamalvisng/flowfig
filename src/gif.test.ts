@@ -268,3 +268,38 @@ test('Ctrl-C stops the run, stops the browser and removes the temp folder', { sk
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('gif --step 1 writes <name>-step1.gif and keeps <name>.gif', { skip }, () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gif-e2e-'));
+  try {
+    const two = { props: { ...ONE.props, steps: [...ONE.props.steps, { label: 'read', flow: [{ edges: 'w', back: true }] }] } };
+    const svg = render(dir, 'two', two);
+    const r = gif([svg, '--step', '1', '--fps', '5', '--scale', '1']);
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stdout, /two-step1\.gif — /);
+    assert.ok(existsSync(join(dir, 'two-step1.gif')));
+    assert.equal(existsSync(join(dir, 'two.gif')), false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('gif --mp4 writes the MP4 with ffmpeg, and only the GIF without ffmpeg', { skip }, () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gif-e2e-'));
+  try {
+    const svg = render(dir, 'one', ONE);
+    // An empty PATH hides ffmpeg. The browser path does not use PATH.
+    const none = gif([svg, '--fps', '2', '--scale', '1', '--mp4'], { ...process.env, PATH: '' });
+    assert.equal(none.status, 0, none.stderr);
+    assert.match(none.stderr, /gif: no ffmpeg on the PATH, so no MP4\. The GIF is written\./);
+    assert.ok(existsSync(join(dir, 'one.gif')));
+    assert.equal(existsSync(join(dir, 'one.mp4')), false);
+    if (spawnSync('ffmpeg', ['-version']).error) return;
+    const r = gif([svg, '--fps', '2', '--scale', '1', '--mp4']);
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stdout, /one\.gif — 7 frames, .*\n.*one\.mp4 — 7 frames, /);
+    assert.ok(existsSync(join(dir, 'one.mp4')));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

@@ -390,8 +390,10 @@ test('gif exits 2 for bad use, before a browser starts', () => {
   const dir = mkdtempSync(join(tmpdir(), 'figure-svg-'));
   try {
     const one = join(dir, 'one.svg'),
+      none = join(dir, 'none.svg'),
       plain = join(dir, 'plain.svg');
     execFileSync('node', [cli, '-', one], { input: JSON.stringify(SPEC) });
+    execFileSync('node', [cli, '-', none, '--no-check'], { input: JSON.stringify({ props: { ...SPEC.props, steps: [] } }) });
     writeFileSync(plain, '<svg xmlns="http://www.w3.org/2000/svg"></svg>');
     // A missing CHROME_PATH: the run can never reach a real browser.
     const env = { ...process.env, CHROME_PATH: join(dir, 'no-such-chrome') };
@@ -403,6 +405,10 @@ test('gif exits 2 for bad use, before a browser starts', () => {
       [[one, '--fps', '60'], /--fps needs a whole number from 1 to 50/],
       [[one, '--fps', '2.5'], /--fps needs a whole number from 1 to 50/],
       [[one, '--scale', '0'], /--scale needs a positive number/],
+      [[one, '--step', '9'], /--step needs a whole number from 1 to 1/],
+      [[one, '--step', '1.5'], /--step needs a whole number from 1 to 1/],
+      [[none, '--step', '1'], /none\.svg: --step needs a figure with steps; this figure has 0/],
+      [[plain, '--step', '1'], /plain\.svg: no figure spec inside this SVG/],
       [[plain], /plain\.svg: no width and height on the <svg> element/],
       [[one, join(dir, 'no', 'such', 'out.gif')], /out\.gif: the folder does not exist/],
       [[one], /gif needs Chrome, Edge, Chromium or Brave\. Checked:\n.*no-such-chrome\nSet CHROME_PATH to the browser program\./],

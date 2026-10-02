@@ -22,7 +22,8 @@
  *
  * Every rendered SVG carries its own spec in <metadata>, so a figure is editable later without anyone having to keep the JSON.
  */
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -38,7 +39,7 @@ import { decodePng } from './png.ts';
 import { diff, formatDiff } from './diff.ts';
 import { loadSpec, reportLines, sortFindings, specOf, svgWithSpec } from './load.ts';
 import type { FlowProps } from './model.ts';
-import { check, type Finding } from './svg.ts';
+import { check, toSvg, type Finding } from './svg.ts';
 import { links, verify, type Link } from './verify.ts';
 
 const USAGE = `usage: flowfig <-|spec.json|figure.ts> [out.svg] [--open]   render a figure; a spec on stdin with -
@@ -161,9 +162,11 @@ if (args[0] === 'diff') {
 
 if (args[0] === 'gif') {
   args.shift();
-  const dark = flag('--dark');
+  const dark = flag('--dark'),
+    mp4 = flag('--mp4');
   const fps = value('--fps') ?? 20,
-    scale = value('--scale') ?? 2;
+    scale = value('--scale') ?? 2,
+    step = value('--step');
   if (!Number.isInteger(fps) || fps > 50) usage('--fps needs a whole number from 1 to 50');
   const unknown = args.find((a) => a.startsWith('-'));
   if (unknown) usage(`unknown flag ${unknown}`);
@@ -176,7 +179,21 @@ if (args[0] === 'gif') {
   } catch (e) {
     usage(`${path}: ${(e as Error).message}`);
   }
-  const out = outArg ?? path.replace(/\.svg$/, '.gif');
+  if (step !== undefined) {
+    // One step only: render the spec again with that step, so the loop holds that step alone.
+    const props = (() => {
+      try {
+        return loadSpec(path);
+      } catch (e) {
+        return usage((e as Error).message);
+      }
+    })();
+    const count = props.steps?.length ?? 0;
+    if (!count) usage(`${path}: --step needs a figure with steps; this figure has 0`);
+    if (!Number.isInteger(step) || step > count) usage(`--step needs a whole number from 1 to ${count}`);
+    svg = toSvg({ ...props, steps: [props.steps![step - 1]] });
+  }
+  const out = outArg ?? path.replace(/\.svg$/, step === undefined ? '.gif' : `-step${step}.gif`);
   const size = /<svg\b[^>]*?\swidth="([\d.]+)"[^>]*?\sheight="([\d.]+)"/.exec(svg);
   if (!size) usage(`${path}: no width and height on the <svg> element`);
   if (!existsSync(dirname(resolve(out)))) usage(`${out}: the folder does not exist`);
@@ -216,6 +233,23 @@ if (args[0] === 'gif') {
       console.error(
         `warning: ${out} is ${(gif.length / 1048576).toFixed(1)} MB, over 10 MB. Try --step <n>, a lower --fps or a lower --scale.`,
       );
+    if (mp4) {
+      const mp4Path = out.replace(/(\.gif)?$/, '.mp4');
+      if (spawnSync('ffmpeg', ['-version']).error) console.error('gif: no ffmpeg on the PATH, so no MP4. The GIF is written.');
+      else {
+        // yuv420p needs an even width and height, so the pad filter adds a pixel where needed.
+        const ff = spawnSync(
+          'ffmpeg',
+          [
+            ...['-y', '-loglevel', 'error', '-f', 'image2pipe', '-framerate', String(fps), '-c:v', 'png', '-i', '-'],
+            ...['-vf', 'pad=ceil(iw/2)*2:ceil(ih/2)*2', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', mp4Path],
+          ],
+          { input: Buffer.concat(pngs), maxBuffer: 64 * 1024 * 1024 },
+        );
+        if (ff.status !== 0) throw new Error(`ffmpeg failed: ${String(ff.stderr).trim()}`);
+        console.log(line(mp4Path, pngs.length, statSync(mp4Path).size));
+      }
+    }
   } catch (e) {
     if (!interrupted) console.error(`gif: ${(e as Error).message}`);
     code = 1;
