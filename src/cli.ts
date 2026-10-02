@@ -14,6 +14,7 @@
  *   flowfig init [dir]                   # write flowfig instructions for the coding agents of a repo
  *   flowfig draw "<question>" [--out out.svg]   # ask Claude Code for a figure, then check it
  *   flowfig open figure.svg              # show the figure in the default browser
+ *   flowfig gif figure.svg [out.gif]     # write an animated GIF of the figure (needs Chrome, Edge, Chromium or Brave)
  *
  * A render checks first and writes nothing on an error (--no-check skips that). --strict makes warnings errors; --width and
  * --min-text set the page width and the smallest text the reader should get.
@@ -21,14 +22,19 @@
  *
  * Every rendered SVG carries its own spec in <metadata>, so a figure is editable later without anyone having to keep the JSON.
  */
-import { readFileSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { basename, dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { captureFrames, findBrowser, launch } from './browser.ts';
+import { delays, encodeGif } from './gif.ts';
 import { GUIDE } from './guide.ts';
 import { runDraw } from './draw.ts';
 import { runInit } from './init.ts';
 import { serve } from './mcp.ts';
 import { openedLine, openSvg, runOpen } from './open.ts';
+import { pageHtml } from './page.ts';
+import { decodePng } from './png.ts';
 import { diff, formatDiff } from './diff.ts';
 import { loadSpec, reportLines, sortFindings, specOf, svgWithSpec } from './load.ts';
 import type { FlowProps } from './model.ts';
@@ -45,6 +51,7 @@ const USAGE = `usage: flowfig <-|spec.json|figure.ts> [out.svg] [--open]   rende
        flowfig init [dir] [--agents <ids>] [-y] [--global] [--dry-run] [--no-mcp]   write flowfig instructions for the coding agents of a repo
        flowfig draw "<question>" [--out <path>] [--model <alias>] [--max-turns <n>] [--json] [--open]   ask Claude Code for a figure, then check it
        flowfig open <figure.svg> [--html <path>]          show the figure in the default browser
+       flowfig gif <figure.svg> [out.gif] [--step <n>] [--dark] [--fps <n>] [--scale <n>] [--mp4]   write an animated GIF
 flags for render and check: --strict (warnings are errors), --json, --width <px>, --min-text <px>, --no-check (render only)`;
 /** Bad use, not a bad figure: exit 2 with a message, not a stack trace. A declaration, so TypeScript narrows after a call. */
 function usage(message: string): never {
@@ -150,6 +157,73 @@ if (args[0] === 'diff') {
   const changes = diff(await load(args[0]), await load(args[1]));
   console.log(json ? JSON.stringify(changes, null, 2) : formatDiff(changes, md ? 'md' : 'text'));
   process.exit(0);
+}
+
+if (args[0] === 'gif') {
+  args.shift();
+  const dark = flag('--dark');
+  const fps = value('--fps') ?? 20,
+    scale = value('--scale') ?? 2;
+  if (!Number.isInteger(fps) || fps > 50) usage('--fps needs a whole number from 1 to 50');
+  const unknown = args.find((a) => a.startsWith('-'));
+  if (unknown) usage(`unknown flag ${unknown}`);
+  const [path, outArg] = args;
+  if (!path) usage('usage: flowfig gif <figure.svg> [out.gif] [--step <n>] [--dark] [--fps <n>] [--scale <n>] [--mp4]');
+  if (!path.endsWith('.svg')) usage(`${path}: expected a .svg path`);
+  let svg = '';
+  try {
+    svg = readFileSync(path, 'utf8');
+  } catch (e) {
+    usage(`${path}: ${(e as Error).message}`);
+  }
+  const out = outArg ?? path.replace(/\.svg$/, '.gif');
+  const size = /<svg\b[^>]*?\swidth="([\d.]+)"[^>]*?\sheight="([\d.]+)"/.exec(svg);
+  if (!size) usage(`${path}: no width and height on the <svg> element`);
+  if (!existsSync(dirname(resolve(out)))) usage(`${out}: the folder does not exist`);
+  const found = findBrowser({ platform: process.platform, env: process.env, exists: existsSync });
+  if (!found.path)
+    usage(['gif needs Chrome, Edge, Chromium or Brave. Checked:', ...found.checked, 'Set CHROME_PATH to the browser program.'].join('\n'));
+  const line = (file: string, frames: number, bytes: number) =>
+    `${file} — ${frames} frame${frames === 1 ? '' : 's'}, ${(frames / fps).toFixed(1)} s, ${(bytes / 1048576).toFixed(1)} MB`;
+
+  const temp = mkdtempSync(join(tmpdir(), 'flowfig-gif-'));
+  let close = async () => {};
+  const cleanup = async () => {
+    await close();
+    // The retries cover Windows, where the browser can hold a file lock for a short time after the exit.
+    rmSync(temp, { recursive: true, force: true, maxRetries: 3 });
+  };
+  let interrupted = false;
+  const onSigint = () => {
+    interrupted = true;
+    void cleanup().finally(() => process.exit(130));
+  };
+  process.once('SIGINT', onSigint);
+  let code = 0;
+  try {
+    const page = join(temp, 'page.html');
+    writeFileSync(page, pageHtml(svg, basename(path)));
+    const browser = await launch(found.path, join(temp, 'profile'));
+    close = browser.close;
+    const viewport = { width: Math.ceil(Number(size[1])), height: Math.ceil(Number(size[2])) };
+    const { pngs } = await captureFrames(browser.cdp, page, { ...viewport, scale, fps, dark });
+    const wait = delays(pngs.length, fps);
+    // The GIF keeps the PNG bytes, not the pixels: a decoded 2400 x 1600 frame is 15 MB.
+    const gif = encodeGif(pngs.map((png, i) => ({ load: () => decodePng(png), delay: wait[i] })));
+    writeFileSync(out, gif);
+    console.log(line(out, pngs.length, gif.length));
+    if (gif.length > 10485760)
+      console.error(
+        `warning: ${out} is ${(gif.length / 1048576).toFixed(1)} MB, over 10 MB. Try --step <n>, a lower --fps or a lower --scale.`,
+      );
+  } catch (e) {
+    if (!interrupted) console.error(`gif: ${(e as Error).message}`);
+    code = 1;
+  } finally {
+    process.off('SIGINT', onSigint);
+    await cleanup();
+  }
+  process.exit(interrupted ? 130 : code);
 }
 
 const command = args[0] === 'check' ? args.shift()! : 'render';

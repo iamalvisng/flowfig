@@ -1,6 +1,7 @@
 // The capture browser of `flowfig gif`: find it, start it in headless mode, and talk CDP to it over a pipe. Node only.
 import { spawn } from 'node:child_process';
 import { win32 } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import type { Readable, Writable } from 'node:stream';
 
 export type Found = { path: string | null; checked: string[] };
@@ -171,4 +172,60 @@ export function launch(path: string, profile: string, timeoutMs = 30_000): Promi
       throw e;
     },
   );
+}
+
+export type Capture = { pngs: Buffer[]; width: number; height: number; loopMs: number };
+
+/** Load the page, pause the animations and take one PNG per frame time. */
+export async function captureFrames(
+  cdp: Cdp,
+  pagePath: string,
+  o: { width: number; height: number; scale: number; fps: number; dark: boolean },
+): Promise<Capture> {
+  const { targetId } = await cdp.send('Target.createTarget', { url: 'about:blank' });
+  const { sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true });
+  const send = (method: string, params?: object) => cdp.send(method, params, sessionId);
+  const run = async (expression: string) => {
+    const r = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
+    if (r.exceptionDetails) throw new Error(`Runtime.evaluate: ${r.exceptionDetails.exception?.description ?? r.exceptionDetails.text}`);
+    return r.result.value;
+  };
+  await send('Emulation.setDeviceMetricsOverride', { width: o.width, height: o.height, deviceScaleFactor: o.scale, mobile: false });
+  // The figure picks its theme with a media query, so the run sets the query and leaves the SVG as it is.
+  await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: o.dark ? 'dark' : 'light' }] });
+  await send('Page.enable');
+  // Wait for the load event before the navigation starts, so the event cannot come first.
+  const loaded = cdp.once('Page.loadEventFired', sessionId);
+  loaded.catch(() => {}); // the await below reports the error; this stops an unhandled rejection
+  const nav = await send('Page.navigate', { url: pathToFileURL(pagePath).href });
+  if (nav.errorText) throw new Error(`Page.navigate: ${nav.errorText}`);
+  await loaded;
+  // CSS animations are in getAnimations(). The packet moves with SMIL, which only the <svg> element controls.
+  const info = await run(`(async () => {
+    await document.fonts.ready;
+    const svg = document.querySelector('svg');
+    const css = document.getAnimations();
+    for (const a of css) a.pause();
+    svg.pauseAnimations();
+    let loop = 0;
+    for (const a of css) loop = Math.max(loop, Number(a.effect.getTiming().duration) || 0);
+    for (const m of svg.querySelectorAll('animate, animateMotion, animateTransform, set'))
+      try { loop = Math.max(loop, m.getSimpleDuration() * 1000); } catch {}
+    const r = svg.getBoundingClientRect();
+    return { loop, x: r.x, y: r.y, width: r.width, height: r.height };
+  })()`);
+  const n = Math.max(1, Math.round((info.loop * o.fps) / 1000));
+  const clip = { x: info.x, y: info.y, width: info.width, height: info.height, scale: 1 };
+  const pngs: Buffer[] = [];
+  for (let i = 0; i < n; i++) {
+    const t = (i * 1000) / o.fps;
+    await run(`(() => {
+      for (const a of document.getAnimations()) a.currentTime = ${t};
+      document.querySelector('svg').setCurrentTime(${t / 1000});
+      return new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    })()`);
+    const { data } = await send('Page.captureScreenshot', { format: 'png', clip });
+    pngs.push(Buffer.from(data, 'base64'));
+  }
+  return { pngs, width: Math.round(info.width * o.scale), height: Math.round(info.height * o.scale), loopMs: info.loop };
 }

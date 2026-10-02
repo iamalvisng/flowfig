@@ -385,3 +385,34 @@ test('a render with --open opens the SVG; check --open and a failed render open 
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('gif exits 2 for bad use, before a browser starts', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'figure-svg-'));
+  try {
+    const one = join(dir, 'one.svg'),
+      plain = join(dir, 'plain.svg');
+    execFileSync('node', [cli, '-', one], { input: JSON.stringify(SPEC) });
+    writeFileSync(plain, '<svg xmlns="http://www.w3.org/2000/svg"></svg>');
+    // A missing CHROME_PATH: the run can never reach a real browser.
+    const env = { ...process.env, CHROME_PATH: join(dir, 'no-such-chrome') };
+    const cases: [string[], RegExp][] = [
+      [[], /usage: flowfig gif/],
+      [['x.txt'], /x\.txt: expected a \.svg path/],
+      [[join(dir, 'missing.svg')], /missing\.svg: ENOENT/],
+      [[one, '--loop'], /unknown flag --loop/],
+      [[one, '--fps', '60'], /--fps needs a whole number from 1 to 50/],
+      [[one, '--fps', '2.5'], /--fps needs a whole number from 1 to 50/],
+      [[one, '--scale', '0'], /--scale needs a positive number/],
+      [[plain], /plain\.svg: no width and height on the <svg> element/],
+      [[one, join(dir, 'no', 'such', 'out.gif')], /out\.gif: the folder does not exist/],
+      [[one], /gif needs Chrome, Edge, Chromium or Brave\. Checked:\n.*no-such-chrome\nSet CHROME_PATH to the browser program\./],
+    ];
+    for (const [args, message] of cases) {
+      const r = spawnSync('node', [cli, 'gif', ...args], { encoding: 'utf8', env });
+      assert.equal(r.status, 2, `${args.join(' ')}: ${r.stderr}`);
+      assert.match(r.stderr, message);
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
