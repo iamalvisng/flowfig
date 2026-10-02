@@ -18,6 +18,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { AGENTS, MCP_ENTRY, detect, registerMcp, renderList, toggle } from './init.ts';
+import { keyStep, screen, type PickState } from './picker.ts';
 import { SKILL_DESCRIPTION } from './guide.ts';
 
 const cli = join(dirname(dirname(fileURLToPath(import.meta.url))), 'scripts', 'figure-svg.mjs');
@@ -383,4 +384,69 @@ test('--dry-run lists CLAUDE.md; --global writes no CLAUDE.md', () => {
     rmSync(dir, { recursive: true, force: true });
     rmSync(home, { recursive: true, force: true });
   }
+});
+
+const ROWS = [
+  { id: 'claude', name: 'Claude Code', detected: true, files: ['.claude/skills/figure/SKILL.md', 'CLAUDE.md', '.mcp.json'] },
+  { id: 'agents', name: 'AGENTS.md', detected: false, files: ['AGENTS.md'] },
+];
+const state = (over: Partial<PickState> = {}): PickState => ({ rows: ROWS, sel: new Set(['claude']), mcp: true, cursor: 0, ...over });
+const asState = (r: ReturnType<typeof keyStep>) => r as PickState;
+
+test('keyStep: move wraps, space toggles an agent and the MCP row, a toggles all', () => {
+  assert.equal(asState(keyStep(state(), { name: 'down' })).cursor, 1);
+  assert.equal(asState(keyStep(state({ cursor: 2 }), { name: 'j' })).cursor, 0);
+  assert.equal(asState(keyStep(state(), { name: 'up' })).cursor, 2);
+  assert.equal(asState(keyStep(state({ cursor: 1 }), { name: 'k' })).cursor, 0);
+  assert.deepEqual([...asState(keyStep(state({ cursor: 1 }), { name: 'space' })).sel].sort(), ['agents', 'claude']);
+  assert.deepEqual([...asState(keyStep(state(), { name: 'space' })).sel], []);
+  assert.equal(asState(keyStep(state({ cursor: 2 }), { name: 'space' })).mcp, false);
+  assert.deepEqual([...asState(keyStep(state(), { name: 'a' })).sel].sort(), ['agents', 'claude']);
+  assert.deepEqual([...asState(keyStep(state({ sel: new Set(['claude', 'agents']) }), { name: 'a' })).sel], []);
+  assert.equal(keyStep(state(), { name: 'x' }) !== 'cancel', true);
+});
+
+test('keyStep: Enter confirms; Esc, q and Ctrl-C cancel', () => {
+  assert.equal(keyStep(state(), { name: 'return' }), 'confirm');
+  assert.equal(keyStep(state(), { name: 'escape' }), 'cancel');
+  assert.equal(keyStep(state(), { name: 'q' }), 'cancel');
+  assert.equal(keyStep(state(), { name: 'c', ctrl: true }), 'cancel');
+});
+
+test('screen with colour off: exact lines, and no escape code', () => {
+  const lines = screen(state(), { color: false, width: 100 });
+  assert.equal(lines.join('\n').includes('\x1b'), false);
+  assert.equal(lines.length, 5 + 1 + 1 + 1 + 2 + 1 + 1 + 1 + 1);
+  assert.deepEqual(lines.slice(5), [
+    '',
+    'Pick the coding agents that should draw diagrams in this repo.',
+    '',
+    '› [x] Claude Code  .claude/skills/figure/SKILL.md, CLAUDE.md, .mcp.json',
+    '  [ ] AGENTS.md   (not detected)  AGENTS.md',
+    '─'.repeat(40),
+    '  [x] MCP server   register flowfig in the MCP file of each agent',
+    '',
+    '↑↓ move · space toggle · a all · enter confirm · esc cancel',
+  ]);
+});
+
+test('screen with colour on: the banner uses 24-bit colour from #4da3ff to #0074d9', () => {
+  const lines = screen(state(), { color: true, width: 100 });
+  assert.ok(lines[0].startsWith('\x1b[38;2;77;163;255m'));
+  assert.ok(lines[4].startsWith('\x1b[38;2;0;116;217m'));
+});
+
+test('screen: a narrow terminal gets the plain word, and a long row is cut', () => {
+  const narrow = screen(state(), { color: false, width: 30 });
+  assert.equal(narrow[0], 'flowfig');
+  assert.equal(narrow[1], '');
+  assert.ok(narrow.every((l) => l.length <= 29));
+  assert.ok(narrow.some((l) => l.endsWith('…')));
+  assert.match(screen(state(), { color: true, width: 30 })[0], /^\x1b\[1;38;2;77;163;255mflowfig/);
+});
+
+test('init prints a check mark for each finished write', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'flowfig-mark-'));
+  assert.match(run(['init', '--agents', 'agents', '--no-mcp'], dir).stdout, /^✓ created {3}.*AGENTS\.md/m);
+  assert.match(run(['init', '--agents', 'agents', '--no-mcp'], dir).stdout, /^✓ unchanged .*AGENTS\.md/m);
 });
