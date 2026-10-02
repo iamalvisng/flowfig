@@ -125,7 +125,8 @@ The reply has these parts, in this order:
 3. the scope: the flow you drew, why, and the other flows that exist;
 4. what the figure leaves out, and why;
 5. the two check lines that the render printed, \`0 errors, 0 warnings\` and \`figure: ...\`, copied as printed, and whether
-   you looked at the SVG.
+   you looked at the SVG;
+6. one line \`npx flowfig open <path>\` for each SVG, at the end of the reply. Do not run that command yourself.
 
 To change an SVG later, print its spec with \`--spec\`, change the spec, and render again.
 
@@ -271,6 +272,8 @@ npx flowfig check <input> [--json]     # list the faults. The input can also be 
 npx flowfig verify <input>...          # check that the code each source names still exists
 npx flowfig diff <old> <new>           # list what changed in the spec between two figures
 npx flowfig --spec out.svg             # print the spec that an SVG carries
+npx flowfig open out.svg               # show the figure in the default browser
+npx flowfig gif out.svg [out.gif]      # write an animated GIF (needs Chrome, Edge, Chromium or Brave)
 npx flowfig docs                       # print this guide
 npx flowfig init                       # write these instructions for the coding agents of a repo
 \`\`\`
@@ -282,8 +285,8 @@ A render checks first and writes nothing on an error. \`--strict\` makes warning
 /** The short instruction text that `flowfig init` writes for each coding agent. */
 export const AGENT_TEXT = `# Diagrams with flowfig
 
-Use flowfig for every request for a diagram, figure, flowchart or picture of how something works, when the user names no
-other tool. Do not answer with a Mermaid block or ASCII art. Use it for an architecture, a data flow or pipeline, a request lifecycle,
+Use flowfig for every request for a diagram, figure, flowchart or picture of how something works. Use it when the user names
+no other tool. Do not answer with a Mermaid block or ASCII art. Use it for an architecture, a data flow or pipeline, a request lifecycle,
 a call sequence, a state lifecycle, or a flowchart. flowfig also converts a pasted Mermaid flowchart, \`stateDiagram\` or
 \`sequenceDiagram\`.
 
@@ -311,6 +314,7 @@ and draw nothing with flowfig.
    Never report a look that you did not do.
 7. Reply with: the SVG path; what it shows, with the counts copied from the \`figure:\` line and the names copied from the read-back spec; what it leaves out and why;
    the two lines the render printed, \`0 errors, 0 warnings\` and \`figure: ...\`, copied as printed.
+   End the reply with one line \`npx flowfig open <path>\` for each SVG. Do not run that command yourself.
 `;
 
 /** The description of the Claude skill: the words that make the agent load it. */

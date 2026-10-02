@@ -50,7 +50,8 @@ use flowfig to draw the checkout flow as a sequence
 draw the refund process with a lane for each team
 ```
 
-The agent writes an SVG. Open the SVG in a browser to see the animation.
+The agent writes an SVG and ends its reply with `npx flowfig open <path>`. Run that command to see the animation in your
+browser.
 
 ## One command
 
@@ -65,7 +66,7 @@ checks the figure itself with `check --strict` and `verify`, and removes the spe
 `draw` exits 1 and shows the tool calls that the permission rules denied. `draw` prints the result, the reply of the agent
 and the cost of the run. `draw` needs Claude Code on the machine and a login. `draw` does not run on Windows yet.
 `--out` sets the path (it must end in `.svg`), `--model` sets the model, `--max-turns` sets the turn cap (default 40) and
-`--json` prints `{ out, reply, cost, session, findings }` for scripts.
+`--json` prints `{ out, reply, cost, session, findings }` for scripts. `--open` opens the figure in the default browser after the check.
 
 ## The problem
 
@@ -108,6 +109,7 @@ and the cost of the run. `draw` needs Claude Code on the machine and a login. `d
 - [Three forms](#three-forms)
 - [The spec](#the-spec)
 - [Check a figure](#check-a-figure)
+- [Open and share a figure](#open-and-share-a-figure)
 - [Verify in CI](#verify-in-ci)
 - [For teams](#for-teams)
 - [MCP server](#mcp-server)
@@ -328,6 +330,31 @@ A render runs the same check first. If the check finds an error, the render writ
 
 In React, `<Flow check />` runs the same rules on the layout that the browser drew. The player prints each fault with
 `console.warn`.
+
+## Open and share a figure
+
+`flowfig open` shows a figure in your default browser. On macOS, an `.svg` file often opens in a text editor or in Xcode. Thus
+`open` writes an HTML page that holds the SVG, and opens that page.
+
+```bash
+npx flowfig open docs/checkout.svg
+npx flowfig open docs/checkout.svg --html checkout.html    # also write the page to checkout.html
+npx flowfig docs/checkout.json docs/checkout.svg --open    # render, then open
+```
+
+`flowfig gif` writes an animated GIF of the whole loop. A GIF plays in Slack, Notion, X and slide decks, where an SVG
+animation does not play.
+
+```bash
+npx flowfig gif docs/checkout.svg                 # writes docs/checkout.gif
+npx flowfig gif docs/checkout.svg --step 2        # only step 2: writes docs/checkout-step2.gif
+npx flowfig gif docs/checkout.svg --dark --mp4    # the dark theme, and also docs/checkout.mp4
+```
+
+`gif` needs Chrome, Edge, Chromium or Brave in the standard install path. Set `CHROME_PATH` to use another browser program.
+`--fps` sets the frames per second (1 to 50, default 20). `--scale` sets the pixel scale (default 2). `--mp4` needs `ffmpeg`
+on the PATH. If a GIF is over 10 MB, `gif` prints a warning. Use `--step`, a lower `--fps` or a lower `--scale` to make the
+file smaller.
 
 ## Verify in CI
 

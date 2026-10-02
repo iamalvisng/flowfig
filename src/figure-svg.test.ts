@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { GUIDE } from './guide.ts';
+import { AGENT_TEXT, GUIDE } from './guide.ts';
 
 // The CLI is how a figure actually gets made, and its promise is that a spec never has to be kept:
 // it goes in on stdin and comes back out of the SVG.
@@ -421,4 +421,12 @@ test('gif exits 2 for bad use, before a browser starts', () => {
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('the guide and the agent text end the reply with npx flowfig open, and the guide lists open and gif', () => {
+  const sentence = 'one line `npx flowfig open <path>` for each SVG';
+  assert.ok(AGENT_TEXT.includes(`End the reply with ${sentence}. Do not run that command yourself.`));
+  assert.ok(GUIDE.includes(`6. ${sentence}, at the end of the reply. Do not run that command yourself.`));
+  assert.match(GUIDE, /\nnpx flowfig open out\.svg +# /);
+  assert.match(GUIDE, /\nnpx flowfig gif out\.svg \[out\.gif\] +# /);
 });
