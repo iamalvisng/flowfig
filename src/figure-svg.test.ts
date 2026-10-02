@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -374,13 +374,14 @@ test('a render with --open opens the SVG; check --open and a failed render open 
     const lines = r.stdout.trimEnd().split('\n');
     assert.equal(lines.length, 2);
     assert.ok(lines[0].startsWith(`${out} — `));
-    assert.equal(lines[1], `${join(dir, 'tmp', 'flowfig-open', 'out.html')} — opened in the default browser`);
+    assert.match(lines[1], /flowfig-open-[^/\\]+[/\\]out\.html — opened in the default browser$/);
     const c = go(['check', '-', '--open'], SPEC);
     assert.equal(c.status, 2);
     assert.match(c.stderr, /--open works with a render, not with check/);
-    rmSync(join(dir, 'tmp', 'flowfig-open'), { recursive: true });
+    const pages = () => readdirSync(join(dir, 'tmp')).filter((n) => n.startsWith('flowfig-open-'));
+    assert.equal(pages().length, 1);
     assert.equal(go(['-', join(dir, 'bad.svg'), '--open'], BAD).status, 1);
-    assert.equal(existsSync(join(dir, 'tmp', 'flowfig-open')), false);
+    assert.equal(pages().length, 1);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
