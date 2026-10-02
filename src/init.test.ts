@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import {
@@ -23,7 +23,14 @@ import { keyStep, screen, type PickState } from './picker.ts';
 import { SKILL_DESCRIPTION } from './guide.ts';
 
 const cli = join(dirname(dirname(fileURLToPath(import.meta.url))), 'scripts', 'figure-svg.mjs');
-const tmp = () => mkdtempSync(join(tmpdir(), 'flowfig-init-'));
+const made: string[] = [];
+// every folder goes on the list, so one hook removes them all, also after a failed test
+const tmp = (prefix = 'flowfig-init-') => {
+  const dir = mkdtempSync(join(tmpdir(), prefix));
+  made.push(dir);
+  return dir;
+};
+after(() => made.forEach((d) => rmSync(d, { recursive: true, force: true })));
 const run = (args: string[], cwd: string, env: Record<string, string> = {}, input?: string) =>
   spawnSync('node', [cli, ...args], { cwd, input, encoding: 'utf8', env: { ...process.env, ...env } });
 
@@ -445,7 +452,7 @@ test('screen: a narrow terminal gets the plain version line, and a long row is c
 });
 
 test('init prints a check mark for each finished write', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'flowfig-mark-'));
+  const dir = tmp('flowfig-mark-');
   assert.match(run(['init', '--agents', 'agents', '--no-mcp'], dir).stdout, /^✓ created   AGENTS\.md$/m);
   assert.match(run(['init', '--agents', 'agents', '--no-mcp'], dir).stdout, /^✓ unchanged AGENTS\.md$/m);
 });
