@@ -1,7 +1,6 @@
 // The capture browser of `flowfig gif`: find it, start it in headless mode, and talk CDP to it over a pipe. Node only.
 import { spawn } from 'node:child_process';
 import { win32 } from 'node:path';
-import { pathToFileURL } from 'node:url';
 import type { Readable, Writable } from 'node:stream';
 
 export type Found = { path: string | null; checked: string[] };
@@ -49,8 +48,8 @@ export function findBrowser(o: {
 }
 
 export type Cdp = {
-  send(method: string, params?: object, sessionId?: string): Promise<any>;
-  once(event: string, sessionId?: string): Promise<any>;
+  send(method: string, params?: object, sessionId?: string, timeoutMs?: number): Promise<any>;
+  once(event: string, sessionId?: string, timeoutMs?: number): Promise<any>;
 };
 
 type Waiter = { resolve: (v: any) => void; reject: (e: Error) => void };
@@ -130,17 +129,17 @@ export function launch(path: string, profile: string, timeoutMs = 30_000): Promi
   });
 
   /** A promise that rejects after the timeout; `add` registers the waiter, `drop` removes it. */
-  const timed = (label: string, add: (w: Waiter) => void, drop: () => void) =>
+  const timed = (label: string, add: (w: Waiter) => void, drop: () => void, ms = timeoutMs) =>
     new Promise<any>((resolve, reject) => {
       if (dead) return reject(dead);
       const timer = setTimeout(() => {
         drop();
-        reject(new Error(`${label}: no reply in ${timeoutMs / 1000} s`));
-      }, timeoutMs);
+        reject(new Error(`${label}: no reply in ${ms / 1000} s`));
+      }, ms);
       add({ resolve: (v) => (clearTimeout(timer), resolve(v)), reject: (e) => (clearTimeout(timer), reject(e)) });
     });
   const cdp: Cdp = {
-    send: (method, params = {}, sessionId) => {
+    send: (method, params = {}, sessionId, ms) => {
       const id = nextId++;
       return timed(
         method,
@@ -149,14 +148,16 @@ export function launch(path: string, profile: string, timeoutMs = 30_000): Promi
           out.write(JSON.stringify({ id, method, params, sessionId }) + '\0');
         },
         () => pending.delete(id),
+        ms,
       );
     },
-    once: (event, sessionId) => {
+    once: (event, sessionId, ms) => {
       let me: (typeof events)[number];
       return timed(
         event,
         (w) => events.push((me = { ...w, event, sessionId })),
         () => events.splice(events.indexOf(me), 1),
+        ms,
       );
     },
   };
@@ -176,10 +177,10 @@ export function launch(path: string, profile: string, timeoutMs = 30_000): Promi
 
 export type Capture = { pngs: Buffer[]; width: number; height: number; loopMs: number };
 
-/** Load the page, pause the animations and take one PNG per frame time. */
+/** Set the page, pause the animations and take one PNG per frame time. */
 export async function captureFrames(
   cdp: Cdp,
-  pagePath: string,
+  html: string,
   o: { width: number; height: number; scale: number; fps: number; dark: boolean },
 ): Promise<Capture> {
   const { targetId } = await cdp.send('Target.createTarget', { url: 'about:blank' });
@@ -193,13 +194,9 @@ export async function captureFrames(
   await send('Emulation.setDeviceMetricsOverride', { width: o.width, height: o.height, deviceScaleFactor: o.scale, mobile: false });
   // The figure picks its theme with a media query, so the run sets the query and leaves the SVG as it is.
   await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: o.dark ? 'dark' : 'light' }] });
-  await send('Page.enable');
-  // Wait for the load event before the navigation starts, so the event cannot come first.
-  const loaded = cdp.once('Page.loadEventFired', sessionId);
-  loaded.catch(() => {}); // the await below reports the error; this stops an unhandled rejection
-  const nav = await send('Page.navigate', { url: pathToFileURL(pagePath).href });
-  if (nav.errorText) throw new Error(`Page.navigate: ${nav.errorText}`);
-  await loaded;
+  // The page goes in as content, not as a file: a snap browser has a private /tmp and cannot read the temp folder.
+  const { frameTree } = await send('Page.getFrameTree');
+  await send('Page.setDocumentContent', { frameId: frameTree.frame.id, html });
   // CSS animations are in getAnimations(). The packet moves with SMIL, which only the <svg> element controls.
   const info = await run(`(async () => {
     await document.fonts.ready;
