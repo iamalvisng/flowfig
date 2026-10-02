@@ -17,6 +17,7 @@
  *
  * A render checks first and writes nothing on an error (--no-check skips that). --strict makes warnings errors; --width and
  * --min-text set the page width and the smallest text the reader should get.
+ * --open opens the rendered SVG in the default browser (render and draw).
  *
  * Every rendered SVG carries its own spec in <metadata>, so a figure is editable later without anyone having to keep the JSON.
  */
@@ -27,14 +28,14 @@ import { GUIDE } from './guide.ts';
 import { runDraw } from './draw.ts';
 import { runInit } from './init.ts';
 import { serve } from './mcp.ts';
-import { runOpen } from './open.ts';
+import { openedLine, openSvg, runOpen } from './open.ts';
 import { diff, formatDiff } from './diff.ts';
 import { loadSpec, reportLines, sortFindings, specOf, svgWithSpec } from './load.ts';
 import type { FlowProps } from './model.ts';
 import { check, type Finding } from './svg.ts';
 import { links, verify, type Link } from './verify.ts';
 
-const USAGE = `usage: flowfig <-|spec.json|figure.ts> [out.svg]   render a figure; a spec on stdin with -
+const USAGE = `usage: flowfig <-|spec.json|figure.ts> [out.svg] [--open]   render a figure; a spec on stdin with -
        flowfig check <-|spec.json|figure.ts|figure.svg>   list the faults; the input can be an SVG this wrote
        flowfig --spec figure.svg                          print the spec the SVG carries
        flowfig verify <input>... [--root <dir>] [--json] [--strict]   check the code links of one or more figures
@@ -42,7 +43,7 @@ const USAGE = `usage: flowfig <-|spec.json|figure.ts> [out.svg]   render a figur
        flowfig docs                                       print the guide (Markdown)
        flowfig mcp                                        serve check, render, verify, diff and docs over MCP (stdio)
        flowfig init [dir] [--agents <ids>] [-y] [--global] [--dry-run] [--no-mcp]   write flowfig instructions for the coding agents of a repo
-       flowfig draw "<question>" [--out <path>] [--model <alias>] [--max-turns <n>] [--json]   ask Claude Code for a figure, then check it
+       flowfig draw "<question>" [--out <path>] [--model <alias>] [--max-turns <n>] [--json] [--open]   ask Claude Code for a figure, then check it
        flowfig open <figure.svg> [--html <path>]          show the figure in the default browser
 flags for render and check: --strict (warnings are errors), --json, --width <px>, --min-text <px>, --no-check (render only)`;
 /** Bad use, not a bad figure: exit 2 with a message, not a stack trace. A declaration, so TypeScript narrows after a call. */
@@ -154,7 +155,9 @@ if (args[0] === 'diff') {
 const command = args[0] === 'check' ? args.shift()! : 'render';
 const json = flag('--json'),
   strict = flag('--strict'),
-  skip = flag('--no-check');
+  skip = flag('--no-check'),
+  open = flag('--open');
+if (command === 'check' && open) usage('--open works with a render, not with check');
 const opts = { width: value('--width'), minText: value('--min-text') };
 const unknown = args.find((a) => a.startsWith('-') && a !== '-');
 if (unknown) usage(`unknown flag ${unknown}`);
@@ -188,3 +191,11 @@ const dest = out ?? (input === '-' ? 'figure.svg' : input.replace(/\.[^./\\]+$/,
 const withSpec = svgWithSpec(props);
 writeFileSync(dest, withSpec);
 console.log(`${dest} — ${(withSpec.length / 1024).toFixed(1)} kB`);
+if (open) {
+  try {
+    console.log(openedLine((await openSvg(dest))[0]));
+  } catch (e) {
+    console.error(`open: ${(e as Error).message}`);
+    process.exit(1);
+  }
+}

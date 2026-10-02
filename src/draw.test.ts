@@ -190,3 +190,37 @@ test('draw exits 2 without a question, with an unknown flag, or without Claude C
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('draw --open opens the figure after the report, also with findings; --json sends the line to stderr', { skip: !posix }, () => {
+  const dir = mkdtempSync(join(tmpdir(), 'draw-'));
+  try {
+    fake(dir);
+    mkdirSync(join(dir, 'src'));
+    writeFileSync(join(dir, 'src', 'a.ts'), 'export const login = 1;');
+    mkdirSync(join(dir, 'tmp'));
+    const go = (mode: string, args: string[]) =>
+      spawnSync('node', [cli, 'draw', ...args, '--open'], {
+        cwd: dir,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          FLOWFIG_CLAUDE_BIN: join(dir, 'claude'),
+          FAKE_MODE: mode,
+          FAKE_LOG: join(dir, 'argv.log'),
+          FLOWFIG_OPENER: 'true',
+          TMPDIR: join(dir, 'tmp'),
+        },
+      });
+    const ok = go('ok', ['how does login work?', '--out', 'login.svg']);
+    assert.equal(ok.status, 0, ok.stdout + ok.stderr);
+    assert.ok(ok.stdout.endsWith(`${join(dir, 'tmp', 'flowfig-open', 'login.html')} — opened in the default browser\n`), ok.stdout);
+    const j = go('ok', ['how does login work?', '--out', 'login2.svg', '--json']);
+    assert.equal(JSON.parse(j.stdout).out, 'login2.svg');
+    assert.match(j.stderr, /login2\.html — opened in the default browser/);
+    const bad = go('bad', ['how does login work?', '--out', 'bad.svg']);
+    assert.equal(bad.status, 1);
+    assert.match(bad.stdout, /bad\.html — opened in the default browser/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

@@ -4,12 +4,13 @@ import { existsSync, mkdirSync, rmSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { AGENT_TEXT } from './guide.ts';
 import { loadSpec, reportLines, sortFindings } from './load.ts';
+import { openedLine, openSvg } from './open.ts';
 import { check } from './svg.ts';
 import { verify } from './verify.ts';
 
 const ALLOWED = 'Read,Glob,Grep,Bash(npx flowfig *)';
 const DISALLOWED = 'Edit,MultiEdit,NotebookEdit';
-const USAGE = 'usage: flowfig draw "<question>" [--out <path>] [--model <alias>] [--max-turns <n>] [--json]';
+const USAGE = 'usage: flowfig draw "<question>" [--out <path>] [--model <alias>] [--max-turns <n>] [--json] [--open]';
 
 /** A file name from the question: lower case, letters and digits, joined by -, at most 60 characters. */
 export function slug(question: string): string {
@@ -66,9 +67,10 @@ export async function runDraw(argv: string[]): Promise<number> {
     if (v === undefined) throw new Bad(`${n} needs a value`);
     return v;
   };
-  let json: boolean, outArg: string | undefined, model: string | undefined, turns: string | undefined;
+  let json: boolean, open: boolean, outArg: string | undefined, model: string | undefined, turns: string | undefined;
   try {
     json = flag('--json');
+    open = flag('--open');
     outArg = value('--out');
     model = value('--model');
     turns = value('--max-turns');
@@ -163,5 +165,17 @@ export async function runDraw(argv: string[]): Promise<number> {
     console.log(`agent: claude, $${cost === null ? '?' : cost.toFixed(4)}, session ${session ?? '?'}`);
   }
   stop();
-  return errors || stopped !== undefined ? 1 : 0;
+  let code = errors || stopped !== undefined ? 1 : 0;
+  // The SVG is on disk also with findings, so the user can look at it.
+  if (open) {
+    try {
+      const line = openedLine((await openSvg(full))[0]);
+      if (json) console.error(line);
+      else console.log(line);
+    } catch (e) {
+      console.error(`open: ${(e as Error).message}`);
+      code = 1;
+    }
+  }
+  return code;
 }
