@@ -269,7 +269,7 @@ export function Flow({
         };
       });
       const avoid: Rect[] = [];
-      el.querySelectorAll<HTMLElement>('[data-fig-label]').forEach((n) => {
+      el.querySelectorAll<HTMLElement>('[data-fig-outside]').forEach((n) => {
         const r = n.getBoundingClientRect();
         avoid.push({ x: (r.left - base.left) / k, y: (r.top - base.top) / k, w: r.width / k, h: r.height / k });
       });
@@ -519,7 +519,7 @@ export function Flow({
     const inside = it.labelInside;
     const outside = (
       <span
-        data-fig-label=""
+        data-fig-outside=""
         style={{ position: 'absolute', left: '100%', marginLeft: 6, whiteSpace: 'nowrap', fontSize: 13, fontWeight: 500, color: v('fg') }}
       >
         {label}
