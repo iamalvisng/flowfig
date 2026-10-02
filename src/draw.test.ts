@@ -213,7 +213,7 @@ test('draw --open opens the figure after the report, also with findings; --json 
       });
     const ok = go('ok', ['how does login work?', '--out', 'login.svg']);
     assert.equal(ok.status, 0, ok.stdout + ok.stderr);
-    assert.ok(ok.stdout.endsWith(`${join(dir, 'tmp', 'flowfig-open', 'login.html')} — opened in the default browser\n`), ok.stdout);
+    assert.match(ok.stdout, /flowfig-open-[^/\\]+[/\\]login\.html — opened in the default browser\n$/);
     const j = go('ok', ['how does login work?', '--out', 'login2.svg', '--json']);
     assert.equal(JSON.parse(j.stdout).out, 'login2.svg');
     assert.match(j.stderr, /login2\.html — opened in the default browser/);

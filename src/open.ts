@@ -1,6 +1,6 @@
 // `flowfig open`: show a figure in the default browser. An .svg file often opens in an editor; an .html page opens in a browser.
 import { spawn } from 'node:child_process';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { pageHtml } from './page.ts';
@@ -30,11 +30,11 @@ export function pageName(svgPath: string): string {
 /** The line that `open`, a render with `--open` and `draw --open` print. */
 export const openedLine = (page: string) => `${page} — opened in the default browser`;
 
-/** Write the page to the temp folder (and to `html`, if given), then start the opener. Returns the written paths. */
+/** Write the page to a new temp folder (and to `html`, if given), then start the opener. Returns the written paths. */
 export async function openSvg(svgPath: string, html?: string): Promise<string[]> {
   const page = pageHtml(readFileSync(svgPath, 'utf8'), basename(svgPath));
-  const dir = join(tmpdir(), 'flowfig-open');
-  mkdirSync(dir, { recursive: true });
+  // A fresh private folder (mode 0700): a fixed shared path lets another user plant a symlink there.
+  const dir = mkdtempSync(join(tmpdir(), 'flowfig-open-'));
   // The page stays after the exit: the browser reads it after the CLI stops.
   const temp = join(dir, pageName(svgPath));
   writeFileSync(temp, page);
@@ -44,7 +44,7 @@ export async function openSvg(svgPath: string, html?: string): Promise<string[]>
     ? { cmd: process.env.FLOWFIG_OPENER, args: [temp], verbatim: false }
     : openerFor(process.platform, temp);
   await new Promise<void>((resolve, reject) => {
-    const child = spawn(o.cmd, o.args, { detached: true, stdio: 'ignore', windowsVerbatimArguments: o.verbatim });
+    const child = spawn(o.cmd, o.args, { detached: true, windowsHide: true, stdio: 'ignore', windowsVerbatimArguments: o.verbatim });
     child.once('spawn', () => (child.unref(), resolve()));
     child.once('error', (e) => reject(new Error(`${e.message}. Open ${temp} in a browser.`)));
   });
