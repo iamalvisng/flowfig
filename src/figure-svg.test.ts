@@ -304,7 +304,7 @@ test('the browser entries import no Node built-in', () => {
     if (seen.has(file)) return;
     seen.add(file);
     const text = readFileSync(file, 'utf8');
-    assert.doesNotMatch(text, /from ['"]node:(fs|path)['"]/, file);
+    assert.doesNotMatch(text, /from ['"]node:/, file);
     for (const m of text.matchAll(/from ['"](\.[^'"]+)['"]/g)) walk(join(dirname(file), m[1]));
   };
   walk(join(dist, 'svg.js'));
