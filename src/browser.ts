@@ -1,5 +1,7 @@
 // The capture browser of `flowfig gif`: find it, start it in headless mode, and talk CDP to it over a pipe. Node only.
+import { spawn } from 'node:child_process';
 import { win32 } from 'node:path';
+import type { Readable, Writable } from 'node:stream';
 
 export type Found = { path: string | null; checked: string[] };
 
@@ -43,4 +45,130 @@ export function findBrowser(o: {
     if (o.exists(p)) return { path: p, checked };
   }
   return { path: null, checked };
+}
+
+export type Cdp = {
+  send(method: string, params?: object, sessionId?: string): Promise<any>;
+  once(event: string, sessionId?: string): Promise<any>;
+};
+
+type Waiter = { resolve: (v: any) => void; reject: (e: Error) => void };
+
+/** Start the capture browser in headless mode with a CDP pipe. `close` stops it and never throws. */
+export function launch(path: string, profile: string, timeoutMs = 30_000): Promise<{ cdp: Cdp; close: () => Promise<void> }> {
+  const args = [
+    '--headless=new',
+    '--remote-debugging-pipe',
+    `--user-data-dir=${profile}`,
+    '--no-first-run',
+    '--no-default-browser-check',
+    '--hide-scrollbars',
+    '--mute-audio',
+  ];
+  // Chrome refuses to start as root without it, for example in a Docker container.
+  if (process.getuid?.() === 0) args.push('--no-sandbox');
+  const child = spawn(path, [...args, 'about:blank'], {
+    stdio: ['ignore', 'ignore', 'pipe', 'pipe', 'pipe'],
+    // Its own process group, so close can stop the helpers too. Not on Windows: there it opens a console window.
+    detached: process.platform !== 'win32',
+  });
+  // The browser reads commands on fd 3 and writes replies on fd 4. A NUL byte ends each message.
+  const out = child.stdio[3] as Writable,
+    input = child.stdio[4] as Readable;
+  out.on('error', () => {}); // a write after the exit fails; the exit handler below rejects the commands
+  let tail = '',
+    dead: Error | null = null,
+    nextId = 1;
+  child.stderr!.on('data', (d: Buffer) => (tail = (tail + d.toString()).slice(-2048)));
+  const pending = new Map<number, Waiter & { method: string }>();
+  const events: (Waiter & { event: string; sessionId?: string })[] = [];
+  const stop = (e: Error) => {
+    dead ??= e;
+    for (const w of [...pending.values(), ...events.splice(0)]) w.reject(dead);
+    pending.clear();
+  };
+  // The browser starts helper processes in its process group. A helper can outlive the browser and keep a pipe open.
+  const killGroup = () => {
+    try {
+      if (process.platform === 'win32') child.kill('SIGKILL');
+      else if (child.pid) process.kill(-child.pid, 'SIGKILL');
+    } catch {
+      // the group is already gone
+    }
+  };
+  const closed = new Promise<void>((done) => {
+    const end = (e: Error) => (stop(e), done());
+    const stopped = (code: number | null) => new Error(`the browser stopped (exit ${code}): ${tail.trim()}`);
+    child.once('error', end);
+    child.once('exit', (code) => {
+      out.destroy(); // the write end of fd 3 does not close by itself, and 'close' waits for it
+      killGroup();
+      setTimeout(() => end(stopped(code)), 1000).unref(); // in case a pipe stays open after the group kill
+    });
+    child.once('close', (code) => end(stopped(code)));
+  });
+
+  let parts: Buffer[] = [];
+  input.on('data', (chunk: Buffer) => {
+    let start = 0;
+    for (let end = chunk.indexOf(0); end !== -1; start = end + 1, end = chunk.indexOf(0, start)) {
+      parts.push(chunk.subarray(start, end));
+      const msg = JSON.parse(Buffer.concat(parts).toString('utf8'));
+      parts = [];
+      if (msg.id !== undefined) {
+        const w = pending.get(msg.id);
+        pending.delete(msg.id);
+        if (msg.error) w?.reject(new Error(`${w.method}: ${msg.error.message}`));
+        else w?.resolve(msg.result);
+      } else {
+        const i = events.findIndex((w) => w.event === msg.method && w.sessionId === msg.sessionId);
+        if (i !== -1) events.splice(i, 1)[0].resolve(msg.params);
+      }
+    }
+    if (start < chunk.length) parts.push(chunk.subarray(start));
+  });
+
+  /** A promise that rejects after the timeout; `add` registers the waiter, `drop` removes it. */
+  const timed = (label: string, add: (w: Waiter) => void, drop: () => void) =>
+    new Promise<any>((resolve, reject) => {
+      if (dead) return reject(dead);
+      const timer = setTimeout(() => {
+        drop();
+        reject(new Error(`${label}: no reply in ${timeoutMs / 1000} s`));
+      }, timeoutMs);
+      add({ resolve: (v) => (clearTimeout(timer), resolve(v)), reject: (e) => (clearTimeout(timer), reject(e)) });
+    });
+  const cdp: Cdp = {
+    send: (method, params = {}, sessionId) => {
+      const id = nextId++;
+      return timed(
+        method,
+        (w) => {
+          pending.set(id, { ...w, method });
+          out.write(JSON.stringify({ id, method, params, sessionId }) + '\0');
+        },
+        () => pending.delete(id),
+      );
+    },
+    once: (event, sessionId) => {
+      let me: (typeof events)[number];
+      return timed(
+        event,
+        (w) => events.push((me = { ...w, event, sessionId })),
+        () => events.splice(events.indexOf(me), 1),
+      );
+    },
+  };
+  // No Browser.close: the profile is a temp folder with nothing to keep, and Chrome takes about 10 s to exit after it.
+  const close = async () => {
+    killGroup();
+    await closed;
+  };
+  return cdp.send('Browser.getVersion').then(
+    () => ({ cdp, close }),
+    async (e) => {
+      await close();
+      throw e;
+    },
+  );
 }
