@@ -1,7 +1,7 @@
 // `flowfig init`: write flowfig instructions for the coding agents of a repo. Pure functions where possible, so the tests need no TTY.
 import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 import { AGENT_TEXT, SKILL_DESCRIPTION } from './guide.ts';
 import { runPicker } from './picker.ts';
@@ -158,6 +158,9 @@ export function registerMcp(a: Agent, old: string | undefined): string | undefin
 /** `✓ ` before a finished write. */
 const mark = (status: string) => (/^(created|updated|unchanged)$/.test(status) ? '✓ ' : '');
 
+/** The path to show: relative to the repo folder, or `~` for the home folder. */
+const shown = (path: string, base: string, global: boolean) => (global ? `~/${relative(base, path)}` : relative(base, path));
+
 const HINT = 'run with -y or --agents <ids>';
 
 /** Run `flowfig init`. Returns the exit code. */
@@ -234,7 +237,7 @@ export async function runInit(argv: string[]): Promise<number> {
           writeFileSync(path, next);
         }
       }
-      console.log(`${mark(status)}${status.padEnd(9)} ${path}`);
+      console.log(`${mark(status)}${status.padEnd(9)} ${shown(path, global ? homedir() : dir, global)}`);
     }
     if (noMcp) continue;
     if (a.mcpNote) {
@@ -267,7 +270,7 @@ export async function runInit(argv: string[]): Promise<number> {
         }
       }
     }
-    console.log(`${mark(mcpStatus)}${mcpStatus.padEnd(9)} ${mcpPath}`);
+    console.log(`${mark(mcpStatus)}${mcpStatus.padEnd(9)} ${shown(mcpPath, global ? homedir() : dir, global)}`);
   }
   if (!dry)
     console.log(`Next: start a new agent session.${chosen.has('claude') ? ' In Claude Code, run /figure how does login work.' : ''}`);

@@ -1,5 +1,6 @@
 // The arrow-key picker for `flowfig init`. The screen and the keys are pure, so the tests need no TTY.
 import { emitKeypressEvents } from 'node:readline';
+import { VERSION } from './version.ts';
 
 export type PickRow = { id: string; name: string; detected: boolean; files: string[] };
 export type PickState = { rows: PickRow[]; sel: Set<string>; mcp: boolean; cursor: number };
@@ -7,18 +8,19 @@ export type Key = { name?: string; ctrl?: boolean; sequence?: string };
 export type Screen = { color: boolean; width: number };
 export type Picked = { ids: Set<string>; mcp: boolean };
 
-const GLYPH: Record<string, string[]> = {
-  F: ['█████', '█    ', '████ ', '█    ', '█    '],
-  L: ['█    ', '█    ', '█    ', '█    ', '█████'],
-  O: [' ███ ', '█   █', '█   █', '█   █', ' ███ '],
-  W: ['█   █', '█   █', '█ █ █', '██ ██', '█   █'],
-  I: ['█████', '  █  ', '  █  ', '  █  ', '█████'],
-  G: [' ████', '█    ', '█  ██', '█   █', ' ███ '],
-};
-const BANNER = [0, 1, 2, 3, 4].map((r) => [...'FLOWFIG'].map((c) => GLYPH[c][r]).join(' '));
-const BANNER_WIDTH = BANNER[0].length;
+const BANNER = [
+  '███████╗██╗      ██████╗ ██╗    ██╗███████╗██╗ ██████╗ ',
+  '██╔════╝██║     ██╔═══██╗██║    ██║██╔════╝██║██╔════╝ ',
+  '█████╗  ██║     ██║   ██║██║ █╗ ██║█████╗  ██║██║  ███╗',
+  '██╔══╝  ██║     ██║   ██║██║███╗██║██╔══╝  ██║██║   ██║',
+  '██║     ███████╗╚██████╔╝╚███╔███╔╝██║     ██║╚██████╔╝',
+  '╚═╝     ╚══════╝ ╚═════╝  ╚══╝╚══╝ ╚═╝     ╚═╝ ╚═════╝ ',
+];
+const BANNER_WIDTH = Math.max(...BANNER.map((l) => l.length));
+const NOT = '(not detected)'.length; // the width of the detected column
 const HELP = '↑↓ move · space toggle · a all · enter confirm · esc cancel';
 
+const SHADOW = '38;2;43;93;143';
 const ansi = (on: boolean, code: string, text: string) => (on ? `\x1b[${code}m${text}\x1b[0m` : text);
 /** Row `i` of `n`: the blue gradient from #4da3ff to #0074d9. */
 const blue = (i: number, n: number) => {
@@ -26,10 +28,15 @@ const blue = (i: number, n: number) => {
   return `38;2;${mix(0x4d, 0x00)};${mix(0xa3, 0x74)};${mix(0xff, 0xd9)}`;
 };
 
-/** The banner lines. A terminal narrower than the banner gets the plain word. */
+/** The banner lines. A terminal narrower than the banner gets the plain version line. */
 export function banner({ color, width }: Screen): string[] {
-  if (width < BANNER_WIDTH) return [ansi(color, '1;38;2;77;163;255', 'flowfig')];
-  return BANNER.map((l, i) => ansi(color, blue(i, BANNER.length), l));
+  const ver = `flowfig ${VERSION}`;
+  if (width < BANNER_WIDTH) return [ansi(color, '1;38;2;77;163;255', ver)];
+  const art = BANNER.map((l, i) =>
+    // each run of one character type gets its own colour: the block letters take the gradient, the shadow takes dim blue
+    l.replace(/█+|[╗║╚═╔╝]+/g, (run) => ansi(color, run[0] === '█' ? blue(i, BANNER.length - 1) : SHADOW, run)),
+  );
+  return [...art, ansi(color, '90', ver)];
 }
 
 /** Cut the pieces `[text, colour code]` to `width` visible characters, then colour them. */
@@ -55,7 +62,7 @@ export function screen(s: PickState, o: Screen): string[] {
       [
         [`${mark(i)} [${s.sel.has(r.id) ? 'x' : ' '}] `, ''],
         [r.name.padEnd(pad), ''],
-        ...(r.detected ? [] : ([[' (not detected)', '90']] as [string, string][])),
+        [` ${r.detected ? ''.padEnd(NOT) : '(not detected)'}`, '90'],
         [`  ${r.files.join(', ')}`, '36'],
       ],
       w,
@@ -65,7 +72,7 @@ export function screen(s: PickState, o: Screen): string[] {
   const mcp = fit(
     [
       [`${mark(s.rows.length)} [${s.mcp ? 'x' : ' '}] `, ''],
-      ['MCP server'.padEnd(pad), ''],
+      [`${'MCP server'.padEnd(pad)} ${''.padEnd(NOT)}`, ''],
       ['  register flowfig in the MCP file of each agent', '36'],
     ],
     w,

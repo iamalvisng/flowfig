@@ -18,6 +18,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { AGENTS, MCP_ENTRY, detect, registerMcp, renderList, toggle } from './init.ts';
+import { VERSION } from './version.ts';
 import { keyStep, screen, type PickState } from './picker.ts';
 import { SKILL_DESCRIPTION } from './guide.ts';
 
@@ -87,7 +88,7 @@ test('--agents agents adds a section and keeps the other text byte for byte', ()
     assert.equal(after.match(/<!-- flowfig:start -->/g)?.length, 1);
     assert.match(after, /npx flowfig docs/);
     const again = run(['init', '--agents', 'agents'], dir);
-    assert.match(again.stdout, /unchanged .*AGENTS\.md/);
+    assert.match(again.stdout, /unchanged AGENTS\.md/);
     assert.equal(readFileSync(join(dir, 'AGENTS.md'), 'utf8'), after);
     // text around the markers stays as it is on a second run
     writeFileSync(join(dir, 'AGENTS.md'), after + '\nTail.\n');
@@ -103,7 +104,7 @@ test('a missing shared file is created; a whole-file target is written with the 
   try {
     const r = run(['init', '--agents', 'claude,copilot'], dir);
     assert.equal(r.status, 0, r.stderr);
-    assert.match(r.stdout, /created .*SKILL\.md/);
+    assert.match(r.stdout, /created   \.claude\/skills\/figure\/SKILL\.md/);
     const skill = readFileSync(join(dir, '.claude/skills/figure/SKILL.md'), 'utf8');
     assert.match(skill, /^---\nname: figure\ndescription: .*diagram/);
     assert.ok(existsSync(join(dir, '.github/copilot-instructions.md')));
@@ -272,10 +273,10 @@ test('init writes the MCP file for each agent that has one, and --no-mcp or --dr
     for (const f of ['.mcp.json', '.cursor/mcp.json', '.vscode/mcp.json', '.gemini/settings.json', '.kiro/settings/mcp.json'])
       assert.ok(existsSync(join(dir, f)), f);
     assert.deepEqual(JSON.parse(readFileSync(join(dir, '.vscode/mcp.json'), 'utf8')).servers.flowfig, { ...MCP_ENTRY, type: 'stdio' });
-    assert.match(r.stdout, /created {3}.*\.mcp\.json/);
+    assert.match(r.stdout, /created   \.mcp\.json/);
     assert.match(r.stdout, /note {6}windsurf: add/);
     const again = run(['init', '--agents', 'claude', dir], dir);
-    assert.match(again.stdout, /unchanged .*\.mcp\.json/);
+    assert.match(again.stdout, /unchanged \.mcp\.json/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -353,7 +354,7 @@ test('init for claude writes one Diagrams section into CLAUDE.md, keeps other te
   const dir = tmp();
   try {
     const r = run(['init', '--agents', 'claude'], dir);
-    assert.match(r.stdout, /created .*CLAUDE\.md/);
+    assert.match(r.stdout, /created   CLAUDE\.md/);
     assert.match(r.stdout, /Next: start a new agent session\. In Claude Code, run \/figure/);
     const first = readFileSync(join(dir, 'CLAUDE.md'), 'utf8');
     assert.match(first, /## Diagrams\nDraw every diagram with the `figure` skill/);
@@ -413,32 +414,30 @@ test('keyStep: Enter confirms; Esc, q and Ctrl-C cancel', () => {
   assert.equal(keyStep(state(), { name: 'c', ctrl: true }), 'cancel');
 });
 
-test('screen with colour off: exact lines, and no escape code', () => {
-  const lines = screen(state(), { color: false, width: 100 });
+test('screen with colour off: exact lines, no escape code, and the file lists share one column', () => {
+  const lines = screen(state(), { color: false, width: 120 });
   assert.equal(lines.join('\n').includes('\x1b'), false);
-  assert.equal(lines.length, 5 + 1 + 1 + 1 + 2 + 1 + 1 + 1 + 1);
-  assert.deepEqual(lines.slice(5), [
-    '',
-    'Pick the coding agents that should draw diagrams in this repo.',
-    '',
-    '› [x] Claude Code  .claude/skills/figure/SKILL.md, CLAUDE.md, .mcp.json',
-    '  [ ] AGENTS.md   (not detected)  AGENTS.md',
-    '─'.repeat(40),
-    '  [x] MCP server   register flowfig in the MCP file of each agent',
-    '',
-    '↑↓ move · space toggle · a all · enter confirm · esc cancel',
-  ]);
+  assert.equal(lines.length, 16);
+  assert.equal(new Set(lines.slice(0, 6).map((l) => l.length)).size, 1);
+  assert.equal(lines[6], `flowfig ${VERSION}`);
+  const rows = lines.slice(10, 12);
+  assert.equal(rows[0].indexOf('.claude/skills'), rows[1].indexOf('AGENTS.md', 20));
+  assert.equal(lines[13].indexOf('register'), rows[0].indexOf('.claude/skills'));
+  assert.deepEqual(lines.slice(7, 9), ['', 'Pick the coding agents that should draw diagrams in this repo.']);
+  assert.equal(rows[1], '  [ ] AGENTS.md   (not detected)  AGENTS.md');
 });
 
-test('screen with colour on: the banner uses 24-bit colour from #4da3ff to #0074d9', () => {
-  const lines = screen(state(), { color: true, width: 100 });
-  assert.ok(lines[0].startsWith('\x1b[38;2;77;163;255m'));
-  assert.ok(lines[4].startsWith('\x1b[38;2;0;116;217m'));
+test('screen with colour on: block letters take the blue gradient, the shadow takes dim blue', () => {
+  const lines = screen(state(), { color: true, width: 120 });
+  assert.ok(lines[0].includes('\x1b[38;2;77;163;255m█'));
+  assert.ok(lines[4].includes('\x1b[38;2;0;116;217m█'));
+  assert.ok(lines[0].includes('\x1b[38;2;43;93;143m╗'));
+  assert.ok(lines[6].startsWith('\x1b[90mflowfig'));
 });
 
-test('screen: a narrow terminal gets the plain word, and a long row is cut', () => {
+test('screen: a narrow terminal gets the plain version line, and a long row is cut', () => {
   const narrow = screen(state(), { color: false, width: 30 });
-  assert.equal(narrow[0], 'flowfig');
+  assert.equal(narrow[0], `flowfig ${VERSION}`);
   assert.equal(narrow[1], '');
   assert.ok(narrow.every((l) => l.length <= 29));
   assert.ok(narrow.some((l) => l.endsWith('…')));
@@ -447,6 +446,6 @@ test('screen: a narrow terminal gets the plain word, and a long row is cut', () 
 
 test('init prints a check mark for each finished write', () => {
   const dir = mkdtempSync(join(tmpdir(), 'flowfig-mark-'));
-  assert.match(run(['init', '--agents', 'agents', '--no-mcp'], dir).stdout, /^✓ created {3}.*AGENTS\.md/m);
-  assert.match(run(['init', '--agents', 'agents', '--no-mcp'], dir).stdout, /^✓ unchanged .*AGENTS\.md/m);
+  assert.match(run(['init', '--agents', 'agents', '--no-mcp'], dir).stdout, /^✓ created   AGENTS\.md$/m);
+  assert.match(run(['init', '--agents', 'agents', '--no-mcp'], dir).stdout, /^✓ unchanged AGENTS\.md$/m);
 });
