@@ -24,6 +24,8 @@ type Agent = {
   mcp?: { file: string; key: 'mcpServers' | 'servers'; type?: true; global?: string };
   /** Shown in place of the MCP file when init cannot write the config. */
   mcpNote?: string;
+  /** A second file, a marked section in a file the user owns. Written only in a repo run, never with `--global`. */
+  also?: { file: string; text: string };
 };
 
 export const MCP_ENTRY = { command: 'npx', args: ['flowfig', 'mcp'] };
@@ -36,6 +38,10 @@ export const AGENTS: Agent[] = [
     file: '.claude/skills/figure/SKILL.md',
     kind: 'whole',
     mcp: { file: '.mcp.json', key: 'mcpServers', type: true, global: '.claude.json' },
+    also: {
+      file: 'CLAUDE.md',
+      text: '## Diagrams\nDraw every diagram with the `figure` skill (flowfig). The user can run `/figure <question>`. Do not answer a diagram request with a Mermaid block or ASCII art, unless the user asks for that tool.',
+    },
     head: `---\nname: figure\ndescription: ${JSON.stringify(SKILL_DESCRIPTION)}\nuser_invocable: true\n---\n\n`,
   },
   { id: 'agents', name: 'AGENTS.md', marks: ['AGENTS.md'], file: 'AGENTS.md', kind: 'section', note: 'Codex, Amp, Jules, ...' },
@@ -111,12 +117,17 @@ export function renderList(selected: Set<string>, detected: string[], dir: strin
   ].join('\n');
 }
 
-const block = () => `${START}\n${AGENT_TEXT.trimEnd()}\n${END}\n`;
+const block = (text = AGENT_TEXT) => `${START}\n${text.trimEnd()}\n${END}\n`;
 
 /** The new file text, or `undefined` if the file belongs to the user and init must leave it. `old` is `undefined` for a missing file. */
 export function place(a: Agent, old: string | undefined): string | undefined {
   const mine = block();
   if (a.kind === 'whole') return old === undefined || old.includes(START) ? `${a.head ?? ''}${mine}` : undefined;
+  return section(old, mine);
+}
+
+/** `old` with the marked block `mine` added or replaced. `undefined` if the block is open. */
+function section(old: string | undefined, mine: string): string | undefined {
   if (old === undefined) return mine;
   const s = old.indexOf(START),
     e = old.indexOf(END, s);
@@ -188,22 +199,26 @@ export async function runInit(argv: string[]): Promise<number> {
   }
 
   for (const a of AGENTS.filter((x) => chosen.has(x.id))) {
-    const path = global ? join(homedir(), a.file) : join(dir, a.file);
-    const old = existsSync(path) ? readFileSync(path, 'utf8') : undefined;
-    const next = place(a, old);
-    let status: string;
-    if (next === undefined)
-      status = old?.includes(START) ? 'skipped (flowfig:start without flowfig:end)' : 'skipped (the file exists and is not from flowfig)';
-    else if (next === old) status = 'unchanged';
-    else {
-      status = old === undefined ? 'created' : 'updated';
-      if (dry) status = `would ${status === 'created' ? 'create' : 'update'}`;
+    const files = [{ file: a.file, place: (o?: string) => place(a, o) }];
+    if (a.also && !global) files.push({ file: a.also.file, place: (o) => section(o, block(a.also!.text)) });
+    for (const f of files) {
+      const path = global ? join(homedir(), f.file) : join(dir, f.file);
+      const old = existsSync(path) ? readFileSync(path, 'utf8') : undefined;
+      const next = f.place(old);
+      let status: string;
+      if (next === undefined)
+        status = old?.includes(START) ? 'skipped (flowfig:start without flowfig:end)' : 'skipped (the file exists and is not from flowfig)';
+      else if (next === old) status = 'unchanged';
       else {
-        mkdirSync(dirname(path), { recursive: true });
-        writeFileSync(path, next);
+        status = old === undefined ? 'created' : 'updated';
+        if (dry) status = `would ${status === 'created' ? 'create' : 'update'}`;
+        else {
+          mkdirSync(dirname(path), { recursive: true });
+          writeFileSync(path, next);
+        }
       }
+      console.log(`${status.padEnd(9)} ${path}`);
     }
-    console.log(`${status.padEnd(9)} ${path}`);
     if (noMcp) continue;
     if (a.mcpNote) {
       console.log(`note      ${a.id}: ${a.mcpNote}`);
@@ -237,6 +252,8 @@ export async function runInit(argv: string[]): Promise<number> {
     }
     console.log(`${mcpStatus.padEnd(9)} ${mcpPath}`);
   }
+  if (!dry)
+    console.log(`Next: start a new agent session.${chosen.has('claude') ? ' In Claude Code, run /figure how does login work.' : ''}`);
   return 0;
 }
 

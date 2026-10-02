@@ -347,3 +347,40 @@ test('--global --dry-run writes nothing and prints would', () => {
     rmSync(home, { recursive: true, force: true });
   }
 });
+
+test('init for claude writes one Diagrams section into CLAUDE.md, keeps other text, and prints the next step', () => {
+  const dir = tmp();
+  try {
+    const r = run(['init', '--agents', 'claude'], dir);
+    assert.match(r.stdout, /created .*CLAUDE\.md/);
+    assert.match(r.stdout, /Next: start a new agent session\. In Claude Code, run \/figure/);
+    const first = readFileSync(join(dir, 'CLAUDE.md'), 'utf8');
+    assert.match(first, /## Diagrams\nDraw every diagram with the `figure` skill/);
+    run(['init', '--agents', 'claude'], dir);
+    assert.equal(readFileSync(join(dir, 'CLAUDE.md'), 'utf8'), first);
+    assert.equal(first.match(/<!-- flowfig:start -->/g)?.length, 1);
+    writeFileSync(join(dir, 'CLAUDE.md'), `# Mine\n\nKeep this.\n`);
+    run(['init', '--agents', 'claude'], dir);
+    const kept = readFileSync(join(dir, 'CLAUDE.md'), 'utf8');
+    assert.ok(kept.startsWith('# Mine\n\nKeep this.\n'));
+    assert.match(kept, /## Diagrams/);
+    assert.doesNotMatch(run(['init', '--agents', 'agents'], dir).stdout, /Claude Code/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('--dry-run lists CLAUDE.md; --global writes no CLAUDE.md', () => {
+  const dir = tmp(),
+    home = tmp();
+  try {
+    const dry = run(['init', '--agents', 'claude', '--dry-run'], dir);
+    assert.match(dry.stdout, /would create .*CLAUDE\.md/);
+    assert.ok(!existsSync(join(dir, 'CLAUDE.md')));
+    run(['init', '--agents', 'claude', '--global'], dir, { HOME: home, USERPROFILE: home });
+    assert.ok(!existsSync(join(home, 'CLAUDE.md')));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(home, { recursive: true, force: true });
+  }
+});
