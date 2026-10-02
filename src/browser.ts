@@ -221,9 +221,10 @@ export async function captureFrames(
     await run(`(() => {
       for (const a of document.getAnimations()) a.currentTime = ${t};
       document.querySelector('svg').setCurrentTime(${t / 1000});
-      return new Promise((r) => requestAnimationFrame(r));
+      // two frames: one frame can fire before the browser draws the new time under load
+      return new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
     })()`);
-    const { data } = await send('Page.captureScreenshot', { format: 'png', clip, optimizeForSpeed: true });
+    const { data } = await send('Page.captureScreenshot', { format: 'png', clip });
     pngs.push(Buffer.from(data, 'base64'));
   }
   return { pngs, width: Math.round(info.width * o.scale), height: Math.round(info.height * o.scale), loopMs: info.loop };
