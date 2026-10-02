@@ -1,8 +1,9 @@
 // An animated GIF with no dependency: one global palette, LZW, and only the changed area of each later frame. Pure.
 import type { Image } from './png.ts';
 
-/** One frame: `load` returns the pixels (called twice per frame); `delay` is in centiseconds. */
-export type GifFrame = { load: () => Image; delay: number };
+/** One frame: `load` returns the pixels (called twice per frame); `delay` is in centiseconds.
+ * `same` says the pixels equal the frame before: the encoder then never calls `load`. */
+export type GifFrame = { load: () => Image; delay: number; same?: boolean };
 
 /** The delay of each of `count` frames in cs. The sum is round(count * 100 / fps). */
 export function delays(count: number, fps: number): number[] {
@@ -156,6 +157,10 @@ export async function encodeGif(frames: GifFrame[]): Promise<Uint8Array> {
     width = 0,
     height = 0;
   for (let f = 0; f < frames.length; f++) {
+    if (frames[f].same && f > 0) continue;
+    // A run of equal frames counts once, with the weight of the run.
+    let weight = 1;
+    while (f + weight < frames.length && frames[f + weight].same) weight++;
     await new Promise(setImmediate);
     const { width: w, height: h, data } = frames[f].load();
     if (f === 0) [width, height] = [w, h];
@@ -169,10 +174,10 @@ export async function encodeGif(frames: GifFrame[]): Promise<Uint8Array> {
         bin = binOf(rgb);
         if (exact && !exact.has(rgb)) exact = exact.size < 256 ? exact.set(rgb, exact.size) : null;
       }
-      counts[bin]++;
-      sums[bin * 3] += data[i];
-      sums[bin * 3 + 1] += data[i + 1];
-      sums[bin * 3 + 2] += data[i + 2];
+      counts[bin] += weight;
+      sums[bin * 3] += data[i] * weight;
+      sums[bin * 3 + 1] += data[i + 1] * weight;
+      sums[bin * 3 + 2] += data[i + 2] * weight;
     }
   }
   const { colors, index } = palette(exact, counts, sums);
@@ -208,17 +213,21 @@ export async function encodeGif(frames: GifFrame[]): Promise<Uint8Array> {
   let prev: Uint8Array | null = null;
   for (const frame of frames) {
     await new Promise(setImmediate);
-    const { data } = frame.load();
-    const cur = new Uint8Array(width * height);
-    let last = -1,
-      k = 0;
-    for (let p = 0, i = 0; p < cur.length; p++, i += 4) {
-      const rgb = (data[i] << 16) | (data[i + 1] << 8) | data[i + 2];
-      if (rgb !== last) [last, k] = [rgb, index(rgb)];
-      cur[p] = k;
+    let cur: Uint8Array = prev!;
+    if (!(frame.same && prev)) {
+      const { data } = frame.load();
+      cur = new Uint8Array(width * height);
+      let last = -1,
+        k = 0;
+      for (let p = 0, i = 0; p < cur.length; p++, i += 4) {
+        const rgb = (data[i] << 16) | (data[i + 1] << 8) | data[i + 2];
+        if (rgb !== last) [last, k] = [rgb, index(rgb)];
+        cur[p] = k;
+      }
     }
     let rect = [0, 0, width - 1, height - 1];
-    if (prev) {
+    if (cur === prev) rect = [0, 0, -1, -1];
+    else if (prev) {
       rect = [width, height, -1, -1];
       for (let y = 0, p = 0; y < height; y++)
         for (let x = 0; x < width; x++, p++)
@@ -228,9 +237,9 @@ export async function encodeGif(frames: GifFrame[]): Promise<Uint8Array> {
             if (y < rect[1]) rect[1] = y;
             rect[3] = y;
           }
-      // No change: a 1 x 1 frame that paints the old color keeps the frame and its delay.
-      if (rect[2] < 0) rect = [0, 0, 0, 0];
     }
+    // No change: a 1 x 1 frame that paints the old color keeps the frame and its delay.
+    if (rect[2] < 0) rect = [0, 0, 0, 0];
     bytes(0x21, 0xf9, 4, 1 << 2); // disposal method 1: the next frame draws over this frame
     word(frame.delay);
     bytes(0, 0, 0x2c);
