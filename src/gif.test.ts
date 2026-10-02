@@ -166,6 +166,25 @@ test('a frame with no change is a 1 x 1 image, and the frame count stays the sam
   assert.deepEqual(d.frames[2].rgba, img.data);
 });
 
+test('a same frame is never loaded, and the bytes equal those of a full load (300 colors)', async () => {
+  const a = image(30, 10, (x, y) => [
+    8 * ((y * 30 + x) % 10) + 4,
+    8 * (Math.floor((y * 30 + x) / 10) % 10) + 4,
+    8 * Math.floor((y * 30 + x) / 100) + 4,
+  ]);
+  const b = image(30, 10, (x, y) => [(x * 8) % 256, y * 20, 90]);
+  const full = await encodeGif([frame(a), frame(a), frame(a), frame(b), frame(b)]);
+  const skip = (): Image => assert.fail('a same frame was loaded');
+  const same = await encodeGif([
+    frame(a),
+    { load: skip, delay: 5, same: true },
+    { load: skip, delay: 5, same: true },
+    frame(b),
+    { load: skip, delay: 5, same: true },
+  ]);
+  assert.deepEqual(same, full);
+});
+
 test('300 colors make a 256-color palette, and each pixel stays within 16 per channel', async () => {
   // A lattice of 300 colors, one color in each 5-bit bin: more colors than the palette holds.
   const img = image(30, 10, (x, y) => {

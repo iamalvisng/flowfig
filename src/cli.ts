@@ -248,7 +248,9 @@ if (args[0] === 'gif') {
     const { pngs } = await captureFrames(browser.cdp, pageHtml(svg, basename(path)), { ...viewport, scale, fps, dark });
     const wait = delays(pngs.length, fps);
     // The GIF keeps the PNG bytes, not the pixels: a decoded 2400 x 1600 frame is 15 MB.
-    const gif = await encodeGif(pngs.map((png, i) => ({ load: () => decodePng(png), delay: wait[i] })));
+    const gif = await encodeGif(
+      pngs.map((png, i) => ({ load: () => decodePng(png), delay: wait[i], same: i > 0 && png.equals(pngs[i - 1]) })),
+    );
     await proceed();
     written.push(out);
     writeFileSync(out, gif);
