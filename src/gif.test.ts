@@ -1,5 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { findBrowser } from './browser.ts';
 import { delays, encodeGif, type GifFrame } from './gif.ts';
 import type { Image } from './png.ts';
 
@@ -174,4 +180,91 @@ test('300 colors make a 256-color palette, and each pixel stays within 16 per ch
 
 test('a frame with another size throws', () => {
   assert.throws(() => encodeGif([frame(image(2, 2, () => [0, 0, 0])), frame(image(3, 2, () => [0, 0, 0]))]), /frame 2 is 3 x 2/);
+});
+
+// End to end: the CLI with the real capture browser. The tests skip when this machine has none.
+const cli = join(dirname(dirname(fileURLToPath(import.meta.url))), 'scripts', 'figure-svg.mjs');
+const skip = !findBrowser({ platform: process.platform, env: process.env, exists: existsSync }).path || process.platform === 'win32';
+const ONE = {
+  props: {
+    layout: {
+      children: [
+        { id: 'a', label: 'Client' },
+        { id: 'b', label: 'Server', shape: 'store' },
+      ],
+    },
+    edges: [{ id: 'w', from: 'a', to: 'b', label: 'write' }],
+    steps: [{ label: 'write', flow: [{ edges: 'w', say: 'The client writes a row.' }] }],
+  },
+};
+/** The temp folders of earlier gif runs. Another process can make one, so a test compares the list before and after. */
+const leftovers = () => readdirSync(tmpdir()).filter((n) => n.startsWith('flowfig-gif-'));
+const render = (dir: string, name: string, spec: object) => {
+  const svg = join(dir, `${name}.svg`);
+  execFileSync(process.execPath, [cli, '-', svg, '--no-check'], { input: JSON.stringify(spec) });
+  return svg;
+};
+const gif = (args: string[], env: NodeJS.ProcessEnv = process.env) =>
+  spawnSync(process.execPath, [cli, 'gif', ...args], { encoding: 'utf8', env });
+
+test('gif writes one frame per 1/fps of the loop, prints the line and removes its temp folder', { skip }, () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gif-e2e-'));
+  const before = leftovers();
+  try {
+    const svg = render(dir, 'one', ONE);
+    const loop = Number(/animation: \S+ ([\d.]+)s infinite/.exec(readFileSync(svg, 'utf8'))![1]);
+    const frames = Math.round(loop * 10);
+    const r = gif([svg, '--fps', '10', '--scale', '1']);
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stdout, new RegExp(`one\\.gif — ${frames} frames, ${(frames / 10).toFixed(1)} s, [\\d.]+ MB\\n$`));
+    assert.equal(decodeGif(readFileSync(join(dir, 'one.gif'))).frames.length, frames);
+    assert.deepEqual(leftovers(), before);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('gif --dark paints the dark theme; the default is the light theme', { skip }, () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gif-e2e-'));
+  try {
+    const svg = render(dir, 'one', ONE);
+    assert.equal(gif([svg, join(dir, 'light.gif'), '--fps', '1', '--scale', '1']).status, 0);
+    assert.equal(gif([svg, join(dir, 'dark.gif'), '--fps', '1', '--scale', '1', '--dark']).status, 0);
+    // The pixel at (0, 0) is the figure background.
+    const corner = (file: string) => [...decodeGif(readFileSync(join(dir, file))).frames[0].rgba.subarray(0, 3)];
+    const sum = (c: number[]) => c[0] + c[1] + c[2];
+    assert.ok(sum(corner('light.gif')) > sum(corner('dark.gif')) + 300, `${corner('light.gif')} vs ${corner('dark.gif')}`);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a figure with no animation makes one frame', { skip }, () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gif-e2e-'));
+  try {
+    const svg = render(dir, 'still', { props: { layout: { children: [{ id: 'a', label: 'A' }] }, edges: [], steps: [] } });
+    const r = gif([svg, '--scale', '1']);
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stdout, /still\.gif — 1 frame, /);
+    assert.equal(decodeGif(readFileSync(join(dir, 'still.gif'))).frames.length, 1);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('Ctrl-C stops the run, stops the browser and removes the temp folder', { skip }, async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gif-e2e-'));
+  const before = leftovers();
+  try {
+    const svg = render(dir, 'one', ONE);
+    const child = spawn(process.execPath, [cli, 'gif', svg, '--fps', '50'], { stdio: 'ignore' });
+    setTimeout(() => child.kill('SIGINT'), 1500);
+    const code = await new Promise((done) => child.once('exit', done));
+    // A fast machine can finish before the signal: then the exit is 0 and the GIF is there.
+    assert.ok(code === 130 || code === 0, String(code));
+    if (code === 130) assert.equal(existsSync(join(dir, 'one.gif')), false);
+    assert.deepEqual(leftovers(), before);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
