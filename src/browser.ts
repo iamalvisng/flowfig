@@ -66,6 +66,8 @@ export function launch(path: string, profile: string, timeoutMs = 30_000): Promi
     '--mute-audio',
     // The GPU raster gave a different pixel run to run on a rounded corner, and a bigger GIF.
     '--disable-gpu',
+    // A transform animation (the timeline playhead) runs on the compositor thread, so a seek can draw a stale x under load.
+    '--disable-threaded-animation',
   ];
   // Chrome refuses to start as root without it, for example in a Docker container.
   if (process.getuid?.() === 0) args.push('--no-sandbox');
