@@ -20,6 +20,7 @@ export function route(
   edges: { id: string; from: string; to: string; around?: Around; sides?: [Side, Side]; elbow?: boolean }[],
   rects: Record<string, Rect>,
   tips: Set<string> = new Set(),
+  avoid: Rect[] = [], // boxes an elbow's vertical run must not cross (the timeline's outside labels)
 ): Routed[] {
   const picks: Pick[] = [];
   for (const e of edges) {
@@ -88,7 +89,11 @@ export function route(
     if (p.elbow) {
       // The vertical run sits at the midpoint x. Under 16 px of gap, it detours: out 8 px past the start, back to 8 px
       // before the end, then forward into the target. A gap of 0 px or less takes the same detour.
-      const mx = e.x - s.x >= 16 ? (s.x + e.x) / 2 : s.x + 8;
+      // Over 16 px, it tries the midpoint, then 8 px before the end, then 8 px after the start, and takes the first that clears `avoid`.
+      const y0 = Math.min(s.y, e.y),
+        y1 = Math.max(s.y, e.y);
+      const clear = (x: number) => !avoid.some((r) => x > r.x - 2 && x < r.x + r.w + 2 && y1 > r.y && y0 < r.y + r.h);
+      const mx = e.x - s.x >= 16 ? ([(s.x + e.x) / 2, e.x - 8, s.x + 8].find(clear) ?? (s.x + e.x) / 2) : s.x + 8;
       const c1 = { x: mx, y: s.y },
         c2 = { x: mx, y: e.y };
       if (e.x - s.x < 16 && s.y === e.y) {

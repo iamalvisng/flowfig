@@ -87,3 +87,16 @@ test('elbow: boxes on one row draw a straight forward line, with no detour', () 
   const [r] = route([{ id: 'e', from: 'a', to: 'b', sides: ['r', 'l'], elbow: true }], rects);
   assert.equal(r.d, 'M 100 14 H 108');
 });
+
+test('an elbow moves its vertical run clear of an outside label, then falls back to the midpoint', () => {
+  const rects = { a: { x: 0, y: 0, w: 100, h: 28 }, b: { x: 300, y: 60, w: 100, h: 28 } };
+  const elbow = [{ id: 'e', from: 'a', to: 'b', sides: ['r', 'l'] as ['r', 'l'], elbow: true }];
+  // the midpoint x is 200; the label spans 150 to 250
+  const label = { x: 150, y: 10, w: 100, h: 28 };
+  assert.match(route(elbow, rects, new Set(), [])[0].d, /H 200 V/, 'no label: the midpoint');
+  assert.match(route(elbow, rects, new Set(), [label])[0].d, /H 292 V/, 'a label at the midpoint: 8 px before the end');
+  const wide = { x: 150, y: 10, w: 150, h: 28 }; // reaches the target too
+  assert.match(route(elbow, rects, new Set(), [wide])[0].d, /H 108 V/, 'then 8 px after the start');
+  const off = { x: 150, y: 200, w: 100, h: 28 }; // below the run
+  assert.match(route(elbow, rects, new Set(), [off])[0].d, /H 200 V/, 'a label off the run is ignored');
+});

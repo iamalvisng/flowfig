@@ -229,6 +229,20 @@ export const playheadItem = <T extends { id: string }>(items: T[], beats: { focu
   return undefined;
 };
 
+/** The box of a timeline label that sits beside its bar, in the bar's coordinates. */
+export const outsideLabelRect = (bar: { x: number; y: number; w: number; h: number }, label: string) => ({
+  x: bar.x + bar.w + 6,
+  y: bar.y,
+  w: textWidth(label, 13),
+  h: bar.h,
+});
+
+/**
+ * The time span in which the playhead label shows its date. The label waits for the line to arrive: it stays hidden for
+ * the ramp (the move), so it never shows a date at a place that is not that date, and it never meets "today" on the way.
+ */
+export const labelSpan = (t0: number, end: number, ramp: number): [number, number] => [Math.min(t0 + ramp, end), end];
+
 /** True if a playhead date label at x would overlap the "today" label, so it moves to the top row. Widths are in px. */
 export const dateLabelRaised = (x: number, today: number | null | undefined, w: number, todayW: number): boolean =>
   today != null && x + 3 < today - 3 && x + 3 + w > today - 3 - todayW;

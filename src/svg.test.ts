@@ -900,3 +900,22 @@ test('timeline: a playhead date label that would meet the "today" label moves to
   const far = toSvg(tlFocus([['inv']], '2026-12-20'));
   assert.equal(rowOf(far, '5 Oct'), rowOf(far, 'today'));
 });
+
+test('timeline: in the roadmap demo no dependency run crosses an outside label', async () => {
+  const { default: demo } = await import('../figures/roadmap.ts');
+  const props = { ...demo.props, timeline: true } as FlowProps;
+  const { scene } = render(props);
+  const beta = scene.boxes.find((b) => b.id === 'beta')!.rect;
+  const e = scene.edges.find((x) => x.id === 'usage-page')!;
+  const run = e.curve[1].x; // the vertical run of the elbow
+  assert.ok(run < beta.x + beta.w + 4 || run > beta.x + beta.w + 6 + textWidth('Beta', 13) + 2, `run at ${run} clear of the Beta label`);
+});
+
+test('timeline: the playhead date label shows only after the line arrives', () => {
+  const svg = toSvg(tlFocus([['inv']]));
+  const name = svg.match(/class="today (a\d+)">5 Oct</)![1];
+  const total = +svg.match(new RegExp(`\\.${name} \\{ animation: ${name} ([\\d.]+)s`))![1];
+  const kf = svg.match(new RegExp(`@keyframes ${name} \\{([^\\n]*)\\}\\n`))![1];
+  const on = [...kf.matchAll(/([\d.]+)%,[\d.]+% \{ opacity: 1 \}/g)].map((m) => (+m[1] / 100) * total);
+  assert.ok(on.length > 0 && Math.min(...on) >= 0.39, `first visible at ${Math.min(...on)} s`);
+});

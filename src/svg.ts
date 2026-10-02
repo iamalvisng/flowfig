@@ -52,6 +52,8 @@ import {
   STEP_HOLD_MS,
   playheadItem,
   dateLabelRaised,
+  labelSpan,
+  outsideLabelRect,
   type Beat,
   type FigContent,
   type FigGroup,
@@ -328,6 +330,7 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
     })),
     rects,
     tips,
+    placed.filter((p) => p.tl && !p.tl.labelInside).map((p) => outsideLabelRect(p, str(p.item.label))),
   );
   const byId = Object.fromEntries(routed.map((r) => [r.id, r]));
 
@@ -747,11 +750,13 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
         const last = i === segs.length - 1 || segs[i + 1].si !== s.si;
         const end = last ? s.t1 - hold : s.t1; // the step hold starts here
         pts.push([s.t0, at], [Math.min(s.t0 + RAMP, end), to], [end, to]);
-        dates.push({ a: s.t0, b: end, d: date, x: to });
+        const [la, lb] = labelSpan(s.t0, end, RAMP);
+        if (la < lb) dates.push({ a: la, b: lb, d: date, x: to });
         at = to;
         if (last) {
           pts.push([Math.min(end + RAMP, s.t1), home], [s.t1, home]);
-          dates.push({ a: end, b: s.t1, d: tl.lastDate, x: home });
+          const [ha, hb] = labelSpan(end, s.t1, RAMP);
+          if (ha < hb) dates.push({ a: ha, b: hb, d: tl.lastDate, x: home });
           at = home;
         }
       });
@@ -766,7 +771,13 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
         if (!seen.has(key)) {
           const nm = `a${seen.size}`;
           seen.set(key, nm);
-          const fr = dates.map((x) => `${pct(x.a / total)},${pct(x.b / total - 0.0001)} { opacity: ${x.d === d ? 1 : 0} }`).join(' ');
+          // Each span ends with a hidden frame: the label stays off while the line moves.
+          const fr = dates
+            .map(
+              (x) =>
+                `${pct(x.a / total)},${pct(x.b / total - 0.0001)} { opacity: ${x.d === d ? 1 : 0} } ${pct(x.b / total)} { opacity: 0 }`,
+            )
+            .join(' ');
           css.push(`@keyframes ${nm} { ${fr} }\n.${nm} { animation: ${nm} ${n2(total)}s infinite step-end; }`);
         }
         // A label that would meet "today" moves to the tick row.

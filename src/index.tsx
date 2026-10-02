@@ -268,6 +268,11 @@ export function Flow({
           h: r.height / k,
         };
       });
+      const avoid: Rect[] = [];
+      el.querySelectorAll<HTMLElement>('[data-fig-label]').forEach((n) => {
+        const r = n.getBoundingClientRect();
+        avoid.push({ x: (r.left - base.left) / k, y: (r.top - base.top) / k, w: r.width / k, h: r.height / k });
+      });
       setRouted(
         route(
           edges.map((e, i) => ({
@@ -279,6 +284,7 @@ export function Flow({
           })),
           rects,
           tips,
+          avoid,
         ),
       );
     };
@@ -513,6 +519,7 @@ export function Flow({
     const inside = it.labelInside;
     const outside = (
       <span
+        data-fig-label=""
         style={{ position: 'absolute', left: '100%', marginLeft: 6, whiteSpace: 'nowrap', fontSize: 13, fontWeight: 500, color: v('fg') }}
       >
         {label}
@@ -682,6 +689,8 @@ export function Flow({
                 }}
               >
                 <span
+                  // The label waits for the line: it remounts on a new date and stays hidden for the 400 ms move (wall time, like the line).
+                  key={dateText}
                   style={{
                     position: 'absolute',
                     left: 3,
@@ -691,6 +700,7 @@ export function Flow({
                     fontWeight: 600,
                     whiteSpace: 'nowrap',
                     color: v('accent'),
+                    animation: still ? undefined : 'flowfig-label .4s step-end',
                   }}
                 >
                   {dateText}
@@ -1009,7 +1019,7 @@ export function Flow({
         <Icon d={full ? 'M4 4l8 8M12 4l-8 8' : 'M9 3h4v4M7 13H3V9M13 3L9 7M3 13l4-4'} />
       </button>
       <style>
-        {'@keyframes flowfig-in{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}' +
+        {'@keyframes flowfig-label{from{opacity:0}to{opacity:0}}@keyframes flowfig-in{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}' +
           // The active box has a 2 px border, a tint and a glow. The padding shrinks by 1 px. The box size stays the same, so the edges keep their route.
           `.${ACTIVE}:not([data-diamond]){--ff-b:1px;border-width:2px!important;background:color-mix(in srgb, ${hue} 10%, ${v('surface')})!important;box-shadow:${glow}!important;border-color:${hue}!important}` +
           `.${ACTIVE} polygon{fill:color-mix(in srgb, ${hue} 10%, ${v('surface')});stroke:${hue};stroke-width:2px}`}
