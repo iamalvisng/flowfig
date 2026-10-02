@@ -86,10 +86,21 @@ export function route(
     const s = anchor.get(p.id + ':s')!,
       e = anchor.get(p.id + ':e')!;
     if (p.elbow) {
-      // The vertical run sits at the midpoint x, or 8 px past the start when the gap is under 16 px.
+      // The vertical run sits at the midpoint x. Under 16 px of gap, it detours: out 8 px past the start, back to 8 px
+      // before the end, then forward into the target. A gap of 0 px or less takes the same detour.
       const mx = e.x - s.x >= 16 ? (s.x + e.x) / 2 : s.x + 8;
       const c1 = { x: mx, y: s.y },
         c2 = { x: mx, y: e.y };
+      if (e.x - s.x < 16) {
+        const ex = e.x - 8,
+          my = (s.y + e.y) / 2;
+        return {
+          id: p.id,
+          d: `M ${s.x} ${s.y} H ${mx} V ${my} H ${ex} V ${e.y} H ${e.x}`,
+          mid: { x: (mx + ex) / 2, y: my },
+          curve: [s, { x: mx, y: my }, { x: ex, y: my }, e],
+        };
+      }
       return { id: p.id, d: `M ${s.x} ${s.y} H ${mx} V ${e.y} H ${e.x}`, mid: { x: mx, y: (s.y + e.y) / 2 }, curve: [s, c1, c2, e] };
     }
     if (p.around) {
