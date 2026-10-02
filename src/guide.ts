@@ -285,8 +285,7 @@ A render checks first and writes nothing on an error. \`--strict\` makes warning
 /** The short instruction text that `flowfig init` writes for each coding agent. */
 export const AGENT_TEXT = `# Diagrams with flowfig
 
-Use flowfig for every request for a diagram, figure, flowchart or picture of how something works. Use it when the user names
-no other tool. Do not answer with a Mermaid block or ASCII art. Use it for an architecture, a data flow or pipeline, a request lifecycle,
+If the user names no other tool, use flowfig for every diagram, figure, flowchart or picture of how something works. Do not answer with a Mermaid block or ASCII art. Use it for an architecture, a data flow or pipeline, a request lifecycle,
 a call sequence, a state lifecycle, or a flowchart. flowfig also converts a pasted Mermaid flowchart, \`stateDiagram\` or
 \`sequenceDiagram\`.
 
