@@ -64,6 +64,8 @@ export function launch(path: string, profile: string, timeoutMs = 30_000): Promi
     '--no-default-browser-check',
     '--hide-scrollbars',
     '--mute-audio',
+    // The GPU raster gave a different pixel run to run on a rounded corner, and a bigger GIF.
+    '--disable-gpu',
   ];
   // Chrome refuses to start as root without it, for example in a Docker container.
   if (process.getuid?.() === 0) args.push('--no-sandbox');
