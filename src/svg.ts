@@ -50,6 +50,8 @@ import {
   toBeat,
   beatMs,
   STEP_HOLD_MS,
+  playheadItem,
+  dateLabelRaised,
   type Beat,
   type FigContent,
   type FigGroup,
@@ -736,22 +738,22 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
       const dateOf = new Map(tl.items.map((i) => [i.id, i.date]));
       const hold = STEP_HOLD_MS / 1000 / BASE_RATE;
       const pts: [number, number][] = [[0, home]];
-      const dates: { a: number; b: number; d: string }[] = []; // the label date in each time span
+      const dates: { a: number; b: number; d: string; x: number }[] = []; // the label date in each time span
       let at = home;
       let atDate = tl.lastDate;
       segs.forEach((s, i) => {
-        const id = (beats[s.si][s.bi].focus ?? []).find((l) => startOf.has(l));
-        const to = id != null ? startOf.get(id)! : at;
-        const date = id != null ? dateOf.get(id)! : atDate;
+        const item = playheadItem(tl.items, beats[s.si], s.bi);
+        const to = item ? startOf.get(item.id)! : home;
+        const date = item ? dateOf.get(item.id)! : tl.lastDate;
         const last = i === segs.length - 1 || segs[i + 1].si !== s.si;
         const end = last ? s.t1 - hold : s.t1; // the step hold starts here
         pts.push([s.t0, at], [Math.min(s.t0 + RAMP, end), to], [end, to]);
-        dates.push({ a: s.t0, b: end, d: date });
+        dates.push({ a: s.t0, b: end, d: date, x: to });
         at = to;
         atDate = date;
         if (last) {
           pts.push([Math.min(end + RAMP, s.t1), home], [s.t1, home]);
-          dates.push({ a: end, b: s.t1, d: tl.lastDate });
+          dates.push({ a: end, b: s.t1, d: tl.lastDate, x: home });
           at = home;
           atDate = tl.lastDate;
         }
@@ -770,7 +772,9 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
           const fr = dates.map((x) => `${pct(x.a / total)},${pct(x.b / total - 0.0001)} { opacity: ${x.d === d ? 1 : 0} }`).join(' ');
           css.push(`@keyframes ${nm} { ${fr} }\n.${nm} { animation: ${nm} ${n2(total)}s infinite step-end; }`);
         }
-        return `<text x="${n2(lx + 3)}" y="${n2(top.y + 22)}" opacity="0"${cls('today', seen.get(key))}>${esc(d)}</text>`;
+        // A label that would meet "today" moves to the tick row.
+        const raised = dateLabelRaised(dates.find((x) => x.d === d)!.x, tl.today, textWidth(d, 11, true), textWidth('today', 11, true));
+        return `<text x="${n2(lx + 3)}" y="${n2(top.y + (raised ? 10 : 22))}" opacity="0"${cls('today', seen.get(key))}>${esc(d)}</text>`;
       });
       todaySvg += `<g${cls(name)}><path d="M ${n2(lx)} ${n2(top.y + 12)} V ${bottom}" stroke="var(--accent)" stroke-width="1.5"/>${labels.join('')}</g>`;
     }

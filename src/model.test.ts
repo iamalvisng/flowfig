@@ -6,6 +6,7 @@ import {
   timelineLayout,
   timelineBeats,
   counts,
+  playheadItem,
   TL_DIAMOND,
   TL_MIN_BAR,
   laneColumns,
@@ -328,4 +329,14 @@ test('a label beside a bar takes room: a milestone the next day gets a second ro
 test('counts reads the synthetic step of a timeline with no steps', () => {
   const c = counts(tl([[{ id: 'a', from: '2026-10-05', to: '2026-10-09' }]]));
   assert.deepEqual([c.steps, c.messages], [1, 0]);
+});
+
+test('playheadItem: the first dated focus id wins, a beat with none keeps the earlier item, and a step start has none', () => {
+  const items = [{ id: 'invoice' }, { id: 'ga' }];
+  const beats = [{ focus: ['nope', 'ga', 'invoice'] }, {}, { focus: ['invoice'] }, { say: 'x' }];
+  assert.equal(playheadItem(items, beats, 0)?.id, 'ga');
+  assert.equal(playheadItem(items, beats, 1)?.id, 'ga');
+  assert.equal(playheadItem(items, beats, 2)?.id, 'invoice');
+  assert.equal(playheadItem(items, beats, 3)?.id, 'invoice');
+  assert.equal(playheadItem(items, [{}], 0), undefined);
 });

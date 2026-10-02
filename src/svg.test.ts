@@ -852,3 +852,51 @@ test('focus outside a timeline: the focused box is active from the beat start, w
   const first = svg.match(/@keyframes a0 \{ ([^}]*\}?)/)![1];
   assert.match(first, /^0%,[\d.]+% \{ fill: var\(--tint\); stroke: var\(--accent\); stroke-width: 2;/);
 });
+
+const tlFocus = (focus: string[][], today = '2026-12-20'): FlowProps =>
+  ({
+    timeline: true,
+    today,
+    layout: {
+      direction: 'column',
+      children: [
+        {
+          label: 'T',
+          children: [
+            { id: 'inv', label: 'Invoice', from: '2026-10-05', to: '2026-10-14' },
+            { id: 'mid', label: 'Mid', from: '2026-11-02', to: '2026-11-20' },
+            { id: 'ga', label: 'GA', from: '2026-12-15' },
+          ],
+        },
+      ],
+    },
+    edges: [],
+    steps: [{ label: 's', flow: focus.map((f) => (f.length ? { focus: f } : { say: 'next' })) }],
+  }) as FlowProps;
+const playheadXs = (svg: string) => {
+  const line = svg.match(/<g class="(a\d+)"><path [^>]*stroke="var\(--accent\)" stroke-width="1.5"/)![1];
+  const kf = svg.match(new RegExp(`@keyframes ${line} \\{([^\\n]*)\\}\\n`))![1];
+  return [...kf.matchAll(/translateX\((-?[\d.]+)px\)/g)].map((m) => +m[1]);
+};
+
+test('timeline: the playhead takes the first dated id in focus order, not the layout order', () => {
+  const xs = (focus: string[]) => playheadXs(toSvg(tlFocus([focus])));
+  assert.deepEqual(xs(['mid', 'inv']), xs(['mid']));
+  assert.notDeepEqual(xs(['mid', 'inv']), xs(['inv']));
+});
+
+test('timeline: a beat with no focus keeps the earlier playhead position', () => {
+  const [, , inv] = playheadXs(toSvg(tlFocus([['inv']])));
+  assert.notEqual(inv, 0);
+  const xs = playheadXs(toSvg(tlFocus([['inv'], []])));
+  assert.deepEqual(xs.slice(2, -2), Array(xs.length - 4).fill(inv));
+});
+
+test('timeline: a playhead date label that would meet the "today" label moves to the tick row', () => {
+  const rowOf = (svg: string, text: string) => +svg.match(new RegExp(`<text [^>]* y="([\\d.]+)"[^>]*>${text}</text>`))![1];
+  // inv starts 2026-10-05; today 2026-10-10 puts the date label 5 days (about 41 px) left of today.
+  const near = toSvg(tlFocus([['inv']], '2026-10-10'));
+  assert.notEqual(rowOf(near, '5 Oct'), rowOf(near, 'today'));
+  const far = toSvg(tlFocus([['inv']], '2026-12-20'));
+  assert.equal(rowOf(far, '5 Oct'), rowOf(far, 'today'));
+});
