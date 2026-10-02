@@ -22,7 +22,7 @@
  *
  * Every rendered SVG carries its own spec in <metadata>, so a figure is editable later without anyone having to keep the JSON.
  */
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
@@ -206,28 +206,51 @@ if (args[0] === 'gif') {
   const temp = mkdtempSync(join(tmpdir(), 'flowfig-gif-'));
   // A Ctrl-C can come while the browser starts, so cleanup waits for the start before it stops the browser.
   let launching: ReturnType<typeof launch> | undefined;
-  const cleanup = async () => {
-    await (await launching?.catch(() => undefined))?.close();
-    // The retries cover Windows, where the browser can hold a file lock for a short time after the exit.
-    rmSync(temp, { recursive: true, force: true, maxRetries: 3 });
+  let cleaning: Promise<void> | undefined;
+  const cleanup = () =>
+    (cleaning ??= (async () => {
+      await (await launching?.catch(() => undefined))?.close();
+      try {
+        // The retries cover Windows, where the browser can hold a file lock for a short time after the exit.
+        rmSync(temp, { recursive: true, force: true, maxRetries: 3 });
+      } catch (e) {
+        console.error(`warning: could not remove ${temp}: ${(e as Error).message}`);
+      }
+    })());
+  // The output files of this run: a stop removes them, so no partial file stays.
+  const written: string[] = [];
+  let ffmpeg: ReturnType<typeof spawn> | undefined,
+    ffmpegDone: Promise<unknown> = Promise.resolve(),
+    stopped = 0;
+  const yieldLoop = () => new Promise((done) => setImmediate(done));
+  // The handlers stay for the whole run: a second signal during the cleanup must not end the process before the cleanup ends.
+  const onSignal = (signal: NodeJS.Signals) => {
+    if (stopped) return;
+    stopped = signal === 'SIGINT' ? 130 : 143;
+    ffmpeg?.kill('SIGKILL');
+    void ffmpegDone
+      .then(() => written.forEach((f) => rmSync(f, { force: true })))
+      .then(cleanup)
+      .finally(() => process.exit(stopped));
   };
-  let interrupted = false;
-  const onSigint = () => {
-    interrupted = true;
-    void cleanup().finally(() => process.exit(130));
+  process.on('SIGINT', onSignal);
+  process.on('SIGTERM', onSignal);
+  // The encode and the ffmpeg run give the event loop a turn, so a signal handler can run. A write comes straight after this check.
+  const proceed = async () => {
+    await yieldLoop();
+    if (stopped) throw new Error('stopped');
   };
-  process.once('SIGINT', onSigint);
   let code = 0;
   try {
-    const page = join(temp, 'page.html');
-    writeFileSync(page, pageHtml(svg, basename(path)));
     launching = launch(found.path, join(temp, 'profile'));
     const browser = await launching;
     const viewport = { width: Math.ceil(Number(size[1])), height: Math.ceil(Number(size[2])) };
-    const { pngs } = await captureFrames(browser.cdp, page, { ...viewport, scale, fps, dark });
+    const { pngs } = await captureFrames(browser.cdp, pageHtml(svg, basename(path)), { ...viewport, scale, fps, dark });
     const wait = delays(pngs.length, fps);
     // The GIF keeps the PNG bytes, not the pixels: a decoded 2400 x 1600 frame is 15 MB.
-    const gif = encodeGif(pngs.map((png, i) => ({ load: () => decodePng(png), delay: wait[i] })));
+    const gif = await encodeGif(pngs.map((png, i) => ({ load: () => decodePng(png), delay: wait[i] })));
+    await proceed();
+    written.push(out);
     writeFileSync(out, gif);
     console.log(line(out, pngs.length, gif.length));
     if (gif.length > 10485760)
@@ -238,27 +261,39 @@ if (args[0] === 'gif') {
       const mp4Path = out.replace(/(\.gif)?$/, '.mp4');
       if (spawnSync('ffmpeg', ['-version']).error) console.error('gif: no ffmpeg on the PATH, so no MP4. The GIF is written.');
       else {
+        await proceed();
+        written.push(mp4Path);
         // yuv420p needs an even width and height, so the pad filter adds a pixel where needed.
-        const ff = spawnSync(
-          'ffmpeg',
-          [
-            ...['-y', '-loglevel', 'error', '-f', 'image2pipe', '-framerate', String(fps), '-c:v', 'png', '-i', '-'],
-            ...['-vf', 'pad=ceil(iw/2)*2:ceil(ih/2)*2', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', mp4Path],
-          ],
-          { input: Buffer.concat(pngs), maxBuffer: 64 * 1024 * 1024 },
-        );
-        if (ff.status !== 0) throw new Error(`ffmpeg failed: ${String(ff.stderr).trim()}`);
+        ffmpeg = spawn('ffmpeg', [
+          ...['-y', '-loglevel', 'error', '-f', 'image2pipe', '-framerate', String(fps), '-c:v', 'png', '-i', '-'],
+          ...['-vf', 'pad=ceil(iw/2)*2:ceil(ih/2)*2', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', mp4Path],
+        ]);
+        let stderr = '';
+        ffmpeg.stderr!.on('data', (d: Buffer) => (stderr += d));
+        ffmpeg.stdin!.on('error', () => {}); // ffmpeg can exit before it reads all the input; the exit code reports that
+        ffmpeg.stdin!.end(Buffer.concat(pngs));
+        const status = await (ffmpegDone = new Promise<number | null>((done) => {
+          ffmpeg!.once('error', () => done(-1));
+          ffmpeg!.once('close', done);
+        }));
+        await proceed();
+        if (status !== 0) {
+          rmSync(mp4Path, { force: true });
+          throw new Error(`ffmpeg failed: ${stderr.trim()}`);
+        }
         console.log(line(mp4Path, pngs.length, statSync(mp4Path).size));
       }
     }
   } catch (e) {
-    if (!interrupted) console.error(`gif: ${(e as Error).message}`);
+    if (!stopped) console.error(`gif: ${(e as Error).message}`);
     code = 1;
   } finally {
-    process.off('SIGINT', onSigint);
     await cleanup();
   }
-  process.exit(interrupted ? 130 : code);
+  // A signal that came in the last turn runs its handler here, before the exit.
+  await yieldLoop();
+  if (stopped) written.forEach((f) => rmSync(f, { force: true }));
+  process.exit(stopped || code);
 }
 
 const command = args[0] === 'check' ? args.shift()! : 'render';
