@@ -340,3 +340,9 @@ test('playheadItem: the first dated focus id wins, a beat with none keeps the ea
   assert.equal(playheadItem(items, beats, 3)?.id, 'invoice');
   assert.equal(playheadItem(items, [{}], 0), undefined);
 });
+
+test('labelSpan: the label starts after the ramp and is empty when the span is shorter', async () => {
+  const { labelSpan } = await import('./model.ts');
+  assert.deepEqual(labelSpan(2, 5, 0.4), [2.4, 5]);
+  assert.deepEqual(labelSpan(2, 2.2, 0.4), [2.2, 2.2]);
+});
