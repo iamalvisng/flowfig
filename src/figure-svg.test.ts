@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -358,4 +358,30 @@ test('verify passes on the roadmap demo against its plan document', () => {
   const r = spawnSync('node', [cli, 'verify', 'docs/roadmap.svg'], { cwd: root, encoding: 'utf8' });
   assert.equal(r.status, 0, r.stdout + r.stderr);
   assert.match(r.stdout, /0 errors/);
+});
+
+test('a render with --open opens the SVG; check --open and a failed render open nothing', { skip: process.platform === 'win32' }, () => {
+  const dir = mkdtempSync(join(tmpdir(), 'figure-svg-'));
+  try {
+    mkdirSync(join(dir, 'tmp'));
+    // `true` stands in for the system opener: it starts, exits 0, and opens nothing.
+    const env = { ...process.env, TMPDIR: join(dir, 'tmp'), FLOWFIG_OPENER: 'true' };
+    const go = (args: string[], spec: unknown) =>
+      spawnSync(process.execPath, [cli, ...args], { input: JSON.stringify(spec), encoding: 'utf8', env });
+    const out = join(dir, 'out.svg');
+    const r = go(['-', out, '--open'], SPEC);
+    assert.equal(r.status, 0, r.stderr);
+    const lines = r.stdout.trimEnd().split('\n');
+    assert.equal(lines.length, 2);
+    assert.ok(lines[0].startsWith(`${out} — `));
+    assert.equal(lines[1], `${join(dir, 'tmp', 'flowfig-open', 'out.html')} — opened in the default browser`);
+    const c = go(['check', '-', '--open'], SPEC);
+    assert.equal(c.status, 2);
+    assert.match(c.stderr, /--open works with a render, not with check/);
+    rmSync(join(dir, 'tmp', 'flowfig-open'), { recursive: true });
+    assert.equal(go(['-', join(dir, 'bad.svg'), '--open'], BAD).status, 1);
+    assert.equal(existsSync(join(dir, 'tmp', 'flowfig-open')), false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
