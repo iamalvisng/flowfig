@@ -1,0 +1,241 @@
+// An animated GIF with no dependency: one global palette, LZW, and only the changed area of each later frame. Pure.
+import type { Image } from './png.ts';
+
+/** One frame: `load` returns the pixels (called twice per frame); `delay` is in centiseconds. */
+export type GifFrame = { load: () => Image; delay: number };
+
+/** The delay of each of `count` frames in cs. The sum is round(count * 100 / fps). */
+export function delays(count: number, fps: number): number[] {
+  // Each delay is a whole cs: the rounding error moves between frames and does not add up.
+  return Array.from({ length: count }, (_, i) => Math.round(((i + 1) * 100) / fps) - Math.round((i * 100) / fps));
+}
+
+// A color bin: 5 bits per channel, 32768 bins.
+const binOf = (rgb: number) => ((rgb >> 9) & 0x7c00) | ((rgb >> 6) & 0x3e0) | ((rgb >> 3) & 0x1f);
+const channel = (bin: number, c: number) => (bin >> (10 - 5 * c)) & 31;
+
+/** Median cut: split the box with the widest channel range at its weighted median, until 256 boxes or one bin per box. */
+function medianCut(bins: number[], counts: Uint32Array): number[][] {
+  const boxes = [bins];
+  while (boxes.length < 256) {
+    let pick = -1,
+      widest = 0,
+      axis = 0;
+    boxes.forEach((box, i) => {
+      for (let c = 0; c < 3; c++) {
+        let lo = 31,
+          hi = 0;
+        for (const b of box) {
+          const v = channel(b, c);
+          if (v < lo) lo = v;
+          if (v > hi) hi = v;
+        }
+        if (hi - lo > widest) [widest, pick, axis] = [hi - lo, i, c];
+      }
+    });
+    if (pick === -1) break;
+    const box = boxes[pick].sort((a, b) => channel(a, axis) - channel(b, axis));
+    const half = box.reduce((s, b) => s + counts[b], 0) / 2;
+    let at = 1,
+      seen = counts[box[0]];
+    while (at < box.length - 1 && seen + counts[box[at]] <= half) seen += counts[box[at++]];
+    boxes.splice(pick, 1, box.slice(0, at), box.slice(at));
+  }
+  return boxes;
+}
+
+/** The palette: the exact colors if there are 256 or fewer, else median cut over the bins. No dither. */
+function palette(exact: Map<number, number> | null, counts: Uint32Array, sums: Float64Array) {
+  const colors = new Uint8Array(768);
+  if (exact) {
+    for (const [rgb, k] of exact) colors.set([rgb >> 16, (rgb >> 8) & 255, rgb & 255], k * 3);
+    return { colors, index: (rgb: number) => exact.get(rgb)! };
+  }
+  const bins: number[] = [];
+  for (let b = 0; b < 32768; b++) if (counts[b]) bins.push(b);
+  const boxes = medianCut(bins, counts);
+  boxes.forEach((box, k) => {
+    let n = 0,
+      r = 0,
+      g = 0,
+      b = 0;
+    for (const x of box) {
+      n += counts[x];
+      r += sums[x * 3];
+      g += sums[x * 3 + 1];
+      b += sums[x * 3 + 2];
+    }
+    colors.set([Math.round(r / n), Math.round(g / n), Math.round(b / n)], k * 3);
+  });
+  // Each bin maps to the palette color nearest to the mean color of the bin.
+  const table = new Uint8Array(32768);
+  for (const x of bins) {
+    const r = sums[x * 3] / counts[x],
+      g = sums[x * 3 + 1] / counts[x],
+      b = sums[x * 3 + 2] / counts[x];
+    let best = 0,
+      dist = Infinity;
+    for (let k = 0; k < boxes.length; k++) {
+      const d = (colors[k * 3] - r) ** 2 + (colors[k * 3 + 1] - g) ** 2 + (colors[k * 3 + 2] - b) ** 2;
+      if (d < dist) [dist, best] = [d, k];
+    }
+    table[x] = best;
+  }
+  return { colors, index: (rgb: number) => table[binOf(rgb)] };
+}
+
+/** GIF LZW: minimum code size 8, a clear code first, codes up to 12 bits, data in sub-blocks of 255 bytes or fewer. */
+function lzw(px: Uint8Array, width: number, rect: number[], byte: (v: number) => void): void {
+  const [x0, y0, x1, y1] = rect;
+  const CLEAR = 256,
+    END = 257;
+  const block = new Uint8Array(255);
+  const dict = new Map<number, number>();
+  let blen = 0,
+    acc = 0,
+    bits = 0,
+    size = 9,
+    next = 258,
+    prefix = -1;
+  const flush = () => {
+    byte(blen);
+    for (let i = 0; i < blen; i++) byte(block[i]);
+    blen = 0;
+  };
+  const emit = (code: number) => {
+    acc |= code << bits;
+    for (bits += size; bits >= 8; bits -= 8, acc >>>= 8) {
+      block[blen++] = acc & 255;
+      if (blen === 255) flush();
+    }
+  };
+  byte(8);
+  emit(CLEAR);
+  for (let y = y0; y <= y1; y++)
+    for (let x = x0; x <= x1; x++) {
+      const k = px[y * width + x];
+      if (prefix < 0) {
+        prefix = k;
+        continue;
+      }
+      const code = dict.get((prefix << 8) | k);
+      if (code !== undefined) {
+        prefix = code;
+        continue;
+      }
+      emit(prefix);
+      if (next === 4096) {
+        emit(CLEAR);
+        dict.clear();
+        [next, size] = [258, 9];
+      } else {
+        // The decoder runs one code behind: grow the size when the new code no longer fits.
+        if (next >= 1 << size) size++;
+        dict.set((prefix << 8) | k, next++);
+      }
+      prefix = k;
+    }
+  emit(prefix);
+  emit(END);
+  if (bits > 0) {
+    block[blen++] = acc & 255;
+    if (blen === 255) flush();
+  }
+  if (blen) flush();
+  byte(0);
+}
+
+/** An animated GIF that loops forever. All frames have the size of the first frame. */
+export function encodeGif(frames: GifFrame[]): Uint8Array {
+  if (!frames.length) throw new Error('a GIF needs at least one frame');
+  // Pass 1: count the colors of all frames.
+  const counts = new Uint32Array(32768),
+    sums = new Float64Array(32768 * 3);
+  let exact: Map<number, number> | null = new Map(),
+    width = 0,
+    height = 0;
+  for (let f = 0; f < frames.length; f++) {
+    const { width: w, height: h, data } = frames[f].load();
+    if (f === 0) [width, height] = [w, h];
+    else if (w !== width || h !== height) throw new Error(`frame ${f + 1} is ${w} x ${h}; the first frame is ${width} x ${height}`);
+    let last = -1,
+      bin = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      const rgb = (data[i] << 16) | (data[i + 1] << 8) | data[i + 2];
+      if (rgb !== last) {
+        last = rgb;
+        bin = binOf(rgb);
+        if (exact && !exact.has(rgb)) exact = exact.size < 256 ? exact.set(rgb, exact.size) : null;
+      }
+      counts[bin]++;
+      sums[bin * 3] += data[i];
+      sums[bin * 3 + 1] += data[i + 1];
+      sums[bin * 3 + 2] += data[i + 2];
+    }
+  }
+  const { colors, index } = palette(exact, counts, sums);
+
+  let buf = new Uint8Array(1 << 20),
+    len = 0;
+  const byte = (v: number) => {
+    if (len === buf.length) {
+      const grown = new Uint8Array(buf.length * 2);
+      grown.set(buf);
+      buf = grown;
+    }
+    buf[len++] = v;
+  };
+  const word = (v: number) => {
+    byte(v & 255);
+    byte(v >> 8);
+  };
+  const bytes = (...vs: number[]) => vs.forEach(byte);
+  const text = (s: string) => {
+    for (const c of s) byte(c.charCodeAt(0));
+  };
+  text('GIF89a');
+  word(width);
+  word(height);
+  bytes(0xf7, 0, 0); // a global color table of 256 colors; background color 0; no aspect ratio
+  colors.forEach(byte);
+  bytes(0x21, 0xff, 11);
+  text('NETSCAPE2.0');
+  bytes(3, 1, 0, 0, 0); // loop count 0: loop forever
+
+  // Pass 2: each frame as palette indices. A later frame sends only the rectangle that changed.
+  let prev: Uint8Array | null = null;
+  for (const frame of frames) {
+    const { data } = frame.load();
+    const cur = new Uint8Array(width * height);
+    let last = -1,
+      k = 0;
+    for (let p = 0, i = 0; p < cur.length; p++, i += 4) {
+      const rgb = (data[i] << 16) | (data[i + 1] << 8) | data[i + 2];
+      if (rgb !== last) [last, k] = [rgb, index(rgb)];
+      cur[p] = k;
+    }
+    let rect = [0, 0, width - 1, height - 1];
+    if (prev) {
+      rect = [width, height, -1, -1];
+      for (let y = 0, p = 0; y < height; y++)
+        for (let x = 0; x < width; x++, p++)
+          if (cur[p] !== prev[p]) {
+            if (x < rect[0]) rect[0] = x;
+            if (x > rect[2]) rect[2] = x;
+            if (y < rect[1]) rect[1] = y;
+            rect[3] = y;
+          }
+      // No change: a 1 x 1 frame that paints the old color keeps the frame and its delay.
+      if (rect[2] < 0) rect = [0, 0, 0, 0];
+    }
+    bytes(0x21, 0xf9, 4, 1 << 2); // disposal method 1: the next frame draws over this frame
+    word(frame.delay);
+    bytes(0, 0, 0x2c);
+    [rect[0], rect[1], rect[2] - rect[0] + 1, rect[3] - rect[1] + 1].forEach(word);
+    byte(0);
+    lzw(cur, width, rect, byte);
+    prev = cur;
+  }
+  byte(0x3b);
+  return buf.slice(0, len);
+}
