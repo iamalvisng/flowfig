@@ -4,6 +4,7 @@ import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 import { AGENT_TEXT, SKILL_DESCRIPTION } from './guide.ts';
+import { runPicker } from './picker.ts';
 
 const START = '<!-- flowfig:start -->';
 const END = '<!-- flowfig:end -->';
@@ -154,6 +155,9 @@ export function registerMcp(a: Agent, old: string | undefined): string | undefin
   return JSON.stringify(json, null, 2) + '\n';
 }
 
+/** `✓ ` before a finished write. */
+const mark = (status: string) => (/^(created|updated|unchanged)$/.test(status) ? '✓ ' : '');
+
 const HINT = 'run with -y or --agents <ids>';
 
 /** Run `flowfig init`. Returns the exit code. */
@@ -164,8 +168,8 @@ export async function runInit(argv: string[]): Promise<number> {
     all = flag('--all-agents'),
     yes = flag('-y', '--yes'),
     global = flag('--global'),
-    dry = flag('--dry-run'),
-    noMcp = flag('--no-mcp');
+    dry = flag('--dry-run');
+  let noMcp = flag('--no-mcp');
   let ids: string[] | undefined;
   const at = args.indexOf('--agents');
   if (at !== -1) ids = (args.splice(at, 2)[1] ?? '').split(',').filter(Boolean);
@@ -193,9 +197,22 @@ export async function runInit(argv: string[]): Promise<number> {
     for (const a of AGENTS) console.log(`${a.id.padEnd(9)}${a.name}`);
     return fail(HINT);
   } else {
-    const picked = await pick(auto, detected, dir);
-    if (!picked) return 0;
-    chosen = picked;
+    const rows = AGENTS.map((a) => ({
+      id: a.id,
+      name: a.name,
+      detected: detected.includes(a.id),
+      files: [...new Set([a.file, a.also?.file, a.mcp?.file].filter((f): f is string => !!f))],
+    }));
+    const got = await runPicker(rows, auto, !noMcp);
+    if (got === 'fallback') {
+      const picked = await pick(auto, detected, dir);
+      if (!picked) return 0;
+      chosen = picked;
+    } else if (!got) return 0;
+    else {
+      chosen = got.ids;
+      noMcp = !got.mcp;
+    }
   }
 
   for (const a of AGENTS.filter((x) => chosen.has(x.id))) {
@@ -217,7 +234,7 @@ export async function runInit(argv: string[]): Promise<number> {
           writeFileSync(path, next);
         }
       }
-      console.log(`${status.padEnd(9)} ${path}`);
+      console.log(`${mark(status)}${status.padEnd(9)} ${path}`);
     }
     if (noMcp) continue;
     if (a.mcpNote) {
@@ -250,7 +267,7 @@ export async function runInit(argv: string[]): Promise<number> {
         }
       }
     }
-    console.log(`${mcpStatus.padEnd(9)} ${mcpPath}`);
+    console.log(`${mark(mcpStatus)}${mcpStatus.padEnd(9)} ${mcpPath}`);
   }
   if (!dry)
     console.log(`Next: start a new agent session.${chosen.has('claude') ? ' In Claude Code, run /figure how does login work.' : ''}`);
