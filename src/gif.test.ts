@@ -117,8 +117,8 @@ test('delays spreads the rounding over the frames', () => {
   );
 });
 
-test('the GIF has the GIF89a header, a 256-color global table and a loop forever block', () => {
-  const d = decodeGif(encodeGif([frame(image(4, 3, () => [255, 0, 0]))]));
+test('the GIF has the GIF89a header, a 256-color global table and a loop forever block', async () => {
+  const d = decodeGif(await encodeGif([frame(image(4, 3, () => [255, 0, 0]))]));
   assert.equal(d.header, 'GIF89a');
   assert.deepEqual([d.width, d.height], [4, 3]);
   assert.equal(d.tableSize, 256);
@@ -126,17 +126,17 @@ test('the GIF has the GIF89a header, a 256-color global table and a loop forever
   assert.deepEqual([d.frames[0].delay, d.frames[0].disposal], [5, 1]);
 });
 
-test('frames with 3 colors give a palette that holds those 3 exact colors', () => {
+test('frames with 3 colors give a palette that holds those 3 exact colors', async () => {
   const rgb = [
     [255, 0, 0],
     [0, 255, 0],
     [0, 0, 255],
   ];
-  const d = decodeGif(encodeGif([frame(image(3, 1, (x) => rgb[x])), frame(image(3, 1, (x) => rgb[2 - x]))]));
+  const d = decodeGif(await encodeGif([frame(image(3, 1, (x) => rgb[x])), frame(image(3, 1, (x) => rgb[2 - x]))]));
   assert.deepEqual(d.palette.slice(0, 9), rgb.flat());
 });
 
-test('a round trip gives back each frame, and a later frame holds only the changed rectangle', () => {
+test('a round trip gives back each frame, and a later frame holds only the changed rectangle', async () => {
   // 96 x 96 pixels of noise in 200 colors: enough LZW codes to fill the table, so the encoder sends a clear code.
   let seed = 1;
   const noise = () => (seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) % 200;
@@ -149,7 +149,7 @@ test('a round trip gives back each frame, and a later frame holds only the chang
     [12, 21],
   ])
     second.data.set([255, 255, 255, 255], (y * 96 + x) * 4);
-  const d = decodeGif(encodeGif([frame(first), frame(second, 7)]));
+  const d = decodeGif(await encodeGif([frame(first), frame(second, 7)]));
   assert.equal(d.frames.length, 2);
   assert.deepEqual(d.frames[0].rect, [0, 0, 96, 96]);
   assert.deepEqual(d.frames[1].rect, [10, 20, 3, 2]);
@@ -158,28 +158,28 @@ test('a round trip gives back each frame, and a later frame holds only the chang
   assert.deepEqual(d.frames[1].rgba, second.data);
 });
 
-test('a frame with no change is a 1 x 1 image, and the frame count stays the same', () => {
+test('a frame with no change is a 1 x 1 image, and the frame count stays the same', async () => {
   const img = image(5, 4, (x, y) => [x * 40, y * 40, 0]);
-  const d = decodeGif(encodeGif([frame(img), frame(img), frame(img)]));
+  const d = decodeGif(await encodeGif([frame(img), frame(img), frame(img)]));
   assert.equal(d.frames.length, 3);
   assert.deepEqual(d.frames[1].rect, [0, 0, 1, 1]);
   assert.deepEqual(d.frames[2].rgba, img.data);
 });
 
-test('300 colors make a 256-color palette, and each pixel stays within 16 per channel', () => {
+test('300 colors make a 256-color palette, and each pixel stays within 16 per channel', async () => {
   // A lattice of 300 colors, one color in each 5-bit bin: more colors than the palette holds.
   const img = image(30, 10, (x, y) => {
     const i = y * 30 + x;
     return [8 * (i % 10) + 4, 8 * (Math.floor(i / 10) % 10) + 4, 8 * Math.floor(i / 100) + 4];
   });
-  const d = decodeGif(encodeGif([frame(img)]));
+  const d = decodeGif(await encodeGif([frame(img)]));
   assert.equal(d.tableSize, 256);
   const out = d.frames[0].rgba;
   for (let i = 0; i < img.data.length; i++) assert.ok(Math.abs(out[i] - img.data[i]) <= 16, `byte ${i}: ${out[i]} vs ${img.data[i]}`);
 });
 
-test('a frame with another size throws', () => {
-  assert.throws(() => encodeGif([frame(image(2, 2, () => [0, 0, 0])), frame(image(3, 2, () => [0, 0, 0]))]), /frame 2 is 3 x 2/);
+test('a frame with another size throws', async () => {
+  await assert.rejects(encodeGif([frame(image(2, 2, () => [0, 0, 0])), frame(image(3, 2, () => [0, 0, 0]))]), /frame 2 is 3 x 2/);
 });
 
 // End to end: the CLI with the real capture browser. The tests skip when this machine has none.

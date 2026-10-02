@@ -146,7 +146,8 @@ function lzw(px: Uint8Array, width: number, rect: number[], byte: (v: number) =>
 }
 
 /** An animated GIF that loops forever. All frames have the size of the first frame. */
-export function encodeGif(frames: GifFrame[]): Uint8Array {
+// It yields to the event loop between frames, so a signal handler can run while the encode goes on.
+export async function encodeGif(frames: GifFrame[]): Promise<Uint8Array> {
   if (!frames.length) throw new Error('a GIF needs at least one frame');
   // Pass 1: count the colors of all frames.
   const counts = new Uint32Array(32768),
@@ -155,6 +156,7 @@ export function encodeGif(frames: GifFrame[]): Uint8Array {
     width = 0,
     height = 0;
   for (let f = 0; f < frames.length; f++) {
+    await new Promise(setImmediate);
     const { width: w, height: h, data } = frames[f].load();
     if (f === 0) [width, height] = [w, h];
     else if (w !== width || h !== height) throw new Error(`frame ${f + 1} is ${w} x ${h}; the first frame is ${width} x ${height}`);
@@ -205,6 +207,7 @@ export function encodeGif(frames: GifFrame[]): Uint8Array {
   // Pass 2: each frame as palette indices. A later frame sends only the rectangle that changed.
   let prev: Uint8Array | null = null;
   for (const frame of frames) {
+    await new Promise(setImmediate);
     const { data } = frame.load();
     const cur = new Uint8Array(width * height);
     let last = -1,
