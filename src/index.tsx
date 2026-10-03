@@ -23,8 +23,11 @@ import {
   groupGap,
   isGroup,
   isRows,
-  laneColumns,
-  LANE_GAP,
+  lanePlan as planLanes,
+  laneEnd,
+  labelPillW,
+  str,
+  LANE_BLOCK_GAP,
   LANE_PAD,
   LANE_ROW_GAP,
   isLanesLayout,
@@ -165,6 +168,18 @@ export function Flow({
   const [holding, setHolding] = useState(false); // the step hold: a timeline's today line rests at today
   const paths = useRef<Record<string, SVGPathElement | null>>({});
   const [routed, setRouted] = useState<Routed[]>([]);
+  // Lanes: the shared wrap plan (blocks, gaps, stubs), the same as the SVG at the default 830 px width.
+  const lanePlan = useMemo(
+    () =>
+      lanes && !tl && isLanesLayout(layout)
+        ? planLanes(
+            { layout, edges, steps, lanes },
+            // A rail sets a least width, as in the SVG.
+            { floor: withRail ? (layoutRail({ layout, edges, steps, rail: true }, 560)?.width ?? 0) : 0 },
+          )
+        : null,
+    [lanes, tl, layout, edges, steps, withRail],
+  );
   const [active, setActive] = useState<number | null>(steps.length ? 0 : null);
   const [playing, setPlaying] = useState(autoplay);
   // The step's clock lives outside React: pausing freezes it, resizing keeps it, only a new step resets it.
@@ -273,14 +288,33 @@ export function Flow({
         const r = n.getBoundingClientRect();
         avoid.push({ x: (r.left - base.left) / k, y: (r.top - base.top) / k, w: r.width / k, h: r.height / k });
       });
+      // Wrapped lanes: an edge between two blocks is two stubs with pills, clear of the boxes and the lane labels.
+      const stubs = lanePlan?.stubs ?? new Map<string, [string, string]>();
+      if (stubs.size) {
+        for (const n of nodes(layout)) if (rects[n.id]) avoid.push(rects[n.id]);
+        el.querySelectorAll<HTMLElement>('[data-fig-gutter]').forEach((n) => {
+          const r = n.getBoundingClientRect();
+          avoid.push({ x: (r.left - base.left) / k, y: (r.top - base.top) / k, w: r.width / k, h: r.height / k });
+        });
+      }
+      // A wrapped lane end routes to the band of its block (`data-fig-copy`), as in the SVG.
+      const bands: Record<string, Rect> = {};
+      el.querySelectorAll<HTMLElement>('[data-fig-copy]').forEach((n) => {
+        const r = n.getBoundingClientRect();
+        bands[n.dataset.figCopy!] = { x: (r.left - base.left) / k, y: (r.top - base.top) / k, w: r.width / k, h: r.height / k };
+      });
+      const end = (eid: string, id: string, start: boolean) =>
+        lanePlan ? laneEnd(lanePlan, eid, id, start, (lane, b) => bands[`${lane}@${b}`], rects) : id;
       setRouted(
         route(
           edges.map((e, i) => ({
             id: ids[i],
-            from: e.from,
-            to: e.to,
+            from: end(ids[i], e.from, true),
+            to: end(ids[i], e.to, false),
             around: e.around,
             ...(tl && { sides: ['r', 'l'] as [Side, Side], elbow: true }),
+            ...(stubs.has(ids[i]) && { stub: stubs.get(ids[i])!.map(labelPillW) as [number, number] }),
+            ...(stubs.size && e.label != null && { labelW: labelPillW(str(e.label)) }),
           })),
           rects,
           tips,
@@ -294,7 +328,7 @@ export function Flow({
     ro.observe(box);
     el.querySelectorAll('[data-fig]').forEach((n) => ro.observe(n));
     return () => ro.disconnect();
-  }, [edges, ids, layout, tips, noMap, lanes, tl, axisW]);
+  }, [edges, ids, layout, tips, noMap, lanes, tl, axisW, lanePlan]);
 
   // The same rules as `flowfig check`, on what the browser actually drew: real fonts, real wrapping. Each fault prints once.
   const reported = useRef(new Set<string>());
@@ -339,9 +373,12 @@ export function Flow({
       width: Math.max(el?.offsetWidth ?? 0, rail?.width ?? 0),
       boxes,
       edges: [
-        ...routed.map((r) => {
+        ...routed.flatMap((r): Scene['edges'] => {
           const e = edges[ids.indexOf(r.id)];
-          return { id: r.id, from: e.from, to: e.to, curve: r.curve, label: labels[r.id], ...(tl && { behind: true as const }) };
+          // A cross-block edge is two scene edges: each stub with its pill.
+          if (r.stub)
+            return r.stub.pts.map((pts, j) => ({ id: r.id, from: e.from, to: e.to, curve: r.curve, pts, label: labels[`${r.id}:${j}`] }));
+          return [{ id: r.id, from: e.from, to: e.to, curve: r.curve, label: labels[r.id], ...(tl && { behind: true as const }) }];
         }),
         // A rail pill is a label for label-overlap; its curve is a point at the pill center, so it can cross no box.
         ...(rail?.rows ?? []).flatMap((row) => {
@@ -712,72 +749,90 @@ export function Flow({
       );
     }
     if (lanes && item === layout && isLanesLayout(layout)) {
-      const cols = laneColumns({ layout, edges, steps, lanes });
+      const { cols, per, gaps, lead, blocks, gutter } = lanePlan!;
       const n = Math.max(0, ...cols.values()) + 1;
-      return (
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: `max-content repeat(${n}, max-content)`,
-            columnGap: 0,
-            rowGap: LANE_ROW_GAP,
-            position: 'relative',
-          }}
-        >
-          {(layout.children as FigGroup[]).map((lane, li) => {
-            const lit = lane.id != null && litNodes.has(lane.id);
-            return (
-              <Fragment key={lane.id ?? String(lane.label)}>
-                <div
-                  data-fig={lane.id}
-                  data-fig-lane=""
-                  style={{
-                    gridColumn: '1 / -1',
-                    gridRow: li + 1,
-                    background: v('surface'),
-                    border: `1px solid ${lit ? v('accent') : v('border')}`,
-                    boxShadow: lit ? glow : undefined,
-                    transition: 'border-color .25s, box-shadow .25s',
-                    borderRadius: 14,
-                    zIndex: 0,
-                  }}
-                />
-                <div
-                  style={{
-                    gridColumn: 1,
-                    gridRow: li + 1,
-                    alignSelf: 'center',
-                    zIndex: 1,
-                    padding: '0 18px',
-                    fontSize: 12,
-                    fontWeight: 600,
-                    letterSpacing: '.04em',
-                    textTransform: 'uppercase',
-                    color: v('muted'),
-                  }}
-                >
-                  {lane.label}
-                </div>
-                {(lane.children as FigNode[]).map((b) => (
+      const count = blocks.length;
+      // One grid per block of `per` time columns, as in the SVG. A wrapped block shows only the lanes with a box in it.
+      const grid = (bk: number) => {
+        const m = Math.max(0, Math.min(per, n - bk * per));
+        const inBlock = (b: FigNode | FigGroup) => Math.floor(cols.get((b as FigNode).id)! / per) === bk;
+        const shown = (layout.children as FigGroup[]).filter((lane) => count < 2 || lane.children.some(inBlock));
+        return (
+          <div
+            key={bk}
+            data-fig-block={bk}
+            style={{
+              display: 'grid',
+              // A wrapped block stretches to the widest block, so all bands share one width.
+              // Every block has the gutter of the plan, so the labels and the columns line up as in the SVG.
+              gridTemplateColumns: `${gutter}px repeat(${m}, max-content)${count > 1 ? ' 1fr' : ''}`,
+              // An empty lane keeps the SVG's least band height: a 38 px label line plus the lane padding.
+              gridAutoRows: `minmax(${38 + LANE_PAD * 2}px, auto)`,
+              columnGap: 0,
+              rowGap: LANE_ROW_GAP,
+              position: 'relative',
+            }}
+          >
+            {shown.map((lane, li) => {
+              const lit = lane.id != null && litNodes.has(lane.id);
+              return (
+                <Fragment key={lane.id ?? String(lane.label)}>
                   <div
-                    key={b.id}
+                    data-fig={lane.id}
+                    data-fig-copy={lane.id != null ? `${lane.id}@${bk}` : undefined}
+                    data-fig-lane=""
                     style={{
-                      gridColumn: cols.get(b.id)! + 2,
+                      gridColumn: '1 / -1',
+                      gridRow: li + 1,
+                      background: v('surface'),
+                      border: `1px solid ${lit ? v('accent') : v('border')}`,
+                      boxShadow: lit ? glow : undefined,
+                      transition: 'border-color .25s, box-shadow .25s',
+                      borderRadius: 14,
+                      zIndex: 0,
+                    }}
+                  />
+                  <div
+                    data-fig-gutter=""
+                    style={{
+                      gridColumn: 1,
                       gridRow: li + 1,
                       alignSelf: 'center',
                       zIndex: 1,
-                      // The last time column keeps the frame side, as in the SVG.
-                      padding: `${LANE_PAD}px ${cols.get(b.id) === n - 1 ? 18 : LANE_GAP}px ${LANE_PAD}px 0`,
+                      padding: '0 18px',
+                      whiteSpace: 'nowrap',
+                      fontSize: 12,
+                      fontWeight: 600,
+                      letterSpacing: '.04em',
+                      textTransform: 'uppercase',
+                      color: v('muted'),
                     }}
                   >
-                    {renderItem(b, 1)}
+                    {lane.label}
                   </div>
-                ))}
-              </Fragment>
-            );
-          })}
-        </div>
-      );
+                  {(lane.children as FigNode[]).filter(inBlock).map((b) => (
+                    <div
+                      key={b.id}
+                      style={{
+                        gridColumn: (cols.get(b.id)! % per) + 2,
+                        gridRow: li + 1,
+                        alignSelf: 'center',
+                        zIndex: 1,
+                        // The space after each column and before a block's first column comes from the plan, as in the SVG.
+                        padding: `${LANE_PAD}px ${gaps[cols.get(b.id)!]}px ${LANE_PAD}px ${cols.get(b.id)! % per ? 0 : lead[bk]}px`,
+                      }}
+                    >
+                      {renderItem(b, 1)}
+                    </div>
+                  ))}
+                </Fragment>
+              );
+            })}
+          </div>
+        );
+      };
+      if (count < 2) return grid(blocks[0]);
+      return <div style={{ display: 'flex', flexDirection: 'column', gap: LANE_BLOCK_GAP }}>{blocks.map(grid)}</div>;
     }
     if (isGroup(item)) {
       const lit = item.id != null && litNodes.has(item.id);
@@ -1055,8 +1110,9 @@ export function Flow({
                   transformOrigin: 'top left',
                   padding: 4,
                   // room for edges that arc over or under the boxes
-                  paddingTop: edges.some((e) => e.around === 'above') ? 44 : 4,
-                  paddingBottom: edges.some((e) => e.around === 'below') ? 44 : 4,
+                  // A stub does not arc.
+                  paddingTop: edges.some((e, i) => e.around === 'above' && !lanePlan?.stubs.has(ids[i])) ? 44 : 4,
+                  paddingBottom: edges.some((e, i) => e.around === 'below' && !lanePlan?.stubs.has(ids[i])) ? 44 : 4,
                 }}
               >
                 {renderItem(layout, 0)}
@@ -1092,13 +1148,17 @@ export function Flow({
                     const on = litEdges.has(r.id);
                     const tone = hopTone(r.id);
                     const hidden = !on && edges[ids.indexOf(r.id)].quiet;
-                    return (
+                    const look = (d: string, key: string, guides = false) => (
                       <path
-                        key={r.id}
-                        ref={(p) => {
-                          paths.current[r.id] = p;
-                        }}
-                        d={r.d}
+                        key={key}
+                        ref={
+                          guides
+                            ? (p) => {
+                                paths.current[r.id] = p;
+                              }
+                            : undefined
+                        }
+                        d={d}
                         fill="none"
                         stroke={on ? (tone ?? v('accent')) : v('muted')}
                         strokeWidth={on ? EDGE_ON : EDGE_OFF}
@@ -1107,6 +1167,20 @@ export function Flow({
                         style={{ transition: 'stroke .25s, stroke-opacity .25s' }}
                       />
                     );
+                    const guide = (
+                      <path
+                        key={r.id}
+                        ref={(p) => {
+                          paths.current[r.id] = p;
+                        }}
+                        d={r.d}
+                        fill="none"
+                        stroke="none"
+                      />
+                    );
+                    // A cross-block edge draws its two stubs; its full path only guides the packet, which jumps between the blocks.
+                    if (r.stub) return [...r.stub.parts.map((d, j) => look(d, `${r.id}:${j}`)), guide];
+                    return look(r.d, r.id, true);
                   })}
                   {Array.from({ length: Math.max(1, ...beats.map((b) => b.hops.length)) }, (_, j) => (
                     <g
@@ -1149,19 +1223,29 @@ export function Flow({
                     {cur?.hops[j]?.data}
                   </div>
                 ))}
-                {routed.map((r) => {
+                {routed.flatMap((r) => {
                   const e = edges[ids.indexOf(r.id)];
-                  if (e.label == null || tl) return null;
+                  const texts = r.stub && lanePlan?.stubs.get(r.id);
+                  if (!texts && (e.label == null || tl)) return [];
                   const on = litEdges.has(r.id);
                   const tone = hopTone(r.id);
-                  return (
+                  // A cross-block edge has two pills, one per stub, in place of its label.
+                  const pills = texts
+                    ? r.stub!.pills.map((p, j) => ({
+                        key: `${r.id}:${j}`,
+                        x: p.x + p.w / 2,
+                        y: p.y + p.h / 2,
+                        text: texts[j] as ReactNode,
+                      }))
+                    : [{ key: r.id, x: r.mid.x, y: r.mid.y, text: e.label }];
+                  return pills.map((p) => (
                     <div
-                      key={r.id}
-                      data-fig-label={r.id}
+                      key={p.key}
+                      data-fig-label={p.key}
                       style={{
                         position: 'absolute',
-                        left: r.mid.x,
-                        top: r.mid.y,
+                        left: p.x,
+                        top: p.y,
                         transform: 'translate(-50%, -50%)',
                         fontSize: 11,
                         lineHeight: '16px',
@@ -1177,9 +1261,9 @@ export function Flow({
                         transition: 'background .25s, color .25s, opacity .25s',
                       }}
                     >
-                      {e.label}
+                      {p.text}
                     </div>
-                  );
+                  ));
                 })}
               </div>
             </div>

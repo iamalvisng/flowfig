@@ -139,6 +139,7 @@ const at = ([p0, p1, p2, p3]: [Pt, Pt, Pt, Pt], t: number): Pt => {
   const [a, b, c, d] = [u * u * u, 3 * u * u * t, 3 * u * t * t, t * t * t];
   return { x: a * p0.x + b * p1.x + c * p2.x + d * p3.x, y: a * p0.y + b * p1.y + c * p2.y + d * p3.y };
 };
+const lerp = (p: Pt, q: Pt, t: number): Pt => ({ x: p.x + (q.x - p.x) * t, y: p.y + (q.y - p.y) * t });
 // The margins keep a touch from counting: an edge leaves along a border, and pills sit edge to edge.
 const inside = (p: Pt, r: Rect, pad: number) => p.x > r.x + pad && p.x < r.x + r.w - pad && p.y > r.y + pad && p.y < r.y + r.h - pad;
 const overlap = (a: Rect, b: Rect, pad: number) =>
@@ -156,10 +157,26 @@ export function checkScene(scene: Scene, { width = 830, minText = 10 }: CheckOpt
     }
   for (const e of scene.edges) {
     if (e.behind) continue;
-    const pts = Array.from({ length: 33 }, (_, i) => at(e.curve, i / 32));
+    const pts = e.pts
+      ? e.pts.slice(1).flatMap((q, k) => Array.from({ length: 17 }, (_, i) => lerp(e.pts![k], q, i / 16)))
+      : Array.from({ length: 33 }, (_, i) => at(e.curve, i / 32));
     for (const b of scene.boxes)
       if (b.id !== e.from && b.id !== e.to && pts.some((p) => inside(p, b.rect, 2)))
         out.push(err('edge-crosses-box', [e.id, b.id], `edge "${e.id}" passes through box "${b.id}"`));
+  }
+  // A stub pill (the label of an edge with `pts`) must not sit on another edge's path.
+  const pills = scene.edges.filter((e) => e.pts && e.label);
+  const under = new Set<string>();
+  for (const e of scene.edges) {
+    if (e.behind) continue;
+    const pts = e.pts
+      ? e.pts.slice(1).flatMap((q, k) => Array.from({ length: 17 }, (_, i) => lerp(e.pts![k], q, i / 16)))
+      : Array.from({ length: 33 }, (_, i) => at(e.curve, i / 32));
+    for (const f of pills)
+      if (f.id !== e.id && !under.has(e.id + ' ' + f.id) && pts.some((p) => inside(p, f.label!, 2))) {
+        under.add(e.id + ' ' + f.id);
+        out.push(err('label-overlap', [e.id, f.id], `edge "${e.id}" passes under the pill of edge "${f.id}"`));
+      }
   }
   const labeled = scene.edges.filter((e) => e.label);
   labeled.forEach((e, i) => {

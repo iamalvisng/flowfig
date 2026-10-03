@@ -100,3 +100,45 @@ test('an elbow moves its vertical run clear of an outside label, then falls back
   const off = { x: 150, y: 200, w: 100, h: 28 }; // below the run
   assert.match(route(elbow, rects, new Set(), [off])[0].d, /H 200 V/, 'a label off the run is ignored');
 });
+
+test('stub: each pill takes the first clear place, else the first place', () => {
+  const rects = { a: { x: 0, y: 0, w: 100, h: 50 }, b: { x: 400, y: 300, w: 100, h: 50 } };
+  const pills = (avoid: { x: number; y: number; w: number; h: number }[]) =>
+    route([{ id: 'e', from: 'a', to: 'b', stub: [60, 60] }], rects, new Set(), avoid)[0].stub!.pills.map((p) => [p.x, p.y]);
+  // 1: right of the source, left of the target.
+  assert.deepEqual(pills([]), [
+    [112, 16],
+    [328, 316],
+  ]);
+  // 2: right and under the bottom edge.
+  assert.deepEqual(pills([{ x: 110, y: 14, w: 70, h: 22 }])[0], [112, 52]);
+  // 3: right and over the top edge.
+  assert.deepEqual(pills([{ x: 110, y: 14, w: 70, h: 60 }])[0], [112, -20]);
+  // 5: below the source (4, one pill lower, is taken too).
+  assert.deepEqual(pills([{ x: 110, y: -30, w: 70, h: 110 }])[0], [20, 62]);
+  // The target pill: left and over the top edge, when its left place is taken.
+  assert.deepEqual(pills([{ x: 320, y: 312, w: 70, h: 22 }])[1], [328, 280]);
+  // No clear place: the first place stays, and check reports it.
+  assert.deepEqual(pills([{ x: -1000, y: -1000, w: 3000, h: 3000 }]), [
+    [112, 16],
+    [328, 316],
+  ]);
+});
+
+test('stub: a pill keeps clear of the path of another edge', () => {
+  const rects = {
+    a: { x: 0, y: 0, w: 100, h: 50 },
+    b: { x: 400, y: 300, w: 100, h: 50 },
+    c: { x: 112, y: -100, w: 40, h: 20 },
+    d: { x: 112, y: 200, w: 40, h: 20 },
+  };
+  // c -> d runs down through the first place of the source pill.
+  const [, e] = route(
+    [
+      { id: 'cd', from: 'c', to: 'd' },
+      { id: 'e', from: 'a', to: 'b', stub: [60, 60] },
+    ],
+    rects,
+  );
+  assert.notDeepEqual([e.stub!.pills[0].x, e.stub!.pills[0].y], [112, 16]);
+});

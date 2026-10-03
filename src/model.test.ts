@@ -10,6 +10,7 @@ import {
   TL_DIAMOND,
   TL_MIN_BAR,
   laneColumns,
+  lanePlan,
   beatMs,
   decisions,
   edgeId,
@@ -19,7 +20,7 @@ import {
   readMs,
   toBeat,
 } from './model.ts';
-import type { FlowProps } from './model.ts';
+import type { FigBeat, FigGroup, FigNode, FlowProps } from './model.ts';
 
 test('toBeat reads every way a beat can be written', () => {
   assert.deepEqual(toBeat('a->b'), { hops: [{ edge: 'a->b', back: false }] });
@@ -345,4 +346,43 @@ test('labelSpan: the label starts after the ramp and is empty when the span is s
   const { labelSpan } = await import('./model.ts');
   assert.deepEqual(labelSpan(2, 5, 0.4), [2.4, 5]);
   assert.deepEqual(labelSpan(2, 2.2, 0.4), [2.2, 2.2]);
+});
+
+test('lanePlan: n is the largest column count per block that keeps the text readable at the width', async () => {
+  const { default: demo } = await import('../figures/returns-process.ts');
+  assert.equal(lanePlan(demo.props).per, 4);
+  assert.equal(lanePlan(demo.props, { width: 1400 }).per, 7);
+  assert.equal(lanePlan(demo.props, { width: 200 }).per, 1);
+  assert.equal(lanePlan(lanesFig, { width: 1200 }).per, Math.max(...laneColumns(lanesFig).values()) + 1);
+});
+
+test('lanePlan: a cross-block edge gets two pill texts, and the gaps next to its ends grow to hold them', async () => {
+  const { default: demo } = await import('../figures/returns-process.ts');
+  const plan = lanePlan(demo.props);
+  assert.deepEqual(
+    [...plan.stubs],
+    [
+      ['arrive', ['→ Inspect', 'from Ship item']],
+      ['late', ['late → Rejected', 'from Review']],
+    ],
+  );
+  // ship is the last column of block 1; inspect is the first column of block 2.
+  assert.ok(plan.gaps[plan.cols.get('ship')!] > 18);
+  assert.ok(plan.lead[1] > 0 && plan.lead[0] === 0);
+  assert.equal(lanePlan(demo.props, { width: 1400 }).stubs.size, 0);
+});
+
+test('lanePlan: a diamond adds 70 px to its column, and a mono card row lowers the smallest font to 10.5 px', async () => {
+  const { default: demo } = await import('../figures/returns-process.ts');
+  const diamond = structuredClone(demo.props);
+  ((diamond.layout.children[1] as FigGroup).children[0] as FigNode).shape = 'decision';
+  assert.equal(lanePlan(demo.props).per, 4);
+  assert.equal(lanePlan(diamond).per, 3);
+  const card = (mono: boolean) => {
+    const f = structuredClone(demo.props);
+    (f.steps![0].flow[0] as FigBeat).show = { review: [{ text: 'x', mono }] };
+    return lanePlan(f, { width: 900 }).per;
+  };
+  assert.equal(card(false), 4);
+  assert.equal(card(true), 3);
 });

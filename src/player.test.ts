@@ -162,8 +162,9 @@ const lanesFig: FlowProps = {
 
 test('lanes: the player renders a grid with one band per lane and a grid column per box', () => {
   const html = render(lanesFig);
-  assert.match(html, /grid-template-columns:\s*max-content repeat\(\d+,\s*max-content\)/);
-  assert.equal((html.match(/data-fig-lane/g) ?? []).length, 3);
+  assert.match(html, /grid-template-columns:\s*[\d.]+px repeat\(\d+,\s*max-content\)/);
+  // Five columns do not fit 830 px: block 1 holds all three lanes, block 2 only Support.
+  assert.equal((html.match(/data-fig-lane/g) ?? []).length, 4);
   assert.match(html, /grid-column:\s*3[^>]*><div data-fig="check"/);
   assert.match(html, /grid-column:\s*3[^>]*><div data-fig="audit"/);
   assert.match(html, /Customer/);
@@ -171,8 +172,11 @@ test('lanes: the player renders a grid with one band per lane and a grid column 
 
 test('lanes: the last time column keeps 18 px on the right, and a box at the top does not crash', () => {
   const html = render(lanesFig);
-  assert.match(html, /padding:24px 18px 24px 0[^>]*><div data-fig="reject"/);
-  assert.match(html, /padding:24px 56px 24px 0[^>]*><div data-fig="check"/);
+  // reject opens block 2, so its cell also holds the lead for the pill of its stub.
+  assert.match(html, /padding:24px 18px 24px [\d.]+px[^>]*><div data-fig="reject"/);
+  assert.match(html, /padding:24px 56px 24px 0[^>]*><div data-fig="ask"/);
+  // check has a stub to reject in block 2, so the gap after it grows to hold the pill.
+  assert.ok(Number(/padding:24px ([\d.]+)px[^>]*><div data-fig="check"/.exec(html)![1]) > 56);
   assert.doesNotThrow(() => render({ lanes: true, layout: { direction: 'row', children: [{ id: 'a', label: 'A' }] }, edges: [] }));
 });
 
@@ -224,4 +228,32 @@ test('timeline: the server markup has the bars, the axis ticks and the today lin
     render({ ...tlFig, steps: [{ label: 'walk', flow: [{ light: ['spec'] }] }] }).includes('role="tablist"'),
     'own steps keep the tabs',
   );
+});
+
+test('lanes wrap: the player shows the blocks of the SVG, each with its own lanes', async () => {
+  const { default: demo } = await import('../figures/returns-process.ts');
+  const { lanePlan, nodes } = await import('./model.ts');
+  const html = render(demo.props);
+  const blocks = html.split(/data-fig-block="\d+"/).slice(1);
+  assert.equal(blocks.length, 2);
+  const lanes = (b: string) => [...b.matchAll(/data-fig-gutter=""[^>]*>([^<]+)</g)].map((m) => m[1]);
+  assert.deepEqual(lanes(blocks[0]), ['Customer', 'Support']);
+  assert.deepEqual(lanes(blocks[1]), ['Support', 'Warehouse', 'Finance']);
+  const { cols, per } = lanePlan(demo.props);
+  for (const n of nodes(demo.props.layout))
+    assert.ok(blocks[Math.floor(cols.get(n.id)! / per)].includes(`data-fig="${n.id}"`), `${n.id} sits in the SVG's block`);
+  // An empty lane keeps the SVG's least band height of 86 px.
+  assert.match(html, /grid-auto-rows:minmax\(86px, auto\)/);
+});
+
+test('lanes wrap: every block has the gutter of the plan, and an empty block is not drawn', async () => {
+  const { default: demo } = await import('../figures/returns-process.ts');
+  const { lanePlan } = await import('./model.ts');
+  const html = render(demo.props);
+  const gutters = [...html.matchAll(/data-fig-block="\d+" style="display:grid;grid-template-columns:([\d.]+)px/g)].map((m) => +m[1]);
+  assert.deepEqual(gutters, [lanePlan(demo.props).gutter, lanePlan(demo.props).gutter]);
+  const far = structuredClone(demo.props);
+  (far.layout.children[1] as { children: { id: string; at?: number }[] }).children.find((b) => b.id === 'rejected')!.at = 20;
+  const blocks = [...render(far).matchAll(/data-fig-block="(\d+)"/g)].map((m) => +m[1]);
+  assert.deepEqual(blocks, lanePlan(far).blocks);
 });

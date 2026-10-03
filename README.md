@@ -301,6 +301,7 @@ The last line gives the counts of the parts of the figure. Compare the counts wi
 | `low-contrast`      | error    | A text and background pair below 4.5:1, in the light, dark or custom theme.  |
 | `empty-step`        | warning  | A step with no beats.                                                        |
 | `small-text`        | warning  | At the page width, the smallest text is below the minimum size.              |
+| `lane-end-block`    | warning  | In wrapped lanes, an edge ends at a lane that no block on its side shows.    |
 | `font-estimated`    | warning  | `theme.font` is set. The SVG check estimates text width for the system font. |
 | `color-not-checked` | warning  | A color that the check cannot read, so its contrast is not checked.          |
 
@@ -308,7 +309,7 @@ The last line gives the counts of the parts of the figure. Compare the counts wi
 | ----------------- | ---------------------------------------------------------------------------------------------------------- |
 | `--strict`        | Every warning becomes an error.                                                                            |
 | `--json`          | Print the findings as a JSON array, for scripts. Each finding has `rule`, `severity`, `ids` and `message`. |
-| `--width <px>`    | The page width for `small-text`. Default: 830.                                                             |
+| `--width <px>`    | The page width for `small-text` and for the lanes wrap. Default: 830.                                      |
 | `--min-text <px>` | The smallest text size the reader must get. Default: 10.                                                   |
 
 The exit code is 0 with no errors, 1 with one or more errors, and 2 for bad use, such as a missing input, an unknown flag, or a `--width` value that is not a number.

@@ -1,13 +1,35 @@
+import { STUB } from './model.ts';
 export type Rect = { x: number; y: number; w: number; h: number };
 export type Side = 'l' | 'r' | 't' | 'b';
 export type Pt = { x: number; y: number };
-export type Routed = { id: string; d: string; mid: Pt; curve: [Pt, Pt, Pt, Pt] };
+/** A cross-block edge of wrapped lanes: the two drawn stubs, their pills, and their points for `check`. `d` then holds both stubs,
+ * so a packet runs the source stub and jumps to the target stub. */
+export type Stub = { parts: [string, string]; pills: [Rect, Rect]; pts: [Pt[], Pt[]] };
+export type Routed = { id: string; d: string; mid: Pt; curve: [Pt, Pt, Pt, Pt]; stub?: Stub };
 
 type Around = 'above' | 'below';
-type Pick = { id: string; a: Rect; b: Rect; sa: Side; sb: Side; from: string; to: string; around?: Around; elbow?: boolean };
+type Pick = {
+  id: string;
+  a: Rect;
+  b: Rect;
+  sa: Side;
+  sb: Side;
+  from: string;
+  to: string;
+  around?: Around;
+  elbow?: boolean;
+  stub?: [number, number];
+  labelW?: number;
+};
 
 const cx = (r: Rect) => r.x + r.w / 2;
 const cy = (r: Rect) => r.y + r.h / 2;
+/** A point on the cubic Bézier at `t`, as `check` samples an edge. */
+const bezier = ([p0, p1, p2, p3]: [Pt, Pt, Pt, Pt], t: number): Pt => {
+  const u = 1 - t;
+  const [a, b, c, d] = [u * u * u, 3 * u * u * t, 3 * u * t * t, t * t * t];
+  return { x: a * p0.x + b * p1.x + c * p2.x + d * p3.x, y: a * p0.y + b * p1.y + c * p2.y + d * p3.y };
+};
 
 // Turns edges between measured boxes into curved SVG paths.
 // Boxes stacked on top of each other connect bottom->top, otherwise side->side.
@@ -16,11 +38,22 @@ const cy = (r: Rect) => r.y + r.h / 2;
 // `elbow` draws a right-angle path, from a right end to a left end: its four curve points are the corners.
 // `sides` fixes the two sides an edge uses (a timeline uses right to left).
 // `around` makes an edge leave and enter from the top or bottom, arcing over whatever sits between.
+// `labelW` is the width of an edge's label pill: a stub pill keeps clear of it.
+// `stub` (wrapped lanes, the two pill widths) draws a short stub from the source to a pill, and from a second pill into the target.
 export function route(
-  edges: { id: string; from: string; to: string; around?: Around; sides?: [Side, Side]; elbow?: boolean }[],
+  edges: {
+    id: string;
+    from: string;
+    to: string;
+    around?: Around;
+    sides?: [Side, Side];
+    elbow?: boolean;
+    stub?: [number, number];
+    labelW?: number;
+  }[],
   rects: Record<string, Rect>,
   tips: Set<string> = new Set(),
-  avoid: Rect[] = [], // boxes an elbow's vertical run must not cross (the timeline's outside labels)
+  avoid: Rect[] = [], // what an elbow's vertical run and a stub pill must not cross (the timeline's outside labels; the boxes and gutters of lanes)
 ): Routed[] {
   const picks: Pick[] = [];
   for (const e of edges) {
@@ -30,17 +63,19 @@ export function route(
     const stacked = a.x < b.x + b.w && b.x < a.x + a.w;
     const [sa, sb]: Side[] = e.sides
       ? e.sides
-      : e.around
-        ? e.around === 'above'
-          ? ['t', 't']
-          : ['b', 'b']
-        : stacked
-          ? a.y < b.y
-            ? ['b', 't']
-            : ['t', 'b']
-          : a.x < b.x
-            ? ['r', 'l']
-            : ['l', 'r'];
+      : e.stub
+        ? ['r', 'l']
+        : e.around
+          ? e.around === 'above'
+            ? ['t', 't']
+            : ['b', 'b']
+          : stacked
+            ? a.y < b.y
+              ? ['b', 't']
+              : ['t', 'b']
+            : a.x < b.x
+              ? ['r', 'l']
+              : ['l', 'r'];
     picks.push({ ...e, a, b, sa, sb });
   }
 
@@ -83,9 +118,69 @@ export function route(
     const [s, c1, c2, e] = curve;
     return { id, d: `M ${s.x} ${s.y} C ${c1.x} ${c1.y}, ${c2.x} ${c2.y}, ${e.x} ${e.y}`, mid, curve };
   };
-  return picks.map((p) => {
+  // Stub pills are placed after the other edges. Each pill keeps clear of `avoid`, of the edge labels, of the pills and stubs
+  // before it, and of every edge path (sampled as `check` samples it).
+  const pills: Rect[] = [];
+  const paths: Pt[] = [];
+  const clear = (r: Rect) =>
+    ![...avoid, ...pills].some((q) => r.x < q.x + q.w + 2 && q.x < r.x + r.w + 2 && r.y < q.y + q.h + 2 && q.y < r.y + r.h + 2) &&
+    !paths.some((q) => q.x > r.x - 2 && q.x < r.x + r.w + 2 && q.y > r.y - 2 && q.y < r.y + r.h + 2);
+  const one = (p: Pick): Routed => {
     const s = anchor.get(p.id + ':s')!,
       e = anchor.get(p.id + ':e')!;
+    if (p.stub) {
+      // The source pill goes right of the source, else right and under its bottom edge, else right and over its top edge,
+      // else right one pill lower, else below it. The target pill goes left of the target, else left and over its top edge,
+      // else left and under its bottom edge, else left one pill higher, else above it.
+      // If no place is clear, the first one stays and `check` reports it.
+      const [ow, iw] = p.stub;
+      const outs: [Rect, Pt, Pt][] = [
+        [{ x: s.x + STUB, y: s.y - 9, w: ow, h: 18 }, s, { x: s.x + STUB, y: s.y }],
+        [{ x: s.x + STUB, y: p.a.y + p.a.h + 2, w: ow, h: 18 }, s, { x: s.x + STUB, y: p.a.y + p.a.h + 11 }],
+        [{ x: s.x + STUB, y: p.a.y - 20, w: ow, h: 18 }, s, { x: s.x + STUB, y: p.a.y - 11 }],
+        [{ x: s.x + STUB, y: p.a.y + p.a.h + 22, w: ow, h: 18 }, s, { x: s.x + STUB, y: p.a.y + p.a.h + 31 }],
+        [
+          { x: cx(p.a) - ow / 2, y: p.a.y + p.a.h + STUB, w: ow, h: 18 },
+          { x: cx(p.a), y: p.a.y + p.a.h },
+          { x: cx(p.a), y: p.a.y + p.a.h + STUB },
+        ],
+      ];
+      const ins: [Rect, Pt, Pt][] = [
+        [{ x: e.x - STUB - iw, y: e.y - 9, w: iw, h: 18 }, { x: e.x - STUB, y: e.y }, e],
+        [{ x: e.x - STUB - iw, y: p.b.y - 20, w: iw, h: 18 }, { x: e.x - STUB, y: p.b.y - 11 }, e],
+        [{ x: e.x - STUB - iw, y: p.b.y + p.b.h + 2, w: iw, h: 18 }, { x: e.x - STUB, y: p.b.y + p.b.h + 11 }, e],
+        [{ x: e.x - STUB - iw, y: p.b.y - 40, w: iw, h: 18 }, { x: e.x - STUB, y: p.b.y - 31 }, e],
+        [
+          { x: cx(p.b) - iw / 2, y: p.b.y - STUB - 18, w: iw, h: 18 },
+          { x: cx(p.b), y: p.b.y - STUB },
+          { x: cx(p.b), y: p.b.y },
+        ],
+      ];
+      const seg = (a: Pt, b: Pt) =>
+        Array.from({ length: 9 }, (_, i) => ({ x: a.x + ((b.x - a.x) * i) / 8, y: a.y + ((b.y - a.y) * i) / 8 }));
+      const [po, o1, o2] = outs.find(([r]) => clear(r)) ?? outs[0];
+      pills.push(po);
+      paths.push(...seg(o1, o2));
+      const [pi, i1, i2] = ins.find(([r]) => clear(r)) ?? ins[0];
+      pills.push(pi);
+      paths.push(...seg(i1, i2));
+      const line = (a: Pt, b: Pt) => `M ${a.x} ${a.y} L ${b.x} ${b.y}`;
+      const parts: [string, string] = [line(o1, o2), line(i1, i2)];
+      return {
+        id: p.id,
+        d: parts.join(' '),
+        mid: { x: po.x + ow / 2, y: po.y + 9 },
+        curve: [o1, o1, i2, i2],
+        stub: {
+          parts,
+          pills: [po, pi],
+          pts: [
+            [o1, o2],
+            [i1, i2],
+          ],
+        },
+      };
+    }
     if (p.elbow) {
       // The vertical run sits at the midpoint x. Under 16 px of gap, it detours: out 8 px past the start, back to 8 px
       // before the end, then forward into the target. A gap of 0 px or less takes the same detour.
@@ -123,5 +218,15 @@ export function route(
     const c1 = horiz ? { x: s.x + sign * k, y: s.y } : { x: s.x, y: s.y + sign * k };
     const c2 = horiz ? { x: e.x - sign * k, y: e.y } : { x: e.x, y: e.y - sign * k };
     return drawn(p.id, [s, c1, c2, e], { x: (s.x + e.x) / 2, y: (s.y + e.y) / 2 });
-  });
+  };
+  const done = new Map<Pick, Routed>();
+  for (const p of picks) {
+    if (p.stub) continue;
+    const r = one(p);
+    done.set(p, r);
+    if (p.labelW) pills.push({ x: r.mid.x - p.labelW / 2, y: r.mid.y - 9, w: p.labelW, h: 18 });
+    paths.push(...Array.from({ length: 33 }, (_, i) => bezier(r.curve, i / 32)));
+  }
+  for (const p of picks) if (p.stub) done.set(p, one(p));
+  return picks.map((p) => done.get(p)!);
 }

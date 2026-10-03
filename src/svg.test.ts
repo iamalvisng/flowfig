@@ -2,7 +2,21 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { toSvg, render, check } from './svg.ts';
 import { textWidth } from './text.ts';
-import { timelineLayout, TL_AXIS_W, TL_BAR_H, DARK, BASE_RATE, STEP_HOLD_MS, beatMs, nodes, type FlowProps } from './model.ts';
+import {
+  timelineLayout,
+  TL_AXIS_W,
+  TL_BAR_H,
+  DARK,
+  BASE_RATE,
+  STEP_HOLD_MS,
+  beatMs,
+  nodes,
+  lanePlan,
+  type FigGroup,
+  type FigNode,
+  type FlowProps,
+} from './model.ts';
+import type { Pt } from './geometry.ts';
 import { layoutRail, railState, RAIL } from './rail.ts';
 
 const fig: FlowProps = {
@@ -605,7 +619,8 @@ const lanesFig: FlowProps = {
 };
 
 test('lanes: boxes in one time column share x across lanes; the bands span the width; a lane label sits in the gutter', () => {
-  const { scene, svg } = render(lanesFig);
+  // Five columns wrap at 830 px; a wider page keeps them in one block.
+  const { scene, svg } = render(lanesFig, { width: 1200 });
   const rect = (id: string) => scene.boxes.find((b) => b.id === id)!.rect;
   assert.equal(rect('check').x, rect('audit').x); // both column 1
   assert.ok(rect('ask').x < rect('check').x && rect('check').x < rect('pay').x);
@@ -636,11 +651,12 @@ test('lanes: an empty lane still draws, a decision widens its column, and the ra
       ],
     },
   };
-  const { svg, scene } = render(fig);
+  // A wide page keeps one block: only one block draws an empty lane.
+  const { svg, scene } = render(fig, { width: 1600 });
   assert.match(svg, /EMPTY/);
   const w = (id: string) => scene.boxes.find((b) => b.id === id)!.rect.w;
   assert.ok(w('check') > w('ask'));
-  assert.equal(check(fig).filter((f) => f.severity === 'error').length, 0);
+  assert.equal(check(fig, { width: 1600 }).filter((f) => f.severity === 'error').length, 0);
 });
 
 test('lanes: a box at the top draws the normal layout and check reports the rule; the bands do not touch', () => {
@@ -1010,4 +1026,200 @@ test('timeline: no dependency elbow crosses an outside label box on the roadmap 
         assert.ok(!hit, `an elbow crosses the label of ${b.id}`);
       }
   }
+});
+
+test('lanes wrap: seven columns at 830 px draw as two blocks that hold only their own lanes, and check finds nothing', async () => {
+  const { default: demo } = await import('../figures/returns-process.ts');
+  const bands = (width?: number) =>
+    [...render(demo.props, { width }).svg.matchAll(/class="lane[^>]*\/><text[^>]*>([A-Z]+)</g)].map((m) => m[1]);
+  // Block 1 holds Customer and Support; block 2 holds Support, Warehouse and Finance.
+  assert.deepEqual(bands(), ['CUSTOMER', 'SUPPORT', 'SUPPORT', 'WAREHOUSE', 'FINANCE']);
+  assert.deepEqual(check(demo.props, { width: 830 }), []);
+  // The block count comes from the width: a wider page holds all seven columns in one block.
+  assert.deepEqual(bands(1400), ['CUSTOMER', 'SUPPORT', 'WAREHOUSE', 'FINANCE']);
+});
+
+test('lanes wrap: a cross-block edge is two stubs with pills that clear every box and label, and its packet jumps', async () => {
+  const { default: demo } = await import('../figures/returns-process.ts');
+  const { scene, svg } = render(demo.props);
+  for (const [id, texts] of [
+    ['arrive', ['→ Inspect', 'from Ship item']],
+    ['late', ['late → Rejected', 'from Review']],
+  ] as const) {
+    const parts = scene.edges.filter((e) => e.id === id);
+    assert.equal(parts.length, 2, `${id} has two stubs`);
+    for (const t of texts) assert.ok(svg.includes(`>${t}</text>`), t);
+    // The guide path holds both stubs: a second M is the jump between the blocks.
+    const d = svg.match(new RegExp(`<path id="p-${id}" d="([^"]+)" fill="none" stroke="none"`))![1];
+    assert.equal(d.match(/M/g)!.length, 2);
+  }
+  // The target stub enters Inspect from the left.
+  const inspect = scene.boxes.find((b) => b.id === 'inspect')!.rect;
+  const [p, q] = scene.edges.filter((e) => e.id === 'arrive')[1].pts!;
+  assert.ok(p.x < q.x && q.x === inspect.x);
+  const found = check(demo.props).filter((f) => f.ids.includes('arrive') || f.ids.includes('late'));
+  assert.deepEqual(found, []);
+});
+
+test('lanes wrap: a figure that fits renders byte for byte as before the wrap', async () => {
+  const { createHash } = await import('node:crypto');
+  const { default: refund } = await import('../figures/refund-process.ts');
+  // The hash of toSvg on main at c008cf5 (0.4.0).
+  assert.equal(
+    createHash('sha256').update(toSvg(refund.props)).digest('hex'),
+    '7c3c7684e6f098a20e1a32e9872695aacc45c6ee734ed8c5211ca29bd23e85ba',
+  );
+});
+
+const crossFig: FlowProps = {
+  lanes: true,
+  layout: {
+    direction: 'column',
+    children: [
+      {
+        id: 'L0',
+        label: 'Lane0',
+        children: [
+          { id: 'b6', label: 'Ship item' },
+          { id: 'b8', label: 'Notify' },
+        ],
+      },
+      {
+        id: 'L1',
+        label: 'Lane1',
+        children: [
+          { id: 'b2', label: 'Check stock levels' },
+          { id: 'b4', label: 'Notify' },
+          { id: 'b7', label: 'Review' },
+        ],
+      },
+      { id: 'L2', label: 'Lane2', children: [{ id: 'b1', label: 'Escalate to manager' }] },
+      {
+        id: 'L3',
+        label: 'Lane3',
+        children: [
+          { id: 'b0', label: 'Close' },
+          { id: 'b3', label: 'Pay' },
+          { id: 'b5', label: 'Close' },
+        ],
+      },
+    ],
+  },
+  edges: [
+    { id: 'c0', from: 'b0', to: 'b1' },
+    { id: 'c1', from: 'b1', to: 'b2', label: 'ok' },
+    { id: 'c2', from: 'b2', to: 'b3' },
+    { id: 'c3', from: 'b3', to: 'b4', label: 'ok' },
+    { id: 'c4', from: 'b4', to: 'b5', label: 'ok' },
+    { id: 'c5', from: 'b5', to: 'b6' },
+    { id: 'c6', from: 'b6', to: 'b7' },
+    { id: 'c7', from: 'b7', to: 'b8' },
+    { id: 'x0', from: 'b8', to: 'b2', label: 'retry' },
+    { id: 'x1', from: 'b6', to: 'b1', label: 'retry' },
+    { id: 'x2', from: 'b7', to: 'b3', label: 'retry' },
+  ],
+  steps: [
+    {
+      label: 's',
+      flow: [
+        { edges: 'c0', say: 'x' },
+        { edges: 'c1', say: 'x' },
+        { edges: 'c2', say: 'x' },
+        { edges: 'c3', say: 'x' },
+        { edges: 'c4', say: 'x' },
+        { edges: 'c5', say: 'x' },
+        { edges: 'c6', say: 'x' },
+        { edges: 'c7', say: 'x' },
+      ],
+    },
+  ],
+};
+
+test("lanes wrap: a stub pill sits on no edge path, or check reports it (the reviewer's cross.json)", () => {
+  const { scene } = render(crossFig);
+  const pills = scene.edges.filter((e) => e.pts && e.label);
+  assert.ok(pills.length > 0);
+  const at = ([p0, p1, p2, p3]: Pt[], t: number) => {
+    const u = 1 - t;
+    const [a, b, c, d] = [u * u * u, 3 * u * u * t, 3 * u * t * t, t * t * t];
+    return { x: a * p0.x + b * p1.x + c * p2.x + d * p3.x, y: a * p0.y + b * p1.y + c * p2.y + d * p3.y };
+  };
+  const under = new Set<string>();
+  for (const e of scene.edges) {
+    const pts = e.pts
+      ? e.pts.slice(1).flatMap((q, k) =>
+          Array.from({ length: 17 }, (_, i) => ({
+            x: e.pts![k].x + ((q.x - e.pts![k].x) * i) / 16,
+            y: e.pts![k].y + ((q.y - e.pts![k].y) * i) / 16,
+          })),
+        )
+      : Array.from({ length: 33 }, (_, i) => at(e.curve, i / 32));
+    for (const f of pills)
+      if (
+        f.id !== e.id &&
+        pts.some(
+          (p) => p.x > f.label!.x + 2 && p.x < f.label!.x + f.label!.w - 2 && p.y > f.label!.y + 2 && p.y < f.label!.y + f.label!.h - 2,
+        )
+      )
+        under.add(`${e.id} ${f.id}`);
+  }
+  const reported = new Set(
+    check(crossFig)
+      .filter((f) => f.message.includes('passes under the pill'))
+      .map((f) => f.ids.join(' ')),
+  );
+  assert.deepEqual([...under].sort(), [...reported].sort());
+  assert.equal(under.size, 0);
+});
+
+test('lanes wrap: a lanes figure with no box keeps the width of 0.4.0', () => {
+  const empty: FlowProps = {
+    lanes: true,
+    layout: { direction: 'column', children: [{ id: 'a', label: 'Alpha', children: [] }] },
+    edges: [],
+  };
+  const { svg, scene } = render(empty);
+  assert.ok(!svg.includes('NaN'));
+  assert.equal(scene.width, 560);
+});
+
+test('lanes wrap: a block with no box is not drawn', async () => {
+  const { default: demo } = await import('../figures/returns-process.ts');
+  const far = structuredClone(demo.props);
+  ((far.layout.children[1] as FigGroup).children.find((b) => (b as FigNode).id === 'rejected') as FigNode).at = 20;
+  assert.deepEqual(lanePlan(far).blocks, [0, 1, 5]);
+  // The bands step by one lane gap (20 px) or one block gap (40 px), never more.
+  const ys = [...render(far).svg.matchAll(/<rect x="[\d.]+" y="([\d.]+)" width="[\d.]+" height="([\d.]+)"[^>]*class="lane/g)].map((m) => [
+    +m[1],
+    +m[2],
+  ]);
+  const steps = ys.slice(1).map(([y], i) => Math.round(y - ys[i][0] - ys[i][1]));
+  assert.deepEqual([...new Set(steps)].sort(), [20, 40]);
+  assert.deepEqual(check(far), []);
+});
+
+test('lanes wrap: no wrap when the wrap cannot make the text readable (min-text over the font, or a wide rail)', async () => {
+  const { default: demo } = await import('../figures/returns-process.ts');
+  const bands = (fig: FlowProps, o = {}) => (render(fig, o).svg.match(/class="lane/g) ?? []).length;
+  assert.equal(bands(demo.props, { width: 1300, minText: 12 }), 4);
+  assert.ok(check(demo.props, { width: 1300, minText: 12 }).some((f) => f.rule === 'small-text'));
+  assert.equal(bands({ ...demo.props, rail: true }), 4);
+});
+
+test('lanes wrap: an edge to a lane routes to the band of the right block, and a lane with no block near is reported', async () => {
+  const { default: demo } = await import('../figures/returns-process.ts');
+  const withEdge = (to: string, from = 'open') => ({ ...demo.props, edges: [...demo.props.edges, { id: 'lane', from, to }] });
+  // finance shows only in block 2, so open -> finance is a stub.
+  const finance = withEdge('finance');
+  assert.ok(lanePlan(finance).stubs.has('lane'));
+  assert.equal(render(finance).scene.edges.filter((e) => e.id === 'lane').length, 2);
+  assert.deepEqual(check(finance), []);
+  // support shows in block 1, so open -> support stays in block 1.
+  const support = withEdge('support');
+  assert.deepEqual(lanePlan(support).ends.get('lane'), [0, 0]);
+  assert.deepEqual(check(support), []);
+  // customer ends with ship; close sits in a later block, so close -> customer has no block at or after it.
+  const back = withEdge('customer', 'close');
+  assert.deepEqual(lanePlan(back).lost, ['lane']);
+  assert.ok(check(back).some((f) => f.rule === 'lane-end-block'));
 });
