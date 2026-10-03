@@ -512,7 +512,10 @@ export function Flow({
   );
 
   // A bar or a milestone of a timeline: placed by the shared layout, with the look of a box.
-  const renderBar = (n: FigNode, it: { row: number; x: number; w: number; milestone: boolean; labelInside: boolean }) => {
+  const renderBar = (
+    n: FigNode,
+    it: { row: number; x: number; w: number; milestone: boolean; labelInside: boolean; labelLeft: boolean },
+  ) => {
     const lit = litNodes.has(n.id);
     const bt = n.tone && TONES[n.tone];
     const label = String(n.label);
@@ -520,7 +523,14 @@ export function Flow({
     const outside = (
       <span
         data-fig-outside=""
-        style={{ position: 'absolute', left: '100%', marginLeft: 6, whiteSpace: 'nowrap', fontSize: 13, fontWeight: 500, color: v('fg') }}
+        style={{
+          position: 'absolute',
+          ...(it.labelLeft ? { right: '100%', marginRight: 6 } : { left: '100%', marginLeft: 6 }),
+          whiteSpace: 'nowrap',
+          fontSize: 13,
+          fontWeight: 500,
+          color: v('fg'),
+        }}
       >
         {label}
       </span>

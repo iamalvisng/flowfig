@@ -787,8 +787,9 @@ test('timeline: the roadmap demo has no label over another item in a row', async
   const lay = timelineLayout(fig, TL_AXIS_W);
   const spans = scene.boxes.map((b) => {
     const it = lay.items.find((i) => i.id === b.id)!;
-    const end = it.labelInside ? b.rect.x + b.rect.w : b.rect.x + b.rect.w + 6 + textWidth(b.texts[0].text, 13);
-    return { id: b.id, y: b.rect.y + b.rect.h / 2, x0: b.rect.x, x1: end };
+    const tw = textWidth(b.texts[0].text, 13);
+    const end = it.labelInside || it.labelLeft ? b.rect.x + b.rect.w : b.rect.x + b.rect.w + 6 + tw;
+    return { id: b.id, y: b.rect.y + b.rect.h / 2, x0: it.labelLeft ? b.rect.x - 6 - tw : b.rect.x, x1: end };
   });
   for (const p of spans)
     for (const q of spans) {
@@ -918,4 +919,91 @@ test('timeline: the playhead date label shows only after the line arrives', () =
   const kf = svg.match(new RegExp(`@keyframes ${name} \\{([^\\n]*)\\}\\n`))![1];
   const on = [...kf.matchAll(/([\d.]+)%,[\d.]+% \{ opacity: 1 \}/g)].map((m) => (+m[1] / 100) * total);
   assert.ok(on.length > 0 && Math.min(...on) >= 0.39, `first visible at ${Math.min(...on)} s`);
+});
+
+// The Q4 roadmap with full labels: the last bar and the last milestone have no room right of them.
+const endFig = (ga: string): FlowProps => ({
+  timeline: true,
+  today: '2026-10-19',
+  layout: {
+    direction: 'column',
+    children: [
+      {
+        label: 'Product',
+        children: [
+          { id: 'invoice', label: 'Invoice redesign', from: '2026-10-05', to: '2026-10-23' },
+          { id: 'usage', label: 'Usage-based pricing', from: '2026-11-02', to: '2026-11-27' },
+          { id: 'plan', label: 'Self-serve plan change', from: '2026-11-16', to: '2026-12-11' },
+        ],
+      },
+      {
+        label: 'Platform',
+        children: [
+          { id: 'meter', label: 'Metering pipeline', from: '2026-10-05', to: '2026-10-30' },
+          { id: 'ledger', label: 'Ledger migration', from: '2026-11-02', to: '2026-12-04' },
+        ],
+      },
+      {
+        label: 'Launch',
+        children: [
+          { id: 'beta', label: 'Beta with 20 customers', from: '2026-11-30' },
+          { id: 'page', label: 'Pricing page update', from: '2026-12-07', to: '2026-12-11' },
+          { id: 'ga', label: ga, from: '2026-12-15' },
+        ],
+      },
+    ],
+  },
+  edges: [
+    { from: 'meter', to: 'usage' },
+    { from: 'meter', to: 'ledger' },
+    { from: 'usage', to: 'page' },
+  ],
+});
+
+test('timeline: labels at the axis end go left of the item and check is clean', () => {
+  const fig = endFig('General availability');
+  const lay = timelineLayout(fig, TL_AXIS_W);
+  const side = (id: string) => lay.items.find((i) => i.id === id)!.labelLeft;
+  assert.equal(side('page'), true);
+  assert.equal(side('ga'), true);
+  assert.equal(side('beta'), false);
+  const f = check(fig);
+  assert.deepEqual(f, []);
+  const { scene } = render(fig);
+  const ga = scene.boxes.find((b) => b.id === 'ga')!;
+  assert.match(toSvg(fig), /text-anchor="end"[^>]*>General availability</);
+  assert.ok(ga.rect.x > 0);
+});
+
+test('timeline: with no room on either side the label stays right and check reports text-overflow', () => {
+  const fig = endFig('General availability');
+  fig.layout.children[2] = {
+    label: 'Launch',
+    children: [{ id: 'ga', label: 'General availability '.repeat(8).trim(), from: '2026-12-15' }],
+  } as never;
+  const lay = timelineLayout(fig, TL_AXIS_W);
+  assert.equal(lay.items.find((i) => i.id === 'ga')!.labelLeft, false);
+  assert.ok(check(fig).some((x) => x.rule === 'text-overflow'));
+});
+
+test('timeline: a left label never overlaps the item before it in its row', () => {
+  const lay = timelineLayout(endFig('General availability'), TL_AXIS_W);
+  const tw = (id: string, l: string) => textWidth(l, 13);
+  const ga = lay.items.find((i) => i.id === 'ga')!;
+  const page = lay.items.find((i) => i.id === 'page')!;
+  const gaStart = ga.x - 6 - tw('ga', 'General availability');
+  if (ga.row === page.row) assert.ok(page.x + page.w + 8 <= gaStart || page.labelLeft);
+  assert.ok(gaStart >= 0);
+});
+
+test('timeline: the player and the SVG take the label side from the shared layout', async () => {
+  const fig = endFig('General availability');
+  const lay = timelineLayout(fig, TL_AXIS_W);
+  const { default: src } = await import('node:fs').then((fs) => ({
+    default: fs.readFileSync(new URL('./index.tsx', import.meta.url), 'utf8'),
+  }));
+  assert.match(src, /it\.labelLeft/);
+  const svg = toSvg(fig);
+  const ends = (svg.match(/class="bar" text-anchor="end"/g) ?? []).length;
+  assert.equal(ends, lay.items.filter((i) => i.labelLeft).length);
 });
