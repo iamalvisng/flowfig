@@ -26,6 +26,7 @@ import {
   lanePlan as planLanes,
   laneEnd,
   laneBlock,
+  STUB_ROOM,
   labelPillW,
   str,
   LANE_BLOCK_GAP,
@@ -315,6 +316,16 @@ export function Flow({
               return { x, y: (y0 - base.top) / k, w: (x1 - base.left) / k - x, h: (y1 - y0) / k };
             })()
           : undefined;
+      // The band of an edge end, in the block of that end, as in the SVG.
+      const laneBands: Record<string, Rect> = {};
+      el.querySelectorAll<HTMLElement>('[data-fig-band]').forEach((n) => {
+        const r = n.getBoundingClientRect();
+        laneBands[n.dataset.figBand!] = { x: (r.left - base.left) / k, y: (r.top - base.top) / k, w: r.width / k, h: r.height / k };
+      });
+      const bandOf = (eid: string, id: string, j: 0 | 1): Rect | undefined => {
+        const li = layout.children.findIndex((l) => isGroup(l) && (l.id === id || l.children.some((b) => (b as FigNode).id === id)));
+        return laneBands[`${li}@${lanePlan?.ends.get(eid)?.[j]}`];
+      };
       const end = (eid: string, id: string, start: boolean) =>
         lanePlan ? laneEnd(lanePlan, eid, id, start, (lane, b) => bands[`${lane}@${b}`], rects) : id;
       setRouted(
@@ -325,7 +336,10 @@ export function Flow({
             to: end(ids[i], e.to, false),
             around: e.around ?? (lanePlan?.around.has(ids[i]) ? ('below' as const) : undefined),
             ...(tl && { sides: ['r', 'l'] as [Side, Side], elbow: true }),
-            ...(stubs.has(ids[i]) && { stub: stubs.get(ids[i])!.map(labelPillW) }),
+            ...(stubs.has(ids[i]) && {
+              stub: stubs.get(ids[i])!.map(labelPillW),
+              bands: [bandOf(ids[i], e.from, 0), bandOf(ids[i], e.to, 1)] as [Rect | undefined, Rect | undefined],
+            }),
             ...(stubs.size && e.label != null && { labelW: labelPillW(str(e.label)) }),
           })),
           rects,
@@ -382,9 +396,16 @@ export function Flow({
       )
       .map((t) => parseFloat(getComputedStyle(t).fontSize));
     const labels = Object.fromEntries([...fig.querySelectorAll<HTMLElement>('[data-fig-label]')].map((n) => [n.dataset.figLabel!, rel(n)]));
+    const lanesIn = el ? [...el.querySelectorAll<HTMLElement>('[data-fig-band]')] : [];
     const scene: Scene = {
       width: Math.max(el?.offsetWidth ?? 0, rail?.width ?? 0),
       boxes,
+      ...(lanePlan?.stubs.size && {
+        lanes: lanesIn.map((n) => ({
+          id: str((layout.children[Number(n.dataset.figBand!.split('@')[0])] as FigGroup).label),
+          rect: rel(n),
+        })),
+      }),
       edges: [
         ...routed.flatMap((r): Scene['edges'] => {
           const e = edges[ids.indexOf(r.id)];
@@ -422,7 +443,7 @@ export function Flow({
       reported.current.add(key);
       console.warn(`flowfig check: ${f.severity} ${f.rule}: ${f.message}`);
     }
-  }, [check, routed, layout, edges, steps, ids, theme, rail, noMap]);
+  }, [check, routed, layout, edges, steps, ids, theme, rail, noMap, lanePlan]);
 
   // Play the step's beats: each moves its packets (and their data cards) along its edges, then the next step starts.
   useEffect(() => {
@@ -762,7 +783,7 @@ export function Flow({
       );
     }
     if (lanes && item === layout && isLanesLayout(layout)) {
-      const { cols, starts, gaps, lead, blocks, gutter } = lanePlan!;
+      const { cols, starts, gaps, lead, blocks, gutter, tall } = lanePlan!;
       const n = Math.max(0, ...cols.values()) + 1;
       const count = blocks.length;
       // One grid per block of `per` time columns, as in the SVG. A wrapped block shows only the lanes with a box in it.
@@ -793,6 +814,7 @@ export function Flow({
                   <div
                     data-fig={lane.id}
                     data-fig-copy={lane.id != null ? `${lane.id}@${bk}` : undefined}
+                    data-fig-band={`${layout.children.indexOf(lane)}@${bk}`}
                     data-fig-lane=""
                     style={{
                       gridColumn: '1 / -1',
@@ -832,7 +854,7 @@ export function Flow({
                         alignSelf: 'center',
                         zIndex: 1,
                         // The space after each column and before a block's first column comes from the plan, as in the SVG.
-                        padding: `${LANE_PAD}px ${gaps[cols.get(b.id)!]}px ${LANE_PAD}px ${cols.get(b.id) === starts[bk] ? lead[bk] : 0}px`,
+                        padding: `${LANE_PAD}px ${gaps[cols.get(b.id)!]}px ${LANE_PAD + (tall.has(`${layout.children.indexOf(lane)}@${bk}`) ? STUB_ROOM : 0)}px ${cols.get(b.id) === starts[bk] ? lead[bk] : 0}px`,
                       }}
                     >
                       {renderItem(b, 1)}

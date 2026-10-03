@@ -43,6 +43,7 @@ import {
   FRAME_SIDE,
   laneGutter as gutterOf,
   lanePlan,
+  STUB_ROOM,
   laneBlock,
   laneEnd,
   type LanePlan,
@@ -209,7 +210,7 @@ function placeLanes(fig: FlowProps, x: number, y: number, s: Sizes, out: Placed[
       // A wrapped block draws only its own lanes; one block draws every lane, an empty one too.
       if (blocks.length > 1 && !kids.length) continue;
       const inner = Math.max(LABEL_LINE + 20, ...kids.map((k) => k.h));
-      const h = inner + LANE_PAD * 2;
+      const h = inner + LANE_PAD * 2 + (s.plan!.tall.has(`${lanes.indexOf(lane)}@${bk}`) ? STUB_ROOM : 0);
       out.push({ x, y: ly, w: width, h, item: lane, lane: true, block: bk });
       for (const k of kids) out.push({ x: x + colX[cols.get(k.b.id)!], y: ly + LANE_PAD + (inner - k.h) / 2, w: k.w, h: k.h, item: k.b });
       ly += h + LANE_ROW_GAP;
@@ -352,6 +353,13 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
   const stubs = plan?.stubs ?? new Map<string, string[]>();
   const gutter = plan ? gutterOf(fig.layout.children as FigGroup[]) : 0;
   const band = (id: string, k: number) => placed.find((p) => p.lane && p.item.id === id && p.block === k);
+  // The band of an edge end, in the block of that end: the band of the box's lane, or of the lane itself.
+  const laneGroups = fig.layout.children as FigGroup[];
+  const bandOf = (eid: string, id: string, k: 0 | 1): Rect | undefined => {
+    const block = plan?.ends.get(eid)?.[k];
+    const lane = laneGroups.find((l) => l.id === id || l.children.some((b) => (b as FigNode).id === id));
+    return placed.find((p) => p.lane && p.item === lane && p.block === block);
+  };
   const end = (eid: string, id: string, start: boolean) => (plan ? laneEnd(plan, eid, id, start, band, rects) : id);
   const routed = route(
     fig.edges.map((e, i) => ({
@@ -360,7 +368,7 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
       to: end(ids[i], e.to, false),
       around: e.around ?? (plan?.around.has(ids[i]) ? ('below' as const) : undefined),
       ...(tl && { sides: ['r', 'l'] as [Side, Side], elbow: true }),
-      ...(stubs.has(ids[i]) && { stub: stubs.get(ids[i])!.map(labelPillW) }),
+      ...(stubs.has(ids[i]) && { stub: stubs.get(ids[i])!.map(labelPillW), bands: [bandOf(ids[i], e.from, 0), bandOf(ids[i], e.to, 1)] }),
       ...(stubs.size && e.label != null && { labelW: labelPillW(str(e.label)) }),
     })),
     rects,
@@ -1041,6 +1049,9 @@ ${said.join('\n')}
       }),
     ],
     minFont: Math.min(...fonts),
+    ...(stubs.size && {
+      lanes: placed.filter((p) => p.lane).map((p) => ({ id: str((p.item as FigGroup).label), rect: { x: p.x, y: p.y, w: p.w, h: p.h } })),
+    }),
   };
   return { svg, scene };
 }

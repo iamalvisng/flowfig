@@ -19,6 +19,7 @@ export type SceneEdge = {
   behind?: true;
 };
 /** `minFont` is the smallest reading text in px, before any scale. Group frames are not boxes. */
-export type Scene = { width: number; boxes: SceneBox[]; edges: SceneEdge[]; minFont: number };
+/** `lanes` are the lane bands of a swimlanes figure, one per lane and block, named by the lane label. A stub pill stays inside one. */
+export type Scene = { width: number; boxes: SceneBox[]; edges: SceneEdge[]; minFont: number; lanes?: { id: string; rect: Rect }[] };
 /** One fault that `flowfig check` found. `rule` names the check, for example `unknown-id`, `text-overflow`, `edge-crosses-box`, `label-overlap`, `small-text`, `low-contrast`. `ids` are the boxes or edges it names. */
 export type Finding = { rule: string; severity: 'error' | 'warning'; ids: string[]; message: string };

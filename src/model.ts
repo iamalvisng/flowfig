@@ -289,9 +289,10 @@ export const FRAME_SIDE = 18,
   NODE_MAX_W = 190;
 /** The gap between two blocks of wrapped lanes. */
 export const LANE_BLOCK_GAP = 40;
-/** The length of a stub line between a box and its pill, and the clear space past a pill. */
+/** The length of a stub line between a box and its pill, the clear space past a pill, and the room a lane grows by for a pill. */
 export const STUB = 12,
-  STUB_CLEAR = 8;
+  STUB_CLEAR = 8,
+  STUB_ROOM = 30;
 
 /** The width of a box as the SVG draws it, before a diamond adds its 70 px. */
 export function nodeWidth(item: FigNode, carded: boolean): number {
@@ -330,6 +331,8 @@ export type LanePlan = {
   /** Edges between two boxes of one lane and one block, with a box of that lane between them and no `around` of their own.
    * A straight route would cross that box, so the renderers route them around below. */
   around: Set<string>;
+  /** The lane copies (`laneIndex@block`) that grow by STUB_ROOM at the bottom: a stub pill there has no room beside its box. */
+  tall: Set<string>;
   /** Edges with a lane end that has no block on the side of the other end. They use the nearest block; `check` reports them. */
   lost: string[];
 };
@@ -436,6 +439,8 @@ export function lanePlan(fig: FlowProps, { width = 830, minText = 10, padding = 
     const fit = blocks.every((k) => widthOf(starts[k], starts[k + 1], gaps, 0) <= room);
     const out = new Map<number, number>(),
       inn = new Map<number, number>();
+    const roomOut = new Set<number>(),
+      roomIn = new Set<number>();
     for (const [id, texts] of stubs) {
       const e = fig.edges.find((x) => edgeId(x) === id)!;
       const [a, b] = [cols.get(e.from), cols.get(e.to)];
@@ -452,10 +457,22 @@ export function lanePlan(fig: FlowProps, { width = 830, minText = 10, padding = 
         }
       };
       grow(inn.get(c0) ?? 0, () => (lead[k] = inn.get(c0)!));
+      if (!inn.has(c0) || lead[k]) roomIn.add(c0);
       for (let c = c0; c < end; c++) {
         const need = (out.get(c) ?? 0) + (c < end - 1 ? (inn.get(c + 1) ?? 0) : 0);
         grow(need - gaps[c], () => (gaps[c] = need));
+        if (gaps[c] >= need) roomOut.add(c).add(-1 - (c + 1)); // -1 - c marks room before column c
       }
+    }
+    // A stub end with no room beside its box makes its lane taller in that block: the pill then fits under the box, inside the band.
+    const laneIndex = (id: string) => lanes.findIndex((l) => l.id === id || l.children.some((b) => (b as FigNode).id === id));
+    const tall = new Set<string>();
+    for (const [id] of stubs) {
+      const e = fig.edges.find((x) => edgeId(x) === id)!;
+      const [a, b] = [cols.get(e.from), cols.get(e.to)];
+      const [fb, tb] = ends.get(id)!;
+      if (a == null || !roomOut.has(a)) tall.add(`${laneIndex(e.from)}@${fb}`);
+      if (b == null || !(b === starts[tb] ? roomIn.has(b) : roomOut.has(-1 - b))) tall.add(`${laneIndex(e.to)}@${tb}`);
     }
     const laneOfBox = new Map(lanes.flatMap((l) => l.children.map((b) => [(b as FigNode).id, l] as const)));
     const around = new Set(
@@ -467,7 +484,7 @@ export function lanePlan(fig: FlowProps, { width = 830, minText = 10, padding = 
         })
         .map(edgeId),
     );
-    return [{ cols, starts, per, blocks, gutter, gaps, lead, ends, stubs, around, lost }, fit] as const;
+    return [{ cols, starts, per, blocks, gutter, gaps, lead, ends, stubs, around, tall, lost }, fit] as const;
   };
   const widthOf = (c: number, end: number, gaps: number[], lead: number) =>
     gutter + lead + colW.slice(c, end).reduce((a, w) => a + w, 0) + gaps.slice(c, end).reduce((a, g) => a + g, 0);
