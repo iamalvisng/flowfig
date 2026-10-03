@@ -301,6 +301,7 @@ The last line gives the counts of the parts of the figure. Compare the counts wi
 | `low-contrast`      | error    | A text and background pair below 4.5:1, in the light, dark or custom theme.  |
 | `empty-step`        | warning  | A step with no beats.                                                        |
 | `small-text`        | warning  | At the page width, the smallest text is below the minimum size.              |
+| `lane-end-block`    | warning  | In wrapped lanes, an edge ends at a lane that no block on its side shows.    |
 | `font-estimated`    | warning  | `theme.font` is set. The SVG check estimates text width for the system font. |
 | `color-not-checked` | warning  | A color that the check cannot read, so its contrast is not checked.          |
 
