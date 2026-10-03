@@ -281,6 +281,57 @@ export function laneColumns(fig: FlowProps): Map<string, number> {
   for (const n of nodes(fig.layout)) if (validAt(n.at)) cols.set(n.id, n.at);
   return cols;
 }
+
+/** The side of an SVG frame, and the width limits of a box with no card. The lane split measures with them. */
+export const FRAME_SIDE = 18,
+  NODE_MIN_W = 100,
+  NODE_MAX_W = 190;
+/** The gap between two blocks of wrapped lanes. A cross-block edge runs along the middle of it. */
+export const LANE_BLOCK_GAP = 40;
+
+/** The width of a box as the SVG draws it, before a diamond adds its 70 px. */
+export function nodeWidth(item: FigNode, carded: boolean): number {
+  if (item.width != null) return item.width;
+  if (carded) return CARD_WIDTH;
+  const label = textWidth(str(item.label), 14) + 32;
+  const sub = textWidth(str(item.sub), 12) + 32;
+  return Math.min(NODE_MAX_W, Math.max(NODE_MIN_W, label, sub));
+}
+
+/** The width of the label gutter of lanes and of a timeline: the widest track label plus the frame sides. */
+export const laneGutter = (lanes: FigGroup[]) =>
+  Math.max(0, ...lanes.map((l) => textWidth(str(l.label).toUpperCase(), 12))) + FRAME_SIDE * 2;
+
+/**
+ * The time columns per block of a lanes figure. If all the columns do not fit `width` with text at `minText` or more, the lanes
+ * wrap like a line of text: block 1 holds columns 0..n-1, block 2 holds n..2n-1. n is the largest count that fits; it is 1 at least.
+ * The text test is the one `check` runs: the smallest text (11 px, or 10.5 px with a mono card row) times width / figure width.
+ * Both renderers call it with the SVG box widths, so the player shows the same blocks as the SVG.
+ */
+export function laneWrap(fig: FlowProps, { width = 830, minText = 10, padding = 24 } = {}): number {
+  const cols = laneColumns(fig);
+  const n = Math.max(-1, ...cols.values()) + 1;
+  const shown = (fig.steps ?? []).flatMap((s) => s.flow.flatMap((b) => Object.entries(toBeat(b).show ?? {})));
+  const carded = new Set(shown.map(([id]) => id));
+  const mono = shown.some(([, c]) => isRows(c) && c.some((r) => r.mono));
+  const colW = Array.from({ length: n }, () => 0);
+  for (const b of nodes(fig.layout)) {
+    const c = cols.get(b.id)!;
+    colW[c] = Math.max(colW[c], nodeWidth(b, carded.has(b.id)) + (b.shape === 'decision' ? 70 : 0));
+  }
+  const room = (width * (mono ? 10.5 : 11)) / minText - padding * 2;
+  const fixed = laneGutter(fig.layout.children as FigGroup[]) + FRAME_SIDE;
+  const fits = (k: number) => {
+    for (let c = 0; c < n; c += k) {
+      const ws = colW.slice(c, c + k);
+      if (fixed + ws.reduce((a, w) => a + w, 0) + LANE_GAP * (ws.length - 1) > room) return false;
+    }
+    return true;
+  };
+  let k = Math.max(1, n);
+  while (k > 1 && !fits(k)) k--;
+  return k;
+}
 /** Timeline constants, shared by both renderers: the bar height, the gap between rows, the least bar width, the milestone width,
  * the axis strip height and the axis width of the SVG. */
 export const TL_BAR_H = 28,

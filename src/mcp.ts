@@ -101,7 +101,7 @@ function run(name: string, args: Record<string, unknown>): Result {
     const lines = reportLines(props, findings);
     if (name === 'check' || errors) return ok(lines.join('\n'), errors);
     const out = String(args.out);
-    const svg = svgWithSpec(props);
+    const svg = svgWithSpec(props, opts);
     try {
       mkdirSync(dirname(out), { recursive: true });
       writeFileSync(out, svg);

@@ -40,6 +40,11 @@ import {
   LANE_GAP,
   LANE_PAD,
   LANE_ROW_GAP,
+  LANE_BLOCK_GAP,
+  FRAME_SIDE,
+  laneGutter as gutterOf,
+  laneWrap,
+  nodeWidth,
   isLanesLayout,
   timelineBeats,
   timelineLayout,
@@ -70,11 +75,8 @@ const LINE = CARD_LINE,
   CARD_SIDE = 8,
   ROW_GAP = 4;
 const LABEL_LINE = 18,
-  SUB_LINE = 15,
-  NODE_MIN_W = 100,
-  NODE_MAX_W = 190;
+  SUB_LINE = 15;
 const FRAME_TOP = 37,
-  FRAME_SIDE = 18,
   FRAME_BOTTOM = 18;
 
 // The card-on fills are fixed colors that approximate the player's 8% accent tint. The active tint is the player's color-mix.
@@ -141,15 +143,10 @@ type Sizes = {
   minH: (id: string) => number;
   gap: (g: FigGroup) => number;
   fig: FlowProps;
+  /** Lanes: the time columns per block, and the top of each block once placed. */
+  per: number;
+  tops: number[];
 };
-
-function nodeWidth(item: FigNode, carded: boolean): number {
-  if (item.width != null) return item.width;
-  if (carded) return CARD_WIDTH;
-  const label = textWidth(str(item.label), 14) + 32;
-  const sub = textWidth(str(item.sub), 12) + 32;
-  return Math.min(NODE_MAX_W, Math.max(NODE_MIN_W, label, sub));
-}
 
 function size(item: FigNode | FigGroup, s: Sizes): { w: number; h: number } {
   if (!isGroup(item)) {
@@ -168,7 +165,8 @@ function size(item: FigNode | FigGroup, s: Sizes): { w: number; h: number } {
   return item.label != null ? { w: inner.w + FRAME_SIDE * 2, h: inner.h + FRAME_TOP + FRAME_BOTTOM } : inner;
 }
 
-/** Swimlanes: the bands span the width, the label sits in a left gutter, and a box sits at its time column. */
+/** Swimlanes: the bands span the width, the label sits in a left gutter, and a box sits at its time column. Columns past
+ * `s.per` wrap into blocks under the first: each block repeats every lane, and all bands share the widest block's width. */
 function placeLanes(fig: FlowProps, x: number, y: number, s: Sizes, out: Placed[]): void {
   const lanes = fig.layout.children as FigGroup[];
   const cols = laneColumns(fig);
@@ -176,24 +174,31 @@ function placeLanes(fig: FlowProps, x: number, y: number, s: Sizes, out: Placed[
   for (const lane of lanes)
     for (const b of lane.children as FigNode[]) colW[cols.get(b.id)!] = Math.max(colW[cols.get(b.id)!], size(b, s).w);
   const gutter = gutterOf(lanes);
-  const colX = colW.map((_, c) => gutter + colW.slice(0, c).reduce((a, w) => a + w + LANE_GAP, 0));
-  const width = gutter + colW.reduce((a, w) => a + w, 0) + LANE_GAP * Math.max(0, colW.length - 1) + FRAME_SIDE;
+  const blocks = Array.from({ length: Math.max(1, Math.ceil(colW.length / s.per)) }, (_, k) => colW.slice(k * s.per, (k + 1) * s.per));
+  const colX = blocks.flatMap((ws) => ws.map((_, c) => gutter + ws.slice(0, c).reduce((a, w) => a + w + LANE_GAP, 0)));
+  const width = Math.max(
+    ...blocks.map((ws) => gutter + ws.reduce((a, w) => a + w, 0) + LANE_GAP * Math.max(0, ws.length - 1) + FRAME_SIDE),
+  );
   const topAt = out.length;
   out.push({ x, y, w: width, h: 0, item: fig.layout });
   let ly = y;
-  for (const lane of lanes) {
-    const kids = (lane.children as FigNode[]).map((b) => ({ b, ...size(b, s) }));
-    const inner = Math.max(LABEL_LINE + 20, ...kids.map((k) => k.h));
-    const h = inner + LANE_PAD * 2;
-    out.push({ x, y: ly, w: width, h, item: lane, lane: true });
-    for (const k of kids) out.push({ x: x + colX[cols.get(k.b.id)!], y: ly + LANE_PAD + (inner - k.h) / 2, w: k.w, h: k.h, item: k.b });
-    ly += h + LANE_ROW_GAP;
-  }
+  s.tops = [];
+  blocks.forEach((_, bk) => {
+    if (bk) ly += LANE_BLOCK_GAP - LANE_ROW_GAP;
+    s.tops.push(ly);
+    for (const lane of lanes) {
+      const kids = (lane.children as FigNode[])
+        .filter((b) => Math.floor(cols.get(b.id)! / s.per) === bk)
+        .map((b) => ({ b, ...size(b, s) }));
+      const inner = Math.max(LABEL_LINE + 20, ...kids.map((k) => k.h));
+      const h = inner + LANE_PAD * 2;
+      out.push({ x, y: ly, w: width, h, item: lane, lane: true });
+      for (const k of kids) out.push({ x: x + colX[cols.get(k.b.id)!], y: ly + LANE_PAD + (inner - k.h) / 2, w: k.w, h: k.h, item: k.b });
+      ly += h + LANE_ROW_GAP;
+    }
+  });
   out[topAt].h = ly - LANE_ROW_GAP - y;
 }
-
-/** The width of the label gutter of lanes and of a timeline: the widest track label plus the frame sides. */
-const gutterOf = (lanes: FigGroup[]) => Math.max(0, ...lanes.map((l) => textWidth(str(l.label).toUpperCase(), 12))) + FRAME_SIDE * 2;
 
 /** A timeline: the axis strip on top, one band per track, and the bars and milestones at the shared layout x. */
 function placeTimeline(fig: FlowProps, x: number, y: number, out: Placed[]): void {
@@ -264,6 +269,9 @@ export type SvgOptions = {
   padding?: number;
   /** Colors, in place of `FlowProps.theme`. Default: `FlowProps.theme`. */
   theme?: FigTheme;
+  /** Lanes: the page width and the smallest text that decide when the time columns wrap into blocks. Default: 830 and 10, as in `check`. */
+  width?: number;
+  minText?: number;
 };
 
 const SYSTEM_FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
@@ -297,7 +305,9 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
     return n > 2 ? n * 30 : 0;
   };
   const cardH = new Map<string, number>();
-  const sizes: Sizes = { cards, cardH, minH, gap: (g) => groupGap(g, fig.edges), fig };
+  const lanes = !tl && fig.lanes && isLanesLayout(fig.layout);
+  const per = lanes ? laneWrap(fig, { width: opts.width, minText: opts.minText, padding: pad }) : Infinity;
+  const sizes: Sizes = { cards, cardH, minH, gap: (g) => groupGap(g, fig.edges), fig, per, tops: [] };
   for (const [id, contents] of cards) {
     const width = CARD_WIDTH; // refined below once the node's own width is known
     const widths = [width];
@@ -320,6 +330,9 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
   for (const p of placed) if (p.item.id) rects[p.item.id] = p;
   const tips = new Set(placed.filter((p) => !isGroup(p.item) && (p.item.shape === 'decision' || p.tl?.milestone)).map((p) => p.item.id!));
   const ids = fig.edges.map(edgeId);
+  // Wrapped lanes: an edge to another block runs along the gap above the target's block, clear of every box.
+  const cols = sizes.tops.length > 1 ? laneColumns(fig) : null;
+  const blockOf = (id: string) => Math.floor(cols!.get(id)! / per);
   const routed = route(
     fig.edges.map((e, i) => ({
       id: ids[i],
@@ -327,10 +340,15 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
       to: e.to,
       around: e.around,
       ...(tl && { sides: ['r', 'l'] as [Side, Side], elbow: true }),
+      ...(cols?.has(e.from) &&
+        cols.has(e.to) &&
+        blockOf(e.from) !== blockOf(e.to) && { via: sizes.tops[blockOf(e.to)] - LANE_BLOCK_GAP / 2 }),
     })),
     rects,
     tips,
-    placed.filter((p) => p.tl && !p.tl.labelInside).map((p) => outsideLabelRect(p, str(p.item.label))),
+    cols
+      ? placed.filter((p) => !isGroup(p.item))
+      : placed.filter((p) => p.tl && !p.tl.labelInside).map((p) => outsideLabelRect(p, str(p.item.label))),
   );
   const byId = Object.fromEntries(routed.map((r) => [r.id, r]));
 
@@ -968,7 +986,15 @@ ${said.join('\n')}
     edges: [
       ...(only ? [] : routed).map((r) => {
         const e = fig.edges[ids.indexOf(r.id)];
-        return { id: r.id, from: e.from, to: e.to, curve: r.curve, label: labelRects[r.id], ...(tl && { behind: true as const }) };
+        return {
+          id: r.id,
+          from: e.from,
+          to: e.to,
+          curve: r.curve,
+          ...(r.pts && { pts: r.pts }),
+          label: labelRects[r.id],
+          ...(tl && { behind: true as const }),
+        };
       }),
       // Each rail payload is a label too, in its own open-phase position, so label-overlap covers the rail.
       ...(rail?.rows ?? []).flatMap((row, i) => {

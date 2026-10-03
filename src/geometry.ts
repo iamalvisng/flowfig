@@ -1,10 +1,22 @@
 export type Rect = { x: number; y: number; w: number; h: number };
 export type Side = 'l' | 'r' | 't' | 'b';
 export type Pt = { x: number; y: number };
-export type Routed = { id: string; d: string; mid: Pt; curve: [Pt, Pt, Pt, Pt] };
+/** `pts` are the corners of a path of straight runs (`via`), for `check`; `curve` then holds four of them. */
+export type Routed = { id: string; d: string; mid: Pt; curve: [Pt, Pt, Pt, Pt]; pts?: Pt[] };
 
 type Around = 'above' | 'below';
-type Pick = { id: string; a: Rect; b: Rect; sa: Side; sb: Side; from: string; to: string; around?: Around; elbow?: boolean };
+type Pick = {
+  id: string;
+  a: Rect;
+  b: Rect;
+  sa: Side;
+  sb: Side;
+  from: string;
+  to: string;
+  around?: Around;
+  elbow?: boolean;
+  via?: number;
+};
 
 const cx = (r: Rect) => r.x + r.w / 2;
 const cy = (r: Rect) => r.y + r.h / 2;
@@ -16,11 +28,12 @@ const cy = (r: Rect) => r.y + r.h / 2;
 // `elbow` draws a right-angle path, from a right end to a left end: its four curve points are the corners.
 // `sides` fixes the two sides an edge uses (a timeline uses right to left).
 // `around` makes an edge leave and enter from the top or bottom, arcing over whatever sits between.
+// `via` (wrapped lanes) leaves right, runs to the gap at y = via, along it, and enters the target from the left.
 export function route(
-  edges: { id: string; from: string; to: string; around?: Around; sides?: [Side, Side]; elbow?: boolean }[],
+  edges: { id: string; from: string; to: string; around?: Around; sides?: [Side, Side]; elbow?: boolean; via?: number }[],
   rects: Record<string, Rect>,
   tips: Set<string> = new Set(),
-  avoid: Rect[] = [], // boxes an elbow's vertical run must not cross (the timeline's outside labels)
+  avoid: Rect[] = [], // boxes a vertical run must not cross (the timeline's outside labels; the boxes of wrapped lanes)
 ): Routed[] {
   const picks: Pick[] = [];
   for (const e of edges) {
@@ -30,17 +43,19 @@ export function route(
     const stacked = a.x < b.x + b.w && b.x < a.x + a.w;
     const [sa, sb]: Side[] = e.sides
       ? e.sides
-      : e.around
-        ? e.around === 'above'
-          ? ['t', 't']
-          : ['b', 'b']
-        : stacked
-          ? a.y < b.y
-            ? ['b', 't']
-            : ['t', 'b']
-          : a.x < b.x
-            ? ['r', 'l']
-            : ['l', 'r'];
+      : e.via != null
+        ? ['r', 'l']
+        : e.around
+          ? e.around === 'above'
+            ? ['t', 't']
+            : ['b', 'b']
+          : stacked
+            ? a.y < b.y
+              ? ['b', 't']
+              : ['t', 'b']
+            : a.x < b.x
+              ? ['r', 'l']
+              : ['l', 'r'];
     picks.push({ ...e, a, b, sa, sb });
   }
 
@@ -83,9 +98,36 @@ export function route(
     const [s, c1, c2, e] = curve;
     return { id, d: `M ${s.x} ${s.y} C ${c1.x} ${c1.y}, ${c2.x} ${c2.y}, ${e.x} ${e.y}`, mid, curve };
   };
+  // Edges that share a gap get their own row in it, and their labels sit at their own share of the run.
+  const gap = (p: Pick) => picks.filter((q) => q.via === p.via);
   return picks.map((p) => {
     const s = anchor.get(p.id + ':s')!,
       e = anchor.get(p.id + ':e')!;
+    if (p.via != null) {
+      const share = gap(p),
+        i = share.indexOf(p);
+      const vy = p.via + (i - (share.length - 1) / 2) * 10;
+      // Each vertical run starts 9 px off its box (6 px more per edge before it) and steps past any box it would cut, 9 px clear.
+      const run = (x: number, ya: number, yb: number, dir: 1 | -1) => {
+        const [y0, y1] = [Math.min(ya, yb), Math.max(ya, yb)];
+        for (let hit = true; hit;) {
+          const r = avoid.find((r) => x > r.x - 4 && x < r.x + r.w + 4 && y1 > r.y && y0 < r.y + r.h);
+          hit = r != null;
+          if (r) x = dir > 0 ? r.x + r.w + 9 : r.x - 9;
+        }
+        return x;
+      };
+      const x1 = run(s.x + 9 + i * 6, s.y, vy, 1),
+        x2 = run(e.x - 9 - i * 6, vy, e.y, -1);
+      const pts = [s, { x: x1, y: s.y }, { x: x1, y: vy }, { x: x2, y: vy }, { x: x2, y: e.y }, e];
+      return {
+        id: p.id,
+        d: `M ${s.x} ${s.y} H ${x1} V ${vy} H ${x2} V ${e.y} H ${e.x}`,
+        mid: { x: x1 + ((x2 - x1) * (i + 1)) / (share.length + 1), y: vy },
+        curve: [s, pts[2], pts[3], e],
+        pts,
+      };
+    }
     if (p.elbow) {
       // The vertical run sits at the midpoint x. Under 16 px of gap, it detours: out 8 px past the start, back to 8 px
       // before the end, then forward into the target. A gap of 0 px or less takes the same detour.
