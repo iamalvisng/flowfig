@@ -230,6 +230,19 @@ test('timeline: the server markup has the bars, the axis ticks and the today lin
   );
 });
 
+test('timeline: on the first mount the playhead is at the first item, and the lines sit behind the bars', async () => {
+  const { timelineLayout, loopStartItem, timelineBeats, TL_AXIS_W } = await import('./model.ts');
+  const html = render(tlFig);
+  const lay = timelineLayout(tlFig, TL_AXIS_W);
+  const first = loopStartItem(lay.items, timelineBeats(tlFig))!;
+  assert.equal(first.id, 'spec');
+  const line = html.indexOf('data-fig-playhead');
+  assert.ok(html.slice(line, line + 400).includes(`translateX(${first.x}px)`), 'the line starts at the first item');
+  assert.ok(line < html.indexOf('data-fig="spec"') && html.indexOf('data-fig-today') < html.indexOf('data-fig="spec"'), 'lines first');
+  assert.ok(html.lastIndexOf('>today<') > html.indexOf('data-fig="ga"'), 'the today label is on top');
+  assert.ok(html.lastIndexOf(`>${first.date}<`) > html.indexOf('data-fig="ga"'), 'the date label is on top');
+});
+
 test('lanes wrap: the player shows the blocks of the SVG, each with its own lanes', async () => {
   const { default: demo } = await import('../figures/returns-process.ts');
   const { lanePlan, nodes } = await import('./model.ts');

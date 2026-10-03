@@ -229,6 +229,9 @@ export const playheadItem = <T extends { id: string }>(items: T[], beats: { focu
   }
   return undefined;
 };
+/** The item the playhead rests on when the loop starts: the playhead item of the first beat of the first step. */
+export const loopStartItem = <T extends { id: string }>(items: T[], steps: { flow: FigStep['flow'] }[]): T | undefined =>
+  playheadItem(items, (steps[0]?.flow ?? []).slice(0, 1).map(toBeat), 0);
 
 /** The box of a timeline label that sits beside its bar, in the bar's coordinates. */
 export const outsideLabelRect = (bar: { x: number; y: number; w: number; h: number }, label: string) => ({

@@ -395,3 +395,17 @@ test('checkScene: a stub pill across a lane border is label-overlap; a pill insi
     [['label-overlap', 'the pill of edge "s" crosses the border of lane "Support"']],
   );
 });
+
+test('checkScene: a timeline elbow (behind, with corners) through a box it does not connect is edge-crosses-box', () => {
+  const box = (id: string, x: number, y: number): SceneBox => ({ id, rect: { x, y, w: 100, h: 40 }, texts: [] });
+  const p = (x: number, y: number): Pt => ({ x, y });
+  const boxes = [box('a', 0, 0), box('b', 300, 200), box('c', 150, 100)];
+  const curve = [p(100, 20), p(200, 20), p(200, 220), p(300, 220)] as [Pt, Pt, Pt, Pt];
+  const edge = { id: 'e', from: 'a', to: 'b', curve, behind: true as const };
+  const found = (e: Scene['edges'][0]) => checkScene({ width: 600, minFont: 12, boxes, edges: [e] }).map((f) => [f.rule, f.ids]);
+  // The vertical run at x 200 passes through c.
+  assert.deepEqual(found({ ...edge, elbow: [...curve] }), [['edge-crosses-box', ['e', 'c']]]);
+  assert.deepEqual(found(edge), [], 'a behind edge with no corners is skipped');
+  // A run at x 120, left of c, is clear.
+  assert.deepEqual(found({ ...edge, elbow: [p(100, 20), p(120, 20), p(120, 220), p(300, 220)] }), []);
+});

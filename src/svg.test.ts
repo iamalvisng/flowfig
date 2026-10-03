@@ -834,7 +834,8 @@ test('timeline: in the roadmap demo each dependency path has right angles only',
   const svg = toSvg({ ...demo.props, timeline: true } as FlowProps);
   const paths = [...svg.matchAll(/<path id="p-[^"]*" d="([^"]*)"/g)].map((m) => m[1]);
   assert.ok(paths.length > 0, 'the demo has dependency paths');
-  for (const d of paths) assert.match(d, /^M [\d.-]+ [\d.-]+ H [\d.-]+ V [\d.-]+ H [\d.-]+$/, `elbow: ${d}`);
+  // A run in the gap has three parts; a detour around a box has five.
+  for (const d of paths) assert.match(d, /^M [\d.-]+ [\d.-]+ H [\d.-]+ V [\d.-]+ H [\d.-]+( V [\d.-]+ H [\d.-]+)?$/, `elbow: ${d}`);
 });
 
 test('timeline: the playhead follows each focused item, ends at the range end, and has a date label for each from', async () => {
@@ -847,7 +848,9 @@ test('timeline: the playhead follows each focused item, ends at the range end, a
   const froms = new Set(nodes(props.layout).map((n) => n.from));
   assert.ok(new Set(xs).size >= 3, `distinct x: ${[...new Set(xs)]}`);
   assert.ok(new Set(xs).size >= froms.size, 'one x for each distinct from date');
-  assert.equal(xs.at(-1), 0, 'the range end');
+  assert.equal(xs.at(-2), 0, 'the range end in the last hold');
+  assert.equal(xs.at(-1), xs[0], 'the loop ends where it starts');
+  assert.notEqual(xs[0], 0, 'the loop starts at the first item, not at the range end');
   assert.equal(svg.match(/stroke-dasharray="3 3"/g)?.length, 1, 'one today marker');
   const lay = timelineLayout(props, TL_AXIS_W);
   const texts = [...svg.matchAll(/class="today a\d+">([^<]*)</g)].map((m) => m[1]);
@@ -905,7 +908,8 @@ test('timeline: a beat with no focus keeps the earlier playhead position', () =>
   const [, , inv] = playheadXs(toSvg(tlFocus([['inv']])));
   assert.notEqual(inv, 0);
   const xs = playheadXs(toSvg(tlFocus([['inv'], []])));
-  assert.deepEqual(xs.slice(2, -2), Array(xs.length - 4).fill(inv));
+  assert.deepEqual(xs.slice(0, -3), Array(xs.length - 3).fill(inv));
+  assert.deepEqual(xs.slice(-3), [0, 0, inv], 'the hold rests at the range end, then moves back to the loop start');
 });
 
 test('timeline: a playhead date label that would meet the "today" label moves to the tick row', () => {
@@ -927,13 +931,17 @@ test('timeline: in the roadmap demo no dependency run crosses an outside label',
   assert.ok(run < beta.x + beta.w + 4 || run > beta.x + beta.w + 6 + textWidth('Beta', 13) + 2, `run at ${run} clear of the Beta label`);
 });
 
-test('timeline: the playhead date label shows only after the line arrives', () => {
-  const svg = toSvg(tlFocus([['inv']]));
-  const name = svg.match(/class="today (a\d+)">5 Oct</)![1];
-  const total = +svg.match(new RegExp(`\\.${name} \\{ animation: ${name} ([\\d.]+)s`))![1];
-  const kf = svg.match(new RegExp(`@keyframes ${name} \\{([^\\n]*)\\}\\n`))![1];
-  const on = [...kf.matchAll(/([\d.]+)%,[\d.]+% \{ opacity: 1 \}/g)].map((m) => (+m[1] / 100) * total);
-  assert.ok(on.length > 0 && Math.min(...on) >= 0.39, `first visible at ${Math.min(...on)} s`);
+test('timeline: the playhead date label shows only after the line arrives, and at once at the loop start', () => {
+  const svg = toSvg(tlFocus([['inv'], ['mid']]));
+  const spans = (date: string) => {
+    const name = svg.match(new RegExp(`class="today (a\\d+)">${date}<`))![1];
+    const total = +svg.match(new RegExp(`\\.${name} \\{ animation: ${name} ([\\d.]+)s`))![1];
+    const kf = svg.match(new RegExp(`@keyframes ${name} \\{([^\\n]*)\\}\\n`))![1];
+    return [...kf.matchAll(/([\d.]+)%,([\d.]+)% \{ opacity: 1 \}/g)].map((m) => [(+m[1] / 100) * total, (+m[2] / 100) * total]);
+  };
+  const [inv, mid] = [spans('5 Oct'), spans('2 Nov')];
+  assert.equal(inv[0][0], 0, 'the line starts in place, so the first label shows at once');
+  assert.ok(mid[0][0] - inv[0][1] >= 0.39, `the second label waits ${mid[0][0] - inv[0][1]} s for the line`);
 });
 
 // The Q4 roadmap with full labels: the last bar and the last milestone have no room right of them.
@@ -1020,8 +1028,8 @@ test('timeline: no dependency elbow crosses an outside label box on the roadmap 
       y1: b.rect.y + b.rect.h,
     };
     for (const e of scene.edges)
-      for (let k = 1; k < e.curve.length; k++) {
-        const [p, q] = [e.curve[k - 1], e.curve[k]];
+      for (let k = 1; k < e.elbow!.length; k++) {
+        const [p, q] = [e.elbow![k - 1], e.elbow![k]];
         const hit = Math.max(p.x, q.x) > r.x0 && Math.min(p.x, q.x) < r.x1 && Math.max(p.y, q.y) > r.y0 && Math.min(p.y, q.y) < r.y1;
         assert.ok(!hit, `an elbow crosses the label of ${b.id}`);
       }
@@ -1226,4 +1234,37 @@ test('lanes wrap: an edge to a lane routes to the band of the right block, and a
   const back = withEdge('customer', 'close');
   assert.deepEqual(lanePlan(back).lost, ['lane']);
   assert.ok(check(back).some((f) => f.rule === 'lane-end-block'));
+});
+
+test('timeline: at time 0 the playhead is at the first item, and the today and playhead lines sit behind the bars', async () => {
+  const { default: demo } = await import('../figures/roadmap.ts');
+  const svg = toSvg(demo.props);
+  const lay = timelineLayout(demo.props, TL_AXIS_W);
+  const name = svg.match(/<g class="(a\d+)"><path [^>]*stroke="var\(--accent\)" stroke-width="1.5"/)![1];
+  const kf = svg.match(new RegExp(`@keyframes ${name} \\{([^\\n]*)\\}\\n`))![1];
+  const invoice = lay.items.find((i) => i.id === 'invoice')!;
+  assert.match(kf, new RegExp(`^ ?0% \\{ transform: translateX\\(${Math.round((invoice.x - lay.last!) * 10) / 10}px\\) \\}`));
+  const body = svg.slice(svg.indexOf('</defs>'));
+  const bar = body.indexOf('data-fig="invoice"') > -1 ? body.indexOf('data-fig="invoice"') : body.indexOf('>Invoice redesign<');
+  assert.ok(body.indexOf('stroke-dasharray="3 3"') < bar, 'the today line is before the bars');
+  assert.ok(body.indexOf(`<g class="${name}"><path`) < bar, 'the playhead line is before the bars');
+  assert.ok(body.indexOf('class="today">today<') > bar, 'the today label is after the bars');
+  assert.ok(body.lastIndexOf(`<g class="${name}"><text`) > bar, 'the date labels are after the bars');
+});
+
+test('timeline: the roadmap elbows clear every box they do not connect, and check finds no crossing', async () => {
+  const { default: demo } = await import('../figures/roadmap.ts');
+  const { scene } = render(demo.props);
+  for (const e of scene.edges) {
+    const pts = e.elbow!;
+    for (let k = 1; k < pts.length; k++)
+      for (const b of scene.boxes) {
+        if (b.id === e.from || b.id === e.to) continue;
+        const [p, q, r] = [pts[k - 1], pts[k], b.rect];
+        const hit =
+          Math.max(p.x, q.x) > r.x && Math.min(p.x, q.x) < r.x + r.w && Math.max(p.y, q.y) > r.y && Math.min(p.y, q.y) < r.y + r.h;
+        assert.ok(!hit, `${e.id} crosses ${b.id}`);
+      }
+  }
+  assert.ok(!check(demo.props).some((f) => f.rule === 'edge-crosses-box'));
 });
