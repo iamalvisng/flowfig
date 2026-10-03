@@ -191,6 +191,25 @@ export function route(
           }
         return out.sort((m, q) => m[3] - q[3]).map(([r, a, b]) => [r, a, b]);
       };
+      // A diamond with no room beside its point: the stub leaves the side point straight down or up, to a pill that spans its x.
+      const along = (w: number, box: Rect, from: Pt, dir: 1 | -1, band?: Rect): [Rect, Pt, Pt][] => {
+        if (!tips.has(dir > 0 ? p.from : p.to)) return [];
+        const out: [Rect, Pt, Pt, number][] = [];
+        for (const y of rows(box, from.y + 12, band))
+          for (let x = from.x - w + 8; x <= from.x - 8; x += 8) {
+            const down = y >= from.y + 12;
+            if (!down && y + 18 > from.y - 12) continue;
+            const r = { x, y, w, h: 18 };
+            const [a, b] = [from, { x: from.x, y: down ? y : y + 18 }];
+            out.push([r, ...(dir > 0 ? [a, b] : [b, a]), Math.abs(y + 9 - from.y) + Math.abs(x + w / 2 - from.x)] as [
+              Rect,
+              Pt,
+              Pt,
+              number,
+            ]);
+          }
+        return out.sort((m, q) => m[3] - q[3]).map(([r, a, b]) => [r, a, b]);
+      };
       const outs = (w: number): [Rect, Pt, Pt][] => [
         ...beside(w, p.a, s, 1, sb),
         [
@@ -203,6 +222,7 @@ export function route(
           { x: cx(p.a), y: p.a.y },
           { x: cx(p.a), y: p.a.y - STUB },
         ],
+        ...along(w, p.a, s, 1, sb),
       ];
       const ins: [Rect, Pt, Pt][] = [
         ...beside(iw, p.b, e, -1, tb),
@@ -216,6 +236,7 @@ export function route(
           { x: cx(p.b), y: p.b.y + p.b.h + STUB },
           { x: cx(p.b), y: p.b.y + p.b.h },
         ],
+        ...along(iw, p.b, e, -1, tb),
       ];
       const seg = (a: Pt, b: Pt) =>
         Array.from({ length: 9 }, (_, i) => ({ x: a.x + ((b.x - a.x) * i) / 8, y: a.y + ((b.y - a.y) * i) / 8 }));
