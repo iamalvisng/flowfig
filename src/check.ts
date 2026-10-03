@@ -19,8 +19,8 @@ import {
   type FigTheme,
   type FlowProps,
 } from './model.ts';
-import type { Finding, Scene } from './scene.ts';
-import type { Pt, Rect } from './geometry.ts';
+import type { Finding, Scene, SceneEdge } from './scene.ts';
+import { crosses, type Pt, type Rect } from './geometry.ts';
 import { textWidth } from './text.ts';
 import { owners, parseSource } from './source.ts';
 
@@ -178,6 +178,22 @@ export function checkScene(scene: Scene, { width = 830, minText = 10 }: CheckOpt
         out.push(err('label-overlap', [e.id, f.id], `edge "${e.id}" passes under the pill of edge "${f.id}"`));
       }
   }
+  // A stub line (a segment of an edge with `pts`) must not cross the path of another edge.
+  const path = (e: SceneEdge) =>
+    e.pts
+      ? e.pts.slice(1).flatMap((q, k) => Array.from({ length: 17 }, (_, i) => lerp(e.pts![k], q, i / 16)))
+      : Array.from({ length: 33 }, (_, i) => at(e.curve, i / 32));
+  const stubs = scene.edges.filter((e) => e.pts && e.pts.length > 1);
+  const hit = new Set<string>();
+  for (const f of stubs)
+    for (const e of scene.edges) {
+      if (e.behind || e === f || (e.id === f.id && e.pts) || hit.has(f.id + ' ' + e.id)) continue;
+      const p = path(e);
+      if (f.pts!.slice(1).some((a, k) => p.slice(1).some((b, i) => crosses(f.pts![k], a, p[i], b)))) {
+        hit.add(f.id + ' ' + e.id);
+        out.push(warn('stub-crosses-edge', [f.id, e.id], `the stub of edge "${f.id}" crosses edge "${e.id}"`));
+      }
+    }
   // A stub pill sits inside the band of its box: a pill across a band border reads as part of two lanes.
   for (const f of pills)
     for (const l of scene.lanes ?? []) {

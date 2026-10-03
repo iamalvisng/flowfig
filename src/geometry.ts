@@ -126,6 +126,12 @@ export function route(
   // before it, and of every edge path (sampled as `check` samples it).
   const pills: Rect[] = [];
   const paths: Pt[] = [];
+  // The same samples as segments: a stub line must not cross one.
+  const runs: [Pt, Pt][] = [];
+  const track = (pts: Pt[]) => {
+    paths.push(...pts);
+    pts.slice(1).forEach((q, i) => runs.push([pts[i], q]));
+  };
   const inBand = (r: Rect, b?: Rect) =>
     !b || (r.x >= b.x + 4 && r.x + r.w <= b.x + b.w - 4 && r.y >= b.y + 4 && r.y + r.h <= b.y + b.h - 4);
   const clear = (r: Rect, band?: Rect) =>
@@ -207,24 +213,29 @@ export function route(
       ];
       const seg = (a: Pt, b: Pt) =>
         Array.from({ length: 9 }, (_, i) => ({ x: a.x + ((b.x - a.x) * i) / 8, y: a.y + ((b.y - a.y) * i) / 8 }));
-      // A stub must not run through a box other than its own, nor through a pill or a label.
+      // A stub must not run through a box other than its own, nor through a pill or a label, nor cross an edge path.
       const free = (a: Pt, b: Pt, own: Rect) =>
         seg(a, b).every(
           (q) =>
             ![...avoid, ...pills].some((r) => r !== own && q.x > r.x + 2 && q.x < r.x + r.w - 2 && q.y > r.y + 2 && q.y < r.y + r.h - 2),
         );
+      const whole = (a: Pt, b: Pt) => !runs.some(([c, d]) => crosses(a, b, c, d));
       const fits =
-        (own: Rect, band?: Rect) =>
+        (own: Rect, band: Rect | undefined, strict: boolean) =>
         ([r, a, b]: [Rect, Pt, Pt]) =>
-          clear(r, band) && free(a, b, own);
-      const long = outs(ow).find(fits(p.a, sb));
-      const cut = long || sw == null ? undefined : outs(sw).find(fits(p.a, sb));
-      const [po, o1, o2] = long ?? cut ?? outs(ow)[0];
+          clear(r, band) && free(a, b, own) && (!strict || whole(a, b));
+      // The first place whose stub crosses no edge path. If none, the first place that clears everything else: in a dense
+      // figure no place may avoid every edge, and `check` then warns about the crossing.
+      const first = (own: Rect, band: Rect | undefined, lists: [Rect, Pt, Pt][][]) =>
+        [true, false].flatMap((strict) => lists.map((l, i) => [l.find(fits(own, band, strict)), i] as const)).find(([x]) => x);
+      const hit = first(p.a, sb, [outs(ow), ...(sw == null ? [] : [outs(sw)])]);
+      const cut = hit?.[1] === 1;
+      const [po, o1, o2] = hit?.[0] ?? outs(ow)[0];
       pills.push(po);
-      paths.push(...seg(o1, o2));
-      const [pi, i1, i2] = ins.find(fits(p.b, tb)) ?? ins[0];
+      track(seg(o1, o2));
+      const [pi, i1, i2] = first(p.b, tb, [ins])?.[0] ?? ins[0];
       pills.push(pi);
-      paths.push(...seg(i1, i2));
+      track(seg(i1, i2));
       const line = (a: Pt, b: Pt) => `M ${a.x} ${a.y} L ${b.x} ${b.y}`;
       const parts: [string, string] = [line(o1, o2), line(i1, i2)];
       return {
@@ -287,8 +298,21 @@ export function route(
     const r = one(p);
     done.set(p, r);
     if (p.labelW) pills.push({ x: r.mid.x - p.labelW / 2, y: r.mid.y - 9, w: p.labelW, h: 18 });
-    paths.push(...Array.from({ length: 33 }, (_, i) => bezier(r.curve, i / 32)));
+    track(Array.from({ length: 33 }, (_, i) => bezier(r.curve, i / 32)));
   }
   for (const p of picks) if (p.stub) done.set(p, one(p));
   return picks.map((p) => done.get(p)!);
+}
+
+/** True if the segment a-b crosses the segment c-d. The ends of a-b are trimmed by 1.5 px, so a touch at a box side does not count. */
+export function crosses(a: Pt, b: Pt, c: Pt, d: Pt): boolean {
+  const len = Math.hypot(b.x - a.x, b.y - a.y);
+  if (len < 4) return false;
+  const t = 1.5 / len;
+  const [p, q] = [
+    { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t },
+    { x: b.x - (b.x - a.x) * t, y: b.y - (b.y - a.y) * t },
+  ];
+  const side = (o: Pt, u: Pt, v: Pt) => Math.sign((u.x - o.x) * (v.y - o.y) - (u.y - o.y) * (v.x - o.x));
+  return side(p, q, c) * side(p, q, d) < 0 && side(c, d, p) * side(c, d, q) < 0;
 }
