@@ -1,6 +1,6 @@
 'use client';
 import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { route, type Pt, type Rect, type Routed, type Side } from './geometry.ts';
+import { route, type Avoid, type Pt, type Rect, type Routed, type Side } from './geometry.ts';
 import { foldedLabel, groupBox, layoutRail, railState, RAIL } from './rail.ts';
 import { textWidth } from './text.ts';
 import { checkScene, checkSpec, checkTheme } from './check.ts';
@@ -48,6 +48,7 @@ import {
   beatMs,
   STEP_HOLD_MS,
   playheadItem,
+  loopStartItem,
   dateLabelRaised,
   type FigContent,
   type FigGroup,
@@ -172,6 +173,8 @@ export function Flow({
   const bar = useRef<HTMLDivElement>(null); // the active tab's progress line
   const [beat, setBeat] = useState(0);
   const [holding, setHolding] = useState(false); // the step hold: a timeline's today line rests at today
+  const [returning, setReturning] = useState(false); // the end of the last hold: the playhead moves back to the loop start
+  const firstLabel = useRef<string | null>(''); // the playhead date of the first mount, which shows at once; '' before the first render
   const paths = useRef<Record<string, SVGPathElement | null>>({});
   const [routed, setRouted] = useState<Routed[]>([]);
   // Lane copies that grow because a stub there had no place clear of every edge path (see `tightCopies`).
@@ -291,11 +294,13 @@ export function Flow({
           h: r.height / k,
         };
       });
-      const avoid: Rect[] = [];
+      const avoid: Avoid[] = [];
       el.querySelectorAll<HTMLElement>('[data-fig-outside]').forEach((n) => {
         const r = n.getBoundingClientRect();
         avoid.push({ x: (r.left - base.left) / k, y: (r.top - base.top) / k, w: r.width / k, h: r.height / k });
       });
+      // A timeline elbow keeps clear of the bars and milestones it does not connect, as in the SVG.
+      if (tl) for (const n of nodes(layout)) if (rects[n.id]) avoid.push({ ...rects[n.id], box: true });
       // Wrapped lanes: an edge between two blocks is two stubs with pills, clear of the boxes and the lane labels.
       const stubs = lanePlan?.stubs ?? new Map<string, string[]>();
       if (stubs.size) {
@@ -504,6 +509,7 @@ export function Flow({
       const i = next === -1 ? beats.length - 1 : next;
       if (i !== shownBeat) setBeat((shownBeat = i));
       setHolding(t >= ends.at(-1)!);
+      setReturning(active === steps.length - 1 && t >= total - 400 * BASE_RATE);
       const start = i ? ends[i - 1] : 0;
       const f = Math.min(1, (t - start) / speed); // the packet crosses in `speed`; the hold gives the rest
       const eased = f < 0.5 ? 2 * f * f : 1 - (-2 * f + 2) ** 2 / 2;
@@ -676,11 +682,84 @@ export function Flow({
     if (timelineFig && item === layout) {
       const lanesList = layout.children as FigGroup[];
       // The playhead follows the latest dated focus in the step, and rests at the last date before one and in the hold.
-      const focused = holding || still ? undefined : playheadItem(timelineFig.items, beats, beat);
+      // In the last 400 ms of the loop it moves back to the loop start, so the next loop starts in place, as in the SVG.
+      const focused = still
+        ? undefined
+        : returning
+          ? loopStartItem(timelineFig.items, steps)
+          : holding
+            ? undefined
+            : playheadItem(timelineFig.items, beats, beat);
       const home = timelineFig.last ?? 0;
       const at = focused ? focused.x + (focused.milestone ? focused.w / 2 : 0) : home;
       const dateText = focused ? focused.date : timelineFig.lastDate;
       const rowsPx = timelineFig.rows.map((r) => r * TL_BAR_H + (r - 1) * TL_ROW_GAP + LANE_PAD * 2);
+      // The today line and the playhead line sit behind the bars (before them, at the bars' z-index); their labels sit on top.
+      // The playhead label waits for the line, except on the first mount, where the line starts in place.
+      if (firstLabel.current === '') firstLabel.current = dateText;
+      else if (firstLabel.current !== dateText) firstLabel.current = null;
+      const marks = (front: boolean) =>
+        timelineFig.last != null && (
+          <div style={{ gridColumn: '2 / 4', gridRow: '1 / -1', position: 'relative', zIndex: front ? 2 : 1, pointerEvents: 'none' }}>
+            {timelineFig.today != null && (
+              <div
+                data-fig-today={front ? undefined : ''}
+                style={{ position: 'absolute', left: timelineFig.today, top: 12, bottom: 0, width: 0 }}
+              >
+                {front ? (
+                  <span
+                    style={{
+                      position: 'absolute',
+                      right: 3,
+                      top: -1,
+                      fontSize: 11,
+                      lineHeight: '11px',
+                      fontWeight: 600,
+                      color: v('accent'),
+                    }}
+                  >
+                    today
+                  </span>
+                ) : (
+                  <div style={{ position: 'absolute', top: 0, bottom: 0, borderLeft: `1px dashed ${v('accent')}`, opacity: 0.6 }} />
+                )}
+              </div>
+            )}
+            <div
+              data-fig-playhead={front ? undefined : ''}
+              style={{
+                position: 'absolute',
+                left: 0,
+                top: 12,
+                bottom: 0,
+                width: front ? 0 : 1.5,
+                background: front ? undefined : v('accent'),
+                transform: `translateX(${at}px)`,
+                transition: still ? 'none' : 'transform .4s linear',
+              }}
+            >
+              {front && (
+                <span
+                  // The label remounts on a new date and stays hidden for the 400 ms move (wall time, like the line).
+                  key={dateText}
+                  style={{
+                    position: 'absolute',
+                    left: 3,
+                    top: dateLabelRaised(at, timelineFig.today, textWidth(dateText, 11), textWidth('today', 11)) ? -13 : -1,
+                    fontSize: 11,
+                    lineHeight: '11px',
+                    fontWeight: 600,
+                    whiteSpace: 'nowrap',
+                    color: v('accent'),
+                    animation: still || firstLabel.current === dateText ? undefined : 'flowfig-label .4s step-end',
+                  }}
+                >
+                  {dateText}
+                </span>
+              )}
+            </div>
+          </div>
+        );
       return (
         <div
           style={{
@@ -692,6 +771,7 @@ export function Flow({
             position: 'relative',
           }}
         >
+          {marks(false)}
           <div data-fig-axis="" style={{ gridColumn: '2 / 4', gridRow: 1, position: 'relative', height: TL_AXIS_H, alignSelf: 'start' }}>
             <div style={{ position: 'absolute', left: 0, right: 0, top: TL_AXIS_H - 1, height: 1, background: v('border') }} />
             {timelineFig.ticks.map((k) => (
@@ -750,59 +830,7 @@ export function Flow({
               </Fragment>
             );
           })}
-          {timelineFig.last != null && (
-            <div style={{ gridColumn: '2 / 4', gridRow: '1 / -1', position: 'relative', zIndex: 2, pointerEvents: 'none' }}>
-              {timelineFig.today != null && (
-                <div data-fig-today="" style={{ position: 'absolute', left: timelineFig.today, top: 12, bottom: 0, width: 0 }}>
-                  <div style={{ position: 'absolute', top: 0, bottom: 0, borderLeft: `1px dashed ${v('accent')}`, opacity: 0.6 }} />
-                  <span
-                    style={{
-                      position: 'absolute',
-                      right: 3,
-                      top: -1,
-                      fontSize: 11,
-                      lineHeight: '11px',
-                      fontWeight: 600,
-                      color: v('accent'),
-                    }}
-                  >
-                    today
-                  </span>
-                </div>
-              )}
-              <div
-                data-fig-playhead=""
-                style={{
-                  position: 'absolute',
-                  left: 0,
-                  top: 12,
-                  bottom: 0,
-                  width: 1.5,
-                  background: v('accent'),
-                  transform: `translateX(${at}px)`,
-                  transition: still ? 'none' : 'transform .4s linear',
-                }}
-              >
-                <span
-                  // The label waits for the line: it remounts on a new date and stays hidden for the 400 ms move (wall time, like the line).
-                  key={dateText}
-                  style={{
-                    position: 'absolute',
-                    left: 3,
-                    top: dateLabelRaised(at, timelineFig.today, textWidth(dateText, 11), textWidth('today', 11)) ? -13 : -1,
-                    fontSize: 11,
-                    lineHeight: '11px',
-                    fontWeight: 600,
-                    whiteSpace: 'nowrap',
-                    color: v('accent'),
-                    animation: still ? undefined : 'flowfig-label .4s step-end',
-                  }}
-                >
-                  {dateText}
-                </span>
-              </div>
-            </div>
-          )}
+          {marks(true)}
         </div>
       );
     }
