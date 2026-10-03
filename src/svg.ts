@@ -62,6 +62,7 @@ import {
   beatMs,
   STEP_HOLD_MS,
   playheadItem,
+  loopStartItem,
   dateLabelRaised,
   labelSpan,
   outsideLabelRect,
@@ -364,7 +365,11 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
       tips,
       stubs.size
         ? placed.flatMap((p) => (!isGroup(p.item) ? [p] : p.lane ? [{ x: p.x, y: p.y, w: gutter, h: p.h }] : []))
-        : placed.filter((p) => p.tl && !p.tl.labelInside).map((p) => outsideLabelRect(p, str(p.item.label))),
+        : [
+            ...placed.filter((p) => p.tl && !p.tl.labelInside).map((p) => outsideLabelRect(p, str(p.item.label))),
+            // A timeline elbow keeps clear of the bars and milestones it does not connect.
+            ...placed.filter((p) => p.tl).map((p) => ({ x: p.x, y: p.y, w: p.w, h: p.h, box: true })),
+          ],
       // A stub pill stays in the lanes, right of the gutter.
       stubs.size ? { x: placed[0].x + gutter, y: placed[0].y, w: placed[0].w - gutter, h: placed[0].h } : undefined,
     );
@@ -769,8 +774,9 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
     );
   });
 
-  // The timeline axis under the boxes, the fixed today marker and the moving playhead over them.
+  // The timeline axis, the fixed today marker and the moving playhead. Their lines sit behind the bars, their labels on top.
   let axisSvg = '',
+    lineSvg = '',
     todaySvg = '';
   if (tl) {
     const top = placed[0];
@@ -790,19 +796,21 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
     // The today marker is fixed at the figure's `today`.
     if (tl.today != null) {
       const tx = x0 + tl.today;
-      todaySvg =
-        `<path d="M ${n2(tx)} ${n2(top.y + 12)} V ${bottom}" stroke="var(--accent)" stroke-opacity="0.6" stroke-width="1" stroke-dasharray="3 3"/>` +
-        `<text x="${n2(tx - 3)}" y="${n2(top.y + 22)}" text-anchor="end" class="today">today</text>`;
+      lineSvg = `<path d="M ${n2(tx)} ${n2(top.y + 12)} V ${bottom}" stroke="var(--accent)" stroke-opacity="0.6" stroke-width="1" stroke-dasharray="3 3"/>`;
+      todaySvg = `<text x="${n2(tx - 3)}" y="${n2(top.y + 22)}" text-anchor="end" class="today">today</text>`;
     }
-    // The playhead moves to the start of each beat's item, then to the last date in the step hold.
+    // The playhead moves to the start of each beat's item, then to the last date in the step hold. The loop starts with
+    // the playhead at the first beat's item, so the first frame shows the first beat; the last hold moves it back there.
     if (tl.last != null && segs.length) {
       const home = tl.last;
       const startOf = new Map(tl.items.map((i) => [i.id, i.x + (i.milestone ? i.w / 2 : 0)]));
       const dateOf = new Map(tl.items.map((i) => [i.id, i.date]));
       const hold = STEP_HOLD_MS / 1000 / BASE_RATE;
-      const pts: [number, number][] = [[0, home]];
+      const first = loopStartItem(tl.items, steps);
+      const start = first ? startOf.get(first.id)! : home;
+      const pts: [number, number][] = [[0, start]];
       const dates: { a: number; b: number; d: string; x: number }[] = []; // the label date in each time span
-      let at = home;
+      let at = start;
       segs.forEach((s, i) => {
         const item = playheadItem(tl.items, beats[s.si], s.bi);
         const to = item ? startOf.get(item.id)! : home;
@@ -810,13 +818,17 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
         const last = i === segs.length - 1 || segs[i + 1].si !== s.si;
         const end = last ? s.t1 - hold : s.t1; // the step hold starts here
         pts.push([s.t0, at], [Math.min(s.t0 + RAMP, end), to], [end, to]);
-        const [la, lb] = labelSpan(s.t0, end, RAMP);
+        // The label waits for the line, except at the loop start, where the line is already in place.
+        const [la, lb] = i === 0 && to === start ? [s.t0, end] : labelSpan(s.t0, end, RAMP);
         if (la < lb) dates.push({ a: la, b: lb, d: date, x: to });
         at = to;
         if (last) {
-          pts.push([Math.min(end + RAMP, s.t1), home], [s.t1, home]);
-          const [ha, hb] = labelSpan(end, s.t1, RAMP);
+          // The last hold of the loop ends with the move back to the loop start.
+          const back = i === segs.length - 1 ? Math.max(end + RAMP, s.t1 - RAMP) : s.t1;
+          pts.push([Math.min(end + RAMP, s.t1), home], [back, home]);
+          const [ha, hb] = labelSpan(end, back, RAMP);
           if (ha < hb) dates.push({ a: ha, b: hb, d: tl.lastDate, x: home });
+          if (back < s.t1) pts.push([s.t1, start]);
           at = home;
         }
       });
@@ -844,7 +856,8 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
         const raised = dateLabelRaised(dates.find((x) => x.d === d)!.x, tl.today, textWidth(d, 11), textWidth('today', 11));
         return `<text x="${n2(lx + 3)}" y="${n2(top.y + (raised ? 10 : 22))}" opacity="0"${cls('today', seen.get(key))}>${esc(d)}</text>`;
       });
-      todaySvg += `<g${cls(name)}><path d="M ${n2(lx)} ${n2(top.y + 12)} V ${bottom}" stroke="var(--accent)" stroke-width="1.5"/>${labels.join('')}</g>`;
+      lineSvg += `<g${cls(name)}><path d="M ${n2(lx)} ${n2(top.y + 12)} V ${bottom}" stroke="var(--accent)" stroke-width="1.5"/></g>`;
+      todaySvg += `<g${cls(name)}>${labels.join('')}</g>`;
     }
   }
 
@@ -1008,7 +1021,7 @@ ${
     ? ''
     : `<g transform="translate(${n2(shift)} ${arcs ? 44 : 0})">
 ${axisSvg}
-${tl ? boxes.filter((b, i) => b && isGroup(placed[i].item)).join('\n') : ''}
+${tl ? boxes.filter((b, i) => b && isGroup(placed[i].item)).join('\n') : ''}${lineSvg && `\n${lineSvg}`}
 ${tl ? edgeSvg.join('\n') : ''}
 ${boxes.filter((b, i) => b && !(tl && isGroup(placed[i].item))).join('\n')}
 ${tl ? '' : edgeSvg.join('\n')}
@@ -1030,7 +1043,17 @@ ${said.join('\n')}
         const e = fig.edges[ids.indexOf(r.id)];
         // A cross-block edge is two scene edges: each stub with its pill.
         if (r.stub) return r.stub.pts.map((pts, k) => ({ id: r.id, from: e.from, to: e.to, curve: r.curve, pts, label: r.stub!.pills[k] }));
-        return [{ id: r.id, from: e.from, to: e.to, curve: r.curve, label: labelRects[r.id], ...(tl && { behind: true as const }) }];
+        // A timeline edge is drawn behind, but `check` still tests its elbow against the boxes it does not connect.
+        return [
+          {
+            id: r.id,
+            from: e.from,
+            to: e.to,
+            curve: r.curve,
+            label: labelRects[r.id],
+            ...(tl && { behind: true as const, elbow: r.elbow }),
+          },
+        ];
       }),
       // Each rail payload is a label too, in its own open-phase position, so label-overlap covers the rail.
       ...(rail?.rows ?? []).flatMap((row, i) => {

@@ -7,6 +7,8 @@ import {
   timelineBeats,
   counts,
   playheadItem,
+  loopStartItem,
+  TL_AXIS_W,
   TL_DIAMOND,
   TL_MIN_BAR,
   laneColumns,
@@ -409,4 +411,13 @@ test('lanePlan: the block split does not depend on the pill texts', async () => 
   const none = lanePlan(withLabel());
   assert.deepEqual(long.starts, none.starts);
   assert.ok(labelPillW(long.stubs.get('late')![0]) > 300);
+});
+
+test('timeline: the loop starts with the playhead at the first beat item, not at the range end', async () => {
+  const { default: demo } = await import('../figures/roadmap.ts');
+  const lay = timelineLayout(demo.props, TL_AXIS_W);
+  const first = loopStartItem(lay.items, timelineBeats(demo.props))!;
+  assert.equal(first.id, 'invoice');
+  assert.notEqual(first.x, lay.last);
+  assert.equal(loopStartItem(lay.items, []), undefined, 'no step: the playhead stays at the range end');
 });
