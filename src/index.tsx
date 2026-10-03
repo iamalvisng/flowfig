@@ -350,12 +350,13 @@ export function Flow({
             stub: stubs.get(ids[i])!.map(labelPillW),
             bands: [bandOf(ids[i], e.from, 0), bandOf(ids[i], e.to, 1)] as [Rect | undefined, Rect | undefined],
           }),
-          ...(stubs.size && e.label != null && { labelW: labelPillW(str(e.label)) }),
+          ...((stubs.size || lanePlan) && e.label != null && { labelW: labelPillW(str(e.label)) }),
         })),
         rects,
         tips,
         avoid,
         pillArea,
+        lanePlan ? { bands: Object.values(laneBands), boxes: nodes(layout).flatMap((n) => (rects[n.id] ? [rects[n.id]] : [])) } : undefined,
       );
       setRouted(next);
       if (lanePlan) {

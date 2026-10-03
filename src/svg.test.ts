@@ -1072,10 +1072,10 @@ test('lanes wrap: a cross-block edge is two stubs with pills that clear every bo
 test('lanes wrap: a figure that fits renders byte for byte as before the wrap', async () => {
   const { createHash } = await import('node:crypto');
   const { default: refund } = await import('../figures/refund-process.ts');
-  // The hash of toSvg on main at c008cf5 (0.4.0).
+  // The hash of toSvg on main at c008cf5 (0.4.0), then with the "ticket" label moved into its lane band (lane-labels).
   assert.equal(
     createHash('sha256').update(toSvg(refund.props)).digest('hex'),
-    '7c3c7684e6f098a20e1a32e9872695aacc45c6ee734ed8c5211ca29bd23e85ba',
+    'd2604a6aa8357826dceedbfc80e4728f2b2e0f30f5326586c0ee34cc082d56a3',
   );
 });
 

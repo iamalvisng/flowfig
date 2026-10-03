@@ -10,6 +10,9 @@ svg { --accent:#0074d9; --fg:#1c1e21; --muted:#606770; --bg:#ffffff; --surface:#
 .row { fill: var(--fg); font-size: 11px; }
 .row.mono { font-size: 10.5px; font-family: ui-monospace, Menlo, monospace; }
 .muted { fill: var(--muted); }
+.bar { fill: var(--fg); font-size: 13px; font-weight: 500; }
+.tick { fill: var(--muted); font-size: 11px; }
+.today { fill: var(--accent); font-size: 11px; font-weight: 600; }
 .tag { font-size: 9px; font-weight: 600; letter-spacing: .03em; text-anchor: middle; }
 .mark { fill: var(--accent); font-size: 11px; font-weight: 600; text-anchor: end; }
 .chip { fill: #ffffff; font-size: 11.5px; text-anchor: middle; }
@@ -93,6 +96,9 @@ svg { --accent:#0074d9; --fg:#1c1e21; --muted:#606770; --bg:#ffffff; --surface:#
 <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 1 L 9 5 L 0 9 z" fill="context-stroke"/></marker></defs>
 <rect width="100%" height="100%" fill="var(--bg)"/>
 <g transform="translate(0 0)">
+
+
+
 <rect x="24" y="24" width="843.9" height="101" rx="14" fill="var(--surface)" stroke="var(--border)" class="lane"/><text x="42" y="78.5" class="frame">CUSTOMER</text>
 <rect x="124" y="48" width="124.5" height="53" rx="10" fill="var(--bg)" stroke="var(--border)" class="a0"/><text x="186.2" y="72.5" class="label">Request refund</text><text x="186.2" y="87.5" class="sub">order page</text>
 <rect x="738.9" y="48" width="111" height="53" rx="10" fill="var(--bg)" stroke="var(--border)" class="a1"/><text x="794.4" y="72.5" class="label">Confirmation</text><text x="794.4" y="87.5" class="sub">email</text>
@@ -102,17 +108,18 @@ svg { --accent:#0074d9; --fg:#1c1e21; --muted:#606770; --bg:#ffffff; --surface:#
 <rect x="738.9" y="188.5" width="106.5" height="38" rx="10" fill="var(--bg)" stroke="var(--border)" class="a4"/><text x="792.1" y="212.5" class="label">Close ticket</text>
 <rect x="24" y="290" width="843.9" height="101" rx="14" fill="var(--surface)" stroke="var(--border)" class="lane"/><text x="42" y="344.5" class="frame">FINANCE</text>
 <rect x="567.7" y="314" width="115.2" height="53" rx="10" fill="var(--bg)" stroke="var(--border)" class="a5"/><text x="625.3" y="338.5" class="label">Issue refund</text><text x="625.3" y="353.5" class="sub">3 working days</text>
-<path id="p-open" d="M 248.5 74.5 C 276.5 74.5, 276.5 207.5, 304.5 207.5" fill="none" stroke="var(--muted)" stroke-width="1.25" marker-end="url(#arrow)" class="a6"/><rect x="249.7" y="132" width="53.6" height="18" rx="9" fill="var(--bg)" stroke="var(--border)" class="a7"/><text x="276.5" y="145" class="edgelabel a8">ticket</text>
-<path id="p-yes" d="M 511.74 207.5 C 539.74 207.5, 539.74 340.5, 567.74 340.5" fill="none" stroke="var(--muted)" stroke-width="1.25" marker-end="url(#arrow)" class="a9"/><rect x="522.8" y="265" width="33.8" height="18" rx="9" fill="var(--bg)" stroke="var(--border)" class="a10"/><text x="539.7" y="278" class="edgelabel a11">yes</text>
-<path id="p-paid" d="M 682.9000000000001 340.5 C 710.9000000000001 340.5, 710.9000000000001 207.5, 738.9000000000001 207.5" fill="none" stroke="var(--muted)" stroke-width="1.25" marker-end="url(#arrow)" class="a12"/><rect x="690.7" y="265" width="40.4" height="18" rx="9" fill="var(--bg)" stroke="var(--border)" class="a13"/><text x="710.9" y="278" class="edgelabel a14">paid</text>
-<path id="p-notify" d="M 792.1400000000001 188.5 C 792.1400000000001 144.75, 794.3800000000001 144.75, 794.3800000000001 101" fill="none" stroke="var(--muted)" stroke-width="1.25" marker-end="url(#arrow)" class="a15"/><rect x="769.8" y="135.8" width="47" height="18" rx="9" fill="var(--bg)" stroke="var(--border)" class="a16"/><text x="793.3" y="148.8" class="edgelabel a17">email</text>
-<path id="p-reject" d="M 511.74 207.5 C 539.74 207.5, 539.74 74.5, 567.74 74.5" fill="none" stroke="var(--muted)" stroke-width="1.25" marker-end="url(#arrow)" class="a18"/><rect x="526.1" y="132" width="27.2" height="18" rx="9" fill="var(--bg)" stroke="var(--border)" class="a19"/><text x="539.7" y="145" class="edgelabel a20">no</text>
+<path id="p-open" d="M 248.5 74.5 C 276.5 74.5, 276.5 207.5, 304.5 207.5" fill="none" stroke="var(--muted)" stroke-width="1.25" marker-end="url(#arrow)" class="a6"/><rect x="249.7" y="103" width="53.6" height="18" rx="9" fill="var(--bg)" stroke="var(--border)" class="a7"/><text x="276.5" y="116" class="edgelabel a8">ticket</text>
+<path id="p-yes" d="M 511.74 207.5 C 539.74 207.5, 539.74 340.5, 567.74 340.5" fill="none" stroke="var(--muted)" stroke-width="1.25" marker-end="url(#arrow)" class="a9"/><rect x="518.9" y="246.5" width="33.8" height="18" rx="9" fill="var(--bg)" stroke="var(--border)" class="a10"/><text x="535.8" y="259.5" class="edgelabel a11">yes</text>
+<path id="p-paid" d="M 682.9000000000001 340.5 C 710.9000000000001 340.5, 710.9000000000001 207.5, 738.9000000000001 207.5" fill="none" stroke="var(--muted)" stroke-width="1.25" marker-end="url(#arrow)" class="a12"/><rect x="694.7" y="246.5" width="40.4" height="18" rx="9" fill="var(--bg)" stroke="var(--border)" class="a13"/><text x="714.9" y="259.5" class="edgelabel a14">paid</text>
+<path id="p-notify" d="M 792.1400000000001 188.5 C 792.1400000000001 144.75, 794.3800000000001 144.75, 794.3800000000001 101" fill="none" stroke="var(--muted)" stroke-width="1.25" marker-end="url(#arrow)" class="a15"/><rect x="769.1" y="149.8" width="47" height="18" rx="9" fill="var(--bg)" stroke="var(--border)" class="a16"/><text x="792.6" y="162.8" class="edgelabel a17">email</text>
+<path id="p-reject" d="M 511.74 207.5 C 539.74 207.5, 539.74 74.5, 567.74 74.5" fill="none" stroke="var(--muted)" stroke-width="1.25" marker-end="url(#arrow)" class="a18"/><rect x="522.2" y="150.5" width="27.2" height="18" rx="9" fill="var(--bg)" stroke="var(--border)" class="a19"/><text x="535.8" y="163.5" class="edgelabel a20">no</text>
 <g class="p0" opacity="0"><circle r="10" fill="var(--accent)" opacity="0.2"/><circle r="4.5" fill="var(--accent)"/><animateMotion dur="20.8s" repeatCount="indefinite" keyTimes="0;0;0.0347;1" keyPoints="0;0;1;1" calcMode="linear"><mpath href="#p-open" xlink:href="#p-open"/></animateMotion></g>
 <g class="p1" opacity="0"><circle r="10" fill="#10b981" opacity="0.2"/><circle r="4.5" fill="#10b981"/><animateMotion dur="20.8s" repeatCount="indefinite" keyTimes="0;0.235;0.2696;1" keyPoints="0;0;1;1" calcMode="linear"><mpath href="#p-yes" xlink:href="#p-yes"/></animateMotion></g>
 <g class="p2" opacity="0"><circle r="10" fill="var(--accent)" opacity="0.2"/><circle r="4.5" fill="var(--accent)"/><animateMotion dur="20.8s" repeatCount="indefinite" keyTimes="0;0.3405;0.3752;1" keyPoints="0;0;1;1" calcMode="linear"><mpath href="#p-paid" xlink:href="#p-paid"/></animateMotion></g>
 <g class="p3" opacity="0"><circle r="10" fill="#10b981" opacity="0.2"/><circle r="4.5" fill="#10b981"/><animateMotion dur="20.8s" repeatCount="indefinite" keyTimes="0;0.4461;0.4807;1" keyPoints="0;0;1;1" calcMode="linear"><mpath href="#p-notify" xlink:href="#p-notify"/></animateMotion></g>
 <g class="p4" opacity="0"><circle r="10" fill="var(--accent)" opacity="0.2"/><circle r="4.5" fill="var(--accent)"/><animateMotion dur="20.8s" repeatCount="indefinite" keyTimes="0;0.6287;0.6633;1" keyPoints="0;0;1;1" calcMode="linear"><mpath href="#p-open" xlink:href="#p-open"/></animateMotion></g>
 <g class="p5" opacity="0"><circle r="10" fill="#ef4444" opacity="0.2"/><circle r="4.5" fill="#ef4444"/><animateMotion dur="20.8s" repeatCount="indefinite" keyTimes="0;0.7712;0.8059;1" keyPoints="0;0;1;1" calcMode="linear"><mpath href="#p-reject" xlink:href="#p-reject"/></animateMotion></g>
+
 </g>
 
 <text x="445.9" y="431" opacity="0" class="steplabel a21">approved</text>

@@ -26,6 +26,8 @@ type Pick = {
   labelW?: number;
 };
 
+/** The least gap between a label pill and a lane border. */
+const LABEL_CLEAR = 4;
 const cx = (r: Rect) => r.x + r.w / 2;
 const cy = (r: Rect) => r.y + r.h / 2;
 /** A point on the cubic Bézier at `t`, as `check` samples an edge. */
@@ -61,6 +63,7 @@ export function route(
   tips: Set<string> = new Set(),
   avoid: Avoid[] = [], // what an elbow's vertical run and a stub pill must not cross (the timeline's outside labels; the boxes and gutters of lanes)
   area?: Rect, // where a stub pill may sit: the lanes right of the gutter
+  lanes?: { bands: Rect[]; boxes: Rect[] }, // lane bands and boxes: an edge label (with `labelW`) moves along its path to sit inside one band
 ): Routed[] {
   const picks: Pick[] = [];
   for (const e of edges) {
@@ -354,11 +357,36 @@ export function route(
     if (p.stub) continue;
     const r = one(p);
     done.set(p, r);
+    if (p.labelW && lanes) r.mid = labelInBand(r, p.labelW, lanes, pills);
     if (p.labelW) pills.push({ x: r.mid.x - p.labelW / 2, y: r.mid.y - 9, w: p.labelW, h: 18 });
     track(Array.from({ length: 33 }, (_, i) => bezier(r.curve, i / 32)));
   }
   for (const p of picks) if (p.stub) done.set(p, one(p));
   return picks.map((p) => done.get(p)!);
+}
+
+/** The point of the path nearest its middle where a label pill of width `w` sits inside one band, LABEL_CLEAR from the border, clear of the boxes
+ * and the earlier pills. If a short run leaves no such point, the pill keeps the x of a path point and moves up or down into the nearest
+ * band, still on the path. If that fails too, the middle. Both renderers route through this, so they place the label alike. */
+function labelInBand(r: Routed, w: number, { bands, boxes }: { bands: Rect[]; boxes: Rect[] }, pills: Rect[]): Pt {
+  const hit = (a: Rect, b: Rect, m: number) => a.x < b.x + b.w + m && b.x < a.x + a.w + m && a.y < b.y + b.h + m && b.y < a.y + a.h + m;
+  const ts = Array.from({ length: 65 }, (_, i) => i / 64).sort((a, b) => Math.abs(a - 0.5) - Math.abs(b - 0.5));
+  const path = ts.map((t) => bezier(r.curve, t));
+  const clear = (pill: Rect) => !boxes.some((b) => hit(pill, b, 1)) && !pills.some((b) => hit(pill, b, 1));
+  const room = (x: number, b: Rect) => x - w / 2 >= b.x + LABEL_CLEAR && x + w / 2 <= b.x + b.w - LABEL_CLEAR;
+  for (const q of path) {
+    const pill = { x: q.x - w / 2, y: q.y - 9, w, h: 18 };
+    const fits = bands.some((b) => room(q.x, b) && pill.y >= b.y + LABEL_CLEAR && pill.y + 18 <= b.y + b.h - LABEL_CLEAR);
+    if (fits && clear(pill)) return q;
+  }
+  for (const q of path)
+    for (const b of bands) {
+      if (!room(q.x, b) || b.h < 18 + LABEL_CLEAR * 2) continue;
+      const y = Math.min(Math.max(q.y, b.y + LABEL_CLEAR + 9), b.y + b.h - LABEL_CLEAR - 9);
+      const pill = { x: q.x - w / 2, y: y - 9, w, h: 18 };
+      if (clear(pill) && path.some((o) => o.x >= pill.x && o.x <= pill.x + w && o.y >= pill.y && o.y <= pill.y + 18)) return { x: q.x, y };
+    }
+  return r.mid;
 }
 
 /** True if the segment a-b crosses the segment c-d. The ends of a-b are trimmed by 1.5 px, so a touch at a box side does not count. */
