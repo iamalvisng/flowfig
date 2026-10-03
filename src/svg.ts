@@ -43,6 +43,7 @@ import {
   FRAME_SIDE,
   laneGutter as gutterOf,
   lanePlan,
+  laneBlock,
   laneEnd,
   type LanePlan,
   nodeWidth,
@@ -166,23 +167,23 @@ function size(item: FigNode | FigGroup, s: Sizes): { w: number; h: number } {
 }
 
 /** Swimlanes: the bands span the width, the label sits in a left gutter, and a box sits at its time column. Columns past
- * `plan.per` wrap into blocks under the first. A block holds only the lanes with a box in it; all bands share one width. */
+ * the plan wrap into blocks under the first. A block holds only the lanes with a box in it; all bands share one width. */
 function placeLanes(fig: FlowProps, x: number, y: number, s: Sizes, out: Placed[]): void {
   const lanes = fig.layout.children as FigGroup[];
-  const { cols, per, gaps, lead, blocks } = s.plan!;
+  const { cols, starts, gaps, lead, blocks } = s.plan!;
   const colW = Array.from({ length: Math.max(-1, ...cols.values()) + 1 }, () => 0);
   for (const lane of lanes)
     for (const b of lane.children as FigNode[]) colW[cols.get(b.id)!] = Math.max(colW[cols.get(b.id)!], size(b, s).w);
   const gutter = gutterOf(lanes);
-  const colsOf = (k: number) => colW.slice(k * per, (k + 1) * per);
+  const colsOf = (k: number) => colW.slice(starts[k], starts[k + 1]);
   const colX = colW.map((_, c) => {
-    const k = Math.floor(c / per);
+    const k = laneBlock(starts, c);
     return (
       gutter +
       lead[k] +
       colsOf(k)
-        .slice(0, c % per)
-        .reduce((a, w, i) => a + w + gaps[k * per + i], 0)
+        .slice(0, c - starts[k])
+        .reduce((a, w, i) => a + w + gaps[starts[k] + i], 0)
     );
   });
   // A figure with no box has no column: its band keeps the frame side on the right.
@@ -193,8 +194,8 @@ function placeLanes(fig: FlowProps, x: number, y: number, s: Sizes, out: Placed[
         gutter +
         lead[k] +
         ws.reduce((a, w) => a + w, 0) +
-        gaps.slice(k * per, k * per + ws.length - 1).reduce((a, g) => a + g, 0) +
-        (gaps[k * per + ws.length - 1] ?? FRAME_SIDE)
+        gaps.slice(starts[k], starts[k] + ws.length - 1).reduce((a, g) => a + g, 0) +
+        (gaps[starts[k] + ws.length - 1] ?? FRAME_SIDE)
       );
     }),
   );
@@ -204,7 +205,7 @@ function placeLanes(fig: FlowProps, x: number, y: number, s: Sizes, out: Placed[
   blocks.forEach((bk, i) => {
     if (i) ly += LANE_BLOCK_GAP - LANE_ROW_GAP;
     for (const lane of lanes) {
-      const kids = (lane.children as FigNode[]).filter((b) => Math.floor(cols.get(b.id)! / per) === bk).map((b) => ({ b, ...size(b, s) }));
+      const kids = (lane.children as FigNode[]).filter((b) => laneBlock(starts, cols.get(b.id)!) === bk).map((b) => ({ b, ...size(b, s) }));
       // A wrapped block draws only its own lanes; one block draws every lane, an empty one too.
       if (blocks.length > 1 && !kids.length) continue;
       const inner = Math.max(LABEL_LINE + 20, ...kids.map((k) => k.h));
@@ -348,7 +349,7 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
   const tips = new Set(placed.filter((p) => !isGroup(p.item) && (p.item.shape === 'decision' || p.tl?.milestone)).map((p) => p.item.id!));
   const ids = fig.edges.map(edgeId);
   // Wrapped lanes: an edge between two blocks is two stubs with pills, clear of the boxes and the lane gutters.
-  const stubs = plan?.stubs ?? new Map<string, [string, string]>();
+  const stubs = plan?.stubs ?? new Map<string, string[]>();
   const gutter = plan ? gutterOf(fig.layout.children as FigGroup[]) : 0;
   const band = (id: string, k: number) => placed.find((p) => p.lane && p.item.id === id && p.block === k);
   const end = (eid: string, id: string, start: boolean) => (plan ? laneEnd(plan, eid, id, start, band, rects) : id);
@@ -357,9 +358,9 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
       id: ids[i],
       from: end(ids[i], e.from, true),
       to: end(ids[i], e.to, false),
-      around: e.around,
+      around: e.around ?? (plan?.around.has(ids[i]) ? ('below' as const) : undefined),
       ...(tl && { sides: ['r', 'l'] as [Side, Side], elbow: true }),
-      ...(stubs.has(ids[i]) && { stub: stubs.get(ids[i])!.map(labelPillW) as [number, number] }),
+      ...(stubs.has(ids[i]) && { stub: stubs.get(ids[i])!.map(labelPillW) }),
       ...(stubs.size && e.label != null && { labelW: labelPillW(str(e.label)) }),
     })),
     rects,
@@ -367,6 +368,8 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
     stubs.size
       ? placed.flatMap((p) => (!isGroup(p.item) ? [p] : p.lane ? [{ x: p.x, y: p.y, w: gutter, h: p.h }] : []))
       : placed.filter((p) => p.tl && !p.tl.labelInside).map((p) => outsideLabelRect(p, str(p.item.label))),
+    // A stub pill stays in the lanes, right of the gutter.
+    stubs.size ? { x: placed[0].x + gutter, y: placed[0].y, w: placed[0].w - gutter, h: placed[0].h } : undefined,
   );
   const byId = Object.fromEntries(routed.map((r) => [r.id, r]));
 
@@ -711,7 +714,8 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
     let label = '';
     if (r.stub) {
       fonts.push(11);
-      label = r.stub.pills.map((p, k) => pill(p.x + p.w / 2, p.y + 9, p.w, stubs.get(r.id)![k])).join('');
+      const texts = stubs.get(r.id)!;
+      label = r.stub.pills.map((p, k) => pill(p.x + p.w / 2, p.y + 9, p.w, k === 0 && r.stub!.short ? texts[2] : texts[k])).join('');
     } else if (e.label != null && !tl) {
       const lw = labelPillW(str(e.label));
       labelRects[r.id] = { x: r.mid.x - lw / 2, y: r.mid.y - 9, w: lw, h: 18 };
@@ -831,7 +835,7 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
   }
 
   const bounds = placed[0];
-  const arcs = fig.edges.some((e, i) => e.around && !stubs.has(ids[i])); // a stub does not arc
+  const arcs = fig.edges.some((e, i) => (e.around || plan?.around.has(ids[i])) && !stubs.has(ids[i])); // a stub does not arc
   const capLines = [...new Set(captions)].flatMap((c) => wrap(c, Math.max(560, bounds.w), 13.5).length);
   const mapW = Math.max(bounds.w + pad * 2, 560);
   // `rail: 'only'` drops the map, but only when the rail has a hop to draw; a figure never renders empty.
