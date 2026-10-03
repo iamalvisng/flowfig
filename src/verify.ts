@@ -1,6 +1,6 @@
 // `flowfig verify`: checks that the code a link names is still there. The link parsing lives in source.ts, which has no Node import.
 import { readFileSync, statSync } from 'node:fs';
-import { isAbsolute, relative, resolve } from 'node:path';
+import { isAbsolute, relative, resolve, sep } from 'node:path';
 import type { FlowProps } from './model.ts';
 import { headingSlug, links } from './source.ts';
 import type { Finding } from './scene.ts';
@@ -34,7 +34,7 @@ export function verify(fig: FlowProps, { root = process.cwd() }: { root?: string
   for (const l of all) {
     const full = resolve(root, l.path);
     const rel = relative(root, full);
-    const outside = isAbsolute(l.path) || rel === '..' || rel.startsWith('../');
+    const outside = isAbsolute(l.path) || rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel);
     if (!files.has(full)) files.set(full, outside ? null : read(full));
     const text = files.get(full);
     if (text == null) out.push({ rule: 'missing-file', severity: 'error', ids: [], message: `${l.owner} -> ${l.source}: file not found` });
