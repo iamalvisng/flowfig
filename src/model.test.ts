@@ -10,7 +10,7 @@ import {
   TL_DIAMOND,
   TL_MIN_BAR,
   laneColumns,
-  laneWrap,
+  lanePlan,
   beatMs,
   decisions,
   edgeId,
@@ -348,10 +348,26 @@ test('labelSpan: the label starts after the ramp and is empty when the span is s
   assert.deepEqual(labelSpan(2, 2.2, 0.4), [2.2, 2.2]);
 });
 
-test('laneWrap: n is the largest column count per block that keeps the text readable at the width', async () => {
+test('lanePlan: n is the largest column count per block that keeps the text readable at the width', async () => {
   const { default: demo } = await import('../figures/returns-process.ts');
-  assert.equal(laneWrap(demo.props), 4);
-  assert.equal(laneWrap(demo.props, { width: 1400 }), 7);
-  assert.equal(laneWrap(demo.props, { width: 200 }), 1);
-  assert.equal(laneWrap(lanesFig, { width: 1200 }), Math.max(...laneColumns(lanesFig).values()) + 1);
+  assert.equal(lanePlan(demo.props).per, 4);
+  assert.equal(lanePlan(demo.props, { width: 1400 }).per, 7);
+  assert.equal(lanePlan(demo.props, { width: 200 }).per, 1);
+  assert.equal(lanePlan(lanesFig, { width: 1200 }).per, Math.max(...laneColumns(lanesFig).values()) + 1);
+});
+
+test('lanePlan: a cross-block edge gets two pill texts, and the gaps next to its ends grow to hold them', async () => {
+  const { default: demo } = await import('../figures/returns-process.ts');
+  const plan = lanePlan(demo.props);
+  assert.deepEqual(
+    [...plan.stubs],
+    [
+      ['arrive', ['→ Inspect', 'from Ship item']],
+      ['late', ['late → Rejected', 'from Review']],
+    ],
+  );
+  // ship is the last column of block 1; inspect is the first column of block 2.
+  assert.ok(plan.gaps[plan.cols.get('ship')!] > 18);
+  assert.ok(plan.lead[1] > 0 && plan.lead[0] === 0);
+  assert.equal(lanePlan(demo.props, { width: 1400 }).stubs.size, 0);
 });
