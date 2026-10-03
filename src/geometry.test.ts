@@ -116,8 +116,8 @@ test('stub: each pill takes the first clear place, else the first place', () => 
   assert.deepEqual(pills([{ x: 110, y: 14, w: 70, h: 60 }])[0], [112, -20]);
   // 5: below the source (4, one pill lower, is taken too).
   assert.deepEqual(pills([{ x: 110, y: -30, w: 70, h: 110 }])[0], [20, 62]);
-  // The target pill: left and over the top edge, when its left place is taken.
-  assert.deepEqual(pills([{ x: 320, y: 312, w: 70, h: 22 }])[1], [328, 280]);
+  // The target pill: left and under the bottom edge, when its left place is taken (under and over tie; under comes first).
+  assert.deepEqual(pills([{ x: 320, y: 312, w: 70, h: 22 }])[1], [328, 352]);
   // No clear place: the first place stays, and check reports it.
   assert.deepEqual(pills([{ x: -1000, y: -1000, w: 3000, h: 3000 }]), [
     [112, 16],
@@ -141,4 +141,20 @@ test('stub: a pill keeps clear of the path of another edge', () => {
     rects,
   );
   assert.notDeepEqual([e.stub!.pills[0].x, e.stub!.pills[0].y], [112, 16]);
+});
+
+test('stub: with a band, a pill stays inside it, 4 px from the border, and slides to the nearest clear place', () => {
+  const rects = { a: { x: 0, y: 20, w: 100, h: 50 }, b: { x: 400, y: 300, w: 100, h: 50 } };
+  const band = { x: -20, y: 0, w: 400, h: 90 };
+  const pills = (avoid: { x: number; y: number; w: number; h: number }[]) =>
+    route([{ id: 'e', from: 'a', to: 'b', stub: [60, 60], bands: [band, undefined] }], rects, new Set(), avoid)[0].stub!.pills[0];
+  const inside = (r: { x: number; y: number; w: number; h: number }) =>
+    r.x >= band.x + 4 && r.x + r.w <= band.x + band.w - 4 && r.y >= band.y + 4 && r.y + r.h <= band.y + band.h - 4;
+  assert.deepEqual([pills([]).x, pills([]).y], [112, 36]);
+  // A box right of the source takes the first place: the pill moves up or down in the band, or further right, and stays inside.
+  const moved = pills([{ x: 110, y: 30, w: 70, h: 30 }]);
+  assert.ok(inside(moved) && !(moved.x === 112 && moved.y === 36));
+  // No place inside the band: the first place stays, and check reports it.
+  const stuck = pills([{ x: -1000, y: -1000, w: 3000, h: 3000 }]);
+  assert.deepEqual([stuck.x, stuck.y], [112, 36]);
 });

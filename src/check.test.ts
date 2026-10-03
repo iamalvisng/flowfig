@@ -376,3 +376,22 @@ test('checkScene: a stub (pts) through a box is edge-crosses-box, and an edge th
     [['label-overlap', ['e', 's']]],
   );
 });
+
+test('checkScene: a stub pill across a lane border is label-overlap; a pill inside its lane is fine', () => {
+  const p = (x: number, y: number): Pt => ({ x, y });
+  const lane = { id: 'Support', rect: { x: 0, y: 0, w: 400, h: 100 } };
+  const stub = (y: number) => ({
+    id: 's',
+    from: 'a',
+    to: 'b',
+    curve: [p(0, 0), p(0, 0), p(0, 0), p(0, 0)] as [Pt, Pt, Pt, Pt],
+    pts: [p(100, y), p(112, y)],
+    label: { x: 112, y: y - 9, w: 60, h: 18 },
+  });
+  const scene = (y: number): Scene => ({ width: 400, minFont: 12, boxes: [], edges: [stub(y)], lanes: [lane] });
+  assert.deepEqual(checkScene(scene(50)), []);
+  assert.deepEqual(
+    checkScene(scene(98)).map((f) => [f.rule, f.message]),
+    [['label-overlap', 'the pill of edge "s" crosses the border of lane "Support"']],
+  );
+});

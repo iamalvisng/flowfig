@@ -19,6 +19,7 @@ type Pick = {
   around?: Around;
   elbow?: boolean;
   stub?: number[];
+  bands?: [Rect | undefined, Rect | undefined];
   labelW?: number;
 };
 
@@ -38,6 +39,7 @@ const bezier = ([p0, p1, p2, p3]: [Pt, Pt, Pt, Pt], t: number): Pt => {
 // `elbow` draws a right-angle path, from a right end to a left end: its four curve points are the corners.
 // `sides` fixes the two sides an edge uses (a timeline uses right to left).
 // `around` makes an edge leave and enter from the top or bottom, arcing over whatever sits between.
+// `bands` (with `stub`) are the lane bands of the source and of the target: each pill stays inside its band, 4 px clear of the border.
 // `labelW` is the width of an edge's label pill: a stub pill keeps clear of it.
 // `stub` (wrapped lanes: the source pill width, the target pill width, and the width of a shorter source pill) draws a short stub from the source to a pill, and from a second pill into the target.
 export function route(
@@ -49,6 +51,7 @@ export function route(
     sides?: [Side, Side];
     elbow?: boolean;
     stub?: number[];
+    bands?: [Rect | undefined, Rect | undefined];
     labelW?: number;
   }[],
   rects: Record<string, Rect>,
@@ -123,7 +126,10 @@ export function route(
   // before it, and of every edge path (sampled as `check` samples it).
   const pills: Rect[] = [];
   const paths: Pt[] = [];
-  const clear = (r: Rect) =>
+  const inBand = (r: Rect, b?: Rect) =>
+    !b || (r.x >= b.x + 4 && r.x + r.w <= b.x + b.w - 4 && r.y >= b.y + 4 && r.y + r.h <= b.y + b.h - 4);
+  const clear = (r: Rect, band?: Rect) =>
+    inBand(r, band) &&
     (!area || (r.x >= area.x && r.x + r.w <= area.x + area.w && r.y >= area.y && r.y + r.h <= area.y + area.h)) &&
     ![...avoid, ...pills].some((q) => r.x < q.x + q.w + 2 && q.x < r.x + r.w + 2 && r.y < q.y + q.h + 2 && q.y < r.y + r.h + 2) &&
     !paths.some((q) => q.x > r.x - 2 && q.x < r.x + r.w + 2 && q.y > r.y - 2 && q.y < r.y + r.h + 2);
@@ -131,17 +137,50 @@ export function route(
     const s = anchor.get(p.id + ':s')!,
       e = anchor.get(p.id + ':e')!;
     if (p.stub) {
-      // The source pill goes right of the source, else right and under its bottom edge, else right and over its top edge,
-      // else right one pill lower, else below it, else above it. The target pill goes left of the target, else left and over
-      // its top edge, else left and under its bottom edge, else left one pill higher, else above it, else below it.
-      // If no place is clear, the source pill tries its shorter text. If no place is clear then, the first place stays and
-      // `check` reports it.
+      // The source pill goes right of the source and the target pill left of the target, at the nearest clear place: it slides
+      // away from the box in 8 px steps, and up or down inside the band in 4 px steps. The stub then runs on a slant. The last
+      // places are below and above the box. A place is clear if the pill and its stub keep clear of everything, and the pill stays
+      // inside its band. If no place is clear, the source pill tries its shorter text. If no place is clear then, the first place
+      // stays and `check` reports it.
       const [ow, iw, sw] = p.stub;
+      const [sb, tb] = p.bands ?? [];
+      const rows = (box: Rect, y0: number, band?: Rect) => {
+        const ys = band
+          ? Array.from({ length: Math.max(0, Math.floor((band.h - 26) / 4)) + 1 }, (_, i) => band.y + 4 + i * 4)
+          : [box.y + box.h + 2, box.y - 20];
+        return [y0, ...ys.filter((y) => y !== y0)];
+      };
+      // A place and its stub. Beside the box, the stub runs from the box side to the near end of the pill. Under or over the box,
+      // it runs straight down or up between the box and the pill. `dir` is 1 for the source (box to pill), -1 for the target.
+      const place = (box: Rect, from: Pt, dir: 1 | -1, r: Rect, side: boolean, tip: boolean): [Rect, Pt, Pt] => {
+        let a: Pt, b: Pt;
+        if (side) [a, b] = [from, { x: dir > 0 ? r.x : r.x + r.w, y: r.y + 9 }];
+        else {
+          // A diamond has its point at the middle: the stub meets the point.
+          const x = tip ? cx(box) : Math.min(Math.max(r.x + r.w / 2, box.x + 8, r.x + 8), box.x + box.w - 8, r.x + r.w - 8);
+          const under = r.y >= box.y + box.h;
+          [a, b] = [
+            { x, y: under ? box.y + box.h : box.y },
+            { x, y: under ? r.y : r.y + r.h },
+          ];
+        }
+        return dir > 0 ? [r, a, b] : [r, b, a];
+      };
+      const beside = (w: number, box: Rect, from: Pt, dir: 1 | -1, band?: Rect): [Rect, Pt, Pt][] => {
+        const tip = tips.has(dir > 0 ? p.from : p.to);
+        const out: [Rect, Pt, Pt, number][] = [];
+        for (let dx = STUB - 8 * Math.ceil((box.w + w) / 8); dx <= STUB + 240; dx += 8)
+          for (const y of rows(box, from.y - 9, band)) {
+            // Closer than STUB to the box side, a pill sits under or over the box, with room for the stub.
+            const x = dir > 0 ? from.x + dx : from.x - dx - w;
+            if (dx < STUB && !(y >= box.y + box.h + STUB / 2 || y + 18 <= box.y - STUB / 2)) continue;
+            if (dx < STUB && tip && !(x + 8 <= cx(box) && cx(box) <= x + w - 8)) continue;
+            out.push([...place(box, from, dir, { x, y, w, h: 18 }, dx >= STUB, tip), Math.abs(dx - STUB) + Math.abs(y + 9 - from.y)]);
+          }
+        return out.sort((m, q) => m[3] - q[3]).map(([r, a, b]) => [r, a, b]);
+      };
       const outs = (w: number): [Rect, Pt, Pt][] => [
-        [{ x: s.x + STUB, y: s.y - 9, w, h: 18 }, s, { x: s.x + STUB, y: s.y }],
-        [{ x: s.x + STUB, y: p.a.y + p.a.h + 2, w, h: 18 }, s, { x: s.x + STUB, y: p.a.y + p.a.h + 11 }],
-        [{ x: s.x + STUB, y: p.a.y - 20, w, h: 18 }, s, { x: s.x + STUB, y: p.a.y - 11 }],
-        [{ x: s.x + STUB, y: p.a.y + p.a.h + 22, w, h: 18 }, s, { x: s.x + STUB, y: p.a.y + p.a.h + 31 }],
+        ...beside(w, p.a, s, 1, sb),
         [
           { x: cx(p.a) - w / 2, y: p.a.y + p.a.h + STUB, w, h: 18 },
           { x: cx(p.a), y: p.a.y + p.a.h },
@@ -154,10 +193,7 @@ export function route(
         ],
       ];
       const ins: [Rect, Pt, Pt][] = [
-        [{ x: e.x - STUB - iw, y: e.y - 9, w: iw, h: 18 }, { x: e.x - STUB, y: e.y }, e],
-        [{ x: e.x - STUB - iw, y: p.b.y - 20, w: iw, h: 18 }, { x: e.x - STUB, y: p.b.y - 11 }, e],
-        [{ x: e.x - STUB - iw, y: p.b.y + p.b.h + 2, w: iw, h: 18 }, { x: e.x - STUB, y: p.b.y + p.b.h + 11 }, e],
-        [{ x: e.x - STUB - iw, y: p.b.y - 40, w: iw, h: 18 }, { x: e.x - STUB, y: p.b.y - 31 }, e],
+        ...beside(iw, p.b, e, -1, tb),
         [
           { x: cx(p.b) - iw / 2, y: p.b.y - STUB - 18, w: iw, h: 18 },
           { x: cx(p.b), y: p.b.y - STUB },
@@ -171,12 +207,22 @@ export function route(
       ];
       const seg = (a: Pt, b: Pt) =>
         Array.from({ length: 9 }, (_, i) => ({ x: a.x + ((b.x - a.x) * i) / 8, y: a.y + ((b.y - a.y) * i) / 8 }));
-      const long = outs(ow).find(([r]) => clear(r));
-      const cut = long || sw == null ? undefined : outs(sw).find(([r]) => clear(r));
+      // A stub must not run through a box other than its own, nor through a pill or a label.
+      const free = (a: Pt, b: Pt, own: Rect) =>
+        seg(a, b).every(
+          (q) =>
+            ![...avoid, ...pills].some((r) => r !== own && q.x > r.x + 2 && q.x < r.x + r.w - 2 && q.y > r.y + 2 && q.y < r.y + r.h - 2),
+        );
+      const fits =
+        (own: Rect, band?: Rect) =>
+        ([r, a, b]: [Rect, Pt, Pt]) =>
+          clear(r, band) && free(a, b, own);
+      const long = outs(ow).find(fits(p.a, sb));
+      const cut = long || sw == null ? undefined : outs(sw).find(fits(p.a, sb));
       const [po, o1, o2] = long ?? cut ?? outs(ow)[0];
       pills.push(po);
       paths.push(...seg(o1, o2));
-      const [pi, i1, i2] = ins.find(([r]) => clear(r)) ?? ins[0];
+      const [pi, i1, i2] = ins.find(fits(p.b, tb)) ?? ins[0];
       pills.push(pi);
       paths.push(...seg(i1, i2));
       const line = (a: Pt, b: Pt) => `M ${a.x} ${a.y} L ${b.x} ${b.y}`;
