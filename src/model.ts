@@ -328,6 +328,26 @@ export function diamondLines(
   }
 }
 
+/** The lane copies (`laneIndex@block`) that hold a stub end with no place clear of every edge path. A renderer grows each by
+ * STUB_ROOM and routes again: the pill then fits under or over its box, inside the band. Both renderers call it with their routes. */
+export function tightCopies(
+  lanes: FigGroup[],
+  ends: Map<string, [number, number]>,
+  edges: FlowProps['edges'],
+  routed: { id: string; stub?: { tight: [boolean, boolean] } }[],
+): Set<string> {
+  const laneOf = (id: string) => lanes.findIndex((l) => l.id === id || l.children.some((b) => (b as FigNode).id === id));
+  const out = new Set<string>();
+  for (const r of routed) {
+    const e = edges.find((x) => edgeId(x) === r.id);
+    const [fb, tb] = ends.get(r.id) ?? [];
+    if (!e || !r.stub) continue;
+    if (r.stub.tight[0] && fb != null) out.add(`${laneOf(e.from)}@${fb}`);
+    if (r.stub.tight[1] && tb != null) out.add(`${laneOf(e.to)}@${tb}`);
+  }
+  return out;
+}
+
 /** The width of the label gutter of lanes and of a timeline: the widest track label plus the frame sides. */
 export const laneGutter = (lanes: FigGroup[]) =>
   Math.max(0, ...lanes.map((l) => textWidth(str(l.label).toUpperCase(), 12))) + FRAME_SIDE * 2;

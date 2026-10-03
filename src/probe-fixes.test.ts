@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { check, render } from './svg.ts';
 import { checkScene } from './check.ts';
 import { crosses, type Pt } from './geometry.ts';
-import { diamondLines, diamondRoom, type FlowProps } from './model.ts';
+import { diamondLines, diamondRoom, lanePlan, STUB_ROOM, tightCopies, type FlowProps } from './model.ts';
 import { textWidth } from './text.ts';
 
 // M1: the stub pill "from Refund payment" sat at the top left of the Support band, and its stub ran across "Rejected: damaged -> Reply".
@@ -66,11 +66,25 @@ const diamond = (label: string, sub?: string): FlowProps => ({
   edges: [],
 });
 
-test('M1: the stub of "from Refund payment" is placed so that check reports any crossing', () => {
-  // The band of Support has no place whose stub avoids the edge "Rejected: damaged -> Reply", so check reports the stub as a warning.
-  const f = check(m1);
-  assert.equal(f.filter((x) => x.severity === 'error').length, 0);
-  assert.ok(f.every((x) => x.rule === 'stub-crosses-edge'));
+test('M1: no place in the Support band avoids the edge, so the lane grows and the pill sits under its box with no crossing', () => {
+  assert.deepEqual(check(m1), []);
+  // The copy of the Support lane (101 px with one box row, index 1) in block 2 grew by STUB_ROOM: the plan has not marked it, a tight stub did.
+  assert.ok(!lanePlan(m1).tall.has('1@2'));
+  const bands = render(m1).scene.lanes!.filter((l) => l.id === 'Support agent');
+  assert.equal(bands.at(-1)!.rect.h, 101 + STUB_ROOM);
+});
+
+test('tightCopies names the lane copy of each tight stub end', () => {
+  const lanes = [
+    { id: 'a', label: 'A', children: [{ id: 'x', label: 'X' }] },
+    { id: 'b', label: 'B', children: [{ id: 'y', label: 'Y' }] },
+  ];
+  const ends = new Map<string, [number, number]>([['e', [0, 1]]]);
+  const edges = [{ id: 'e', from: 'x', to: 'y' }];
+  const tight = (t: [boolean, boolean]) => [...tightCopies(lanes, ends, edges, [{ id: 'e', stub: { tight: t } }])];
+  assert.deepEqual(tight([true, false]), ['0@0']);
+  assert.deepEqual(tight([false, true]), ['1@1']);
+  assert.deepEqual(tight([false, false]), []);
 });
 
 test('M2: the sub of a diamond wraps inside the outline, and check reports no overflow', () => {

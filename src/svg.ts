@@ -46,6 +46,7 @@ import {
   STUB_ROOM,
   laneBlock,
   laneEnd,
+  tightCopies,
   type LanePlan,
   nodeWidth,
   diamondLines,
@@ -132,6 +133,8 @@ type Sizes = {
   fig: FlowProps;
   /** Lanes: the shared wrap plan. */
   plan: LanePlan | null;
+  /** Lanes: the lane copies that grow by STUB_ROOM: the plan's, and those a stub with no clear place adds. */
+  tall: Set<string>;
 };
 
 function size(item: FigNode | FigGroup, s: Sizes): { w: number; h: number } {
@@ -195,7 +198,7 @@ function placeLanes(fig: FlowProps, x: number, y: number, s: Sizes, out: Placed[
       // A wrapped block draws only its own lanes; one block draws every lane, an empty one too.
       if (blocks.length > 1 && !kids.length) continue;
       const inner = Math.max(LABEL_LINE + 20, ...kids.map((k) => k.h));
-      const h = inner + LANE_PAD * 2 + (s.plan!.tall.has(`${lanes.indexOf(lane)}@${bk}`) ? STUB_ROOM : 0);
+      const h = inner + LANE_PAD * 2 + (s.tall.has(`${lanes.indexOf(lane)}@${bk}`) ? STUB_ROOM : 0);
       out.push({ x, y: ly, w: width, h, item: lane, lane: true, block: bk });
       for (const k of kids) out.push({ x: x + colX[cols.get(k.b.id)!], y: ly + LANE_PAD + (inner - k.h) / 2, w: k.w, h: k.h, item: k.b });
       ly += h + LANE_ROW_GAP;
@@ -311,7 +314,7 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
   const cardH = new Map<string, number>();
   const lanes = !tl && fig.lanes && isLanesLayout(fig.layout);
   const plan = lanes ? planFor(fig, opts) : null;
-  const sizes: Sizes = { cards, cardH, minH, gap: (g) => groupGap(g, fig.edges), fig, plan };
+  const sizes: Sizes = { cards, cardH, minH, gap: (g) => groupGap(g, fig.edges), fig, plan, tall: new Set(plan?.tall) };
   for (const [id, contents] of cards) {
     const width = CARD_WIDTH; // refined below once the node's own width is known
     const widths = [width];
@@ -320,18 +323,14 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
 
   const placed: Placed[] = [];
   place(fig.layout, pad, pad, sizes, placed);
-  const nodes = placed.filter((p) => !isGroup(p.item)) as (Placed & { item: FigNode })[];
+  let nodes = placed.filter((p) => !isGroup(p.item)) as (Placed & { item: FigNode })[];
   // A node's own width can differ from CARD_WIDTH (`width` in the spec), so re-measure once placed.
   for (const p of nodes) {
     if (!cards.has(p.item.id)) continue;
     const inner = p.w - 20;
     cardH.set(p.item.id, Math.max(...cards.get(p.item.id)!.map((c) => layoutCard(c, inner).height), LINE + CARD_PAD * 2));
   }
-  placed.length = 0;
-  place(fig.layout, pad, pad, sizes, placed);
-
   const rects: Record<string, Rect> = {};
-  for (const p of placed) if (p.item.id) rects[p.item.id] = p;
   const tips = new Set(placed.filter((p) => !isGroup(p.item) && (p.item.shape === 'decision' || p.tl?.milestone)).map((p) => p.item.id!));
   const ids = fig.edges.map(edgeId);
   // Wrapped lanes: an edge between two blocks is two stubs with pills, clear of the boxes and the lane gutters.
@@ -346,24 +345,38 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
     return placed.find((p) => p.lane && p.item === lane && p.block === block);
   };
   const end = (eid: string, id: string, start: boolean) => (plan ? laneEnd(plan, eid, id, start, band, rects) : id);
-  const routed = route(
-    fig.edges.map((e, i) => ({
-      id: ids[i],
-      from: end(ids[i], e.from, true),
-      to: end(ids[i], e.to, false),
-      around: e.around ?? (plan?.around.has(ids[i]) ? ('below' as const) : undefined),
-      ...(tl && { sides: ['r', 'l'] as [Side, Side], elbow: true }),
-      ...(stubs.has(ids[i]) && { stub: stubs.get(ids[i])!.map(labelPillW), bands: [bandOf(ids[i], e.from, 0), bandOf(ids[i], e.to, 1)] }),
-      ...(stubs.size && e.label != null && { labelW: labelPillW(str(e.label)) }),
-    })),
-    rects,
-    tips,
-    stubs.size
-      ? placed.flatMap((p) => (!isGroup(p.item) ? [p] : p.lane ? [{ x: p.x, y: p.y, w: gutter, h: p.h }] : []))
-      : placed.filter((p) => p.tl && !p.tl.labelInside).map((p) => outsideLabelRect(p, str(p.item.label))),
-    // A stub pill stays in the lanes, right of the gutter.
-    stubs.size ? { x: placed[0].x + gutter, y: placed[0].y, w: placed[0].w - gutter, h: placed[0].h } : undefined,
-  );
+  // Place and route. A stub end with no place clear of every edge path makes its lane copy taller, then both run again.
+  const go = () => {
+    placed.length = 0;
+    place(fig.layout, pad, pad, sizes, placed);
+    for (const p of placed) if (p.item.id) rects[p.item.id] = p;
+    return route(
+      fig.edges.map((e, i) => ({
+        id: ids[i],
+        from: end(ids[i], e.from, true),
+        to: end(ids[i], e.to, false),
+        around: e.around ?? (plan?.around.has(ids[i]) ? ('below' as const) : undefined),
+        ...(tl && { sides: ['r', 'l'] as [Side, Side], elbow: true }),
+        ...(stubs.has(ids[i]) && { stub: stubs.get(ids[i])!.map(labelPillW), bands: [bandOf(ids[i], e.from, 0), bandOf(ids[i], e.to, 1)] }),
+        ...(stubs.size && e.label != null && { labelW: labelPillW(str(e.label)) }),
+      })),
+      rects,
+      tips,
+      stubs.size
+        ? placed.flatMap((p) => (!isGroup(p.item) ? [p] : p.lane ? [{ x: p.x, y: p.y, w: gutter, h: p.h }] : []))
+        : placed.filter((p) => p.tl && !p.tl.labelInside).map((p) => outsideLabelRect(p, str(p.item.label))),
+      // A stub pill stays in the lanes, right of the gutter.
+      stubs.size ? { x: placed[0].x + gutter, y: placed[0].y, w: placed[0].w - gutter, h: placed[0].h } : undefined,
+    );
+  };
+  let routed = go();
+  for (let pass = 0; plan && pass < 3; pass++) {
+    const more = [...tightCopies(laneGroups, plan.ends, fig.edges, routed)].filter((k) => !sizes.tall.has(k));
+    if (!more.length) break;
+    more.forEach((k) => sizes.tall.add(k));
+    routed = go();
+  }
+  nodes = placed.filter((p) => !isGroup(p.item)) as (Placed & { item: FigNode })[];
   const byId = Object.fromEntries(routed.map((r) => [r.id, r]));
 
   // What this layout drew, in scene form. Tags are left out of minFont: short bold capitals, not reading text.
