@@ -27,6 +27,19 @@ jobs:
       - run: bash scripts/pack-smoke.sh
       - run: REACT=18 bash scripts/pack-smoke.sh
 
+  # The Windows runner has Chrome, so the gif tests run there. The tests that need a POSIX signal or a shell script skip themselves.
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
   figures:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
