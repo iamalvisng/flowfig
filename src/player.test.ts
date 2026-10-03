@@ -163,7 +163,8 @@ const lanesFig: FlowProps = {
 test('lanes: the player renders a grid with one band per lane and a grid column per box', () => {
   const html = render(lanesFig);
   assert.match(html, /grid-template-columns:\s*max-content repeat\(\d+,\s*max-content\)/);
-  assert.equal((html.match(/data-fig-lane/g) ?? []).length, 3);
+  // Five columns do not fit 830 px, so the lanes wrap into two blocks of three lanes.
+  assert.equal((html.match(/data-fig-lane/g) ?? []).length, 6);
   assert.match(html, /grid-column:\s*3[^>]*><div data-fig="check"/);
   assert.match(html, /grid-column:\s*3[^>]*><div data-fig="audit"/);
   assert.match(html, /Customer/);
@@ -224,4 +225,19 @@ test('timeline: the server markup has the bars, the axis ticks and the today lin
     render({ ...tlFig, steps: [{ label: 'walk', flow: [{ light: ['spec'] }] }] }).includes('role="tablist"'),
     'own steps keep the tabs',
   );
+});
+
+test('lanes wrap: the player shows the blocks of the SVG, each with every lane', async () => {
+  const { default: demo } = await import('../figures/returns-process.ts');
+  const { laneColumns, laneWrap, nodes } = await import('./model.ts');
+  const html = render(demo.props);
+  const blocks = html.split(/data-fig-block="\d+"/).slice(1);
+  assert.equal(blocks.length, 2);
+  for (const b of blocks) assert.equal((b.match(/data-fig-lane/g) ?? []).length, 4);
+  // An empty lane keeps the SVG's least band height of 86 px.
+  assert.match(html, /grid-auto-rows:minmax\(86px, auto\)/);
+  const cols = laneColumns(demo.props),
+    per = laneWrap(demo.props);
+  for (const n of nodes(demo.props.layout))
+    assert.ok(blocks[Math.floor(cols.get(n.id)! / per)].includes(`data-fig="${n.id}"`), `${n.id} sits in the SVG's block`);
 });
