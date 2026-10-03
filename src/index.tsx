@@ -43,6 +43,7 @@ import {
   toBeat,
   diamondLines,
   diamondRoom,
+  tightCopies,
   nodeWidth,
   beatMs,
   STEP_HOLD_MS,
@@ -173,6 +174,8 @@ export function Flow({
   const [holding, setHolding] = useState(false); // the step hold: a timeline's today line rests at today
   const paths = useRef<Record<string, SVGPathElement | null>>({});
   const [routed, setRouted] = useState<Routed[]>([]);
+  // Lane copies that grow because a stub there had no place clear of every edge path (see `tightCopies`).
+  const [extraTall, setExtraTall] = useState<ReadonlySet<string>>(new Set());
   // Lanes: the shared wrap plan (blocks, gaps, stubs), the same as the SVG at the default 830 px width.
   const lanePlan = useMemo(
     () =>
@@ -331,26 +334,31 @@ export function Flow({
       };
       const end = (eid: string, id: string, start: boolean) =>
         lanePlan ? laneEnd(lanePlan, eid, id, start, (lane, b) => bands[`${lane}@${b}`], rects) : id;
-      setRouted(
-        route(
-          edges.map((e, i) => ({
-            id: ids[i],
-            from: end(ids[i], e.from, true),
-            to: end(ids[i], e.to, false),
-            around: e.around ?? (lanePlan?.around.has(ids[i]) ? ('below' as const) : undefined),
-            ...(tl && { sides: ['r', 'l'] as [Side, Side], elbow: true }),
-            ...(stubs.has(ids[i]) && {
-              stub: stubs.get(ids[i])!.map(labelPillW),
-              bands: [bandOf(ids[i], e.from, 0), bandOf(ids[i], e.to, 1)] as [Rect | undefined, Rect | undefined],
-            }),
-            ...(stubs.size && e.label != null && { labelW: labelPillW(str(e.label)) }),
-          })),
-          rects,
-          tips,
-          avoid,
-          pillArea,
-        ),
+      const next = route(
+        edges.map((e, i) => ({
+          id: ids[i],
+          from: end(ids[i], e.from, true),
+          to: end(ids[i], e.to, false),
+          around: e.around ?? (lanePlan?.around.has(ids[i]) ? ('below' as const) : undefined),
+          ...(tl && { sides: ['r', 'l'] as [Side, Side], elbow: true }),
+          ...(stubs.has(ids[i]) && {
+            stub: stubs.get(ids[i])!.map(labelPillW),
+            bands: [bandOf(ids[i], e.from, 0), bandOf(ids[i], e.to, 1)] as [Rect | undefined, Rect | undefined],
+          }),
+          ...(stubs.size && e.label != null && { labelW: labelPillW(str(e.label)) }),
+        })),
+        rects,
+        tips,
+        avoid,
+        pillArea,
       );
+      setRouted(next);
+      if (lanePlan) {
+        const more = [...tightCopies(layout.children as FigGroup[], lanePlan.ends, edges, next)].filter(
+          (k) => !lanePlan.tall.has(k) && !extraTall.has(k),
+        );
+        if (more.length) setExtraTall(new Set([...extraTall, ...more]));
+      }
     };
     measure();
     const ro = new ResizeObserver(measure);
@@ -358,7 +366,7 @@ export function Flow({
     ro.observe(box);
     el.querySelectorAll('[data-fig]').forEach((n) => ro.observe(n));
     return () => ro.disconnect();
-  }, [edges, ids, layout, tips, noMap, lanes, tl, axisW, lanePlan]);
+  }, [edges, ids, layout, tips, noMap, lanes, tl, axisW, lanePlan, extraTall]);
 
   // The same rules as `flowfig check`, on what the browser actually drew: real fonts, real wrapping. Each fault prints once.
   const reported = useRef(new Set<string>());
@@ -870,7 +878,7 @@ export function Flow({
                         alignSelf: 'center',
                         zIndex: 1,
                         // The space after each column and before a block's first column comes from the plan, as in the SVG.
-                        padding: `${LANE_PAD}px ${gaps[cols.get(b.id)!]}px ${LANE_PAD + (tall.has(`${layout.children.indexOf(lane)}@${bk}`) ? STUB_ROOM : 0)}px ${cols.get(b.id) === starts[bk] ? lead[bk] : 0}px`,
+                        padding: `${LANE_PAD}px ${gaps[cols.get(b.id)!]}px ${LANE_PAD + (tall.has(`${layout.children.indexOf(lane)}@${bk}`) || extraTall.has(`${layout.children.indexOf(lane)}@${bk}`) ? STUB_ROOM : 0)}px ${cols.get(b.id) === starts[bk] ? lead[bk] : 0}px`,
                       }}
                     >
                       {renderItem(b, 1)}

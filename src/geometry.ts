@@ -4,7 +4,7 @@ export type Side = 'l' | 'r' | 't' | 'b';
 export type Pt = { x: number; y: number };
 /** A cross-block edge of wrapped lanes: the two drawn stubs, their pills, and their points for `check`. `d` then holds both stubs,
  * so a packet runs the source stub and jumps to the target stub. */
-export type Stub = { parts: [string, string]; pills: [Rect, Rect]; pts: [Pt[], Pt[]]; short?: true };
+export type Stub = { parts: [string, string]; pills: [Rect, Rect]; pts: [Pt[], Pt[]]; short?: true; tight: [boolean, boolean] };
 export type Routed = { id: string; d: string; mid: Pt; curve: [Pt, Pt, Pt, Pt]; stub?: Stub };
 
 type Around = 'above' | 'below';
@@ -227,13 +227,14 @@ export function route(
       // The first place whose stub crosses no edge path. If none, the first place that clears everything else: in a dense
       // figure no place may avoid every edge, and `check` then warns about the crossing.
       const first = (own: Rect, band: Rect | undefined, lists: [Rect, Pt, Pt][][]) =>
-        [true, false].flatMap((strict) => lists.map((l, i) => [l.find(fits(own, band, strict)), i] as const)).find(([x]) => x);
+        [true, false].flatMap((strict) => lists.map((l, i) => [l.find(fits(own, band, strict)), i, !strict] as const)).find(([x]) => x);
       const hit = first(p.a, sb, [outs(ow), ...(sw == null ? [] : [outs(sw)])]);
       const cut = hit?.[1] === 1;
       const [po, o1, o2] = hit?.[0] ?? outs(ow)[0];
       pills.push(po);
       track(seg(o1, o2));
-      const [pi, i1, i2] = first(p.b, tb, [ins])?.[0] ?? ins[0];
+      const hit2 = first(p.b, tb, [ins]);
+      const [pi, i1, i2] = hit2?.[0] ?? ins[0];
       pills.push(pi);
       track(seg(i1, i2));
       const line = (a: Pt, b: Pt) => `M ${a.x} ${a.y} L ${b.x} ${b.y}`;
@@ -250,6 +251,7 @@ export function route(
             [o1, o2],
             [i1, i2],
           ],
+          tight: [hit?.[2] !== false, hit2?.[2] !== false],
           ...(cut && { short: true as const }),
         },
       };
