@@ -358,3 +358,21 @@ test('an unknown focus id is an unknown-id error', () => {
   assert.deepEqual(rules(f), ['unknown-id']);
   assert.deepEqual(f[0].ids, ['nope']);
 });
+
+test('checkScene: a stub (pts) through a box is edge-crosses-box, and an edge through a stub pill is label-overlap', () => {
+  const box = (id: string, x: number, y: number): SceneBox => ({ id, rect: { x, y, w: 100, h: 40 }, texts: [] });
+  const p = (x: number, y: number): Pt => ({ x, y });
+  const base: Scene = { width: 600, minFont: 12, boxes: [box('a', 0, 0), box('b', 300, 0), box('c', 150, 200)], edges: [] };
+  const stub = { id: 's', from: 'a', to: 'b', curve: [p(100, 20), p(100, 20), p(100, 20), p(100, 20)] as [Pt, Pt, Pt, Pt] };
+  const rules = (s: Scene) => checkScene(s).map((f) => f.rule);
+  // The stub runs from a down through c.
+  assert.deepEqual(rules({ ...base, edges: [{ ...stub, pts: [p(100, 20), p(200, 20), p(200, 260)] }] }), ['edge-crosses-box']);
+  // Edge e runs straight across the pill of stub s.
+  const pill = { x: 112, y: 100, w: 60, h: 18 };
+  const e = { id: 'e', from: 'a', to: 'b', curve: [p(50, 109), p(150, 109), p(250, 109), p(350, 109)] as [Pt, Pt, Pt, Pt] };
+  const found = checkScene({ ...base, edges: [{ ...stub, pts: [p(100, 20), p(112, 109)], label: pill }, e] });
+  assert.deepEqual(
+    found.map((f) => [f.rule, f.ids]),
+    [['label-overlap', ['e', 's']]],
+  );
+});

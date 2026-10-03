@@ -164,6 +164,20 @@ export function checkScene(scene: Scene, { width = 830, minText = 10 }: CheckOpt
       if (b.id !== e.from && b.id !== e.to && pts.some((p) => inside(p, b.rect, 2)))
         out.push(err('edge-crosses-box', [e.id, b.id], `edge "${e.id}" passes through box "${b.id}"`));
   }
+  // A stub pill (the label of an edge with `pts`) must not sit on another edge's path.
+  const pills = scene.edges.filter((e) => e.pts && e.label);
+  const under = new Set<string>();
+  for (const e of scene.edges) {
+    if (e.behind) continue;
+    const pts = e.pts
+      ? e.pts.slice(1).flatMap((q, k) => Array.from({ length: 17 }, (_, i) => lerp(e.pts![k], q, i / 16)))
+      : Array.from({ length: 33 }, (_, i) => at(e.curve, i / 32));
+    for (const f of pills)
+      if (f.id !== e.id && !under.has(e.id + ' ' + f.id) && pts.some((p) => inside(p, f.label!, 2))) {
+        under.add(e.id + ' ' + f.id);
+        out.push(err('label-overlap', [e.id, f.id], `edge "${e.id}" passes under the pill of edge "${f.id}"`));
+      }
+  }
   const labeled = scene.edges.filter((e) => e.label);
   labeled.forEach((e, i) => {
     for (const f of labeled.slice(i + 1))

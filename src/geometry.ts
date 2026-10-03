@@ -24,6 +24,12 @@ type Pick = {
 
 const cx = (r: Rect) => r.x + r.w / 2;
 const cy = (r: Rect) => r.y + r.h / 2;
+/** A point on the cubic Bézier at `t`, as `check` samples an edge. */
+const bezier = ([p0, p1, p2, p3]: [Pt, Pt, Pt, Pt], t: number): Pt => {
+  const u = 1 - t;
+  const [a, b, c, d] = [u * u * u, 3 * u * u * t, 3 * u * t * t, t * t * t];
+  return { x: a * p0.x + b * p1.x + c * p2.x + d * p3.x, y: a * p0.y + b * p1.y + c * p2.y + d * p3.y };
+};
 
 // Turns edges between measured boxes into curved SVG paths.
 // Boxes stacked on top of each other connect bottom->top, otherwise side->side.
@@ -112,21 +118,27 @@ export function route(
     const [s, c1, c2, e] = curve;
     return { id, d: `M ${s.x} ${s.y} C ${c1.x} ${c1.y}, ${c2.x} ${c2.y}, ${e.x} ${e.y}`, mid, curve };
   };
-  // Stub pills are placed after the other edges, each clear of `avoid`, of the edge labels and of the pills before it.
+  // Stub pills are placed after the other edges. Each pill keeps clear of `avoid`, of the edge labels, of the pills and stubs
+  // before it, and of every edge path (sampled as `check` samples it).
   const pills: Rect[] = [];
+  const paths: Pt[] = [];
   const clear = (r: Rect) =>
-    ![...avoid, ...pills].some((q) => r.x < q.x + q.w + 2 && q.x < r.x + r.w + 2 && r.y < q.y + q.h + 2 && q.y < r.y + r.h + 2);
+    ![...avoid, ...pills].some((q) => r.x < q.x + q.w + 2 && q.x < r.x + r.w + 2 && r.y < q.y + q.h + 2 && q.y < r.y + r.h + 2) &&
+    !paths.some((q) => q.x > r.x - 2 && q.x < r.x + r.w + 2 && q.y > r.y - 2 && q.y < r.y + r.h + 2);
   const one = (p: Pick): Routed => {
     const s = anchor.get(p.id + ':s')!,
       e = anchor.get(p.id + ':e')!;
     if (p.stub) {
-      // The source pill goes right of the source, else right and under its bottom edge, else below it.
-      // The target pill goes left of the target, else left and over its top edge, else above it.
+      // The source pill goes right of the source, else right and under its bottom edge, else right and over its top edge,
+      // else right one pill lower, else below it. The target pill goes left of the target, else left and over its top edge,
+      // else left and under its bottom edge, else left one pill higher, else above it.
       // If no place is clear, the first one stays and `check` reports it.
       const [ow, iw] = p.stub;
       const outs: [Rect, Pt, Pt][] = [
         [{ x: s.x + STUB, y: s.y - 9, w: ow, h: 18 }, s, { x: s.x + STUB, y: s.y }],
         [{ x: s.x + STUB, y: p.a.y + p.a.h + 2, w: ow, h: 18 }, s, { x: s.x + STUB, y: p.a.y + p.a.h + 11 }],
+        [{ x: s.x + STUB, y: p.a.y - 20, w: ow, h: 18 }, s, { x: s.x + STUB, y: p.a.y - 11 }],
+        [{ x: s.x + STUB, y: p.a.y + p.a.h + 22, w: ow, h: 18 }, s, { x: s.x + STUB, y: p.a.y + p.a.h + 31 }],
         [
           { x: cx(p.a) - ow / 2, y: p.a.y + p.a.h + STUB, w: ow, h: 18 },
           { x: cx(p.a), y: p.a.y + p.a.h },
@@ -136,16 +148,22 @@ export function route(
       const ins: [Rect, Pt, Pt][] = [
         [{ x: e.x - STUB - iw, y: e.y - 9, w: iw, h: 18 }, { x: e.x - STUB, y: e.y }, e],
         [{ x: e.x - STUB - iw, y: p.b.y - 20, w: iw, h: 18 }, { x: e.x - STUB, y: p.b.y - 11 }, e],
+        [{ x: e.x - STUB - iw, y: p.b.y + p.b.h + 2, w: iw, h: 18 }, { x: e.x - STUB, y: p.b.y + p.b.h + 11 }, e],
+        [{ x: e.x - STUB - iw, y: p.b.y - 40, w: iw, h: 18 }, { x: e.x - STUB, y: p.b.y - 31 }, e],
         [
           { x: cx(p.b) - iw / 2, y: p.b.y - STUB - 18, w: iw, h: 18 },
           { x: cx(p.b), y: p.b.y - STUB },
           { x: cx(p.b), y: p.b.y },
         ],
       ];
+      const seg = (a: Pt, b: Pt) =>
+        Array.from({ length: 9 }, (_, i) => ({ x: a.x + ((b.x - a.x) * i) / 8, y: a.y + ((b.y - a.y) * i) / 8 }));
       const [po, o1, o2] = outs.find(([r]) => clear(r)) ?? outs[0];
       pills.push(po);
+      paths.push(...seg(o1, o2));
       const [pi, i1, i2] = ins.find(([r]) => clear(r)) ?? ins[0];
       pills.push(pi);
+      paths.push(...seg(i1, i2));
       const line = (a: Pt, b: Pt) => `M ${a.x} ${a.y} L ${b.x} ${b.y}`;
       const parts: [string, string] = [line(o1, o2), line(i1, i2)];
       return {
@@ -207,6 +225,7 @@ export function route(
     const r = one(p);
     done.set(p, r);
     if (p.labelW) pills.push({ x: r.mid.x - p.labelW / 2, y: r.mid.y - 9, w: p.labelW, h: 18 });
+    paths.push(...Array.from({ length: 33 }, (_, i) => bezier(r.curve, i / 32)));
   }
   for (const p of picks) if (p.stub) done.set(p, one(p));
   return picks.map((p) => done.get(p)!);
