@@ -58,7 +58,9 @@ files, compose files, route tables and queue bindings (or from the pasted Mermai
 - every call that does not wait for an answer (fire and forget, a queue, a webhook, a callback), and every consumer of each queue
   or topic;
 - every branch and every error path (a rejected input, a retry, a dead-letter path);
-- every end state.
+- every end state;
+- for a process document (an SOP): every deadline, every message to a person (an email, a notice), every choice that a person
+  makes, and every wait for a reply. Put each one in a box \`sub\`, a step \`say\` or a \`data\` card. A small fact still counts.
 
 If the code does not show a fact, leave the fact out. Do not guess a part, a name or an order.
 
