@@ -1,6 +1,6 @@
 {
   "name": "flowfig",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Your coding agent draws animated diagrams from your code, and flowfig checks them. One animated SVG for a GitHub README, PR or issue, and a React player. Set up Claude Code, Cursor, GitHub Copilot, Codex, Gemini CLI, Windsurf and Kiro with npx flowfig init.",
   "license": "MIT",
   "repository": {
