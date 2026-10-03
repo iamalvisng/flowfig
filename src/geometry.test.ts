@@ -178,3 +178,31 @@ test('stub: with a band, a pill stays inside it, 4 px from the border, and slide
   const stuck = pills([{ x: -1000, y: -1000, w: 3000, h: 3000 }]);
   assert.deepEqual([stuck.x, stuck.y], [112, 36]);
 });
+
+test('an elbow keeps clear of a box it does not connect: a clear x in the gap, else a detour around it', () => {
+  const rects = { a: { x: 0, y: 0, w: 100, h: 28 }, b: { x: 300, y: 200, w: 100, h: 28 } };
+  const elbow = [{ id: 'e', from: 'a', to: 'b', sides: ['r', 'l'] as ['r', 'l'], elbow: true }];
+  const own = [
+    { ...rects.a, box: true },
+    { ...rects.b, box: true },
+  ];
+  // A box over the midpoint: the run takes 8 px before the end.
+  const mid = { x: 150, y: 80, w: 100, h: 28, box: true };
+  assert.match(route(elbow, rects, new Set(), [...own, mid])[0].d, /H 292 V/);
+  // A box over the whole gap: the elbow goes around it, on its right, and every run clears it.
+  const wide = { x: 104, y: 80, w: 250, h: 28, box: true };
+  const [r] = route(elbow, rects, new Set(), [...own, wide]);
+  assert.equal(r.elbow!.length, 6, 'a five-run detour');
+  for (let k = 1; k < r.elbow!.length; k++) {
+    const [p, q] = [r.elbow![k - 1], r.elbow![k]];
+    const hit =
+      Math.max(p.x, q.x) > wide.x &&
+      Math.min(p.x, q.x) < wide.x + wide.w &&
+      Math.max(p.y, q.y) > wide.y &&
+      Math.min(p.y, q.y) < wide.y + wide.h;
+    assert.ok(!hit, `run ${k} crosses the box`);
+  }
+  assert.ok(r.elbow![1].x >= wide.x + wide.w + 8, 'the detour passes right of the box');
+  // A label (no box flag) over the whole gap does not move a horizontal run, and no detour is drawn for a label alone.
+  assert.match(route(elbow, rects, new Set(), [{ x: 104, y: 80, w: 250, h: 28 }])[0].d, /^M 100 14 H 200 V 214 H 300$/);
+});

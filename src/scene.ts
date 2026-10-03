@@ -17,6 +17,8 @@ export type SceneEdge = {
   label?: Rect;
   step?: number;
   behind?: true;
+  /** The corners of a timeline elbow. `check` tests a `behind` edge against the boxes only when it has them. */
+  elbow?: Pt[];
 };
 /** `minFont` is the smallest reading text in px, before any scale. Group frames are not boxes. */
 /** `lanes` are the lane bands of a swimlanes figure, one per lane and block, named by the lane label. A stub pill stays inside one. */
