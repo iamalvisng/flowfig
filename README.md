@@ -321,7 +321,7 @@ The last line gives the counts of the parts of the figure. Compare the counts wi
 | ----------------- | ---------------------------------------------------------------------------------------------------------- |
 | `--strict`        | Every warning becomes an error.                                                                            |
 | `--json`          | Print the findings as a JSON array, for scripts. Each finding has `rule`, `severity`, `ids` and `message`. |
-| `--width <px>`    | The page width for `small-text`. Default: 830.                                                             |
+| `--width <px>`    | The page width for `small-text` and for the lanes wrap. Default: 830.                                      |
 | `--min-text <px>` | The smallest text size the reader must get. Default: 10.                                                   |
 
 The exit code is 0 with no errors, 1 with one or more errors, and 2 for bad use, such as a missing input, an unknown flag, or a `--width` value that is not a number.
