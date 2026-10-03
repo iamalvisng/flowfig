@@ -1,7 +1,7 @@
 // `flowfig init`: write flowfig instructions for the coding agents of a repo. Pure functions where possible, so the tests need no TTY.
 import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, join, relative, resolve } from 'node:path';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 import { createInterface } from 'node:readline';
 import { AGENT_TEXT, SKILL_DESCRIPTION } from './guide.ts';
 import { runPicker } from './picker.ts';
@@ -159,7 +159,10 @@ export function registerMcp(a: Agent, old: string | undefined): string | undefin
 const mark = (status: string) => (/^(created|updated|unchanged)$/.test(status) ? '✓ ' : '');
 
 /** The path to show: relative to the repo folder, or `~` for the home folder. */
-const shown = (path: string, base: string, global: boolean) => (global ? `~/${relative(base, path)}` : relative(base, path));
+const shown = (path: string, base: string, global: boolean) => {
+  const rel = relative(base, path).split(sep).join('/'); // the output uses / on every system
+  return global ? `~/${rel}` : rel;
+};
 
 const HINT = 'run with -y or --agents <ids>';
 

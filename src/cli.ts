@@ -212,7 +212,7 @@ if (args[0] === 'gif') {
       await (await launching?.catch(() => undefined))?.close();
       try {
         // The retries cover Windows, where the browser can hold a file lock for a short time after the exit.
-        rmSync(temp, { recursive: true, force: true, maxRetries: 3 });
+        rmSync(temp, { recursive: true, force: true, maxRetries: 10 });
       } catch (e) {
         console.error(`warning: could not remove ${temp}: ${(e as Error).message}`);
       }

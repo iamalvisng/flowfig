@@ -203,7 +203,9 @@ test('a frame with another size throws', async () => {
 
 // End to end: the CLI with the real capture browser. The tests skip when this machine has none.
 const cli = join(dirname(dirname(fileURLToPath(import.meta.url))), 'scripts', 'figure-svg.mjs');
-const skip = !findBrowser({ platform: process.platform, env: process.env, exists: existsSync }).path || process.platform === 'win32';
+const skip = !findBrowser({ platform: process.platform, env: process.env, exists: existsSync }).path;
+// child.kill('SIGINT') ends a Windows process at once: the handler of the CLI does not run. pgrep and pkill do not exist there.
+const noSignal = process.platform === 'win32' && 'POSIX signals and pgrep need a POSIX system';
 const ONE = {
   props: {
     layout: {
@@ -271,7 +273,7 @@ test('a figure with no animation makes one frame', { skip }, () => {
   }
 });
 
-test('Ctrl-C stops the run, stops the browser and removes the temp folder', { skip }, async () => {
+test('Ctrl-C stops the run, stops the browser and removes the temp folder', { skip: skip || noSignal }, async () => {
   const dir = mkdtempSync(join(tmpdir(), 'gif-e2e-'));
   const before = leftovers();
   try {
@@ -290,7 +292,7 @@ test('Ctrl-C stops the run, stops the browser and removes the temp folder', { sk
 
 // A private TMPDIR makes the temp folder and the browser command line belong to this run only.
 for (const delay of [50, 300]) {
-  test(`Ctrl-C ${delay} ms after the browser start begins leaves no browser and no temp folder`, { skip }, async () => {
+  test(`Ctrl-C ${delay} ms after the browser start begins leaves no browser and no temp folder`, { skip: skip || noSignal }, async () => {
     const dir = mkdtempSync(join(tmpdir(), 'gif-e2e-'));
     const priv = join(dir, 'tmp');
     mkdirSync(priv);
