@@ -359,7 +359,7 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
         around: e.around ?? (plan?.around.has(ids[i]) ? ('below' as const) : undefined),
         ...(tl && { sides: ['r', 'l'] as [Side, Side], elbow: true }),
         ...(stubs.has(ids[i]) && { stub: stubs.get(ids[i])!.map(labelPillW), bands: [bandOf(ids[i], e.from, 0), bandOf(ids[i], e.to, 1)] }),
-        ...(stubs.size && e.label != null && { labelW: labelPillW(str(e.label)) }),
+        ...((stubs.size || lanes) && e.label != null && { labelW: labelPillW(str(e.label)) }),
       })),
       rects,
       tips,
@@ -372,6 +372,7 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
           ],
       // A stub pill stays in the lanes, right of the gutter.
       stubs.size ? { x: placed[0].x + gutter, y: placed[0].y, w: placed[0].w - gutter, h: placed[0].h } : undefined,
+      lanes ? { bands: placed.filter((p) => p.lane), boxes: placed.filter((p) => !isGroup(p.item)) } : undefined,
     );
   };
   let routed = go();
@@ -1078,7 +1079,7 @@ ${said.join('\n')}
       }),
     ],
     minFont: Math.min(...fonts),
-    ...(stubs.size && {
+    ...(lanes && {
       lanes: placed.filter((p) => p.lane).map((p) => ({ id: str((p.item as FigGroup).label), rect: { x: p.x, y: p.y, w: p.w, h: p.h } })),
     }),
   };

@@ -195,13 +195,21 @@ export function checkScene(scene: Scene, { width = 830, minText = 10 }: CheckOpt
         out.push(warn('stub-crosses-edge', [f.id, e.id], `the stub of edge "${f.id}" crosses edge "${e.id}"`));
       }
     }
-  // A stub pill sits inside the band of its box: a pill across a band border reads as part of two lanes.
-  for (const f of pills)
+  // A stub pill or an edge label sits inside one band: a pill across a band border reads as part of two lanes.
+  for (const f of scene.edges.filter((e) => e.label))
     for (const l of scene.lanes ?? []) {
       const [p, r] = [f.label!, l.rect];
       const inside = p.x >= r.x && p.x + p.w <= r.x + r.w && p.y >= r.y && p.y + p.h <= r.y + r.h;
       if (!inside && overlap(p, r, 0))
-        out.push(err('label-overlap', [f.id], `the pill of edge "${f.id}" crosses the border of lane "${l.id}"`));
+        out.push(
+          err(
+            'label-overlap',
+            [f.id],
+            f.pts
+              ? `the pill of edge "${f.id}" crosses the border of lane "${l.id}"`
+              : `the label of edge "${f.id}" crosses the border of lane "${l.id}"`,
+          ),
+        );
     }
   const labeled = scene.edges.filter((e) => e.label);
   labeled.forEach((e, i) => {
