@@ -5,7 +5,10 @@ export type Pt = { x: number; y: number };
 /** A cross-block edge of wrapped lanes: the two drawn stubs, their pills, and their points for `check`. `d` then holds both stubs,
  * so a packet runs the source stub and jumps to the target stub. */
 export type Stub = { parts: [string, string]; pills: [Rect, Rect]; pts: [Pt[], Pt[]]; short?: true; tight: [boolean, boolean] };
-export type Routed = { id: string; d: string; mid: Pt; curve: [Pt, Pt, Pt, Pt]; stub?: Stub };
+/** `elbow` holds the corners of an elbow path, so `check` can test its straight runs. */
+export type Routed = { id: string; d: string; mid: Pt; curve: [Pt, Pt, Pt, Pt]; stub?: Stub; elbow?: Pt[] };
+/** A rect that a route keeps clear of. `box` marks a box: an elbow's horizontal runs keep clear of a box, not of a label. */
+export type Avoid = Rect & { box?: boolean };
 
 type Around = 'above' | 'below';
 type Pick = {
@@ -56,7 +59,7 @@ export function route(
   }[],
   rects: Record<string, Rect>,
   tips: Set<string> = new Set(),
-  avoid: Rect[] = [], // what an elbow's vertical run and a stub pill must not cross (the timeline's outside labels; the boxes and gutters of lanes)
+  avoid: Avoid[] = [], // what an elbow's vertical run and a stub pill must not cross (the timeline's outside labels; the boxes and gutters of lanes)
   area?: Rect, // where a stub pill may sit: the lanes right of the gutter
 ): Routed[] {
   const picks: Pick[] = [];
@@ -257,30 +260,82 @@ export function route(
       };
     }
     if (p.elbow) {
-      // The vertical run sits at the midpoint x. Under 16 px of gap, it detours: out 8 px past the start, back to 8 px
-      // before the end, then forward into the target. A gap of 0 px or less takes the same detour.
-      // Over 16 px, it tries the midpoint, then 8 px before the end, then 8 px after the start, and takes the first that clears `avoid`.
-      const y0 = Math.min(s.y, e.y),
-        y1 = Math.max(s.y, e.y);
-      const clear = (x: number) => !avoid.some((r) => x > r.x - 2 && x < r.x + r.w + 2 && y1 > r.y && y0 < r.y + r.h);
-      const mx = e.x - s.x >= 16 ? ([(s.x + e.x) / 2, e.x - 8, s.x + 8].find(clear) ?? (s.x + e.x) / 2) : s.x + 8;
-      const c1 = { x: mx, y: s.y },
-        c2 = { x: mx, y: e.y };
+      // Under 16 px of gap, the elbow detours: out 8 px past the start, back to 8 px before the end, then forward into the target.
+      // A gap of 0 px or less takes the same detour.
       if (e.x - s.x < 16 && s.y === e.y) {
         // One row: a straight line, since a detour would only double back.
-        return { id: p.id, d: `M ${s.x} ${s.y} H ${e.x}`, mid: { x: (s.x + e.x) / 2, y: s.y }, curve: [s, s, e, e] };
+        return { id: p.id, d: `M ${s.x} ${s.y} H ${e.x}`, mid: { x: (s.x + e.x) / 2, y: s.y }, curve: [s, s, e, e], elbow: [s, e] };
       }
       if (e.x - s.x < 16) {
-        const ex = e.x - 8,
+        const mx = s.x + 8,
+          ex = e.x - 8,
           my = (s.y + e.y) / 2;
         return {
           id: p.id,
           d: `M ${s.x} ${s.y} H ${mx} V ${my} H ${ex} V ${e.y} H ${e.x}`,
           mid: { x: (mx + ex) / 2, y: my },
           curve: [s, { x: mx, y: my }, { x: ex, y: my }, e],
+          elbow: [s, { x: mx, y: s.y }, { x: mx, y: my }, { x: ex, y: my }, { x: ex, y: e.y }, e],
         };
       }
-      return { id: p.id, d: `M ${s.x} ${s.y} H ${mx} V ${e.y} H ${e.x}`, mid: { x: mx, y: (s.y + e.y) / 2 }, curve: [s, c1, c2, e] };
+      // Over 16 px, the vertical run tries the midpoint, 8 px before the end, 8 px after the start, then any x in the gap.
+      // A vertical run keeps clear of every label and box; a horizontal run keeps clear of every box but the two ends.
+      const own = (r: Rect) => [p.a, p.b].some((q) => q.x === r.x && q.y === r.y && q.w === r.w && q.h === r.h);
+      const all = avoid.filter((r) => !own(r));
+      const boxes = all.filter((r) => r.box);
+      // `m` is the margin: 2 px in the gap, 8 px on a detour, so a detour does not run along a box side.
+      const vClear = (x: number, ya: number, yb: number, m = 2) =>
+        !all.some((r) => x > r.x - m && x < r.x + r.w + m && Math.max(ya, yb) > r.y && Math.min(ya, yb) < r.y + r.h);
+      const hClear = (y: number, xa: number, xb: number, list: Rect[] = boxes, m = 2) =>
+        !list.some((r) => y > r.y - m && y < r.y + r.h + m && Math.max(xa, xb) > r.x && Math.min(xa, xb) < r.x + r.w);
+      const mid = (s.x + e.x) / 2;
+      const gap = Array.from({ length: Math.floor((e.x - s.x - 16) / 4) + 1 }, (_, i) => s.x + 8 + i * 4).sort(
+        (u, w) => Math.abs(u - mid) - Math.abs(w - mid),
+      );
+      const mx = [mid, e.x - 8, s.x + 8, ...gap].find((x) => vClear(x, s.y, e.y) && hClear(s.y, s.x, x) && hClear(e.y, x, e.x));
+      if (mx == null && boxes.length) {
+        // No x in the gap is clear: the elbow goes around. It runs right past the boxes in its way, along a clear row, back to
+        // a clear x at or before 8 px before the target, then down or up and forward into the target. The shortest clear
+        // detour wins; ties take the row nearest the middle.
+        const right = Math.max(...boxes.map((r) => r.x + r.w)) + 12;
+        const left = Math.min(...boxes.map((r) => r.x));
+        const [top, bottom] = [Math.min(...boxes.map((r) => r.y)) - 12, Math.max(...boxes.map((r) => r.y + r.h)) + 12];
+        let best: { len: number; off: number; x: number; y: number; ex: number } | undefined;
+        // ponytail: a grid search in 4 px steps, about 10^5 tries for a figure the size of the roadmap.
+        for (let x = s.x + 8; x <= right; x += 4) {
+          if (!hClear(s.y, s.x, x)) continue;
+          for (let ex = e.x - 8; ex >= left; ex -= 4) {
+            if (!hClear(e.y, ex, e.x)) continue;
+            for (let y = top; y <= bottom; y += 4) {
+              const len = x - s.x + Math.abs(y - s.y) + Math.abs(x - ex) + Math.abs(e.y - y) + e.x - ex;
+              const off = Math.abs(y - (s.y + e.y) / 2);
+              if (best && (len > best.len || (len === best.len && off >= best.off))) continue;
+              if (vClear(x, s.y, y, 8) && hClear(y, x, ex, all, 8) && vClear(ex, y, e.y)) best = { len, off, x, y, ex };
+            }
+          }
+        }
+        if (best) {
+          const { x, y, ex } = best;
+          return {
+            id: p.id,
+            d: `M ${s.x} ${s.y} H ${x} V ${y} H ${ex} V ${e.y} H ${e.x}`,
+            mid: { x: (x + ex) / 2, y },
+            curve: [s, { x, y }, { x: ex, y }, e],
+            elbow: [s, { x, y: s.y }, { x, y }, { x: ex, y }, { x: ex, y: e.y }, e],
+          };
+        }
+      }
+      // If no path is clear, the midpoint stays and `check` reports the crossing.
+      const x = mx ?? mid;
+      const c1 = { x, y: s.y },
+        c2 = { x, y: e.y };
+      return {
+        id: p.id,
+        d: `M ${s.x} ${s.y} H ${x} V ${e.y} H ${e.x}`,
+        mid: { x, y: (s.y + e.y) / 2 },
+        curve: [s, c1, c2, e],
+        elbow: [s, c1, c2, e],
+      };
     }
     if (p.around) {
       // ponytail: arcs 50px past the two ends' boxes; a taller box in between can still be crossed.
