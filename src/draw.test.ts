@@ -184,7 +184,7 @@ test('draw exits 2 without a question, with an unknown flag, or without Claude C
       env: { ...process.env, FLOWFIG_CLAUDE_BIN: join(dir, 'no-such-claude') },
     });
     assert.equal(missing.status, 2);
-    assert.match(missing.stderr, /draw needs Claude Code/);
+    assert.match(missing.stderr, process.platform === 'win32' ? /draw does not run on Windows/ : /draw needs Claude Code/);
     assert.doesNotMatch(missing.stderr, /\bat .*:\d+/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
