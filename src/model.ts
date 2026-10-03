@@ -1,6 +1,6 @@
 // The figure format and the pure helpers that read it. No React rendering here, so it can be tested directly.
 import type { ReactNode } from 'react';
-import { textWidth } from './text.ts';
+import { textWidth, wrap } from './text.ts';
 import type { Rect } from './geometry.ts';
 
 /** A box in the figure. A box with a `show` in some step becomes a content card: it grows to fit the most any step puts in it. */
@@ -301,6 +301,31 @@ export function nodeWidth(item: FigNode, carded: boolean): number {
   const label = textWidth(str(item.label), 14) + 32;
   const sub = textWidth(str(item.sub), 12) + 32;
   return Math.min(NODE_MAX_W, Math.max(NODE_MIN_W, label, sub));
+}
+
+/** The room a diamond of size w by h gives a text line whose far edge sits `far` px from the center: the width of the outline there, less 8 px. */
+export const diamondRoom = (w: number, h: number, far: number) => w * Math.max(0, 1 - far / (h / 2)) - 8;
+/** The lines of a diamond with no card. The sub wraps to the room the outline gives its last line; the diamond grows taller by 15 px
+ * for each line until the lines fit. `dy` is the baseline of each line below the center, as the SVG draws it: the label sits 2 px
+ * above the center over a one-line sub, and 5 px below it with no sub. `far` is the distance from the center to the far edge of the text. */
+export function diamondLines(
+  item: FigNode,
+  w: number,
+): { h: number; label: { dy: number; far: number }; subs: { text: string; dy: number; far: number }[] } {
+  const sub = item.sub ? str(item.sub) : '';
+  for (let n = sub ? 1 : 0; ; n++) {
+    const h = 62 + 15 * n;
+    const dy0 = n ? -2 - 7.5 * (n - 1) : 5;
+    const at = (dy: number, size: number) => Math.max(Math.abs(dy - 0.75 * size), dy + 0.25 * size);
+    const last = n ? at(dy0 + 15 * n, 12) : 0;
+    const lines = n ? wrap(sub, diamondRoom(w, h, last), 12) : [];
+    if (lines.length <= n || n >= 6)
+      return {
+        h,
+        label: { dy: dy0, far: at(dy0, 14) },
+        subs: lines.map((text, k) => ({ text, dy: dy0 + 15 * (k + 1), far: at(dy0 + 15 * (k + 1), 12) })),
+      };
+  }
 }
 
 /** The width of the label gutter of lanes and of a timeline: the widest track label plus the frame sides. */

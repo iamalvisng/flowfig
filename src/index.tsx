@@ -41,6 +41,9 @@ import {
   TL_BAR_H,
   TL_ROW_GAP,
   toBeat,
+  diamondLines,
+  diamondRoom,
+  nodeWidth,
   beatMs,
   STEP_HOLD_MS,
   playheadItem,
@@ -374,16 +377,29 @@ export function Flow({
     const boxIds = new Set(nodes(layout).map((n) => n.id));
     const boxes = [...(el ?? fig).querySelectorAll<HTMLElement>('[data-fig]')]
       .filter((n) => boxIds.has(n.dataset.fig!))
-      .map((n) => ({
-        id: n.dataset.fig!,
-        rect: rel(n),
-        texts: [...n.querySelectorAll<HTMLElement>('*')]
-          .filter((t) => !t.children.length && t.textContent?.trim() && t.clientWidth > 0 && !t.closest('[aria-hidden]'))
-          .map((t) => {
-            const fontSize = parseFloat(getComputedStyle(t).fontSize);
-            return { text: t.textContent!, fontSize, room: t.clientWidth, need: t.scrollWidth };
-          }),
-      }));
+      .map((n) => {
+        const rect = rel(n);
+        return {
+          id: n.dataset.fig!,
+          rect,
+          texts: [...n.querySelectorAll<HTMLElement>('*')]
+            .filter((t) => !t.children.length && t.textContent?.trim() && t.clientWidth > 0 && !t.closest('[aria-hidden]'))
+            .map((t) => {
+              const fontSize = parseFloat(getComputedStyle(t).fontSize);
+              if (!n.dataset.diamond) return { text: t.textContent!, fontSize, room: t.clientWidth, need: t.scrollWidth };
+              // A diamond gives a line the width of its outline at the far edge of the line, and the line is as wide as its text.
+              const [r, range] = [rel(t), document.createRange()];
+              range.selectNodeContents(t);
+              const far = Math.max(Math.abs(r.y - rect.y - rect.h / 2), Math.abs(r.y + r.h - rect.y - rect.h / 2));
+              return {
+                text: t.textContent!,
+                fontSize,
+                room: diamondRoom(rect.w, rect.h, far),
+                need: range.getBoundingClientRect().width / k,
+              };
+            }),
+        };
+      });
     // Every visible leaf text counts, as in the SVG scene; the 9 px tag pills do not.
     // The rail is a sibling of the map, so the rail queries start at the figure. An SVG <text> has no CSS box, so it skips clientWidth.
     const fonts = [...fig.querySelectorAll<Element>('*')]
@@ -925,6 +941,8 @@ export function Flow({
     const diamond = item.shape === 'decision';
     const store = item.shape === 'store';
     const card = carded.has(item.id);
+    // The sub of a diamond wraps as in the SVG, one div per line, so a line stays inside the outline.
+    const dl = diamond && !card ? diamondLines(item, nodeWidth(item, false) + 70) : null;
     const bt = item.tone && TONES[item.tone];
     return (
       <div
@@ -937,9 +955,9 @@ export function Flow({
           position: 'relative',
           isolation: 'isolate',
           minWidth: 100,
-          maxWidth: card ? undefined : 190,
-          width: item.width ?? (card ? CARD_WIDTH : undefined),
-          minHeight: minHeight(item.id),
+          maxWidth: card || diamond ? undefined : 190,
+          width: diamond ? nodeWidth(item, card) + 70 : (item.width ?? (card ? CARD_WIDTH : undefined)),
+          minHeight: dl ? Math.max(dl.h, (minHeight(item.id) ?? 0) + 24) : minHeight(item.id),
           boxSizing: 'border-box',
           display: 'flex',
           flexDirection: 'column',
@@ -1023,7 +1041,13 @@ export function Flow({
           />
         )}
         <div>{item.label}</div>
-        {item.sub != null && <div style={{ fontSize: 12, fontWeight: 400, color: v('muted'), marginTop: 2 }}>{item.sub}</div>}
+        {dl
+          ? dl.subs.map((l, i) => (
+              <div key={i} style={{ fontSize: 12, fontWeight: 400, color: v('muted'), lineHeight: '15px', whiteSpace: 'nowrap' }}>
+                {l.text}
+              </div>
+            ))
+          : item.sub != null && <div style={{ fontSize: 12, fontWeight: 400, color: v('muted'), marginTop: 2 }}>{item.sub}</div>}
         {card && (
           <div
             key={`${active}-${shownAt[item.id] ?? 'empty'}`}

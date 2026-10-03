@@ -143,6 +143,26 @@ test('stub: a pill keeps clear of the path of another edge', () => {
   assert.notDeepEqual([e.stub!.pills[0].x, e.stub!.pills[0].y], [112, 16]);
 });
 
+test('stub: a stub line does not cross the path of another edge', () => {
+  const rects = {
+    a: { x: 0, y: 0, w: 100, h: 50 },
+    b: { x: 400, y: 300, w: 100, h: 50 },
+    c: { x: 96, y: -100, w: 20, h: 20 },
+    d: { x: 96, y: 200, w: 20, h: 20 },
+  };
+  // c -> d runs down at x 106: the pill at [112, 16] is clear of it, but its stub (100 to 112, at y 25) crosses it.
+  const [, e] = route(
+    [
+      { id: 'cd', from: 'c', to: 'd' },
+      { id: 'e', from: 'a', to: 'b', stub: [60, 60] },
+    ],
+    rects,
+  );
+  assert.notDeepEqual([e.stub!.pills[0].x, e.stub!.pills[0].y], [112, 16]);
+  const [a, b] = e.stub!.pts[0];
+  assert.ok(!(Math.min(a.x, b.x) < 106 && Math.max(a.x, b.x) > 106 && Math.min(a.y, b.y) < 200 && Math.max(a.y, b.y) > -80));
+});
+
 test('stub: with a band, a pill stays inside it, 4 px from the border, and slides to the nearest clear place', () => {
   const rects = { a: { x: 0, y: 20, w: 100, h: 50 }, b: { x: 400, y: 300, w: 100, h: 50 } };
   const band = { x: -20, y: 0, w: 400, h: 90 };

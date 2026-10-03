@@ -8,7 +8,7 @@
 // Wrapping is therefore approximate; `flowfig check` uses the same measure, and the player check measures real text.
 import { route, type Pt, type Rect, type Side } from './geometry.ts';
 import { foldedLabel, groupBox, layoutRail, railState, RAIL, type Rail } from './rail.ts';
-import { textWidth } from './text.ts';
+import { textWidth, wrap } from './text.ts';
 import { checkScene, checkSpec, checkTheme, type CheckOptions } from './check.ts';
 import type { Finding, Scene, SceneBox, SceneEdge } from './scene.ts';
 export type { CheckOptions } from './check.ts';
@@ -48,6 +48,8 @@ import {
   laneEnd,
   type LanePlan,
   nodeWidth,
+  diamondLines,
+  diamondRoom,
   isLanesLayout,
   timelineBeats,
   timelineLayout,
@@ -94,24 +96,6 @@ const n2 = (v: number) => Math.round(v * 10) / 10;
 const n4 = (v: number) => Math.round(v * 10000) / 10000;
 const pct = (v: number) => Math.round(v * 10000) / 100 + '%';
 
-/** Break a string into lines that fit `width`, keeping the newlines it already has. */
-function wrap(s: string, width: number, fontSize: number, mono = false): string[] {
-  const out: string[] = [];
-  for (const para of s.split('\n')) {
-    let line = '';
-    for (const word of para.split(' ')) {
-      if (!line) line = word;
-      else if (textWidth(line + ' ' + word, fontSize, mono) <= width) line += ' ' + word;
-      else {
-        out.push(line);
-        line = word;
-      }
-    }
-    out.push(line);
-  }
-  return out;
-}
-
 /** A tag pill. The tag is drawn in bold capitals with letter spacing, so the width counts both. */
 const pillW = (tag: string) => textWidth(tag.toUpperCase(), 9) + tag.length * 0.27 + 8;
 
@@ -153,11 +137,12 @@ type Sizes = {
 function size(item: FigNode | FigGroup, s: Sizes): { w: number; h: number } {
   if (!isGroup(item)) {
     const contents = s.cards.get(item.id);
-    const w = nodeWidth(item, contents != null);
+    const w = nodeWidth(item, contents != null) + (item.shape === 'decision' ? 70 : 0);
     const top = item.shape === 'store' ? 24 : 10;
     const card = contents ? 8 + s.cardH.get(item.id)! : 0;
     const h = Math.max(top + LABEL_LINE + (item.sub ? SUB_LINE : 0) + card + 10, s.minH(item.id));
-    return item.shape === 'decision' ? { w: w + 70, h: h + 24 } : { w, h };
+    if (item.shape !== 'decision') return { w, h };
+    return { w, h: contents ? h + 24 : Math.max(diamondLines(item, w).h, s.minH(item.id) + 24) };
   }
   const kids = item.children.map((c) => size(c, s));
   const gap = s.gap(item);
@@ -394,12 +379,14 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
       fonts.push(13);
       return { id: p.item.id, rect: { x: p.x, y: p.y, w: p.w, h: p.h }, texts: [{ text: label, fontSize: 13, room }] };
     }
-    const room = (p.item.shape === 'decision' ? p.w - 70 : p.w) - 16;
-    const texts: SceneBox['texts'] = [{ text: str(p.item.label), fontSize: 14, room }];
-    if (p.item.sub) {
-      texts.push({ text: str(p.item.sub), fontSize: 12, room });
-      fonts.push(12);
-    }
+    const dia = p.item.shape === 'decision' && !cards.has(p.item.id);
+    const dl = dia ? diamondLines(p.item as FigNode, p.w) : null;
+    const room = (far: number) => diamondRoom(p.w, p.h, far);
+    const flat = (p.item.shape === 'decision' ? p.w - 70 : p.w) - 16;
+    const texts: SceneBox['texts'] = [{ text: str(p.item.label), fontSize: 14, room: dl ? room(dl.label.far) : flat }];
+    if (dl) for (const l of dl.subs) texts.push({ text: l.text, fontSize: 12, room: room(l.far) });
+    else if (p.item.sub) texts.push({ text: str(p.item.sub), fontSize: 12, room: flat });
+    if (p.item.sub) fonts.push(12);
     for (const c of cards.get(p.item.id) ?? [])
       for (const r of layoutCard(c, p.w - 20).rows) {
         const fontSize = r.row.mono ? 10.5 : 11;
@@ -593,7 +580,9 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
     const cx = p.x + p.w / 2;
     const contents = cards.get(item.id);
     const cardTop = p.y + p.h - 10 - (contents ? cardH.get(item.id)! : 0);
-    const labelY = item.shape === 'store' ? p.y + 24 + 13 : contents ? p.y + 10 + 13 : p.y + p.h / 2 + (item.sub ? -2 : 5);
+    const dl = item.shape === 'decision' && !contents ? diamondLines(item, p.w) : null;
+    const labelY =
+      item.shape === 'store' ? p.y + 24 + 13 : contents ? p.y + 10 + 13 : p.y + p.h / 2 + (dl ? dl.label.dy : item.sub ? -2 : 5);
     const shape =
       item.shape === 'decision'
         ? `<polygon points="${n2(cx)},${n2(p.y)} ${n2(p.x + p.w)},${n2(p.y + p.h / 2)} ${n2(cx)},${n2(p.y + p.h)} ${n2(p.x)},${n2(p.y + p.h / 2)}" fill="${fill0}" stroke="${stroke0}"${stroke}/>`
@@ -602,7 +591,11 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
             `<path d="M${n2(p.x)} ${n2(p.y + 12)} a ${n2(p.w / 2)} 12 0 0 0 ${n2(p.w)} 0" fill="none" stroke="${stroke0}"${rim}/>`
           : `<rect x="${n2(p.x)}" y="${n2(p.y)}" width="${n2(p.w)}" height="${n2(p.h)}" rx="10" fill="${fill0}" stroke="${stroke0}"${stroke}/>`;
     const label = `<text x="${n2(cx)}" y="${n2(labelY)}" class="label">${esc(str(item.label))}</text>`;
-    const sub = item.sub ? `<text x="${n2(cx)}" y="${n2(labelY + SUB_LINE)}" class="sub">${esc(str(item.sub))}</text>` : '';
+    const sub = dl
+      ? dl.subs.map((l) => `<text x="${n2(cx)}" y="${n2(p.y + p.h / 2 + l.dy)}" class="sub">${esc(l.text)}</text>`).join('')
+      : item.sub
+        ? `<text x="${n2(cx)}" y="${n2(labelY + SUB_LINE)}" class="sub">${esc(str(item.sub))}</text>`
+        : '';
     // The mark sits in the gap beside the box, so it changes no size and adds nothing to the scene.
     const dot = bt ?? 'var(--accent)';
     const my = n2(p.y + p.h / 2);
