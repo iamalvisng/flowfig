@@ -261,12 +261,14 @@ if (args[0] === 'gif') {
       );
     if (mp4) {
       const mp4Path = out.replace(/(\.gif)?$/, '.mp4');
-      if (spawnSync('ffmpeg', ['-version']).error) console.error('gif: no ffmpeg on the PATH, so no MP4. The GIF is written.');
+      // FLOWFIG_FFMPEG replaces the PATH lookup, so a test can hide ffmpeg and keep the full PATH.
+      const ffmpegBin = process.env.FLOWFIG_FFMPEG ?? 'ffmpeg';
+      if (spawnSync(ffmpegBin, ['-version']).error) console.error('gif: no ffmpeg on the PATH, so no MP4. The GIF is written.');
       else {
         await proceed();
         written.push(mp4Path);
         // yuv420p needs an even width and height, so the pad filter adds a pixel where needed.
-        ffmpeg = spawn('ffmpeg', [
+        ffmpeg = spawn(ffmpegBin, [
           ...['-y', '-loglevel', 'error', '-f', 'image2pipe', '-framerate', String(fps), '-c:v', 'png', '-i', '-'],
           ...['-vf', 'pad=ceil(iw/2)*2:ceil(ih/2)*2', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', mp4Path],
         ]);
