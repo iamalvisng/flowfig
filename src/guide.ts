@@ -61,6 +61,7 @@ files, compose files, route tables and queue bindings (or from the pasted Mermai
 - every end state;
 - for a process document (an SOP): every deadline, every message to a person (an email, a notice), every choice that a person
   makes, and every wait for a reply. Put each one in a box \`sub\`, a step \`say\` or a \`data\` card. A small fact still counts.
+  Draw each path to its end: after a rejection, also draw the next step that the document gives. Give each path its own step.
 
 If the code does not show a fact, leave the fact out. Do not guess a part, a name or an order.
 
@@ -82,6 +83,9 @@ Mermaid mapping:
 | \`par ... and ... end\`                    | the hops of all branches in one beat                               |
 | \`alt\` / \`opt\`                            | one step per path                                                  |
 | \`stateDiagram\` states and transitions    | boxes, and edges labeled with the event                            |
+
+A pasted design wins over the async rule: keep each arrow as the Mermaid draws it. \`A->>B\` stays a plain hop, also for a
+send to a queue. Mark a hop async only for \`-)\`. If you think the design is wrong, say so in the reply.
 
 ### 4. Render, then fix
 
