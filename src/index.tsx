@@ -23,12 +23,11 @@ import {
   groupGap,
   isGroup,
   isRows,
-  laneColumns,
   lanePlan as planLanes,
+  laneEnd,
   labelPillW,
   str,
   LANE_BLOCK_GAP,
-  LANE_GAP,
   LANE_PAD,
   LANE_ROW_GAP,
   isLanesLayout,
@@ -171,8 +170,15 @@ export function Flow({
   const [routed, setRouted] = useState<Routed[]>([]);
   // Lanes: the shared wrap plan (blocks, gaps, stubs), the same as the SVG at the default 830 px width.
   const lanePlan = useMemo(
-    () => (lanes && !tl && isLanesLayout(layout) ? planLanes({ layout, edges, steps, lanes }) : null),
-    [lanes, tl, layout, edges, steps],
+    () =>
+      lanes && !tl && isLanesLayout(layout)
+        ? planLanes(
+            { layout, edges, steps, lanes },
+            // A rail sets a least width, as in the SVG.
+            { floor: withRail ? (layoutRail({ layout, edges, steps, rail: true }, 560)?.width ?? 0) : 0 },
+          )
+        : null,
+    [lanes, tl, layout, edges, steps, withRail],
   );
   const [active, setActive] = useState<number | null>(steps.length ? 0 : null);
   const [playing, setPlaying] = useState(autoplay);
@@ -291,12 +297,20 @@ export function Flow({
           avoid.push({ x: (r.left - base.left) / k, y: (r.top - base.top) / k, w: r.width / k, h: r.height / k });
         });
       }
+      // A wrapped lane end routes to the band of its block (`data-fig-copy`), as in the SVG.
+      const bands: Record<string, Rect> = {};
+      el.querySelectorAll<HTMLElement>('[data-fig-copy]').forEach((n) => {
+        const r = n.getBoundingClientRect();
+        bands[n.dataset.figCopy!] = { x: (r.left - base.left) / k, y: (r.top - base.top) / k, w: r.width / k, h: r.height / k };
+      });
+      const end = (eid: string, id: string, start: boolean) =>
+        lanePlan ? laneEnd(lanePlan, eid, id, start, (lane, b) => bands[`${lane}@${b}`], rects) : id;
       setRouted(
         route(
           edges.map((e, i) => ({
             id: ids[i],
-            from: e.from,
-            to: e.to,
+            from: end(ids[i], e.from, true),
+            to: end(ids[i], e.to, false),
             around: e.around,
             ...(tl && { sides: ['r', 'l'] as [Side, Side], elbow: true }),
             ...(stubs.has(ids[i]) && { stub: stubs.get(ids[i])!.map(labelPillW) as [number, number] }),
@@ -735,12 +749,12 @@ export function Flow({
       );
     }
     if (lanes && item === layout && isLanesLayout(layout)) {
-      const { cols, per, gaps, lead } = lanePlan!;
+      const { cols, per, gaps, lead, blocks, gutter } = lanePlan!;
       const n = Math.max(0, ...cols.values()) + 1;
-      const count = Math.ceil(n / per);
+      const count = blocks.length;
       // One grid per block of `per` time columns, as in the SVG. A wrapped block shows only the lanes with a box in it.
       const grid = (bk: number) => {
-        const m = Math.min(per, n - bk * per);
+        const m = Math.max(0, Math.min(per, n - bk * per));
         const inBlock = (b: FigNode | FigGroup) => Math.floor(cols.get((b as FigNode).id)! / per) === bk;
         const shown = (layout.children as FigGroup[]).filter((lane) => count < 2 || lane.children.some(inBlock));
         return (
@@ -750,7 +764,8 @@ export function Flow({
             style={{
               display: 'grid',
               // A wrapped block stretches to the widest block, so all bands share one width.
-              gridTemplateColumns: `max-content repeat(${m}, max-content)${count > 1 ? ' 1fr' : ''}`,
+              // Every block has the gutter of the plan, so the labels and the columns line up as in the SVG.
+              gridTemplateColumns: `${gutter}px repeat(${m}, max-content)${count > 1 ? ' 1fr' : ''}`,
               // An empty lane keeps the SVG's least band height: a 38 px label line plus the lane padding.
               gridAutoRows: `minmax(${38 + LANE_PAD * 2}px, auto)`,
               columnGap: 0,
@@ -764,6 +779,7 @@ export function Flow({
                 <Fragment key={lane.id ?? String(lane.label)}>
                   <div
                     data-fig={lane.id}
+                    data-fig-copy={lane.id != null ? `${lane.id}@${bk}` : undefined}
                     data-fig-lane=""
                     style={{
                       gridColumn: '1 / -1',
@@ -784,6 +800,7 @@ export function Flow({
                       alignSelf: 'center',
                       zIndex: 1,
                       padding: '0 18px',
+                      whiteSpace: 'nowrap',
                       fontSize: 12,
                       fontWeight: 600,
                       letterSpacing: '.04em',
@@ -814,12 +831,8 @@ export function Flow({
           </div>
         );
       };
-      if (count < 2) return grid(0);
-      return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: LANE_BLOCK_GAP }}>
-          {Array.from({ length: count }, (_, bk) => grid(bk))}
-        </div>
-      );
+      if (count < 2) return grid(blocks[0]);
+      return <div style={{ display: 'flex', flexDirection: 'column', gap: LANE_BLOCK_GAP }}>{blocks.map(grid)}</div>;
     }
     if (isGroup(item)) {
       const lit = item.id != null && litNodes.has(item.id);
