@@ -1,5 +1,5 @@
 // The capture browser of `flowfig gif`: find it, start it in headless mode, and talk CDP to it over a pipe. Node only.
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { win32 } from 'node:path';
 import type { Readable, Writable } from 'node:stream';
 
@@ -94,8 +94,11 @@ export function launch(path: string, profile: string, timeoutMs = 30_000): Promi
   // The browser starts helper processes in its process group. A helper can outlive the browser and keep a pipe open.
   const killGroup = () => {
     try {
-      if (process.platform === 'win32') child.kill('SIGKILL');
-      else if (child.pid) process.kill(-child.pid, 'SIGKILL');
+      // Windows has no process group: taskkill /T stops the helpers of the browser too.
+      if (process.platform === 'win32') {
+        if (child.pid) spawnSync('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true });
+        child.kill('SIGKILL');
+      } else if (child.pid) process.kill(-child.pid, 'SIGKILL');
     } catch {
       // the group is already gone
     }
