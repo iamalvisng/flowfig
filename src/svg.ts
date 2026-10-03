@@ -134,7 +134,7 @@ function layoutCard(c: FigContent, width: number): { rows: Row[]; height: number
   return { rows, height };
 }
 
-type Placed = Rect & { item: FigNode | FigGroup; lane?: true; tl?: { milestone: boolean; labelInside: boolean } };
+type Placed = Rect & { item: FigNode | FigGroup; lane?: true; tl?: { milestone: boolean; labelInside: boolean; labelLeft: boolean } };
 type Sizes = {
   cards: Map<string, FigContent[]>;
   cardH: Map<string, number>;
@@ -219,7 +219,7 @@ function placeTimeline(fig: FlowProps, x: number, y: number, out: Placed[]): voi
         w: it.w,
         h: bh,
         item: node,
-        tl: { milestone: it.milestone, labelInside: it.labelInside },
+        tl: { milestone: it.milestone, labelInside: it.labelInside, labelLeft: it.labelLeft },
       });
     }
     ly += h + LANE_ROW_GAP;
@@ -330,7 +330,7 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
     })),
     rects,
     tips,
-    placed.filter((p) => p.tl && !p.tl.labelInside).map((p) => outsideLabelRect(p, str(p.item.label))),
+    placed.filter((p) => p.tl && !p.tl.labelInside).map((p) => outsideLabelRect(p, str(p.item.label), p.tl!.labelLeft)),
   );
   const byId = Object.fromEntries(routed.map((r) => [r.id, r]));
 
@@ -343,7 +343,7 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
       const mine = tl!.items.find((i) => i.id === p.item.id)!;
       const next = tl!.items.filter((i) => i.track === mine.track && i.row === mine.row && i.x > mine.x).map((i) => p.x - mine.x + i.x - 8);
       const limit = Math.min(placed[0].x + placed[0].w - FRAME_SIDE, ...next);
-      const room = p.tl.labelInside ? p.w - 16 : limit - (p.x + p.w) - 6;
+      const room = p.tl.labelInside ? p.w - 16 : p.tl.labelLeft ? textWidth(label, 13) : limit - (p.x + p.w) - 6;
       fonts.push(13);
       return { id: p.item.id, rect: { x: p.x, y: p.y, w: p.w, h: p.h }, texts: [{ text: label, fontSize: 13, room }] };
     }
@@ -537,8 +537,9 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
       const shape = p.tl.milestone
         ? `<polygon points="${n2(cx)},${n2(p.y)} ${n2(p.x + p.w)},${n2(cy)} ${n2(cx)},${n2(p.y + p.h)} ${n2(p.x)},${n2(cy)}" fill="${fill0}" stroke="${stroke0}"${stroke}/>`
         : `<rect x="${n2(p.x)}" y="${n2(p.y)}" width="${n2(p.w)}" height="${n2(p.h)}" rx="6" fill="${fill0}" stroke="${stroke0}"${stroke}/>`;
-      const tx = inside ? p.x + 8 : p.x + p.w + 6;
-      return shape + `<text x="${n2(tx)}" y="${n2(cy + 4.5)}" class="bar">${esc(label)}</text>`;
+      const left = p.tl.labelLeft;
+      const tx = inside ? p.x + 8 : left ? p.x - 6 : p.x + p.w + 6;
+      return shape + `<text x="${n2(tx)}" y="${n2(cy + 4.5)}" class="bar"${left ? ' text-anchor="end"' : ''}>${esc(label)}</text>`;
     }
     const rim = item.shape === 'store' ? cls(boxAnim(item.id, false, bt)) : '';
     const fill0 = bt ? toneTint(bt, 'var(--bg)') : 'var(--bg)';

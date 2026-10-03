@@ -230,12 +230,10 @@ export const playheadItem = <T extends { id: string }>(items: T[], beats: { focu
 };
 
 /** The box of a timeline label that sits beside its bar, in the bar's coordinates. */
-export const outsideLabelRect = (bar: { x: number; y: number; w: number; h: number }, label: string) => ({
-  x: bar.x + bar.w + 6,
-  y: bar.y,
-  w: textWidth(label, 13),
-  h: bar.h,
-});
+export const outsideLabelRect = (bar: { x: number; y: number; w: number; h: number }, label: string, left = false) => {
+  const w = textWidth(label, 13);
+  return { x: left ? bar.x - 6 - w : bar.x + bar.w + 6, y: bar.y, w, h: bar.h };
+};
 
 /**
  * The time span in which the playhead label shows its date. The label waits for the line to arrive: it stays hidden for
@@ -306,6 +304,8 @@ export type TimelineItem = {
   w: number;
   milestone: boolean;
   labelInside: boolean;
+  /** The label sits left of the item: it does not fit right of the item before the axis end, and it fits left. */
+  labelLeft: boolean;
   /** The `from` date in the d MMM form, for the playhead label. */
   date: string;
 };
@@ -378,12 +378,19 @@ export function timelineLayout(fig: FlowProps, axisWidth: number): TimelineLayou
     const w = bar ? Math.max(TL_MIN_BAR, px(i.to! + 1) - px(i.from)) : TL_DIAMOND;
     const need = textWidth(str(i.label.label), 13);
     const labelInside = bar && need + 16 <= w;
-    const span = labelInside ? x + w : x + w + 6 + need;
-    let row = busy[i.track].findIndex((until) => until + GAP <= x);
-    if (row < 0) row = busy[i.track].length;
-    busy[i.track][row] = span;
+    // Row packing keeps a right label clear of the next item, so only the axis end can cut it off.
+    const leftAt = x - 6 - need;
+    const tryLeft = !labelInside && x + w + 6 + need > axisWidth && leftAt >= 0;
+    const rowFor = (from: number) => {
+      const r = busy[i.track].findIndex((until) => until + GAP <= from);
+      return r < 0 ? busy[i.track].length : r;
+    };
+    // A left label takes the first row it clears, or a new row, so it never overlaps an item before it.
+    const labelLeft = tryLeft;
+    const row = rowFor(labelLeft ? leftAt : x);
+    busy[i.track][row] = labelInside || labelLeft ? x + w : x + w + 6 + need;
     rows[i.track] = Math.max(rows[i.track], row + 1);
-    placed.push({ id: i.id, track: i.track, row, x, w, milestone: !bar, labelInside, date: fmt(i.from) });
+    placed.push({ id: i.id, track: i.track, row, x, w, milestone: !bar, labelInside, labelLeft, date: fmt(i.from) });
   }
   // Keep the layout order in the result.
   const order = new Map(items.map((i, k) => [i.id, k]));
