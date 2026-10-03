@@ -104,6 +104,9 @@ command writes no SVG and lists the faults. Fix each fault and render again.
   the figure. Use more steps in one figure before you make a second figure. Keep the real name from the code in the label:
   \`ReportsController\` stays \`ReportsController\`, not \`Controller\`. Do not change \`--width\` to pass the check: the
   reader sees the figure at the real page width.
+- If \`text-overflow\` appears, a text is wider than its box. Give the box a larger \`width\`, move a detail from \`label\` to
+  \`sub\`, or put the detail in the step \`say\`. Never cut a fact, a number or a unit to make a text fit: "within 30 days of
+  delivery" does not become "within 30 days". If you must shorten a text, keep every fact and name the change in the reply.
 - Fix every other warning, or tell the user why it stays.
 - Do not use \`--no-check\` to hide a fault.
 
