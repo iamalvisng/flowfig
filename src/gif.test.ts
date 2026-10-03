@@ -275,16 +275,23 @@ test('a figure with no animation makes one frame', { skip }, () => {
 
 test('Ctrl-C stops the run, stops the browser and removes the temp folder', { skip: skip || noSignal }, async () => {
   const dir = mkdtempSync(join(tmpdir(), 'gif-e2e-'));
-  const before = leftovers();
+  // A private TMPDIR: tests in other files make temp folders at the same time, so the shared list is not stable.
+  const priv = join(dir, 'tmp');
+  mkdirSync(priv);
+  const left = () => readdirSync(priv).filter((n) => n.startsWith('flowfig-gif-'));
   try {
     const svg = render(dir, 'one', ONE);
-    const child = spawn(process.execPath, [cli, 'gif', svg, '--fps', '50'], { stdio: 'ignore' });
-    setTimeout(() => child.kill('SIGINT'), 1500);
-    const code = await new Promise((done) => child.once('exit', done));
+    const child = spawn(process.execPath, [cli, 'gif', svg, '--fps', '50'], { stdio: 'ignore', env: { ...process.env, TMPDIR: priv } });
+    const exited = new Promise((done) => child.once('exit', done));
+    // The temp folder shows that the run started; a loaded machine can start late.
+    for (let i = 0; i < 2400 && left().length === 0 && child.exitCode === null; i++) await new Promise((d) => setTimeout(d, 25));
+    await new Promise((d) => setTimeout(d, 300));
+    child.kill('SIGINT');
+    const code = await exited;
     // A fast machine can finish before the signal: then the exit is 0 and the GIF is there.
     assert.ok(code === 130 || code === 0, String(code));
     if (code === 130) assert.equal(existsSync(join(dir, 'one.gif')), false);
-    assert.deepEqual(leftovers(), before);
+    assert.deepEqual(left(), []);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

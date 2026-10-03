@@ -104,8 +104,11 @@ async function stopAt(dir: string, args: string[], e: NodeJS.ProcessEnv, signal:
     env: e,
   });
   const exited = new Promise((done) => child.once('exit', (code, sig) => done(code ?? sig)));
-  for (let i = 0; i < 400 && !existsSync(join(dir, 'marker')); i++) await sleep(25);
-  assert.ok(existsSync(join(dir, 'marker')), 'the run did not reach the marker');
+  // The fake browser makes random PNGs, so a loaded machine needs many seconds: wait for the marker or the exit, not for a fixed time.
+  let ended = false;
+  void exited.then(() => (ended = true));
+  while (!ended && !existsSync(join(dir, 'marker'))) await sleep(25);
+  assert.ok(existsSync(join(dir, 'marker')), 'the run ended before the marker');
   await sleep(100);
   child.kill(signal);
   return exited;
