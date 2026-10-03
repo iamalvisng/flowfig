@@ -336,7 +336,7 @@ report(console.error, process.stderr.isTTY);
 if (errors) process.exit(1);
 const dest = out ?? (input === '-' ? 'figure.svg' : input.replace(/\.[^./\\]+$/, '') + '.svg');
 // The spec rides along in <metadata>: an SVG is then its own source, and no JSON has to be kept.
-const withSpec = svgWithSpec(props);
+const withSpec = svgWithSpec(props, opts);
 writeFileSync(dest, withSpec);
 console.log(`${dest} — ${(withSpec.length / 1024).toFixed(1)} kB`);
 if (open) {

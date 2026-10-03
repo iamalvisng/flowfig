@@ -605,7 +605,8 @@ const lanesFig: FlowProps = {
 };
 
 test('lanes: boxes in one time column share x across lanes; the bands span the width; a lane label sits in the gutter', () => {
-  const { scene, svg } = render(lanesFig);
+  // Five columns wrap at 830 px; a wider page keeps them in one block.
+  const { scene, svg } = render(lanesFig, { width: 1200 });
   const rect = (id: string) => scene.boxes.find((b) => b.id === id)!.rect;
   assert.equal(rect('check').x, rect('audit').x); // both column 1
   assert.ok(rect('ask').x < rect('check').x && rect('check').x < rect('pay').x);
@@ -1010,4 +1011,39 @@ test('timeline: no dependency elbow crosses an outside label box on the roadmap 
         assert.ok(!hit, `an elbow crosses the label of ${b.id}`);
       }
   }
+});
+
+test('lanes wrap: seven columns at 830 px draw as two blocks of four lanes, and check finds nothing', async () => {
+  const { default: demo } = await import('../figures/returns-process.ts');
+  const bands = (width?: number) => (render(demo.props, { width }).svg.match(/class="lane/g) ?? []).length;
+  assert.equal(bands(), 8);
+  assert.deepEqual(check(demo.props, { width: 830 }), []);
+  // The block count comes from the width: a wider page holds all seven columns in one block.
+  assert.equal(bands(1400), 4);
+});
+
+test('lanes wrap: a cross-block edge clears every box and label and enters its target from the left', async () => {
+  const { default: demo } = await import('../figures/returns-process.ts');
+  const { scene, svg } = render(demo.props);
+  const arrive = scene.edges.find((e) => e.id === 'arrive')!;
+  const inspect = scene.boxes.find((b) => b.id === 'inspect')!.rect;
+  const pts = arrive.pts!;
+  assert.equal(pts.length, 6);
+  const [p, q] = pts.slice(-2);
+  assert.equal(q.x, inspect.x);
+  assert.ok(p.x < q.x && p.y === q.y, 'the last run goes right, into the left side');
+  const found = check(demo.props).filter((f) => f.ids.includes('arrive') || f.ids.includes('late'));
+  assert.deepEqual(found, []);
+  // The packet follows the drawn path.
+  assert.match(svg, /<path id="p-arrive" d="M [\d.]+ [\d.]+ H [\d.]+ V [\d.]+ H [\d.]+ V [\d.]+ H [\d.]+"/);
+});
+
+test('lanes wrap: a figure that fits renders byte for byte as before the wrap', async () => {
+  const { createHash } = await import('node:crypto');
+  const { default: refund } = await import('../figures/refund-process.ts');
+  // The hash of toSvg on main at c008cf5 (0.4.0).
+  assert.equal(
+    createHash('sha256').update(toSvg(refund.props)).digest('hex'),
+    '7c3c7684e6f098a20e1a32e9872695aacc45c6ee734ed8c5211ca29bd23e85ba',
+  );
 });

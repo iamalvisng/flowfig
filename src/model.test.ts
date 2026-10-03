@@ -10,6 +10,7 @@ import {
   TL_DIAMOND,
   TL_MIN_BAR,
   laneColumns,
+  laneWrap,
   beatMs,
   decisions,
   edgeId,
@@ -345,4 +346,12 @@ test('labelSpan: the label starts after the ramp and is empty when the span is s
   const { labelSpan } = await import('./model.ts');
   assert.deepEqual(labelSpan(2, 5, 0.4), [2.4, 5]);
   assert.deepEqual(labelSpan(2, 2.2, 0.4), [2.2, 2.2]);
+});
+
+test('laneWrap: n is the largest column count per block that keeps the text readable at the width', async () => {
+  const { default: demo } = await import('../figures/returns-process.ts');
+  assert.equal(laneWrap(demo.props), 4);
+  assert.equal(laneWrap(demo.props, { width: 1400 }), 7);
+  assert.equal(laneWrap(demo.props, { width: 200 }), 1);
+  assert.equal(laneWrap(lanesFig, { width: 1200 }), Math.max(...laneColumns(lanesFig).values()) + 1);
 });
