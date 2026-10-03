@@ -360,12 +360,19 @@ test('verify passes on the roadmap demo against its plan document', () => {
   assert.match(r.stdout, /0 errors/);
 });
 
-test('a render with --open opens the SVG; check --open and a failed render open nothing', { skip: process.platform === 'win32' }, () => {
+test('a render with --open opens the SVG; check --open and a failed render open nothing', () => {
   const dir = mkdtempSync(join(tmpdir(), 'figure-svg-'));
   try {
     mkdirSync(join(dir, 'tmp'));
-    // `true` stands in for the system opener: it starts, exits 0, and opens nothing.
-    const env = { ...process.env, TMPDIR: join(dir, 'tmp'), FLOWFIG_OPENER: 'true' };
+    // `true` stands in for the system opener: it starts, exits 0, and opens nothing. Windows has no `true`; node starts, fails on the page and opens nothing.
+    const tmp = join(dir, 'tmp');
+    const env = {
+      ...process.env,
+      TMPDIR: tmp,
+      TEMP: tmp,
+      TMP: tmp,
+      FLOWFIG_OPENER: process.platform === 'win32' ? process.execPath : 'true',
+    };
     const go = (args: string[], spec: unknown) =>
       spawnSync(process.execPath, [cli, ...args], { input: JSON.stringify(spec), encoding: 'utf8', env });
     const out = join(dir, 'out.svg');
