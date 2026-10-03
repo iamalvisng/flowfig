@@ -308,8 +308,11 @@ export const laneGutter = (lanes: FigGroup[]) =>
 
 /** How a lanes figure wraps. Both renderers lay out with it, so the player shows the blocks and stubs of the SVG. */
 export type LanePlan = {
-  /** The time column of each box, and the columns per block. Box b sits in block floor(col / per). */
+  /** The time column of each box. */
   cols: Map<string, number>;
+  /** The first column of each block, then the column count: block k holds columns starts[k] to starts[k + 1] - 1. */
+  starts: number[];
+  /** The most columns in one block. */
   per: number;
   /** The blocks that hold a box, in order. A block with no box is not drawn. A figure with no box keeps block 0. */
   blocks: number[];
@@ -317,20 +320,33 @@ export type LanePlan = {
   gutter: number;
   /** The space after each column: the gap to the next column of its block, or the right margin of the band for the last one. */
   gaps: number[];
-  /** The room before the first column of each block, after the gutter: it holds the pills of stubs into that block. */
+  /** The room before the first column of each block, after the gutter. */
   lead: number[];
   /** The block of the source and of the target of each edge, by edge id. A lane end names the copy of the lane in that block. */
   ends: Map<string, [number, number]>;
-  /** The edges whose ends sit in two blocks, by edge id: the pill text at the source and at the target. */
-  stubs: Map<string, [string, string]>;
+  /** The edges whose ends sit in two blocks, by edge id: the pill texts at the source and at the target, then a shorter source
+   * text without the edge label, if the edge has one. */
+  stubs: Map<string, string[]>;
+  /** Edges between two boxes of one lane and one block, with a box of that lane between them and no `around` of their own.
+   * A straight route would cross that box, so the renderers route them around below. */
+  around: Set<string>;
   /** Edges with a lane end that has no block on the side of the other end. They use the nearest block; `check` reports them. */
   lost: string[];
 };
 
-/** The pill texts of a cross-block edge: "label → Target" at the source, "from Source" at the target. */
-export const stubTexts = (label: unknown, from: unknown, to: unknown): [string, string] => [
+/** The block of a time column, from the block starts of a plan. */
+export const laneBlock = (starts: number[], c: number): number => {
+  let k = 0;
+  while (k < starts.length - 2 && c >= starts[k + 1]) k++;
+  return k;
+};
+
+/** The pill texts of a cross-block edge: "label → Target" at the source, "from Source" at the target, and "→ Target", a
+ * shorter source text for a pill that has no place for the long one. */
+export const stubTexts = (label: unknown, from: unknown, to: unknown): string[] => [
   `${str(label) ? str(label) + ' ' : ''}→ ${str(to)}`,
   `from ${str(from)}`,
+  ...(str(label) ? [`→ ${str(to)}`] : []),
 ];
 
 /**
@@ -339,7 +355,8 @@ export const stubTexts = (label: unknown, from: unknown, to: unknown): [string, 
  * The text test is the one `check` runs: the smallest text (11 px, or 10.5 px with a mono card row) times width / figure width.
  * If the wrap cannot make the text readable, the lanes do not wrap: the smallest font is under `minText`, or `floor` (the least
  * width of the rest of the figure, such as the rail) is already too wide.
- * An edge between two blocks becomes two stubs with pills. The gaps next to their ends grow to hold the pills.
+ * The blocks share the columns as evenly as they can, and a block holds 2 columns at least: if 2 do not fit, the lanes keep
+ * one block. An edge between two blocks becomes two stubs with pills. A pill takes no room of its own, so n depends on the boxes.
  */
 export function lanePlan(fig: FlowProps, { width = 830, minText = 10, padding = 24, floor = 0 } = {}): LanePlan {
   const cols = laneColumns(fig);
@@ -359,22 +376,21 @@ export function lanePlan(fig: FlowProps, { width = 830, minText = 10, padding = 
   const lanes = fig.layout.children as FigGroup[];
   const laneOf = new Map(lanes.filter((l) => l.id != null).map((l) => [l.id!, l]));
   const gutter = laneGutter(lanes);
-  const plan = (per: number): LanePlan => {
-    const blockOf = (id: string) => Math.floor(cols.get(id)! / per);
-    const count = Math.max(1, Math.ceil(n / per));
+  const plan = (count: number): readonly [LanePlan, boolean] => {
+    // count blocks share the n columns evenly; the first n % count blocks take one column more.
+    const starts = [0];
+    for (let k = 0; k < count; k++) starts.push(starts[k] + Math.floor(n / count) + (k < n % count ? 1 : 0));
+    const colBlock = (c: number) => laneBlock(starts, c);
+    const blockOf = (id: string) => colBlock(cols.get(id)!);
     const held = [...new Set([...byId.keys()].map(blockOf))].sort((a, b) => a - b);
     const blocks = held.length ? held : [0];
     const wrapped = blocks.length > 1;
     // The blocks that show a lane: a wrapped block shows only the lanes with a box in it.
     const showing = (l: FigGroup) =>
       wrapped ? [...new Set((l.children as FigNode[]).map((b) => blockOf(b.id)))].sort((a, b) => a - b) : blocks;
-    const stubs = new Map<string, [string, string]>();
+    const stubs = new Map<string, string[]>();
     const ends = new Map<string, [number, number]>();
     const lost: string[] = [];
-    const out = Array.from({ length: n }, () => 0),
-      inn = Array.from({ length: n }, () => 0),
-      outLane = Array.from({ length: count }, () => 0),
-      innLane = Array.from({ length: count }, () => 0);
     fig.edges.forEach((e) => {
       const id = edgeId(e);
       const [fl, tl] = [laneOf.get(e.from), laneOf.get(e.to)];
@@ -400,33 +416,70 @@ export function lanePlan(fig: FlowProps, { width = 830, minText = 10, padding = 
       if (fb === tb) return;
       const texts = stubTexts(e.label, (byId.get(e.from) ?? fl)!.label, (byId.get(e.to) ?? tl)!.label);
       stubs.set(id, texts);
-      const [o, i] = [STUB + labelPillW(texts[0]) + STUB_CLEAR, STUB + labelPillW(texts[1]) + STUB_CLEAR];
-      if (fl) outLane[fb] = Math.max(outLane[fb], o);
-      else out[cols.get(e.from)!] = Math.max(out[cols.get(e.from)!], o);
-      if (tl) innLane[tb] = Math.max(innLane[tb], i);
-      else inn[cols.get(e.to)!] = Math.max(inn[cols.get(e.to)!], i);
     });
-    const gaps = colW.map((_, c) =>
-      c % per === per - 1 || c === n - 1
-        ? Math.max(FRAME_SIDE, out[c], outLane[Math.floor(c / per)])
-        : Math.max(LANE_GAP, out[c] + inn[c + 1]),
+    // A pill takes no room of its own: the route puts it in free space (route() in geometry.ts), so n depends on the boxes only.
+    // A label on an edge between two next columns of one block sits in the gap between them. A label too wide for the gap would
+    // cover a box, so that gap grows to the label plus 8 px. A label that fits keeps the gap of 0.4.0.
+    const label = Array.from({ length: n }, () => 0);
+    for (const e of fig.edges) {
+      const [a, b] = [cols.get(e.from), cols.get(e.to)];
+      if (e.label == null || a == null || b == null || Math.abs(a - b) !== 1 || colBlock(a) !== colBlock(b)) continue;
+      const w = labelPillW(str(e.label));
+      if (w - 2 > LANE_GAP) label[Math.min(a, b)] = Math.max(label[Math.min(a, b)], w + 8);
+    }
+    const gaps = colW.map((_, c) => (c === starts[colBlock(c) + 1] - 1 ? FRAME_SIDE : Math.max(LANE_GAP, label[c])));
+    const per = Math.max(...starts.slice(1).map((e, k) => e - starts[k]));
+    const lead = Array.from({ length: count }, () => 0);
+    // A pill takes free room only: a gap next to a stub end grows for its pill while the block still fits the width. So the
+    // block count never depends on a pill. A pill with no room finds a free place in route() (geometry.ts).
+    const want = (text: string) => STUB + labelPillW(text) + STUB_CLEAR;
+    const fit = blocks.every((k) => widthOf(starts[k], starts[k + 1], gaps, 0) <= room);
+    const out = new Map<number, number>(),
+      inn = new Map<number, number>();
+    for (const [id, texts] of stubs) {
+      const e = fig.edges.find((x) => edgeId(x) === id)!;
+      const [a, b] = [cols.get(e.from), cols.get(e.to)];
+      if (a != null) out.set(a, Math.max(out.get(a) ?? 0, want(texts[0])));
+      if (b != null) inn.set(b, Math.max(inn.get(b) ?? 0, want(texts[1])));
+    }
+    for (const k of blocks) {
+      const [c0, end] = [starts[k], starts[k + 1]];
+      let free = room - widthOf(c0, end, gaps, 0);
+      const grow = (extra: number, apply: () => void) => {
+        if (extra > 0 && extra <= free) {
+          free -= extra;
+          apply();
+        }
+      };
+      grow(inn.get(c0) ?? 0, () => (lead[k] = inn.get(c0)!));
+      for (let c = c0; c < end; c++) {
+        const need = (out.get(c) ?? 0) + (c < end - 1 ? (inn.get(c + 1) ?? 0) : 0);
+        grow(need - gaps[c], () => (gaps[c] = need));
+      }
+    }
+    const laneOfBox = new Map(lanes.flatMap((l) => l.children.map((b) => [(b as FigNode).id, l] as const)));
+    const around = new Set(
+      fig.edges
+        .filter((e) => {
+          const [a, b, l] = [cols.get(e.from), cols.get(e.to), laneOfBox.get(e.from)];
+          if (e.around || a == null || b == null || !l || l !== laneOfBox.get(e.to) || colBlock(a) !== colBlock(b)) return false;
+          return (l.children as FigNode[]).some((x) => cols.get(x.id)! > Math.min(a, b) && cols.get(x.id)! < Math.max(a, b));
+        })
+        .map(edgeId),
     );
-    const lead = Array.from({ length: count }, (_, k) => Math.max(inn[k * per] ?? 0, innLane[k]));
-    return { cols, per, blocks, gutter, gaps, lead, ends, stubs, lost };
+    return [{ cols, starts, per, blocks, gutter, gaps, lead, ends, stubs, around, lost }, fit] as const;
   };
-  const fits = (p: LanePlan) =>
-    p.blocks.every((k) => {
-      const c = k * p.per,
-        end = Math.min(c + p.per, n);
-      return gutter + p.lead[k] + colW.slice(c, end).reduce((a, w) => a + w, 0) + p.gaps.slice(c, end).reduce((a, g) => a + g, 0) <= room;
-    });
+  const widthOf = (c: number, end: number, gaps: number[], lead: number) =>
+    gutter + lead + colW.slice(c, end).reduce((a, w) => a + w, 0) + gaps.slice(c, end).reduce((a, g) => a + g, 0);
   // The wrap only narrows the lanes. If the text stays too small at any width, keep one block, and check reports small-text.
-  if (font < minText || floor > limit) return plan(Math.max(1, n));
-  for (let k = Math.max(1, n); k > 1; k--) {
-    const p = plan(k);
-    if (fits(p)) return p;
+  if (font < minText || floor > limit) return plan(1)[0];
+  // A block has 2 columns at least: one column per block reads as a list, not as lanes. If 2 do not fit, keep one block.
+  // The fit uses the boxes and the label gaps only, before a pill takes free room.
+  for (let count = 1; count <= Math.max(1, Math.floor(n / 2)); count++) {
+    const [p, fit] = plan(count);
+    if (fit) return p;
   }
-  return plan(1);
+  return plan(1)[0];
 }
 /**
  * The rect id that an edge end routes to in wrapped lanes. A box keeps its id. A lane has one band per block, so a lane end names

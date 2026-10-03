@@ -163,8 +163,8 @@ const lanesFig: FlowProps = {
 test('lanes: the player renders a grid with one band per lane and a grid column per box', () => {
   const html = render(lanesFig);
   assert.match(html, /grid-template-columns:\s*[\d.]+px repeat\(\d+,\s*max-content\)/);
-  // Five columns do not fit 830 px: block 1 holds all three lanes, block 2 only Support.
-  assert.equal((html.match(/data-fig-lane/g) ?? []).length, 4);
+  // Five columns do not fit 830 px: block 1 holds 3 columns and all three lanes, block 2 holds 2 columns in two lanes.
+  assert.equal((html.match(/data-fig-lane/g) ?? []).length, 5);
   assert.match(html, /grid-column:\s*3[^>]*><div data-fig="check"/);
   assert.match(html, /grid-column:\s*3[^>]*><div data-fig="audit"/);
   assert.match(html, /Customer/);

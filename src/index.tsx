@@ -25,6 +25,7 @@ import {
   isRows,
   lanePlan as planLanes,
   laneEnd,
+  laneBlock,
   labelPillW,
   str,
   LANE_BLOCK_GAP,
@@ -289,7 +290,7 @@ export function Flow({
         avoid.push({ x: (r.left - base.left) / k, y: (r.top - base.top) / k, w: r.width / k, h: r.height / k });
       });
       // Wrapped lanes: an edge between two blocks is two stubs with pills, clear of the boxes and the lane labels.
-      const stubs = lanePlan?.stubs ?? new Map<string, [string, string]>();
+      const stubs = lanePlan?.stubs ?? new Map<string, string[]>();
       if (stubs.size) {
         for (const n of nodes(layout)) if (rects[n.id]) avoid.push(rects[n.id]);
         el.querySelectorAll<HTMLElement>('[data-fig-gutter]').forEach((n) => {
@@ -303,6 +304,17 @@ export function Flow({
         const r = n.getBoundingClientRect();
         bands[n.dataset.figCopy!] = { x: (r.left - base.left) / k, y: (r.top - base.top) / k, w: r.width / k, h: r.height / k };
       });
+      // A stub pill stays in the lanes, right of the gutter, as in the SVG.
+      const blockRects = [...el.querySelectorAll<HTMLElement>('[data-fig-block]')].map((n) => n.getBoundingClientRect());
+      const pillArea =
+        stubs.size && blockRects.length
+          ? (() => {
+              const [x0, y0] = [Math.min(...blockRects.map((r) => r.left)), Math.min(...blockRects.map((r) => r.top))];
+              const [x1, y1] = [Math.max(...blockRects.map((r) => r.right)), Math.max(...blockRects.map((r) => r.bottom))];
+              const x = (x0 - base.left) / k + lanePlan!.gutter;
+              return { x, y: (y0 - base.top) / k, w: (x1 - base.left) / k - x, h: (y1 - y0) / k };
+            })()
+          : undefined;
       const end = (eid: string, id: string, start: boolean) =>
         lanePlan ? laneEnd(lanePlan, eid, id, start, (lane, b) => bands[`${lane}@${b}`], rects) : id;
       setRouted(
@@ -311,14 +323,15 @@ export function Flow({
             id: ids[i],
             from: end(ids[i], e.from, true),
             to: end(ids[i], e.to, false),
-            around: e.around,
+            around: e.around ?? (lanePlan?.around.has(ids[i]) ? ('below' as const) : undefined),
             ...(tl && { sides: ['r', 'l'] as [Side, Side], elbow: true }),
-            ...(stubs.has(ids[i]) && { stub: stubs.get(ids[i])!.map(labelPillW) as [number, number] }),
+            ...(stubs.has(ids[i]) && { stub: stubs.get(ids[i])!.map(labelPillW) }),
             ...(stubs.size && e.label != null && { labelW: labelPillW(str(e.label)) }),
           })),
           rects,
           tips,
           avoid,
+          pillArea,
         ),
       );
     };
@@ -749,13 +762,13 @@ export function Flow({
       );
     }
     if (lanes && item === layout && isLanesLayout(layout)) {
-      const { cols, per, gaps, lead, blocks, gutter } = lanePlan!;
+      const { cols, starts, gaps, lead, blocks, gutter } = lanePlan!;
       const n = Math.max(0, ...cols.values()) + 1;
       const count = blocks.length;
       // One grid per block of `per` time columns, as in the SVG. A wrapped block shows only the lanes with a box in it.
       const grid = (bk: number) => {
-        const m = Math.max(0, Math.min(per, n - bk * per));
-        const inBlock = (b: FigNode | FigGroup) => Math.floor(cols.get((b as FigNode).id)! / per) === bk;
+        const m = starts[bk + 1] - starts[bk];
+        const inBlock = (b: FigNode | FigGroup) => laneBlock(starts, cols.get((b as FigNode).id)!) === bk;
         const shown = (layout.children as FigGroup[]).filter((lane) => count < 2 || lane.children.some(inBlock));
         return (
           <div
@@ -814,12 +827,12 @@ export function Flow({
                     <div
                       key={b.id}
                       style={{
-                        gridColumn: (cols.get(b.id)! % per) + 2,
+                        gridColumn: cols.get(b.id)! - starts[bk] + 2,
                         gridRow: li + 1,
                         alignSelf: 'center',
                         zIndex: 1,
                         // The space after each column and before a block's first column comes from the plan, as in the SVG.
-                        padding: `${LANE_PAD}px ${gaps[cols.get(b.id)!]}px ${LANE_PAD}px ${cols.get(b.id)! % per ? 0 : lead[bk]}px`,
+                        padding: `${LANE_PAD}px ${gaps[cols.get(b.id)!]}px ${LANE_PAD}px ${cols.get(b.id) === starts[bk] ? lead[bk] : 0}px`,
                       }}
                     >
                       {renderItem(b, 1)}
@@ -1112,7 +1125,11 @@ export function Flow({
                   // room for edges that arc over or under the boxes
                   // A stub does not arc.
                   paddingTop: edges.some((e, i) => e.around === 'above' && !lanePlan?.stubs.has(ids[i])) ? 44 : 4,
-                  paddingBottom: edges.some((e, i) => e.around === 'below' && !lanePlan?.stubs.has(ids[i])) ? 44 : 4,
+                  paddingBottom: edges.some(
+                    (e, i) => (e.around === 'below' || (!e.around && lanePlan?.around.has(ids[i]))) && !lanePlan?.stubs.has(ids[i]),
+                  )
+                    ? 44
+                    : 4,
                 }}
               >
                 {renderItem(layout, 0)}
@@ -1235,7 +1252,7 @@ export function Flow({
                         key: `${r.id}:${j}`,
                         x: p.x + p.w / 2,
                         y: p.y + p.h / 2,
-                        text: texts[j] as ReactNode,
+                        text: (j === 0 && r.stub!.short ? texts[2] : texts[j]) as ReactNode,
                       }))
                     : [{ key: r.id, x: r.mid.x, y: r.mid.y, text: e.label }];
                   return pills.map((p) => (

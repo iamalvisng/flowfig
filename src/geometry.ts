@@ -4,7 +4,7 @@ export type Side = 'l' | 'r' | 't' | 'b';
 export type Pt = { x: number; y: number };
 /** A cross-block edge of wrapped lanes: the two drawn stubs, their pills, and their points for `check`. `d` then holds both stubs,
  * so a packet runs the source stub and jumps to the target stub. */
-export type Stub = { parts: [string, string]; pills: [Rect, Rect]; pts: [Pt[], Pt[]] };
+export type Stub = { parts: [string, string]; pills: [Rect, Rect]; pts: [Pt[], Pt[]]; short?: true };
 export type Routed = { id: string; d: string; mid: Pt; curve: [Pt, Pt, Pt, Pt]; stub?: Stub };
 
 type Around = 'above' | 'below';
@@ -18,7 +18,7 @@ type Pick = {
   to: string;
   around?: Around;
   elbow?: boolean;
-  stub?: [number, number];
+  stub?: number[];
   labelW?: number;
 };
 
@@ -39,7 +39,7 @@ const bezier = ([p0, p1, p2, p3]: [Pt, Pt, Pt, Pt], t: number): Pt => {
 // `sides` fixes the two sides an edge uses (a timeline uses right to left).
 // `around` makes an edge leave and enter from the top or bottom, arcing over whatever sits between.
 // `labelW` is the width of an edge's label pill: a stub pill keeps clear of it.
-// `stub` (wrapped lanes, the two pill widths) draws a short stub from the source to a pill, and from a second pill into the target.
+// `stub` (wrapped lanes: the source pill width, the target pill width, and the width of a shorter source pill) draws a short stub from the source to a pill, and from a second pill into the target.
 export function route(
   edges: {
     id: string;
@@ -48,12 +48,13 @@ export function route(
     around?: Around;
     sides?: [Side, Side];
     elbow?: boolean;
-    stub?: [number, number];
+    stub?: number[];
     labelW?: number;
   }[],
   rects: Record<string, Rect>,
   tips: Set<string> = new Set(),
   avoid: Rect[] = [], // what an elbow's vertical run and a stub pill must not cross (the timeline's outside labels; the boxes and gutters of lanes)
+  area?: Rect, // where a stub pill may sit: the lanes right of the gutter
 ): Routed[] {
   const picks: Pick[] = [];
   for (const e of edges) {
@@ -123,6 +124,7 @@ export function route(
   const pills: Rect[] = [];
   const paths: Pt[] = [];
   const clear = (r: Rect) =>
+    (!area || (r.x >= area.x && r.x + r.w <= area.x + area.w && r.y >= area.y && r.y + r.h <= area.y + area.h)) &&
     ![...avoid, ...pills].some((q) => r.x < q.x + q.w + 2 && q.x < r.x + r.w + 2 && r.y < q.y + q.h + 2 && q.y < r.y + r.h + 2) &&
     !paths.some((q) => q.x > r.x - 2 && q.x < r.x + r.w + 2 && q.y > r.y - 2 && q.y < r.y + r.h + 2);
   const one = (p: Pick): Routed => {
@@ -130,19 +132,25 @@ export function route(
       e = anchor.get(p.id + ':e')!;
     if (p.stub) {
       // The source pill goes right of the source, else right and under its bottom edge, else right and over its top edge,
-      // else right one pill lower, else below it. The target pill goes left of the target, else left and over its top edge,
-      // else left and under its bottom edge, else left one pill higher, else above it.
-      // If no place is clear, the first one stays and `check` reports it.
-      const [ow, iw] = p.stub;
-      const outs: [Rect, Pt, Pt][] = [
-        [{ x: s.x + STUB, y: s.y - 9, w: ow, h: 18 }, s, { x: s.x + STUB, y: s.y }],
-        [{ x: s.x + STUB, y: p.a.y + p.a.h + 2, w: ow, h: 18 }, s, { x: s.x + STUB, y: p.a.y + p.a.h + 11 }],
-        [{ x: s.x + STUB, y: p.a.y - 20, w: ow, h: 18 }, s, { x: s.x + STUB, y: p.a.y - 11 }],
-        [{ x: s.x + STUB, y: p.a.y + p.a.h + 22, w: ow, h: 18 }, s, { x: s.x + STUB, y: p.a.y + p.a.h + 31 }],
+      // else right one pill lower, else below it, else above it. The target pill goes left of the target, else left and over
+      // its top edge, else left and under its bottom edge, else left one pill higher, else above it, else below it.
+      // If no place is clear, the source pill tries its shorter text. If no place is clear then, the first place stays and
+      // `check` reports it.
+      const [ow, iw, sw] = p.stub;
+      const outs = (w: number): [Rect, Pt, Pt][] => [
+        [{ x: s.x + STUB, y: s.y - 9, w, h: 18 }, s, { x: s.x + STUB, y: s.y }],
+        [{ x: s.x + STUB, y: p.a.y + p.a.h + 2, w, h: 18 }, s, { x: s.x + STUB, y: p.a.y + p.a.h + 11 }],
+        [{ x: s.x + STUB, y: p.a.y - 20, w, h: 18 }, s, { x: s.x + STUB, y: p.a.y - 11 }],
+        [{ x: s.x + STUB, y: p.a.y + p.a.h + 22, w, h: 18 }, s, { x: s.x + STUB, y: p.a.y + p.a.h + 31 }],
         [
-          { x: cx(p.a) - ow / 2, y: p.a.y + p.a.h + STUB, w: ow, h: 18 },
+          { x: cx(p.a) - w / 2, y: p.a.y + p.a.h + STUB, w, h: 18 },
           { x: cx(p.a), y: p.a.y + p.a.h },
           { x: cx(p.a), y: p.a.y + p.a.h + STUB },
+        ],
+        [
+          { x: cx(p.a) - w / 2, y: p.a.y - STUB - 18, w, h: 18 },
+          { x: cx(p.a), y: p.a.y },
+          { x: cx(p.a), y: p.a.y - STUB },
         ],
       ];
       const ins: [Rect, Pt, Pt][] = [
@@ -155,10 +163,17 @@ export function route(
           { x: cx(p.b), y: p.b.y - STUB },
           { x: cx(p.b), y: p.b.y },
         ],
+        [
+          { x: cx(p.b) - iw / 2, y: p.b.y + p.b.h + STUB, w: iw, h: 18 },
+          { x: cx(p.b), y: p.b.y + p.b.h + STUB },
+          { x: cx(p.b), y: p.b.y + p.b.h },
+        ],
       ];
       const seg = (a: Pt, b: Pt) =>
         Array.from({ length: 9 }, (_, i) => ({ x: a.x + ((b.x - a.x) * i) / 8, y: a.y + ((b.y - a.y) * i) / 8 }));
-      const [po, o1, o2] = outs.find(([r]) => clear(r)) ?? outs[0];
+      const long = outs(ow).find(([r]) => clear(r));
+      const cut = long || sw == null ? undefined : outs(sw).find(([r]) => clear(r));
+      const [po, o1, o2] = long ?? cut ?? outs(ow)[0];
       pills.push(po);
       paths.push(...seg(o1, o2));
       const [pi, i1, i2] = ins.find(([r]) => clear(r)) ?? ins[0];
@@ -169,7 +184,7 @@ export function route(
       return {
         id: p.id,
         d: parts.join(' '),
-        mid: { x: po.x + ow / 2, y: po.y + 9 },
+        mid: { x: po.x + po.w / 2, y: po.y + 9 },
         curve: [o1, o1, i2, i2],
         stub: {
           parts,
@@ -178,6 +193,7 @@ export function route(
             [o1, o2],
             [i1, i2],
           ],
+          ...(cut && { short: true as const }),
         },
       };
     }

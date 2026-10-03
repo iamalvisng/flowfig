@@ -10,6 +10,7 @@ import {
   TL_DIAMOND,
   TL_MIN_BAR,
   laneColumns,
+  labelPillW,
   lanePlan,
   beatMs,
   decisions,
@@ -352,37 +353,60 @@ test('lanePlan: n is the largest column count per block that keeps the text read
   const { default: demo } = await import('../figures/returns-process.ts');
   assert.equal(lanePlan(demo.props).per, 4);
   assert.equal(lanePlan(demo.props, { width: 1400 }).per, 7);
-  assert.equal(lanePlan(demo.props, { width: 200 }).per, 1);
   assert.equal(lanePlan(lanesFig, { width: 1200 }).per, Math.max(...laneColumns(lanesFig).values()) + 1);
 });
 
-test('lanePlan: a cross-block edge gets two pill texts, and the gaps next to its ends grow to hold them', async () => {
+test('lanePlan: a cross-block edge gets its pill texts, and the gaps next to its ends grow into free room only', async () => {
   const { default: demo } = await import('../figures/returns-process.ts');
   const plan = lanePlan(demo.props);
   assert.deepEqual(
     [...plan.stubs],
     [
       ['arrive', ['→ Inspect', 'from Ship item']],
-      ['late', ['late → Rejected', 'from Review']],
+      ['late', ['late → Rejected', 'from Review', '→ Rejected']],
     ],
   );
   // ship is the last column of block 1; inspect is the first column of block 2.
   assert.ok(plan.gaps[plan.cols.get('ship')!] > 18);
   assert.ok(plan.lead[1] > 0 && plan.lead[0] === 0);
   assert.equal(lanePlan(demo.props, { width: 1400 }).stubs.size, 0);
+  // The split is the one without pills: the pill room never adds a block.
+  assert.deepEqual(plan.starts, [0, 4, 7]);
 });
 
 test('lanePlan: a diamond adds 70 px to its column, and a mono card row lowers the smallest font to 10.5 px', async () => {
   const { default: demo } = await import('../figures/returns-process.ts');
   const diamond = structuredClone(demo.props);
   ((diamond.layout.children[1] as FigGroup).children[0] as FigNode).shape = 'decision';
-  assert.equal(lanePlan(demo.props).per, 4);
-  assert.equal(lanePlan(diamond).per, 3);
+  assert.deepEqual(lanePlan(demo.props, { width: 700 }).starts, [0, 4, 7]);
+  assert.deepEqual(lanePlan(diamond, { width: 700 }).starts, [0, 3, 5, 7]);
   const card = (mono: boolean) => {
     const f = structuredClone(demo.props);
     (f.steps![0].flow[0] as FigBeat).show = { review: [{ text: 'x', mono }] };
-    return lanePlan(f, { width: 900 }).per;
+    return lanePlan(f, { width: 1240 }).blocks.length;
   };
-  assert.equal(card(false), 4);
-  assert.equal(card(true), 3);
+  assert.equal(card(false), 1);
+  assert.equal(card(true), 2);
+});
+
+test('lanePlan: a block holds 2 columns at least; if 2 do not fit, the lanes keep one block', async () => {
+  const { default: demo } = await import('../figures/returns-process.ts');
+  // At 600 px, 7 columns share 3 blocks as evenly as they can.
+  assert.deepEqual(lanePlan(demo.props, { width: 600 }).starts, [0, 3, 5, 7]);
+  // At 200 px no block of 2 fits, so there is one block, and check reports small-text.
+  const narrow = lanePlan(demo.props, { width: 200 });
+  assert.deepEqual([narrow.blocks, narrow.starts], [[0], [0, 7]]);
+});
+
+test('lanePlan: the block split does not depend on the pill texts', async () => {
+  const { default: demo } = await import('../figures/returns-process.ts');
+  // Only the two cross-block edges keep a label: one very long, then none.
+  const withLabel = (label?: string) => ({
+    ...demo.props,
+    edges: demo.props.edges.map((e) => ({ ...e, label: ['arrive', 'late'].includes(e.id!) ? label : undefined })),
+  });
+  const long = lanePlan(withLabel('a very long edge label that makes the pill wider than any gap'));
+  const none = lanePlan(withLabel());
+  assert.deepEqual(long.starts, none.starts);
+  assert.ok(labelPillW(long.stubs.get('late')![0]) > 300);
 });
