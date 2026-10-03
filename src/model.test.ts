@@ -20,7 +20,7 @@ import {
   readMs,
   toBeat,
 } from './model.ts';
-import type { FlowProps } from './model.ts';
+import type { FigBeat, FigGroup, FigNode, FlowProps } from './model.ts';
 
 test('toBeat reads every way a beat can be written', () => {
   assert.deepEqual(toBeat('a->b'), { hops: [{ edge: 'a->b', back: false }] });
@@ -370,4 +370,19 @@ test('lanePlan: a cross-block edge gets two pill texts, and the gaps next to its
   assert.ok(plan.gaps[plan.cols.get('ship')!] > 18);
   assert.ok(plan.lead[1] > 0 && plan.lead[0] === 0);
   assert.equal(lanePlan(demo.props, { width: 1400 }).stubs.size, 0);
+});
+
+test('lanePlan: a diamond adds 70 px to its column, and a mono card row lowers the smallest font to 10.5 px', async () => {
+  const { default: demo } = await import('../figures/returns-process.ts');
+  const diamond = structuredClone(demo.props);
+  ((diamond.layout.children[1] as FigGroup).children[0] as FigNode).shape = 'decision';
+  assert.equal(lanePlan(demo.props).per, 4);
+  assert.equal(lanePlan(diamond).per, 3);
+  const card = (mono: boolean) => {
+    const f = structuredClone(demo.props);
+    (f.steps![0].flow[0] as FigBeat).show = { review: [{ text: 'x', mono }] };
+    return lanePlan(f, { width: 900 }).per;
+  };
+  assert.equal(card(false), 4);
+  assert.equal(card(true), 3);
 });

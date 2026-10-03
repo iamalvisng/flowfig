@@ -162,7 +162,7 @@ const lanesFig: FlowProps = {
 
 test('lanes: the player renders a grid with one band per lane and a grid column per box', () => {
   const html = render(lanesFig);
-  assert.match(html, /grid-template-columns:\s*max-content repeat\(\d+,\s*max-content\)/);
+  assert.match(html, /grid-template-columns:\s*[\d.]+px repeat\(\d+,\s*max-content\)/);
   // Five columns do not fit 830 px: block 1 holds all three lanes, block 2 only Support.
   assert.equal((html.match(/data-fig-lane/g) ?? []).length, 4);
   assert.match(html, /grid-column:\s*3[^>]*><div data-fig="check"/);
@@ -244,4 +244,16 @@ test('lanes wrap: the player shows the blocks of the SVG, each with its own lane
     assert.ok(blocks[Math.floor(cols.get(n.id)! / per)].includes(`data-fig="${n.id}"`), `${n.id} sits in the SVG's block`);
   // An empty lane keeps the SVG's least band height of 86 px.
   assert.match(html, /grid-auto-rows:minmax\(86px, auto\)/);
+});
+
+test('lanes wrap: every block has the gutter of the plan, and an empty block is not drawn', async () => {
+  const { default: demo } = await import('../figures/returns-process.ts');
+  const { lanePlan } = await import('./model.ts');
+  const html = render(demo.props);
+  const gutters = [...html.matchAll(/data-fig-block="\d+" style="display:grid;grid-template-columns:([\d.]+)px/g)].map((m) => +m[1]);
+  assert.deepEqual(gutters, [lanePlan(demo.props).gutter, lanePlan(demo.props).gutter]);
+  const far = structuredClone(demo.props);
+  (far.layout.children[1] as { children: { id: string; at?: number }[] }).children.find((b) => b.id === 'rejected')!.at = 20;
+  const blocks = [...render(far).matchAll(/data-fig-block="(\d+)"/g)].map((m) => +m[1]);
+  assert.deepEqual(blocks, lanePlan(far).blocks);
 });

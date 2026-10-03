@@ -43,6 +43,7 @@ import {
   FRAME_SIDE,
   laneGutter as gutterOf,
   lanePlan,
+  laneEnd,
   type LanePlan,
   nodeWidth,
   isLanesLayout,
@@ -136,7 +137,7 @@ function layoutCard(c: FigContent, width: number): { rows: Row[]; height: number
   return { rows, height };
 }
 
-type Placed = Rect & { item: FigNode | FigGroup; lane?: true; tl?: { milestone: boolean; labelInside: boolean } };
+type Placed = Rect & { item: FigNode | FigGroup; lane?: true; block?: number; tl?: { milestone: boolean; labelInside: boolean } };
 type Sizes = {
   cards: Map<string, FigContent[]>;
   cardH: Map<string, number>;
@@ -168,37 +169,47 @@ function size(item: FigNode | FigGroup, s: Sizes): { w: number; h: number } {
  * `plan.per` wrap into blocks under the first. A block holds only the lanes with a box in it; all bands share one width. */
 function placeLanes(fig: FlowProps, x: number, y: number, s: Sizes, out: Placed[]): void {
   const lanes = fig.layout.children as FigGroup[];
-  const { cols, per, gaps, lead } = s.plan!;
+  const { cols, per, gaps, lead, blocks } = s.plan!;
   const colW = Array.from({ length: Math.max(-1, ...cols.values()) + 1 }, () => 0);
   for (const lane of lanes)
     for (const b of lane.children as FigNode[]) colW[cols.get(b.id)!] = Math.max(colW[cols.get(b.id)!], size(b, s).w);
   const gutter = gutterOf(lanes);
-  const blocks = lead.map((_, k) => colW.slice(k * per, (k + 1) * per));
-  const colX = blocks.flatMap((ws, k) =>
-    ws.map((_, c) => gutter + lead[k] + ws.slice(0, c).reduce((a, w, i) => a + w + gaps[k * per + i], 0)),
-  );
+  const colsOf = (k: number) => colW.slice(k * per, (k + 1) * per);
+  const colX = colW.map((_, c) => {
+    const k = Math.floor(c / per);
+    return (
+      gutter +
+      lead[k] +
+      colsOf(k)
+        .slice(0, c % per)
+        .reduce((a, w, i) => a + w + gaps[k * per + i], 0)
+    );
+  });
+  // A figure with no box has no column: its band keeps the frame side on the right.
   const width = Math.max(
-    ...blocks.map(
-      (ws, k) =>
+    ...blocks.map((k) => {
+      const ws = colsOf(k);
+      return (
         gutter +
         lead[k] +
         ws.reduce((a, w) => a + w, 0) +
         gaps.slice(k * per, k * per + ws.length - 1).reduce((a, g) => a + g, 0) +
-        gaps[k * per + ws.length - 1],
-    ),
+        (gaps[k * per + ws.length - 1] ?? FRAME_SIDE)
+      );
+    }),
   );
   const topAt = out.length;
   out.push({ x, y, w: width, h: 0, item: fig.layout });
   let ly = y;
-  blocks.forEach((_, bk) => {
-    if (bk) ly += LANE_BLOCK_GAP - LANE_ROW_GAP;
+  blocks.forEach((bk, i) => {
+    if (i) ly += LANE_BLOCK_GAP - LANE_ROW_GAP;
     for (const lane of lanes) {
       const kids = (lane.children as FigNode[]).filter((b) => Math.floor(cols.get(b.id)! / per) === bk).map((b) => ({ b, ...size(b, s) }));
       // A wrapped block draws only its own lanes; one block draws every lane, an empty one too.
       if (blocks.length > 1 && !kids.length) continue;
       const inner = Math.max(LABEL_LINE + 20, ...kids.map((k) => k.h));
       const h = inner + LANE_PAD * 2;
-      out.push({ x, y: ly, w: width, h, item: lane, lane: true });
+      out.push({ x, y: ly, w: width, h, item: lane, lane: true, block: bk });
       for (const k of kids) out.push({ x: x + colX[cols.get(k.b.id)!], y: ly + LANE_PAD + (inner - k.h) / 2, w: k.w, h: k.h, item: k.b });
       ly += h + LANE_ROW_GAP;
     }
@@ -312,7 +323,7 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
   };
   const cardH = new Map<string, number>();
   const lanes = !tl && fig.lanes && isLanesLayout(fig.layout);
-  const plan = lanes ? lanePlan(fig, { width: opts.width, minText: opts.minText, padding: pad }) : null;
+  const plan = lanes ? planFor(fig, opts) : null;
   const sizes: Sizes = { cards, cardH, minH, gap: (g) => groupGap(g, fig.edges), fig, plan };
   for (const [id, contents] of cards) {
     const width = CARD_WIDTH; // refined below once the node's own width is known
@@ -339,11 +350,13 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
   // Wrapped lanes: an edge between two blocks is two stubs with pills, clear of the boxes and the lane gutters.
   const stubs = plan?.stubs ?? new Map<string, [string, string]>();
   const gutter = plan ? gutterOf(fig.layout.children as FigGroup[]) : 0;
+  const band = (id: string, k: number) => placed.find((p) => p.lane && p.item.id === id && p.block === k);
+  const end = (eid: string, id: string, start: boolean) => (plan ? laneEnd(plan, eid, id, start, band, rects) : id);
   const routed = route(
     fig.edges.map((e, i) => ({
       id: ids[i],
-      from: e.from,
-      to: e.to,
+      from: end(ids[i], e.from, true),
+      to: end(ids[i], e.to, false),
       around: e.around,
       ...(tl && { sides: ['r', 'l'] as [Side, Side], elbow: true }),
       ...(stubs.has(ids[i]) && { stub: stubs.get(ids[i])!.map(labelPillW) as [number, number] }),
@@ -1028,6 +1041,13 @@ ${said.join('\n')}
   return { svg, scene };
 }
 
+/** The lanes wrap plan at the width and text size of `opts`, or null if the figure does not draw as lanes. A rail sets a least width. */
+function planFor(fig: FlowProps, opts: SvgOptions): LanePlan | null {
+  if (fig.timeline || !fig.lanes || !isLanesLayout(fig.layout)) return null;
+  const floor = fig.rail ? (layoutRail(fig, 560)?.width ?? 0) : 0;
+  return lanePlan(fig, { width: opts.width, minText: opts.minText, padding: opts.padding ?? 24, floor });
+}
+
 /** One self-contained animated SVG string for the figure. Needs no React and no browser. */
 export function toSvg(fig: FlowProps, opts: SvgOptions = {}): string {
   return render(fig, opts).svg;
@@ -1035,5 +1055,11 @@ export function toSvg(fig: FlowProps, opts: SvgOptions = {}): string {
 
 /** Every fault `flowfig check` knows about, for this figure as the SVG lays it out. A `Finding` has a `rule` name, a `severity`, the ids it names and a message. */
 export function check(fig: FlowProps, opts: SvgOptions & CheckOptions = {}): Finding[] {
-  return [...checkSpec(fig), ...checkScene(render(fig, opts).scene, opts), ...checkTheme({ ...fig.theme, ...opts.theme })];
+  const lost = (planFor(fig, opts)?.lost ?? []).map((id): Finding => ({
+    rule: 'lane-end-block',
+    severity: 'warning',
+    ids: [id],
+    message: `edge "${id}" ends at a lane that no block on its side shows; the edge uses the nearest block`,
+  }));
+  return [...checkSpec(fig), ...checkScene(render(fig, opts).scene, opts), ...lost, ...checkTheme({ ...fig.theme, ...opts.theme })];
 }
