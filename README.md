@@ -16,18 +16,6 @@
 
 </div>
 
-An agent with the flowfig instructions made faithful, checked diagrams more often than the same agent without them:
-
-| Criterion                                           | Agent without flowfig instructions | Agent with flowfig instructions                |
-| --------------------------------------------------- | ---------------------------------- | ---------------------------------------------- |
-| Diagram faithful to the code (no invented part)     | 7 of 8                             | 8 of 8                                         |
-| Right diagram form for the task                     | 5 of 7                             | 7 of 7                                         |
-| Passes `flowfig check --strict`                     | 5 of 7                             | 6 of 6                                         |
-| Right action (draws, declines or splits)            | 6 of 8                             | 7 of 8                                         |
-| Held-out tasks (not used to write the instructions) | –                                  | 2 of 4 pass all 6 criteria; 2 of 4 pass 4 of 6 |
-
-[How we measured](#how-we-measured).
-
 ## Use it
 
 Set up your repo:
@@ -117,7 +105,6 @@ and the cost of the run. `draw` needs Claude Code on the machine and a login. `d
 - [Use from Node](#use-from-node)
 - [Use with your coding agent](#use-with-your-coding-agent)
 - [What flowfig does not draw](#what-flowfig-does-not-draw)
-- [How we measured](#how-we-measured)
 - [License](#license)
 - [Development](#development)
 
@@ -514,22 +501,6 @@ of the file. A second run also replaces a whole file that `init` wrote. If a who
 flowfig draws parts, the messages between the parts, and their order. flowfig draws a roadmap or a timeline with dates (`timeline: true`),
 and converts a Mermaid `gantt` to it. flowfig does not draw class diagrams, ER diagrams, charts of numbers or mind maps. Use Mermaid
 or a chart library for those.
-
-## How we measured
-
-We ran an evaluation before this release: 47 coding-agent runs, with Claude Sonnet as the agent. The runs covered 12 tasks in 5
-test repos: a TypeScript login API, a Python ETL pipeline, an order state machine, a 20-service platform and a mixed CLI repo.
-The agent ran without the flowfig instructions and with them. An Opus grader scored each run against an answer key.
-
-4 tasks were held out: they shaped no instruction. On the held-out tasks, 2 of 4 runs passed all 6 criteria. The other 2 passed
-4 of 6: one drew an edge from the wrong box, and one reply stated a runtime effect wrongly.
-
-A first draft of the instructions scored worse than no instructions: 5 of 8 faithful. We rewrote the instructions from the
-failures and tested them again. The "with" column comes from the version that we tested on all 8 tasks. The shipped instructions
-add two refinements: the scope of a repo with many flows, and each edge taken from the caller in the code. 9 more runs tested
-the two refinements on the tasks that still failed.
-
-The evaluation also found 3 faults in flowfig itself. We fixed all 3 before this release.
 
 ## License
 
