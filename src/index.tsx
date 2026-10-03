@@ -24,6 +24,8 @@ import {
   isGroup,
   isRows,
   laneColumns,
+  laneWrap,
+  LANE_BLOCK_GAP,
   LANE_GAP,
   LANE_PAD,
   LANE_ROW_GAP,
@@ -165,6 +167,14 @@ export function Flow({
   const [holding, setHolding] = useState(false); // the step hold: a timeline's today line rests at today
   const paths = useRef<Record<string, SVGPathElement | null>>({});
   const [routed, setRouted] = useState<Routed[]>([]);
+  // Lanes: the time column of each box and the columns per block. The same split as the SVG, at the default 830 px width.
+  const lanePlan = useMemo(
+    () =>
+      lanes && !tl && isLanesLayout(layout)
+        ? { cols: laneColumns({ layout, edges, steps, lanes }), per: laneWrap({ layout, edges, steps, lanes }) }
+        : null,
+    [lanes, tl, layout, edges, steps],
+  );
   const [active, setActive] = useState<number | null>(steps.length ? 0 : null);
   const [playing, setPlaying] = useState(autoplay);
   // The step's clock lives outside React: pausing freezes it, resizing keeps it, only a new step resets it.
@@ -273,6 +283,14 @@ export function Flow({
         const r = n.getBoundingClientRect();
         avoid.push({ x: (r.left - base.left) / k, y: (r.top - base.top) / k, w: r.width / k, h: r.height / k });
       });
+      // Wrapped lanes: an edge to another block runs along the gap above the target's block, clear of every box.
+      const tops: number[] = [];
+      el.querySelectorAll<HTMLElement>('[data-fig-block]').forEach((n) => {
+        tops[Number(n.dataset.figBlock)] = (n.getBoundingClientRect().top - base.top) / k;
+      });
+      const wrapped = lanePlan && tops.length > 1 ? lanePlan : null;
+      const blockOf = (id: string) => Math.floor(wrapped!.cols.get(id)! / wrapped!.per);
+      if (wrapped) for (const n of nodes(layout)) if (rects[n.id]) avoid.push(rects[n.id]);
       setRouted(
         route(
           edges.map((e, i) => ({
@@ -281,6 +299,9 @@ export function Flow({
             to: e.to,
             around: e.around,
             ...(tl && { sides: ['r', 'l'] as [Side, Side], elbow: true }),
+            ...(wrapped?.cols.has(e.from) &&
+              wrapped.cols.has(e.to) &&
+              blockOf(e.from) !== blockOf(e.to) && { via: tops[blockOf(e.to)] - LANE_BLOCK_GAP / 2 }),
           })),
           rects,
           tips,
@@ -294,7 +315,7 @@ export function Flow({
     ro.observe(box);
     el.querySelectorAll('[data-fig]').forEach((n) => ro.observe(n));
     return () => ro.disconnect();
-  }, [edges, ids, layout, tips, noMap, lanes, tl, axisW]);
+  }, [edges, ids, layout, tips, noMap, lanes, tl, axisW, lanePlan]);
 
   // The same rules as `flowfig check`, on what the browser actually drew: real fonts, real wrapping. Each fault prints once.
   const reported = useRef(new Set<string>());
@@ -341,7 +362,15 @@ export function Flow({
       edges: [
         ...routed.map((r) => {
           const e = edges[ids.indexOf(r.id)];
-          return { id: r.id, from: e.from, to: e.to, curve: r.curve, label: labels[r.id], ...(tl && { behind: true as const }) };
+          return {
+            id: r.id,
+            from: e.from,
+            to: e.to,
+            curve: r.curve,
+            ...(r.pts && { pts: r.pts }),
+            label: labels[r.id],
+            ...(tl && { behind: true as const }),
+          };
         }),
         // A rail pill is a label for label-overlap; its curve is a point at the pill center, so it can cross no box.
         ...(rail?.rows ?? []).flatMap((row) => {
@@ -712,70 +741,88 @@ export function Flow({
       );
     }
     if (lanes && item === layout && isLanesLayout(layout)) {
-      const cols = laneColumns({ layout, edges, steps, lanes });
+      const { cols, per } = lanePlan!;
       const n = Math.max(0, ...cols.values()) + 1;
-      return (
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: `max-content repeat(${n}, max-content)`,
-            columnGap: 0,
-            rowGap: LANE_ROW_GAP,
-            position: 'relative',
-          }}
-        >
-          {(layout.children as FigGroup[]).map((lane, li) => {
-            const lit = lane.id != null && litNodes.has(lane.id);
-            return (
-              <Fragment key={lane.id ?? String(lane.label)}>
-                <div
-                  data-fig={lane.id}
-                  data-fig-lane=""
-                  style={{
-                    gridColumn: '1 / -1',
-                    gridRow: li + 1,
-                    background: v('surface'),
-                    border: `1px solid ${lit ? v('accent') : v('border')}`,
-                    boxShadow: lit ? glow : undefined,
-                    transition: 'border-color .25s, box-shadow .25s',
-                    borderRadius: 14,
-                    zIndex: 0,
-                  }}
-                />
-                <div
-                  style={{
-                    gridColumn: 1,
-                    gridRow: li + 1,
-                    alignSelf: 'center',
-                    zIndex: 1,
-                    padding: '0 18px',
-                    fontSize: 12,
-                    fontWeight: 600,
-                    letterSpacing: '.04em',
-                    textTransform: 'uppercase',
-                    color: v('muted'),
-                  }}
-                >
-                  {lane.label}
-                </div>
-                {(lane.children as FigNode[]).map((b) => (
+      const count = Math.ceil(n / per);
+      // One grid per block of `per` time columns, as in the SVG. Each block repeats every lane.
+      const grid = (bk: number) => {
+        const m = Math.min(per, n - bk * per);
+        return (
+          <div
+            key={bk}
+            data-fig-block={bk}
+            style={{
+              display: 'grid',
+              // A wrapped block stretches to the widest block, so all bands share one width.
+              gridTemplateColumns: `max-content repeat(${m}, max-content)${count > 1 ? ' 1fr' : ''}`,
+              // An empty lane keeps the SVG's least band height: a 38 px label line plus the lane padding.
+              gridAutoRows: `minmax(${38 + LANE_PAD * 2}px, auto)`,
+              columnGap: 0,
+              rowGap: LANE_ROW_GAP,
+              position: 'relative',
+            }}
+          >
+            {(layout.children as FigGroup[]).map((lane, li) => {
+              const lit = lane.id != null && litNodes.has(lane.id);
+              return (
+                <Fragment key={lane.id ?? String(lane.label)}>
                   <div
-                    key={b.id}
+                    data-fig={lane.id}
+                    data-fig-lane=""
                     style={{
-                      gridColumn: cols.get(b.id)! + 2,
+                      gridColumn: '1 / -1',
+                      gridRow: li + 1,
+                      background: v('surface'),
+                      border: `1px solid ${lit ? v('accent') : v('border')}`,
+                      boxShadow: lit ? glow : undefined,
+                      transition: 'border-color .25s, box-shadow .25s',
+                      borderRadius: 14,
+                      zIndex: 0,
+                    }}
+                  />
+                  <div
+                    style={{
+                      gridColumn: 1,
                       gridRow: li + 1,
                       alignSelf: 'center',
                       zIndex: 1,
-                      // The last time column keeps the frame side, as in the SVG.
-                      padding: `${LANE_PAD}px ${cols.get(b.id) === n - 1 ? 18 : LANE_GAP}px ${LANE_PAD}px 0`,
+                      padding: '0 18px',
+                      fontSize: 12,
+                      fontWeight: 600,
+                      letterSpacing: '.04em',
+                      textTransform: 'uppercase',
+                      color: v('muted'),
                     }}
                   >
-                    {renderItem(b, 1)}
+                    {lane.label}
                   </div>
-                ))}
-              </Fragment>
-            );
-          })}
+                  {(lane.children as FigNode[])
+                    .filter((b) => Math.floor(cols.get(b.id)! / per) === bk)
+                    .map((b) => (
+                      <div
+                        key={b.id}
+                        style={{
+                          gridColumn: (cols.get(b.id)! % per) + 2,
+                          gridRow: li + 1,
+                          alignSelf: 'center',
+                          zIndex: 1,
+                          // The last time column of a block keeps the frame side, as in the SVG.
+                          padding: `${LANE_PAD}px ${cols.get(b.id)! % per === m - 1 ? 18 : LANE_GAP}px ${LANE_PAD}px 0`,
+                        }}
+                      >
+                        {renderItem(b, 1)}
+                      </div>
+                    ))}
+                </Fragment>
+              );
+            })}
+          </div>
+        );
+      };
+      if (count < 2) return grid(0);
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: LANE_BLOCK_GAP }}>
+          {Array.from({ length: count }, (_, bk) => grid(bk))}
         </div>
       );
     }
