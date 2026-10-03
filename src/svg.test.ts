@@ -637,11 +637,12 @@ test('lanes: an empty lane still draws, a decision widens its column, and the ra
       ],
     },
   };
-  const { svg, scene } = render(fig);
+  // A wide page keeps one block: only one block draws an empty lane.
+  const { svg, scene } = render(fig, { width: 1600 });
   assert.match(svg, /EMPTY/);
   const w = (id: string) => scene.boxes.find((b) => b.id === id)!.rect.w;
   assert.ok(w('check') > w('ask'));
-  assert.equal(check(fig).filter((f) => f.severity === 'error').length, 0);
+  assert.equal(check(fig, { width: 1600 }).filter((f) => f.severity === 'error').length, 0);
 });
 
 test('lanes: a box at the top draws the normal layout and check reports the rule; the bands do not touch', () => {
@@ -1013,29 +1014,37 @@ test('timeline: no dependency elbow crosses an outside label box on the roadmap 
   }
 });
 
-test('lanes wrap: seven columns at 830 px draw as two blocks of four lanes, and check finds nothing', async () => {
+test('lanes wrap: seven columns at 830 px draw as two blocks that hold only their own lanes, and check finds nothing', async () => {
   const { default: demo } = await import('../figures/returns-process.ts');
-  const bands = (width?: number) => (render(demo.props, { width }).svg.match(/class="lane/g) ?? []).length;
-  assert.equal(bands(), 8);
+  const bands = (width?: number) =>
+    [...render(demo.props, { width }).svg.matchAll(/class="lane[^>]*\/><text[^>]*>([A-Z]+)</g)].map((m) => m[1]);
+  // Block 1 holds Customer and Support; block 2 holds Support, Warehouse and Finance.
+  assert.deepEqual(bands(), ['CUSTOMER', 'SUPPORT', 'SUPPORT', 'WAREHOUSE', 'FINANCE']);
   assert.deepEqual(check(demo.props, { width: 830 }), []);
   // The block count comes from the width: a wider page holds all seven columns in one block.
-  assert.equal(bands(1400), 4);
+  assert.deepEqual(bands(1400), ['CUSTOMER', 'SUPPORT', 'WAREHOUSE', 'FINANCE']);
 });
 
-test('lanes wrap: a cross-block edge clears every box and label and enters its target from the left', async () => {
+test('lanes wrap: a cross-block edge is two stubs with pills that clear every box and label, and its packet jumps', async () => {
   const { default: demo } = await import('../figures/returns-process.ts');
   const { scene, svg } = render(demo.props);
-  const arrive = scene.edges.find((e) => e.id === 'arrive')!;
+  for (const [id, texts] of [
+    ['arrive', ['→ Inspect', 'from Ship item']],
+    ['late', ['late → Rejected', 'from Review']],
+  ] as const) {
+    const parts = scene.edges.filter((e) => e.id === id);
+    assert.equal(parts.length, 2, `${id} has two stubs`);
+    for (const t of texts) assert.ok(svg.includes(`>${t}</text>`), t);
+    // The guide path holds both stubs: a second M is the jump between the blocks.
+    const d = svg.match(new RegExp(`<path id="p-${id}" d="([^"]+)" fill="none" stroke="none"`))![1];
+    assert.equal(d.match(/M/g)!.length, 2);
+  }
+  // The target stub enters Inspect from the left.
   const inspect = scene.boxes.find((b) => b.id === 'inspect')!.rect;
-  const pts = arrive.pts!;
-  assert.equal(pts.length, 6);
-  const [p, q] = pts.slice(-2);
-  assert.equal(q.x, inspect.x);
-  assert.ok(p.x < q.x && p.y === q.y, 'the last run goes right, into the left side');
+  const [p, q] = scene.edges.filter((e) => e.id === 'arrive')[1].pts!;
+  assert.ok(p.x < q.x && q.x === inspect.x);
   const found = check(demo.props).filter((f) => f.ids.includes('arrive') || f.ids.includes('late'));
   assert.deepEqual(found, []);
-  // The packet follows the drawn path.
-  assert.match(svg, /<path id="p-arrive" d="M [\d.]+ [\d.]+ H [\d.]+ V [\d.]+ H [\d.]+ V [\d.]+ H [\d.]+"/);
 });
 
 test('lanes wrap: a figure that fits renders byte for byte as before the wrap', async () => {

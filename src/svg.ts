@@ -10,7 +10,7 @@ import { route, type Pt, type Rect, type Side } from './geometry.ts';
 import { foldedLabel, groupBox, layoutRail, railState, RAIL, type Rail } from './rail.ts';
 import { textWidth } from './text.ts';
 import { checkScene, checkSpec, checkTheme, type CheckOptions } from './check.ts';
-import type { Finding, Scene, SceneBox } from './scene.ts';
+import type { Finding, Scene, SceneBox, SceneEdge } from './scene.ts';
 export type { CheckOptions } from './check.ts';
 export type { Finding, Scene } from './scene.ts';
 export type * from './model.ts';
@@ -36,14 +36,14 @@ import {
   groupGap,
   isGroup,
   isRows,
-  laneColumns,
   LANE_GAP,
   LANE_PAD,
   LANE_ROW_GAP,
   LANE_BLOCK_GAP,
   FRAME_SIDE,
   laneGutter as gutterOf,
-  laneWrap,
+  lanePlan,
+  type LanePlan,
   nodeWidth,
   isLanesLayout,
   timelineBeats,
@@ -143,9 +143,8 @@ type Sizes = {
   minH: (id: string) => number;
   gap: (g: FigGroup) => number;
   fig: FlowProps;
-  /** Lanes: the time columns per block, and the top of each block once placed. */
-  per: number;
-  tops: number[];
+  /** Lanes: the shared wrap plan. */
+  plan: LanePlan | null;
 };
 
 function size(item: FigNode | FigGroup, s: Sizes): { w: number; h: number } {
@@ -166,30 +165,37 @@ function size(item: FigNode | FigGroup, s: Sizes): { w: number; h: number } {
 }
 
 /** Swimlanes: the bands span the width, the label sits in a left gutter, and a box sits at its time column. Columns past
- * `s.per` wrap into blocks under the first: each block repeats every lane, and all bands share the widest block's width. */
+ * `plan.per` wrap into blocks under the first. A block holds only the lanes with a box in it; all bands share one width. */
 function placeLanes(fig: FlowProps, x: number, y: number, s: Sizes, out: Placed[]): void {
   const lanes = fig.layout.children as FigGroup[];
-  const cols = laneColumns(fig);
+  const { cols, per, gaps, lead } = s.plan!;
   const colW = Array.from({ length: Math.max(-1, ...cols.values()) + 1 }, () => 0);
   for (const lane of lanes)
     for (const b of lane.children as FigNode[]) colW[cols.get(b.id)!] = Math.max(colW[cols.get(b.id)!], size(b, s).w);
   const gutter = gutterOf(lanes);
-  const blocks = Array.from({ length: Math.max(1, Math.ceil(colW.length / s.per)) }, (_, k) => colW.slice(k * s.per, (k + 1) * s.per));
-  const colX = blocks.flatMap((ws) => ws.map((_, c) => gutter + ws.slice(0, c).reduce((a, w) => a + w + LANE_GAP, 0)));
+  const blocks = lead.map((_, k) => colW.slice(k * per, (k + 1) * per));
+  const colX = blocks.flatMap((ws, k) =>
+    ws.map((_, c) => gutter + lead[k] + ws.slice(0, c).reduce((a, w, i) => a + w + gaps[k * per + i], 0)),
+  );
   const width = Math.max(
-    ...blocks.map((ws) => gutter + ws.reduce((a, w) => a + w, 0) + LANE_GAP * Math.max(0, ws.length - 1) + FRAME_SIDE),
+    ...blocks.map(
+      (ws, k) =>
+        gutter +
+        lead[k] +
+        ws.reduce((a, w) => a + w, 0) +
+        gaps.slice(k * per, k * per + ws.length - 1).reduce((a, g) => a + g, 0) +
+        gaps[k * per + ws.length - 1],
+    ),
   );
   const topAt = out.length;
   out.push({ x, y, w: width, h: 0, item: fig.layout });
   let ly = y;
-  s.tops = [];
   blocks.forEach((_, bk) => {
     if (bk) ly += LANE_BLOCK_GAP - LANE_ROW_GAP;
-    s.tops.push(ly);
     for (const lane of lanes) {
-      const kids = (lane.children as FigNode[])
-        .filter((b) => Math.floor(cols.get(b.id)! / s.per) === bk)
-        .map((b) => ({ b, ...size(b, s) }));
+      const kids = (lane.children as FigNode[]).filter((b) => Math.floor(cols.get(b.id)! / per) === bk).map((b) => ({ b, ...size(b, s) }));
+      // A wrapped block draws only its own lanes; one block draws every lane, an empty one too.
+      if (blocks.length > 1 && !kids.length) continue;
       const inner = Math.max(LABEL_LINE + 20, ...kids.map((k) => k.h));
       const h = inner + LANE_PAD * 2;
       out.push({ x, y: ly, w: width, h, item: lane, lane: true });
@@ -306,8 +312,8 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
   };
   const cardH = new Map<string, number>();
   const lanes = !tl && fig.lanes && isLanesLayout(fig.layout);
-  const per = lanes ? laneWrap(fig, { width: opts.width, minText: opts.minText, padding: pad }) : Infinity;
-  const sizes: Sizes = { cards, cardH, minH, gap: (g) => groupGap(g, fig.edges), fig, per, tops: [] };
+  const plan = lanes ? lanePlan(fig, { width: opts.width, minText: opts.minText, padding: pad }) : null;
+  const sizes: Sizes = { cards, cardH, minH, gap: (g) => groupGap(g, fig.edges), fig, plan };
   for (const [id, contents] of cards) {
     const width = CARD_WIDTH; // refined below once the node's own width is known
     const widths = [width];
@@ -330,9 +336,9 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
   for (const p of placed) if (p.item.id) rects[p.item.id] = p;
   const tips = new Set(placed.filter((p) => !isGroup(p.item) && (p.item.shape === 'decision' || p.tl?.milestone)).map((p) => p.item.id!));
   const ids = fig.edges.map(edgeId);
-  // Wrapped lanes: an edge to another block runs along the gap above the target's block, clear of every box.
-  const cols = sizes.tops.length > 1 ? laneColumns(fig) : null;
-  const blockOf = (id: string) => Math.floor(cols!.get(id)! / per);
+  // Wrapped lanes: an edge between two blocks is two stubs with pills, clear of the boxes and the lane gutters.
+  const stubs = plan?.stubs ?? new Map<string, [string, string]>();
+  const gutter = plan ? gutterOf(fig.layout.children as FigGroup[]) : 0;
   const routed = route(
     fig.edges.map((e, i) => ({
       id: ids[i],
@@ -340,14 +346,13 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
       to: e.to,
       around: e.around,
       ...(tl && { sides: ['r', 'l'] as [Side, Side], elbow: true }),
-      ...(cols?.has(e.from) &&
-        cols.has(e.to) &&
-        blockOf(e.from) !== blockOf(e.to) && { via: sizes.tops[blockOf(e.to)] - LANE_BLOCK_GAP / 2 }),
+      ...(stubs.has(ids[i]) && { stub: stubs.get(ids[i])!.map(labelPillW) as [number, number] }),
+      ...(stubs.size && e.label != null && { labelW: labelPillW(str(e.label)) }),
     })),
     rects,
     tips,
-    cols
-      ? placed.filter((p) => !isGroup(p.item))
+    stubs.size
+      ? placed.flatMap((p) => (!isGroup(p.item) ? [p] : p.lane ? [{ x: p.x, y: p.y, w: gutter, h: p.h }] : []))
       : placed.filter((p) => p.tl && !p.tl.labelInside).map((p) => outsideLabelRect(p, str(p.item.label))),
   );
   const byId = Object.fromEntries(routed.map((r) => [r.id, r]));
@@ -669,31 +674,37 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
           )
         : anim(on, `stroke: var(--accent); stroke-width: ${EDGE_ON}`, off, 'e'),
     );
-    const path = `<path id="p-${esc(r.id)}" d="${r.d}" fill="none" stroke="var(--muted)" stroke-width="${EDGE_OFF}" marker-end="url(#arrow)"${lit}/>`;
+    // A cross-block edge draws its two stubs; its full path only guides the packet, so the packet jumps between the blocks.
+    const path = r.stub
+      ? r.stub.parts
+          .map((d) => `<path d="${d}" fill="none" stroke="var(--muted)" stroke-width="${EDGE_OFF}" marker-end="url(#arrow)"${lit}/>`)
+          .join('') + `<path id="p-${esc(r.id)}" d="${r.d}" fill="none" stroke="none"/>`
+      : `<path id="p-${esc(r.id)}" d="${r.d}" fill="none" stroke="var(--muted)" stroke-width="${EDGE_OFF}" marker-end="url(#arrow)"${lit}/>`;
     // A quiet edge is only drawn while a step uses it, so wrap the whole thing rather than the stroke.
-    const label =
-      e.label == null || tl
-        ? ''
-        : (() => {
-            const lw = labelPillW(str(e.label));
-            labelRects[r.id] = { x: r.mid.x - lw / 2, y: r.mid.y - 9, w: lw, h: 18 };
-            fonts.push(11);
-            return (
-              `<rect x="${n2(r.mid.x - lw / 2)}" y="${n2(r.mid.y - 9)}" width="${n2(lw)}" height="18" rx="9" fill="var(--bg)" stroke="var(--border)"` +
-              cls(
-                toned
-                  ? frames(
-                      on.map((x, i) =>
-                        x ? `fill: ${tone[i] ? toneFill(col[i]) : col[i]}; stroke: ${col[i]}` : 'fill: var(--bg); stroke: var(--border)',
-                      ),
-                      'l',
-                      'fill: var(--bg); stroke: var(--border)',
-                    )
-                  : anim(on, 'fill: var(--accent); stroke: var(--accent)', 'fill: var(--bg); stroke: var(--border)', 'l'),
-              ) +
-              `/><text x="${n2(r.mid.x)}" y="${n2(r.mid.y + 4)}"${cls('edgelabel', anim(on, `fill: ${ON_ACCENT}`, 'fill: var(--muted)', 'x'))}>${esc(str(e.label))}</text>`
-            );
-          })();
+    const pill = (x: number, y: number, lw: number, text: string) =>
+      `<rect x="${n2(x - lw / 2)}" y="${n2(y - 9)}" width="${n2(lw)}" height="18" rx="9" fill="var(--bg)" stroke="var(--border)"` +
+      cls(
+        toned
+          ? frames(
+              on.map((x, i) =>
+                x ? `fill: ${tone[i] ? toneFill(col[i]) : col[i]}; stroke: ${col[i]}` : 'fill: var(--bg); stroke: var(--border)',
+              ),
+              'l',
+              'fill: var(--bg); stroke: var(--border)',
+            )
+          : anim(on, 'fill: var(--accent); stroke: var(--accent)', 'fill: var(--bg); stroke: var(--border)', 'l'),
+      ) +
+      `/><text x="${n2(x)}" y="${n2(y + 4)}"${cls('edgelabel', anim(on, `fill: ${ON_ACCENT}`, 'fill: var(--muted)', 'x'))}>${esc(text)}</text>`;
+    let label = '';
+    if (r.stub) {
+      fonts.push(11);
+      label = r.stub.pills.map((p, k) => pill(p.x + p.w / 2, p.y + 9, p.w, stubs.get(r.id)![k])).join('');
+    } else if (e.label != null && !tl) {
+      const lw = labelPillW(str(e.label));
+      labelRects[r.id] = { x: r.mid.x - lw / 2, y: r.mid.y - 9, w: lw, h: 18 };
+      fonts.push(11);
+      label = pill(r.mid.x, r.mid.y, lw, str(e.label));
+    }
     return hidden ? `<g opacity="0"${shown}>${path}${label}</g>` : path + label;
   });
 
@@ -807,7 +818,7 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
   }
 
   const bounds = placed[0];
-  const arcs = fig.edges.some((e) => e.around);
+  const arcs = fig.edges.some((e, i) => e.around && !stubs.has(ids[i])); // a stub does not arc
   const capLines = [...new Set(captions)].flatMap((c) => wrap(c, Math.max(560, bounds.w), 13.5).length);
   const mapW = Math.max(bounds.w + pad * 2, 560);
   // `rail: 'only'` drops the map, but only when the rail has a hop to draw; a figure never renders empty.
@@ -984,17 +995,11 @@ ${said.join('\n')}
     width: n2(W),
     boxes: only ? [] : sceneBoxes,
     edges: [
-      ...(only ? [] : routed).map((r) => {
+      ...(only ? [] : routed).flatMap((r): SceneEdge[] => {
         const e = fig.edges[ids.indexOf(r.id)];
-        return {
-          id: r.id,
-          from: e.from,
-          to: e.to,
-          curve: r.curve,
-          ...(r.pts && { pts: r.pts }),
-          label: labelRects[r.id],
-          ...(tl && { behind: true as const }),
-        };
+        // A cross-block edge is two scene edges: each stub with its pill.
+        if (r.stub) return r.stub.pts.map((pts, k) => ({ id: r.id, from: e.from, to: e.to, curve: r.curve, pts, label: r.stub!.pills[k] }));
+        return [{ id: r.id, from: e.from, to: e.to, curve: r.curve, label: labelRects[r.id], ...(tl && { behind: true as const }) }];
       }),
       // Each rail payload is a label too, in its own open-phase position, so label-overlap covers the rail.
       ...(rail?.rows ?? []).flatMap((row, i) => {

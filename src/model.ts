@@ -286,8 +286,11 @@ export function laneColumns(fig: FlowProps): Map<string, number> {
 export const FRAME_SIDE = 18,
   NODE_MIN_W = 100,
   NODE_MAX_W = 190;
-/** The gap between two blocks of wrapped lanes. A cross-block edge runs along the middle of it. */
+/** The gap between two blocks of wrapped lanes. */
 export const LANE_BLOCK_GAP = 40;
+/** The length of a stub line between a box and its pill, and the clear space past a pill. */
+export const STUB = 12,
+  STUB_CLEAR = 8;
 
 /** The width of a box as the SVG draws it, before a diamond adds its 70 px. */
 export function nodeWidth(item: FigNode, carded: boolean): number {
@@ -302,35 +305,74 @@ export function nodeWidth(item: FigNode, carded: boolean): number {
 export const laneGutter = (lanes: FigGroup[]) =>
   Math.max(0, ...lanes.map((l) => textWidth(str(l.label).toUpperCase(), 12))) + FRAME_SIDE * 2;
 
+/** How a lanes figure wraps. Both renderers lay out with it, so the player shows the blocks and stubs of the SVG. */
+export type LanePlan = {
+  /** The time column of each box, and the columns per block. Box b sits in block floor(col / per). */
+  cols: Map<string, number>;
+  per: number;
+  /** The space after each column: the gap to the next column of its block, or the right margin of the band for the last one. */
+  gaps: number[];
+  /** The room before the first column of each block, after the gutter: it holds the pills of stubs into that column. */
+  lead: number[];
+  /** The edges whose ends sit in two blocks, by edge id: the pill text at the source and at the target. */
+  stubs: Map<string, [string, string]>;
+};
+
+/** The pill texts of a cross-block edge: "label → Target" at the source, "from Source" at the target. */
+export const stubTexts = (label: unknown, from: unknown, to: unknown): [string, string] => [
+  `${str(label) ? str(label) + ' ' : ''}→ ${str(to)}`,
+  `from ${str(from)}`,
+];
+
 /**
- * The time columns per block of a lanes figure. If all the columns do not fit `width` with text at `minText` or more, the lanes
- * wrap like a line of text: block 1 holds columns 0..n-1, block 2 holds n..2n-1. n is the largest count that fits; it is 1 at least.
+ * The wrap of a lanes figure. If all the time columns do not fit `width` with text at `minText` or more, the lanes wrap like a
+ * line of text: block 1 holds columns 0..n-1, block 2 holds n..2n-1. n is the largest count that fits; it is 1 at least.
  * The text test is the one `check` runs: the smallest text (11 px, or 10.5 px with a mono card row) times width / figure width.
- * Both renderers call it with the SVG box widths, so the player shows the same blocks as the SVG.
+ * An edge between two blocks becomes two stubs with pills. The gaps next to their ends grow to hold the pills.
  */
-export function laneWrap(fig: FlowProps, { width = 830, minText = 10, padding = 24 } = {}): number {
+export function lanePlan(fig: FlowProps, { width = 830, minText = 10, padding = 24 } = {}): LanePlan {
   const cols = laneColumns(fig);
   const n = Math.max(-1, ...cols.values()) + 1;
   const shown = (fig.steps ?? []).flatMap((s) => s.flow.flatMap((b) => Object.entries(toBeat(b).show ?? {})));
   const carded = new Set(shown.map(([id]) => id));
   const mono = shown.some(([, c]) => isRows(c) && c.some((r) => r.mono));
   const colW = Array.from({ length: n }, () => 0);
-  for (const b of nodes(fig.layout)) {
+  const byId = new Map(nodes(fig.layout).map((b) => [b.id, b]));
+  for (const b of byId.values()) {
     const c = cols.get(b.id)!;
     colW[c] = Math.max(colW[c], nodeWidth(b, carded.has(b.id)) + (b.shape === 'decision' ? 70 : 0));
   }
   const room = (width * (mono ? 10.5 : 11)) / minText - padding * 2;
-  const fixed = laneGutter(fig.layout.children as FigGroup[]) + FRAME_SIDE;
-  const fits = (k: number) => {
-    for (let c = 0; c < n; c += k) {
-      const ws = colW.slice(c, c + k);
-      if (fixed + ws.reduce((a, w) => a + w, 0) + LANE_GAP * (ws.length - 1) > room) return false;
-    }
-    return true;
+  const gutter = laneGutter(fig.layout.children as FigGroup[]);
+  const plan = (per: number): LanePlan => {
+    const stubs = new Map<string, [string, string]>();
+    const out = Array.from({ length: n }, () => 0),
+      inn = Array.from({ length: n }, () => 0);
+    fig.edges.forEach((e) => {
+      const [a, b] = [cols.get(e.from), cols.get(e.to)];
+      if (a == null || b == null || !byId.has(e.from) || !byId.has(e.to) || Math.floor(a / per) === Math.floor(b / per)) return;
+      const texts = stubTexts(e.label, byId.get(e.from)!.label, byId.get(e.to)!.label);
+      stubs.set(edgeId(e), texts);
+      out[a] = Math.max(out[a], STUB + labelPillW(texts[0]) + STUB_CLEAR);
+      inn[b] = Math.max(inn[b], STUB + labelPillW(texts[1]) + STUB_CLEAR);
+    });
+    const gaps = colW.map((_, c) =>
+      c % per === per - 1 || c === n - 1 ? Math.max(FRAME_SIDE, out[c]) : Math.max(LANE_GAP, out[c] + inn[c + 1]),
+    );
+    const lead = Array.from({ length: Math.max(1, Math.ceil(n / per)) }, (_, k) => inn[k * per] ?? 0);
+    return { cols, per, gaps, lead, stubs };
   };
-  let k = Math.max(1, n);
-  while (k > 1 && !fits(k)) k--;
-  return k;
+  const fits = (p: LanePlan) =>
+    p.lead.every((lead, k) => {
+      const c = k * p.per,
+        end = Math.min(c + p.per, n);
+      return gutter + lead + colW.slice(c, end).reduce((a, w) => a + w, 0) + p.gaps.slice(c, end).reduce((a, g) => a + g, 0) <= room;
+    });
+  for (let k = Math.max(1, n); k > 1; k--) {
+    const p = plan(k);
+    if (fits(p)) return p;
+  }
+  return plan(1);
 }
 /** Timeline constants, shared by both renderers: the bar height, the gap between rows, the least bar width, the milestone width,
  * the axis strip height and the axis width of the SVG. */
