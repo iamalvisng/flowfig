@@ -787,9 +787,8 @@ test('timeline: the roadmap demo has no label over another item in a row', async
   const lay = timelineLayout(fig, TL_AXIS_W);
   const spans = scene.boxes.map((b) => {
     const it = lay.items.find((i) => i.id === b.id)!;
-    const tw = textWidth(b.texts[0].text, 13);
-    const end = it.labelInside || it.labelLeft ? b.rect.x + b.rect.w : b.rect.x + b.rect.w + 6 + tw;
-    return { id: b.id, y: b.rect.y + b.rect.h / 2, x0: it.labelLeft ? b.rect.x - 6 - tw : b.rect.x, x1: end };
+    const end = it.labelInside ? b.rect.x + b.rect.w : b.rect.x + b.rect.w + 6 + textWidth(b.texts[0].text, 13);
+    return { id: b.id, y: b.rect.y + b.rect.h / 2, x0: b.rect.x, x1: end };
   });
   for (const p of spans)
     for (const q of spans) {
@@ -960,50 +959,55 @@ const endFig = (ga: string): FlowProps => ({
   ],
 });
 
-test('timeline: labels at the axis end go left of the item and check is clean', () => {
+test('timeline: the axis grows so every outside label is right of its item and inside the axis', () => {
   const fig = endFig('General availability');
   const lay = timelineLayout(fig, TL_AXIS_W);
-  const side = (id: string) => lay.items.find((i) => i.id === id)!.labelLeft;
-  assert.equal(side('page'), true);
-  assert.equal(side('ga'), true);
-  assert.equal(side('beta'), false);
-  const f = check(fig);
-  assert.deepEqual(f, []);
+  const base = timelineLayout({ ...fig, layout: { ...fig.layout, children: fig.layout.children.slice(0, 2) } }, TL_AXIS_W);
+  assert.ok(lay.end > base.end, 'the range grew past the last date');
+  assert.deepEqual(check(fig), []);
   const { scene } = render(fig);
-  const ga = scene.boxes.find((b) => b.id === 'ga')!;
-  assert.match(toSvg(fig), /text-anchor="end"[^>]*>General availability</);
-  assert.ok(ga.rect.x > 0);
+  for (const b of scene.boxes.filter((x) => !lay.items.find((i) => i.id === x.id)?.labelInside)) {
+    const right = b.rect.x + b.rect.w + 6 + textWidth(b.texts[0].text, 13);
+    const axisEnd = scene.boxes.find((x) => x.id === 'ga')!.rect.x - lay.items.find((i) => i.id === 'ga')!.x + TL_AXIS_W;
+    assert.ok(right <= axisEnd + 1e-6, `${b.id} label passes the axis end`);
+  }
 });
 
-test('timeline: with no room on either side the label stays right and check reports text-overflow', () => {
-  const fig = endFig('General availability');
-  fig.layout.children[2] = {
-    label: 'Launch',
-    children: [{ id: 'ga', label: 'General availability '.repeat(8).trim(), from: '2026-12-15' }],
-  } as never;
-  const lay = timelineLayout(fig, TL_AXIS_W);
-  assert.equal(lay.items.find((i) => i.id === 'ga')!.labelLeft, false);
+test('timeline: a label that cannot fit after the passes stays right and check reports text-overflow', () => {
+  const fig = endFig('x'.repeat(300));
   assert.ok(check(fig).some((x) => x.rule === 'text-overflow'));
 });
 
-test('timeline: a left label never overlaps the item before it in its row', () => {
-  const lay = timelineLayout(endFig('General availability'), TL_AXIS_W);
-  const tw = (id: string, l: string) => textWidth(l, 13);
-  const ga = lay.items.find((i) => i.id === 'ga')!;
-  const page = lay.items.find((i) => i.id === 'page')!;
-  const gaStart = ga.x - 6 - tw('ga', 'General availability');
-  if (ga.row === page.row) assert.ok(page.x + page.w + 8 <= gaStart || page.labelLeft);
-  assert.ok(gaStart >= 0);
-});
-
-test('timeline: the player and the SVG take the label side from the shared layout', async () => {
+test('timeline: the range comes from the shared layout in both renderers', () => {
   const fig = endFig('General availability');
   const lay = timelineLayout(fig, TL_AXIS_W);
-  const { default: src } = await import('node:fs').then((fs) => ({
-    default: fs.readFileSync(new URL('./index.tsx', import.meta.url), 'utf8'),
-  }));
-  assert.match(src, /it\.labelLeft/);
-  const svg = toSvg(fig);
-  const ends = (svg.match(/class="bar" text-anchor="end"/g) ?? []).length;
-  assert.equal(ends, lay.items.filter((i) => i.labelLeft).length);
+  const { scene } = render(fig);
+  const g = scene.boxes.find((b) => b.id === 'ga')!;
+  const it = lay.items.find((i) => i.id === 'ga')!;
+  assert.equal(
+    Math.round(g.rect.x - it.x),
+    Math.round(scene.boxes.find((b) => b.id === 'invoice')!.rect.x - lay.items.find((i) => i.id === 'invoice')!.x),
+  );
+  assert.equal(timelineLayout(fig, TL_AXIS_W).end, lay.end);
+});
+
+test('timeline: no dependency elbow crosses an outside label box on the roadmap input', () => {
+  const fig = endFig('General availability');
+  const lay = timelineLayout(fig, TL_AXIS_W);
+  const { scene } = render(fig);
+  for (const b of scene.boxes) {
+    if (lay.items.find((i) => i.id === b.id)!.labelInside) continue;
+    const r = {
+      x0: b.rect.x + b.rect.w + 6,
+      x1: b.rect.x + b.rect.w + 6 + textWidth(b.texts[0].text, 13),
+      y0: b.rect.y,
+      y1: b.rect.y + b.rect.h,
+    };
+    for (const e of scene.edges)
+      for (let k = 1; k < e.curve.length; k++) {
+        const [p, q] = [e.curve[k - 1], e.curve[k]];
+        const hit = Math.max(p.x, q.x) > r.x0 && Math.min(p.x, q.x) < r.x1 && Math.max(p.y, q.y) > r.y0 && Math.min(p.y, q.y) < r.y1;
+        assert.ok(!hit, `an elbow crosses the label of ${b.id}`);
+      }
+  }
 });

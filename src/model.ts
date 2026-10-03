@@ -230,10 +230,12 @@ export const playheadItem = <T extends { id: string }>(items: T[], beats: { focu
 };
 
 /** The box of a timeline label that sits beside its bar, in the bar's coordinates. */
-export const outsideLabelRect = (bar: { x: number; y: number; w: number; h: number }, label: string, left = false) => {
-  const w = textWidth(label, 13);
-  return { x: left ? bar.x - 6 - w : bar.x + bar.w + 6, y: bar.y, w, h: bar.h };
-};
+export const outsideLabelRect = (bar: { x: number; y: number; w: number; h: number }, label: string) => ({
+  x: bar.x + bar.w + 6,
+  y: bar.y,
+  w: textWidth(label, 13),
+  h: bar.h,
+});
 
 /**
  * The time span in which the playhead label shows its date. The label waits for the line to arrive: it stays hidden for
@@ -304,8 +306,6 @@ export type TimelineItem = {
   w: number;
   milestone: boolean;
   labelInside: boolean;
-  /** The label sits left of the item: it does not fit right of the item before the axis end, and it fits left. */
-  labelLeft: boolean;
   /** The `from` date in the d MMM form, for the playhead label. */
   date: string;
 };
@@ -360,8 +360,22 @@ export function timelineLayout(fig: FlowProps, axisWidth: number): TimelineLayou
   const first = days.length ? Math.min(...days) : 0;
   const last = days.length ? Math.max(...days) : 0;
   const start = first - weekday(first);
-  const end = last + (6 - weekday(last));
+  let end = last + (6 - weekday(last));
   const px = (day: number) => ((day - start) / (end - start + 1)) * axisWidth;
+  // A label right of the last items may pass the axis end. Add whole weeks and lay out again; after 4 passes the label stays and `check` reports it.
+  for (let pass = 0; pass < 4; pass++) {
+    const over = Math.max(
+      0,
+      ...items.map((i) => {
+        const x = i.to != null ? px(i.from) : px(i.from) - TL_DIAMOND / 2;
+        const w = i.to != null ? Math.max(TL_MIN_BAR, px(i.to + 1) - px(i.from)) : TL_DIAMOND;
+        const need = textWidth(str(i.label.label), 13);
+        return i.to != null && need + 16 <= w ? 0 : x + w + 6 + need - axisWidth;
+      }),
+    );
+    if (over <= 0) break;
+    end += Math.ceil(over / (axisWidth / (end - start + 1)) / 7) * 7;
+  }
 
   const ticks: TimelineLayout['ticks'] = [];
   if ((end - start + 1) / 7 <= 16) for (let d = start; d <= end; d += 7) ticks.push({ x: px(d), label: `W${isoWeek(d)}` });
@@ -378,19 +392,11 @@ export function timelineLayout(fig: FlowProps, axisWidth: number): TimelineLayou
     const w = bar ? Math.max(TL_MIN_BAR, px(i.to! + 1) - px(i.from)) : TL_DIAMOND;
     const need = textWidth(str(i.label.label), 13);
     const labelInside = bar && need + 16 <= w;
-    // Row packing keeps a right label clear of the next item, so only the axis end can cut it off.
-    const leftAt = x - 6 - need;
-    const tryLeft = !labelInside && x + w + 6 + need > axisWidth && leftAt >= 0;
-    const rowFor = (from: number) => {
-      const r = busy[i.track].findIndex((until) => until + GAP <= from);
-      return r < 0 ? busy[i.track].length : r;
-    };
-    // A left label takes the first row it clears, or a new row, so it never overlaps an item before it.
-    const labelLeft = tryLeft;
-    const row = rowFor(labelLeft ? leftAt : x);
-    busy[i.track][row] = labelInside || labelLeft ? x + w : x + w + 6 + need;
+    let row = busy[i.track].findIndex((until) => until + GAP <= x);
+    if (row < 0) row = busy[i.track].length;
+    busy[i.track][row] = labelInside ? x + w : x + w + 6 + need;
     rows[i.track] = Math.max(rows[i.track], row + 1);
-    placed.push({ id: i.id, track: i.track, row, x, w, milestone: !bar, labelInside, labelLeft, date: fmt(i.from) });
+    placed.push({ id: i.id, track: i.track, row, x, w, milestone: !bar, labelInside, date: fmt(i.from) });
   }
   // Keep the layout order in the result.
   const order = new Map(items.map((i, k) => [i.id, k]));
