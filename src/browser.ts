@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from 'node:child_process';
-import { availableParallelism } from 'node:os';
+import * as os from 'node:os';
 import { win32 } from 'node:path';
 import type { Readable, Writable } from 'node:stream';
 
@@ -223,7 +223,9 @@ export async function captureFrames(
   const { info } = first;
   const n = Math.max(1, Math.round((info.loop * o.fps) / 1000));
   const clip = { x: info.x, y: info.y, width: info.width, height: info.height, scale: 1 };
-  const count = Math.max(1, Math.min(MAX_TABS, availableParallelism(), Math.floor(n / MIN_FRAMES_PER_TAB)));
+  // availableParallelism arrived in Node 18.14; the package supports Node 18.0.
+  const cores = os.availableParallelism?.() ?? os.cpus().length;
+  const count = Math.max(1, Math.min(MAX_TABS, cores, Math.floor(n / MIN_FRAMES_PER_TAB)));
   const tabs = [first, ...(await Promise.all(Array.from({ length: count - 1 }, open)))];
   const pngs: Buffer[] = Array.from<Buffer>({ length: n });
   await Promise.all(

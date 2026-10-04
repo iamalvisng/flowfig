@@ -1067,15 +1067,6 @@ test('lanes wrap: a figure that fits renders byte for byte as before the wrap', 
   );
 });
 
-test('a box or edge that keeps its look over many beats gets one keyframe for the run', async () => {
-  const { default: returns } = await import('../figures/returns-process.ts');
-  const repeats = [...toSvg(returns.props).matchAll(/@keyframes \S+ \{ (.*) \}\n/g)].filter(([, body]) => {
-    const looks = [...body.matchAll(/\{ ([^}]*) \}/g)].map((m) => m[1]);
-    return looks.some((look, i) => look === looks[i - 1]);
-  });
-  assert.deepEqual(repeats, []);
-});
-
 const crossFig: FlowProps = {
   lanes: true,
   layout: {

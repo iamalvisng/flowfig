@@ -1,3 +1,4 @@
+import { endianness } from 'node:os';
 import type { Image } from './png.ts';
 
 /** One frame. `load` returns the pixels, `delay` is in cs, `same` skips `load`. */
@@ -175,6 +176,7 @@ function lzw(px: Uint8Array, width: number, rect: number[], byte: (v: number) =>
 // It yields between frames so a signal handler can run.
 export async function encodeGif(frames: GifFrame[]): Promise<Uint8Array> {
   if (!frames.length) throw new Error('a GIF needs at least one frame');
+  if (endianness() !== 'LE') throw new Error('flowfig gif needs a little-endian CPU');
   const counts = new Uint32Array(32768),
     sums = new Float64Array(32768 * 3);
   let exact: Map<number, number> | null = new Map(),
