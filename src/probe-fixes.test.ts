@@ -1,4 +1,3 @@
-// Two faults a grader found in agent figures (eval-M): text past the outline of a diamond, and a stub line across an edge.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { check, render } from './svg.ts';
@@ -7,7 +6,6 @@ import { crosses, type Pt } from './geometry.ts';
 import { diamondLines, diamondRoom, lanePlan, STUB_ROOM, tightCopies, type FlowProps } from './model.ts';
 import { textWidth } from './text.ts';
 
-// M1: the stub pill "from Refund payment" sat at the top left of the Support band, and its stub ran across "Rejected: damaged -> Reply".
 const m1: FlowProps = {
   lanes: true,
   layout: {
@@ -68,7 +66,6 @@ const diamond = (label: string, sub?: string): FlowProps => ({
 
 test('M1: no place in the Support band avoids the edge, so the lane grows and the pill sits under its box with no crossing', () => {
   assert.deepEqual(check(m1), []);
-  // The copy of the Support lane (101 px with one box row, index 1) in block 2 grew by STUB_ROOM: the plan has not marked it, a tight stub did.
   assert.ok(!lanePlan(m1).tall.has('1@2'));
   const bands = render(m1).scene.lanes!.filter((l) => l.id === 'Support agent');
   assert.equal(bands.at(-1)!.rect.h, 101 + STUB_ROOM);
@@ -95,7 +92,6 @@ test('M2: the sub of a diamond wraps inside the outline, and check reports no ov
   assert.ok(d.subs.length >= 2, 'the sub wraps');
   for (const l of [d.label, ...d.subs]) assert.ok(d.subs.length && true && l.far < d.h / 2);
   for (const l of d.subs) assert.ok(textWidth(l.text, 12) <= diamondRoom(w, d.h, l.far) + 0.5, l.text);
-  // The old room was the box width, 100 px: the one-line sub (about 175 px) crossed the outline.
   assert.ok(textWidth('Checks delivery date and reason', 12) > diamondRoom(w, 77, 16));
 });
 

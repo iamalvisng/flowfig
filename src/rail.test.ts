@@ -64,7 +64,6 @@ test('two adjacent bands keep at least 16 px between them', () => {
 });
 
 test('no band border comes within 12 px of a phase label or a counter', () => {
-  // The first and the last column sit in a band, so the columns must move in to clear the label and the counter.
   const edge: FlowProps = {
     ...fig,
     layout: {
@@ -191,7 +190,7 @@ test('a nested band label sits one label line below its parent, and the rows sta
   const r = layoutRail(nested, 0)!;
   const [outer, inner] = r.bands;
   assert.deepEqual([outer.label, inner.label], ['Backend', 'API tier']);
-  // A label is drawn at rect.x + 10, rect.y + 14, 11 px high (x measured at the .04em spacing).
+  // Label box: x + 10, y + 14, 11 px high, measured at .04em spacing.
   const box = (b: (typeof r.bands)[number]) => ({
     x: b.rect.x + 10,
     w: textWidth(b.label.toUpperCase(), 11, true) + 0.04 * 11 * b.label.length,

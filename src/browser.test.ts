@@ -7,7 +7,6 @@ import { findBrowser, launch } from './browser.ts';
 
 const posix = process.platform !== 'win32';
 
-// A fake browser: it logs its argv, reads commands on fd 3 and writes replies on fd 4, as Chrome does.
 const FAKE = `#!/usr/bin/env node
 const net = require('node:net');
 require('node:fs').writeFileSync(process.env.FAKE_LOG, JSON.stringify(process.argv.slice(2)));
@@ -120,7 +119,7 @@ test('launch starts the browser in headless mode and resolves after Browser.getV
       assert.ok(argv.includes(a), a);
     assert.equal(argv.at(-1), 'about:blank');
     await close();
-    await close(); // a second close does not throw
+    await close();
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -142,7 +141,7 @@ test('send settles by id, an error reply rejects, and once gets the event of its
 
 test('a command with no reply rejects after the timeout', { skip: !posix }, async () => {
   const dir = fake();
-  // A long launch timeout: under the parallel suite the fake browser can start slowly. Each command has its own short timeout.
+  // A loaded machine starts the fake browser slowly: keep the launch timeout long.
   const { cdp, close } = await launch(join(dir, 'chrome'), join(dir, 'profile'), 10_000);
   try {
     await assert.rejects(cdp.send('Silent', {}, undefined, 300), /Silent: no reply in 0.3 s/);

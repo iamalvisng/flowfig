@@ -11,8 +11,6 @@ const paeth = (a: number, b: number, c: number) => {
   return pa <= pb && pa <= pc ? a : pb <= pc ? b : c;
 };
 
-/** A PNG with the given filter on each row, and the image data split over two IDAT chunks. The CRC fields are 0:
- * decodePng does not read them. */
 function png(width: number, height: number, type: number, pixels: number[], filters: number[], depth = 8): Buffer {
   const bpp = type === 6 ? 4 : 3,
     stride = width * bpp;
@@ -47,7 +45,6 @@ function png(width: number, height: number, type: number, pixels: number[], filt
   ]);
 }
 
-// Five rows: one row for each filter type, None, Sub, Up, Average and Paeth.
 const FILTERS = [0, 1, 2, 3, 4];
 
 test('decodePng reverses the five row filters of an RGBA PNG', () => {
@@ -73,11 +70,11 @@ test('decodePng throws on a bad signature and on a PNG it does not support', () 
 test('decodePng throws on an interlaced PNG, on no IHDR and on image data that is too short', () => {
   const ok = png(1, 1, 6, [1, 2, 3, 4], [0]);
   const interlaced = Buffer.from(ok);
-  interlaced[28] = 1; // the interlace byte of the IHDR body
+  interlaced[28] = 1;
   assert.throws(() => decodePng(interlaced), /unsupported PNG: interlace 1/);
-  const none = Buffer.concat([ok.subarray(0, 8), Buffer.from([0, 0, 0, 0, 73, 69, 78, 68, 0, 0, 0, 0])]); // the signature, then IEND
+  const none = Buffer.concat([ok.subarray(0, 8), Buffer.from([0, 0, 0, 0, 73, 69, 78, 68, 0, 0, 0, 0])]);
   assert.throws(() => decodePng(none), /not a PNG: no IHDR chunk/);
   const tall = Buffer.from(ok);
-  tall.writeUInt32BE(5, 20); // the height: the data holds one row
+  tall.writeUInt32BE(5, 20);
   assert.throws(() => decodePng(tall), /not a PNG: the image data is too short/);
 });

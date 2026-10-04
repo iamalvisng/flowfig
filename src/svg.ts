@@ -1,11 +1,4 @@
-// The same figure, as one self-contained animated SVG: no scripts, no fonts to fetch, so it plays
-// inside a markdown image on GitHub, GitLab and Notion, where the React player cannot go. It gives
-// up what needs a reader: no hover, no tabs, no pause — every step runs in one loop.
-//
-// It reads the same spec and the same `route()` as the React renderer, so the two cannot drift.
-//
-// Limit: text is measured by character class (src/text.ts) rather than by a browser, so this runs anywhere with plain node.
-// Wrapping is therefore approximate; `flowfig check` uses the same measure, and the player check measures real text.
+// Wrapping is approximate: text is measured by character class, not by a browser.
 import { route, type Pt, type Rect, type Side } from './geometry.ts';
 import { foldedLabel, groupBox, layoutRail, railState, RAIL, type Rail } from './rail.ts';
 import { textWidth, wrap } from './text.ts';
@@ -85,23 +78,20 @@ const LABEL_LINE = 18,
 const FRAME_TOP = 37,
   FRAME_BOTTOM = 18;
 
-// The card-on fills are fixed colors that approximate the player's 8% accent tint. The active tint is the player's color-mix.
+// The card-on fills approximate the player's 8 % accent tint.
 const vars = (t: Record<'accent' | 'fg' | 'muted' | 'bg' | 'surface' | 'border', string>, cardOn: string) =>
   `--accent:${t.accent}; --fg:${t.fg}; --muted:${t.muted}; --bg:${t.bg}; --surface:${t.surface}; --border:${t.border}; --card-on:${cardOn}; --tint:color-mix(in srgb, var(--accent) 10%, var(--surface));`;
 
-/** What a card actually holds: rows, or its text. Only text survives outside React. */
 const content = (c: FigContent): FigRow[] | string => (isRows(c) ? c : str(c));
 const esc = (s: string) => s.replace(/[<>&"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' })[c]!);
 const n2 = (v: number) => Math.round(v * 10) / 10;
-// Keyframe times are fractions of a loop that can last a minute: one decimal would round a 0.7 s hop away, and the packet would jump.
+// Four decimals: one decimal rounds a 0.7 s hop away and the packet jumps.
 const n4 = (v: number) => Math.round(v * 10000) / 10000;
 const pct = (v: number) => Math.round(v * 10000) / 100 + '%';
 
-/** A tag pill. The tag is drawn in bold capitals with letter spacing, so the width counts both. */
 const pillW = (tag: string) => textWidth(tag.toUpperCase(), 9) + tag.length * 0.27 + 8;
 
 type Row = { row: FigRow; heads: boolean; lines: string[]; room: number };
-/** A card's rows, wrapped for `width`, with the height they need. */
 function layoutCard(c: FigContent, width: number): { rows: Row[]; height: number } {
   const inner = width - CARD_SIDE * 2;
   if (c == null) return { rows: [], height: LINE + CARD_PAD * 2 };
@@ -111,7 +101,6 @@ function layoutCard(c: FigContent, width: number): { rows: Row[]; height: number
     return { rows: [{ row: { text: body }, heads: false, lines, room: inner }], height: lines.length * LINE + CARD_PAD * 2 };
   }
   const rows = body.map((row) => {
-    // A word-sized tag heads its row so the text keeps the full width; a number or no tag sits inline.
     const heads = (row.tag?.length ?? 0) > 2;
     const tagW = row.tag && !heads ? pillW(row.tag) + 5 : 0;
     const markW = row.mark && !heads ? textWidth(str(row.mark), 11) + 6 : 0;
@@ -131,9 +120,7 @@ type Sizes = {
   minH: (id: string) => number;
   gap: (g: FigGroup) => number;
   fig: FlowProps;
-  /** Lanes: the shared wrap plan. */
   plan: LanePlan | null;
-  /** Lanes: the lane copies that grow by STUB_ROOM: the plan's, and those a stub with no clear place adds. */
   tall: Set<string>;
 };
 
@@ -155,8 +142,6 @@ function size(item: FigNode | FigGroup, s: Sizes): { w: number; h: number } {
   return item.label != null ? { w: inner.w + FRAME_SIDE * 2, h: inner.h + FRAME_TOP + FRAME_BOTTOM } : inner;
 }
 
-/** Swimlanes: the bands span the width, the label sits in a left gutter, and a box sits at its time column. Columns past
- * the plan wrap into blocks under the first. A block holds only the lanes with a box in it; all bands share one width. */
 function placeLanes(fig: FlowProps, x: number, y: number, s: Sizes, out: Placed[]): void {
   const lanes = fig.layout.children as FigGroup[];
   const { cols, starts, gaps, lead, blocks } = s.plan!;
@@ -175,7 +160,6 @@ function placeLanes(fig: FlowProps, x: number, y: number, s: Sizes, out: Placed[
         .reduce((a, w, i) => a + w + gaps[starts[k] + i], 0)
     );
   });
-  // A figure with no box has no column: its band keeps the frame side on the right.
   const width = Math.max(
     ...blocks.map((k) => {
       const ws = colsOf(k);
@@ -195,7 +179,6 @@ function placeLanes(fig: FlowProps, x: number, y: number, s: Sizes, out: Placed[
     if (i) ly += LANE_BLOCK_GAP - LANE_ROW_GAP;
     for (const lane of lanes) {
       const kids = (lane.children as FigNode[]).filter((b) => laneBlock(starts, cols.get(b.id)!) === bk).map((b) => ({ b, ...size(b, s) }));
-      // A wrapped block draws only its own lanes; one block draws every lane, an empty one too.
       if (blocks.length > 1 && !kids.length) continue;
       const inner = Math.max(LABEL_LINE + 20, ...kids.map((k) => k.h));
       const h = inner + LANE_PAD * 2 + (s.tall.has(`${lanes.indexOf(lane)}@${bk}`) ? STUB_ROOM : 0);
@@ -207,7 +190,6 @@ function placeLanes(fig: FlowProps, x: number, y: number, s: Sizes, out: Placed[
   out[topAt].h = ly - LANE_ROW_GAP - y;
 }
 
-/** A timeline: the axis strip on top, one band per track, and the bars and milestones at the shared layout x. */
 function placeTimeline(fig: FlowProps, x: number, y: number, out: Placed[]): void {
   const lanes = fig.layout.children as FigGroup[];
   const gutter = gutterOf(lanes);
@@ -265,42 +247,35 @@ function place(item: FigNode | FigGroup, x: number, y: number, s: Sizes, out: Pl
   }
 }
 
-/** One stretch of the loop: the figure holds still, showing beat `bi` of step `si`. */
 type Seg = { t0: number; t1: number; si: number; bi: number };
 
 /** Options for `toSvg`, `render` and `check`. */
 export type SvgOptions = {
-  /** Milliseconds a packet takes to cross one edge, in place of `FlowProps.speed`. Default: `FlowProps.speed`, else 900. */
+  /** Milliseconds a packet takes to cross one edge. Default: `FlowProps.speed`, else 900. */
   speed?: number;
   /** Space around the figure in px. Default: 24. */
   padding?: number;
-  /** Colors, in place of `FlowProps.theme`. Default: `FlowProps.theme`. */
+  /** Colors. Default: `FlowProps.theme`. */
   theme?: FigTheme;
-  /** Lanes: the page width and the smallest text that decide when the time columns wrap into blocks. Default: 830 and 10, as in `check`. */
+  /** Lanes: page width and smallest text size that set the wrap. Default: 830 and 10. */
   width?: number;
   minText?: number;
 };
 
 const SYSTEM_FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
 
-/**
- * The SVG string, and the scene it drew. The scene lets `flowfig check` test the same layout the SVG uses.
- * The scene is for tools, and its shape may change. Use `toSvg` if you only need the SVG.
- */
+/** The SVG string and the scene it drew. The scene shape may change; use `toSvg` for the SVG only. */
 export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; scene: Scene } {
   const speed = (opts.speed ?? fig.speed ?? 900) / 1000 / BASE_RATE;
   const pad = opts.padding ?? 24;
   const tl = fig.timeline && isLanesLayout(fig.layout) ? timelineLayout(fig, TL_AXIS_W) : null;
-  // A timeline with no steps of its own walks its dated items in date order.
   const synthetic = tl != null && !fig.steps?.length;
   const steps = synthetic ? timelineBeats(fig) : (fig.steps ?? []);
   const beats: Beat[][] = steps.map((s) => s.flow.map(toBeat));
 
-  // Every content a box will ever show, so its card can be sized to the biggest one up front.
   const cards = new Map<string, FigContent[]>();
   for (const b of beats.flat()) for (const [id, c] of Object.entries(b.show ?? {})) cards.set(id, [...(cards.get(id) ?? []), c]);
 
-  // Boxes with many edges on one side get taller so the edges and their labels have room.
   const out: Record<string, number> = {},
     inn: Record<string, number> = {};
   for (const e of fig.edges) {
@@ -316,7 +291,7 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
   const plan = lanes ? planFor(fig, opts) : null;
   const sizes: Sizes = { cards, cardH, minH, gap: (g) => groupGap(g, fig.edges), fig, plan, tall: new Set(plan?.tall) };
   for (const [id, contents] of cards) {
-    const width = CARD_WIDTH; // refined below once the node's own width is known
+    const width = CARD_WIDTH;
     const widths = [width];
     cardH.set(id, Math.max(LINE + CARD_PAD * 2, ...contents.map((c) => layoutCard(c, Math.min(...widths) - 20).height)));
   }
@@ -324,7 +299,6 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
   const placed: Placed[] = [];
   place(fig.layout, pad, pad, sizes, placed);
   let nodes = placed.filter((p) => !isGroup(p.item)) as (Placed & { item: FigNode })[];
-  // A node's own width can differ from CARD_WIDTH (`width` in the spec), so re-measure once placed.
   for (const p of nodes) {
     if (!cards.has(p.item.id)) continue;
     const inner = p.w - 20;
@@ -333,11 +307,9 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
   const rects: Record<string, Rect> = {};
   const tips = new Set(placed.filter((p) => !isGroup(p.item) && (p.item.shape === 'decision' || p.tl?.milestone)).map((p) => p.item.id!));
   const ids = fig.edges.map(edgeId);
-  // Wrapped lanes: an edge between two blocks is two stubs with pills, clear of the boxes and the lane gutters.
   const stubs = plan?.stubs ?? new Map<string, string[]>();
   const gutter = plan ? gutterOf(fig.layout.children as FigGroup[]) : 0;
   const band = (id: string, k: number) => placed.find((p) => p.lane && p.item.id === id && p.block === k);
-  // The band of an edge end, in the block of that end: the band of the box's lane, or of the lane itself.
   const laneGroups = fig.layout.children as FigGroup[];
   const bandOf = (eid: string, id: string, k: 0 | 1): Rect | undefined => {
     const block = plan?.ends.get(eid)?.[k];
@@ -345,7 +317,6 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
     return placed.find((p) => p.lane && p.item === lane && p.block === block);
   };
   const end = (eid: string, id: string, start: boolean) => (plan ? laneEnd(plan, eid, id, start, band, rects) : id);
-  // Place and route. A stub end with no place clear of every edge path makes its lane copy taller, then both run again.
   const go = () => {
     placed.length = 0;
     place(fig.layout, pad, pad, sizes, placed);
@@ -366,10 +337,8 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
         ? placed.flatMap((p) => (!isGroup(p.item) ? [p] : p.lane ? [{ x: p.x, y: p.y, w: gutter, h: p.h }] : []))
         : [
             ...placed.filter((p) => p.tl && !p.tl.labelInside).map((p) => outsideLabelRect(p, str(p.item.label))),
-            // A timeline elbow keeps clear of the bars and milestones it does not connect.
             ...placed.filter((p) => p.tl).map((p) => ({ x: p.x, y: p.y, w: p.w, h: p.h, box: true })),
           ],
-      // A stub pill stays in the lanes, right of the gutter.
       stubs.size ? { x: placed[0].x + gutter, y: placed[0].y, w: placed[0].w - gutter, h: placed[0].h } : undefined,
       lanes ? { bands: placed.filter((p) => p.lane), boxes: placed.filter((p) => !isGroup(p.item)) } : undefined,
     );
@@ -384,11 +353,9 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
   nodes = placed.filter((p) => !isGroup(p.item)) as (Placed & { item: FigNode })[];
   const byId = Object.fromEntries(routed.map((r) => [r.id, r]));
 
-  // What this layout drew, in scene form. Tags are left out of minFont: short bold capitals, not reading text.
   const fonts = [14, ...(steps.length ? [13.5] : [])];
   const sceneBoxes: SceneBox[] = nodes.map((p) => {
     if (p.tl) {
-      // A label inside the bar has the bar as room; a label beside the bar has the space to the next item of its row, or to the band edge.
       const label = str(p.item.label);
       const mine = tl!.items.find((i) => i.id === p.item.id)!;
       const next = tl!.items.filter((i) => i.track === mine.track && i.row === mine.row && i.x > mine.x).map((i) => p.x - mine.x + i.x - 8);
@@ -415,7 +382,6 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
   });
   if (placed.some((p) => isGroup(p.item) && p.item.label != null)) fonts.push(11);
 
-  // The timeline: every beat of every step, in order, with the player's hold at the end of each step.
   const segs: Seg[] = [];
   const hops: {
     si: number;
@@ -459,7 +425,6 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
   });
   const total = t || 1;
 
-  // What the figure shows during each segment, matching the React player exactly.
   const shownAt = segs.map(
     ({ si, bi }) => Object.assign({}, ...beats[si].slice(0, bi + 1).map((b) => b.show)) as Record<string, FigContent>,
   );
@@ -481,10 +446,8 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
     return str(said === -1 ? steps[si].caption : beats[si][said].say);
   });
 
-  // One class per on/off pattern over the segments, so 30 boxes share a handful of keyframes.
   const css: string[] = [];
   const seen = new Map<string, string>();
-  /** The class that switches this element between `onCss` and `offCss` as the loop plays. */
   const anim = (on: boolean[], onCss: string, offCss: string, prefix: string): string => {
     if (!segs.length || on.every((x) => !x)) return '';
     const key = prefix + on.map((x) => (x ? 1 : 0)).join('');
@@ -496,13 +459,11 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
     }
     return seen.get(key)!;
   };
-  /** One `class` attribute from the static classes and the animated one — two would be invalid XML. */
   const cls = (...names: (string | false | undefined)[]) => {
     const list = names.filter(Boolean).join(' ');
     return list ? ` class="${list}"` : '';
   };
 
-  /** Like `anim`, for a property that takes a different value in each segment (a row that moves as phases fold). */
   const frames = (values: string[], prefix: string, base = values[0]): string => {
     if (!segs.length || values.every((v) => v === base)) return '';
     const key = prefix + values.join('|');
@@ -515,15 +476,8 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
     return seen.get(key)!;
   };
 
-  /**
-   * The look of one box over the loop: off, trail (visited) or active (the packet arrived, until the segment ends).
-   * A segment ends at the beat end, or after the step hold for the last beat.
-   * Each frame holds one look. The gap before the frame that follows an active frame gives the FADE.
-   * FADE is in timeline seconds, which are wall seconds.
-   */
   const FADE = 0.4;
-  const RAMP = 0.4; // the today line moves in 400 ms, in wall seconds like FADE
-  // A box tone is a permanent state: a 1 px border and a light tint in the off and trail looks. The active look uses the hop tone, else the box tone.
+  const RAMP = 0.4;
   const looks = (look: 'off' | 'trail' | 'active', boxTone?: string, hopTone?: string) => {
     const tint = boxTone ? toneTint(boxTone, 'var(--bg)') : 'var(--bg)';
     if (look === 'off') return [tint, boxTone ?? 'var(--border)', 1, 'drop-shadow(0 0 0 transparent)'] as const;
@@ -538,14 +492,12 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
     segs.forEach((s, i) => {
       if (!litNodes[i].has(id)) return void pieces.push({ a: s.t0, b: s.t1, look: 'off' });
       const here = hops.filter((h) => h.dest === id && h.si === s.si && h.bi === s.bi);
-      // A focused box turns active at the beat start; in a timeline, when the today line arrives.
       const focused = beats[s.si][s.bi].focus?.includes(id);
       const arrive = Math.min(...here.map((h) => h.t1), focused ? Math.min(s.t0 + (tl ? RAMP : 0), s.t1) : s.t1, s.t1);
       if (arrive > s.t0) pieces.push({ a: s.t0, b: arrive, look: 'trail' });
       if (arrive < s.t1) pieces.push({ a: arrive, b: s.t1, look: 'active', hop: here.find((h) => h.tone)?.tone });
     });
     if (!pieces.length || pieces.every((q) => q.look === 'off')) return '';
-    // The last frame is active: the fade ends at 100 %, so the loop wraps with no jump.
     const end = pieces.at(-1)!;
     if (end.look === 'active') {
       end.b -= FADE;
@@ -614,7 +566,6 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
       : item.sub
         ? `<text x="${n2(cx)}" y="${n2(labelY + SUB_LINE)}" class="sub">${esc(str(item.sub))}</text>`
         : '';
-    // The mark sits in the gap beside the box, so it changes no size and adds nothing to the scene.
     const dot = bt ?? 'var(--accent)';
     const my = n2(p.y + p.h / 2);
     const mark =
@@ -626,7 +577,6 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
     return shape + label + sub + mark + (contents ? card(p as Rect & { item: FigNode }, cardTop, contents) : '');
   });
 
-  /** The dashed content card: one group per content it will ever hold, each visible on its own beats. */
   function card(p: Rect & { item: FigNode }, top: number, contents: FigContent[]): string {
     const id = p.item.id;
     const x = p.x + 10,
@@ -637,7 +587,6 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
       `<rect x="${n2(x)}" y="${n2(top)}" width="${n2(w)}" height="${n2(h)}" rx="6" fill="var(--surface)" stroke="var(--border)" stroke-dasharray="3 3"` +
       cls(anim(filled, 'stroke: var(--accent); fill: var(--card-on)', 'stroke: var(--border); fill: var(--surface)', 'c')) +
       `/>`;
-    // Every distinct content gets a layer; the segments decide which one is showing.
     const layers = contents
       .map((c, ci) => {
         const on = segs.map((_, i) => contents.indexOf(shownAt[i][id] as FigContent) === ci);
@@ -652,7 +601,6 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
     return box + layers + dash;
   }
 
-  /** One card's rows: a colored tag pill, the text, its muted meta, and the mark on the right. */
   function rows(c: FigContent, x: number, top: number, w: number): string {
     const { rows } = layoutCard(c, w);
     let y = top + CARD_PAD;
@@ -692,13 +640,11 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
     const on = segs.map((_, i) => litEdges[i].has(r.id));
     const hidden = e.quiet && !on.every(Boolean);
     const shown = hidden ? cls(anim(on, 'opacity: 1', 'opacity: 0', 'q')) : '';
-    // A toned hop colors its edge for its own beat only; the trail after it is the accent.
     const tone = segs.map(
       ({ si, bi }) => (beats[si][bi].hops.find((h) => h.edge === r.id && h.tone)?.tone ?? undefined) as FigTone | undefined,
     );
     const col = tone.map((x) => (x ? TONES[x] : 'var(--accent)'));
     const off = `stroke: var(--muted); stroke-width: ${EDGE_OFF}`;
-    // With no tone the map and the rail share one keyframe (same key); a toned edge needs its own values.
     const toned = tone.some(Boolean);
     const lit = cls(
       toned
@@ -709,13 +655,11 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
           )
         : anim(on, `stroke: var(--accent); stroke-width: ${EDGE_ON}`, off, 'e'),
     );
-    // A cross-block edge draws its two stubs; its full path only guides the packet, so the packet jumps between the blocks.
     const path = r.stub
       ? r.stub.parts
           .map((d) => `<path d="${d}" fill="none" stroke="var(--muted)" stroke-width="${EDGE_OFF}" marker-end="url(#arrow)"${lit}/>`)
           .join('') + `<path id="p-${esc(r.id)}" d="${r.d}" fill="none" stroke="none"/>`
       : `<path id="p-${esc(r.id)}" d="${r.d}" fill="none" stroke="var(--muted)" stroke-width="${EDGE_OFF}" marker-end="url(#arrow)"${lit}/>`;
-    // A quiet edge is only drawn while a step uses it, so wrap the whole thing rather than the stroke.
     const pill = (x: number, y: number, lw: number, text: string) =>
       `<rect x="${n2(x - lw / 2)}" y="${n2(y - 9)}" width="${n2(lw)}" height="18" rx="9" fill="var(--bg)" stroke="var(--border)"` +
       cls(
@@ -744,8 +688,6 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
     return hidden ? `<g opacity="0"${shown}>${path}${label}</g>` : path + label;
   });
 
-  // A packet per hop: it waits offstage, crosses its edge in `speed`, rests at the end of the edge to the end of its beat, then leaves. Any `data`
-  // rides above it in a chip, which is how the figure says what is moving.
   const packets = hops.map((h, i) => {
     const t0 = h.t0 / total,
       t1 = h.t1 / total,
@@ -774,7 +716,6 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
     );
   });
 
-  // The timeline axis, the fixed today marker and the moving playhead. Their lines sit behind the bars, their labels on top.
   let axisSvg = '',
     lineSvg = '',
     todaySvg = '';
@@ -793,14 +734,11 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
         )
         .join('');
     const bottom = n2(top.y + top.h);
-    // The today marker is fixed at the figure's `today`.
     if (tl.today != null) {
       const tx = x0 + tl.today;
       lineSvg = `<path d="M ${n2(tx)} ${n2(top.y + 12)} V ${bottom}" stroke="var(--accent)" stroke-opacity="0.6" stroke-width="1" stroke-dasharray="3 3"/>`;
       todaySvg = `<text x="${n2(tx - 3)}" y="${n2(top.y + 22)}" text-anchor="end" class="today">today</text>`;
     }
-    // The playhead moves to the start of each beat's item, then to the last date in the step hold. The loop starts with
-    // the playhead at the first beat's item, so the first frame shows the first beat; the last hold moves it back there.
     if (tl.last != null && segs.length) {
       const home = tl.last;
       const startOf = new Map(tl.items.map((i) => [i.id, i.x + (i.milestone ? i.w / 2 : 0)]));
@@ -809,21 +747,19 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
       const first = loopStartItem(tl.items, steps);
       const start = first ? startOf.get(first.id)! : home;
       const pts: [number, number][] = [[0, start]];
-      const dates: { a: number; b: number; d: string; x: number }[] = []; // the label date in each time span
+      const dates: { a: number; b: number; d: string; x: number }[] = [];
       let at = start;
       segs.forEach((s, i) => {
         const item = playheadItem(tl.items, beats[s.si], s.bi);
         const to = item ? startOf.get(item.id)! : home;
         const date = item ? dateOf.get(item.id)! : tl.lastDate;
         const last = i === segs.length - 1 || segs[i + 1].si !== s.si;
-        const end = last ? s.t1 - hold : s.t1; // the step hold starts here
+        const end = last ? s.t1 - hold : s.t1;
         pts.push([s.t0, at], [Math.min(s.t0 + RAMP, end), to], [end, to]);
-        // The label waits for the line, except at the loop start, where the line is already in place.
         const [la, lb] = i === 0 && to === start ? [s.t0, end] : labelSpan(s.t0, end, RAMP);
         if (la < lb) dates.push({ a: la, b: lb, d: date, x: to });
         at = to;
         if (last) {
-          // The last hold of the loop ends with the move back to the loop start.
           const back = i === segs.length - 1 ? Math.max(end + RAMP, s.t1 - RAMP) : s.t1;
           pts.push([Math.min(end + RAMP, s.t1), home], [back, home]);
           const [ha, hb] = labelSpan(end, back, RAMP);
@@ -843,7 +779,6 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
         if (!seen.has(key)) {
           const nm = `a${seen.size}`;
           seen.set(key, nm);
-          // Each span ends with a hidden frame: the label stays off while the line moves.
           const fr = dates
             .map(
               (x) =>
@@ -852,7 +787,6 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
             .join(' ');
           css.push(`@keyframes ${nm} { ${fr} }\n.${nm} { animation: ${nm} ${n2(total)}s infinite step-end; }`);
         }
-        // A label that would meet "today" moves to the tick row.
         const raised = dateLabelRaised(dates.find((x) => x.d === d)!.x, tl.today, textWidth(d, 11), textWidth('today', 11));
         return `<text x="${n2(lx + 3)}" y="${n2(top.y + (raised ? 10 : 22))}" opacity="0"${cls('today', seen.get(key))}>${esc(d)}</text>`;
       });
@@ -862,23 +796,20 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
   }
 
   const bounds = placed[0];
-  const arcs = fig.edges.some((e, i) => (e.around || plan?.around.has(ids[i])) && !stubs.has(ids[i])); // a stub does not arc
+  const arcs = fig.edges.some((e, i) => (e.around || plan?.around.has(ids[i])) && !stubs.has(ids[i]));
   const capLines = [...new Set(captions)].flatMap((c) => wrap(c, Math.max(560, bounds.w), 13.5).length);
   const mapW = Math.max(bounds.w + pad * 2, 560);
-  // `rail: 'only'` drops the map, but only when the rail has a hop to draw; a figure never renders empty.
   const rail: Rail | null = fig.rail ? layoutRail(fig, fig.rail === 'only' ? 560 : mapW) : null;
   const only = fig.rail === 'only' && rail != null;
-  // With the rail, the rail shows the step label, so the caption holds the narration only.
   const capTop = rail ? 20 : 26;
   const capH = steps.length ? capTop + 4 + Math.max(0, ...capLines) * 20 : 0;
   const W = only ? Math.max(560, rail.width) : Math.max(mapW, rail?.width ?? 0);
   const mapH = only ? 0 : bounds.h + pad * 2 + (arcs ? 44 : 0);
-  const top = only ? pad : mapH + RAIL.gap; // the rail's top
+  const top = only ? pad : mapH + RAIL.gap;
   const H = only ? pad + rail.height + capH : mapH + (rail ? RAIL.gap + rail.height : 0) + capH;
   const shift = (W - (bounds.w + pad * 2)) / 2;
   const railX = rail ? (W - rail.width) / 2 : 0;
 
-  // The step label and its narration, both switching with the beats.
   const labels =
     rail || synthetic
       ? []
@@ -896,20 +827,17 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
     );
   });
 
-  // The rail: lifelines under the map. Every part reuses a map part: the frame for a band, the edge-label pill for a payload, the card
-  // tag for `async`, the filled card for a parallel group. So the rail adds no color and no font size.
   const railSvg = !rail
     ? ''
     : (() => {
         const parts: string[] = [];
-        const cols = rail.head - RAIL.cols / 2 + 4; // the column-label baseline
+        const cols = rail.head - RAIL.cols / 2 + 4;
         for (const b of rail.bands)
           parts.push(
             `<rect x="${n2(b.rect.x)}" y="${n2(top + b.rect.y)}" width="${n2(b.rect.w)}" height="${n2(b.rect.h)}" rx="10" fill="var(--surface)" stroke="var(--border)"/>` +
               `<text x="${n2(b.rect.x + 10)}" y="${n2(top + b.rect.y + 14)}" class="frame">${esc(b.label.toUpperCase())}</text>`,
           );
         for (const c of rail.columns) parts.push(`<text x="${n2(c.x)}" y="${n2(top + cols)}" class="railcol">${esc(c.label)}</text>`);
-        // Where each row sits in each segment: it moves when another phase opens, and hides while its phase is folded.
         const at = (i: number) => segs.map((s) => railState(rail, s.si)[i]);
         const base = (i: number) => railState(rail, 0)[i].y;
         const moveRow = (i: number) =>
@@ -917,7 +845,6 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
             at(i).map((st) => `transform: translateY(${n2(st.y - base(i))}px); opacity: ${st.shown ? 1 : 0}`),
             'm',
           );
-        // The lifelines run through the message rows only, so a phase header reads as one clear divider.
         rail.rows.forEach((row, i) => {
           if (row.kind !== 'message') return;
           const y = top + base(i);
@@ -936,8 +863,7 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
           if (row.kind === 'phase') {
             const folded = segs.map((s) => rail.folds && s.si !== row.step);
             const rule = (x1: number) => `<path d="M ${n2(x1)} ${n2(y + 15)} H ${n2(row.line.end)}" stroke="var(--border)"/>`;
-            // One counter per beat of this phase, on this row, so it moves with the row. A parallel beat counts its first message.
-            const first = new Map<number, number>(); // beat -> the n of its first message
+            const first = new Map<number, number>();
             for (const r of rail.rows) if (r.kind === 'message' && r.step === row.step && !first.has(r.beat)) first.set(r.beat, r.n);
             const counters = [...first].map(([beat, n]) => {
               const now = segs.map((s) => s.si === row.step && s.bi === beat);
@@ -966,7 +892,7 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
             row.tone ? 'e' + col : 'e',
           );
           const tagW = ASYNC_TAG_W;
-          // The tag sits on the tail side of the pill, so it never hides the arrowhead.
+          // The tag sits on the tail side so it never hides the arrowhead.
           const tagX = !row.pill ? (x1 + x2) / 2 - tagW / 2 : x2 > x1 ? row.pill.x - tagW - 4 : row.pill.x + row.pill.w + 4;
           const tag = row.async
             ? `<rect x="${n2(tagX)}" y="${n2(ly - 6)}" width="${n2(tagW)}" height="12" rx="4" fill="var(--bg)"/>` +
@@ -1041,9 +967,7 @@ ${said.join('\n')}
     edges: [
       ...(only ? [] : routed).flatMap((r): SceneEdge[] => {
         const e = fig.edges[ids.indexOf(r.id)];
-        // A cross-block edge is two scene edges: each stub with its pill.
         if (r.stub) return r.stub.pts.map((pts, k) => ({ id: r.id, from: e.from, to: e.to, curve: r.curve, pts, label: r.stub!.pills[k] }));
-        // A timeline edge is drawn behind, but `check` still tests its elbow against the boxes it does not connect.
         return [
           {
             id: r.id,
@@ -1055,10 +979,9 @@ ${said.join('\n')}
           },
         ];
       }),
-      // Each rail payload is a label too, in its own open-phase position, so label-overlap covers the rail.
       ...(rail?.rows ?? []).flatMap((row, i) => {
         if (row.kind !== 'message') return [];
-        // Scene coordinates are the map's layout coordinates: the page minus the map's translate(shift, arcs).
+        // Scene coordinates are the page minus the map's translate(shift, arcs).
         const dx = only ? railX : railX - shift,
           dy = only ? top : top - (arcs ? 44 : 0);
         const y = dy + railState(rail!, row.step)[i].y + RAIL.row / 2;
@@ -1085,7 +1008,6 @@ ${said.join('\n')}
   return { svg, scene };
 }
 
-/** The lanes wrap plan at the width and text size of `opts`, or null if the figure does not draw as lanes. A rail sets a least width. */
 function planFor(fig: FlowProps, opts: SvgOptions): LanePlan | null {
   if (fig.timeline || !fig.lanes || !isLanesLayout(fig.layout)) return null;
   const floor = fig.rail ? (layoutRail(fig, 560)?.width ?? 0) : 0;
@@ -1097,7 +1019,7 @@ export function toSvg(fig: FlowProps, opts: SvgOptions = {}): string {
   return render(fig, opts).svg;
 }
 
-/** Every fault `flowfig check` knows about, for this figure as the SVG lays it out. A `Finding` has a `rule` name, a `severity`, the ids it names and a message. */
+/** Every fault `flowfig check` knows about, for this figure as the SVG lays it out. */
 export function check(fig: FlowProps, opts: SvgOptions & CheckOptions = {}): Finding[] {
   const lost = (planFor(fig, opts)?.lost ?? []).map((id): Finding => ({
     rule: 'lane-end-block',

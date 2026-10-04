@@ -1,4 +1,3 @@
-// The `gif` command against a fake capture browser and a fake ffmpeg: the tests are fast and need no real browser.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
@@ -23,7 +22,6 @@ const SPEC = {
   },
 };
 
-// The fake browser answers the commands of captureFrames. Each screenshot is a W x H PNG of random gray, so the GIF is big.
 const CHROME = `#!/usr/bin/env node
 const net = require('node:net');
 const zlib = require('node:zlib');
@@ -68,7 +66,6 @@ input.on('data', (d) => {
 });
 `;
 
-/** A temp folder with a figure SVG, a fake browser and a private TMPDIR. */
 function setup() {
   const dir = mkdtempSync(join(tmpdir(), 'gif-fake-'));
   mkdirSync(join(dir, 'tmp'));
@@ -97,14 +94,13 @@ const run = (dir: string, args: string[], e: NodeJS.ProcessEnv) =>
   spawnSync(process.execPath, [cli, 'gif', join(dir, 'fig.svg'), '--fps', '50', '--scale', '1', ...args], { encoding: 'utf8', env: e });
 const left = (dir: string) => readdirSync(join(dir, 'tmp')).filter((n) => n.startsWith('flowfig-gif-'));
 
-/** Start the run, wait for the marker file, signal, and give the exit code. */
 async function stopAt(dir: string, args: string[], e: NodeJS.ProcessEnv, signal: NodeJS.Signals) {
   const child = spawn(process.execPath, [cli, 'gif', join(dir, 'fig.svg'), '--fps', '50', '--scale', '1', ...args], {
     stdio: 'ignore',
     env: e,
   });
   const exited = new Promise((done) => child.once('exit', (code, sig) => done(code ?? sig)));
-  // The fake browser makes random PNGs, so a loaded machine needs many seconds: wait for the marker or the exit, not for a fixed time.
+  // A loaded machine needs many seconds: wait for the marker or the exit.
   let ended = false;
   void exited.then(() => (ended = true));
   while (!ended && !existsSync(join(dir, 'marker'))) await sleep(25);

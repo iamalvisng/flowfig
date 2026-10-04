@@ -1,4 +1,3 @@
-// `flowfig init`: write flowfig instructions for the coding agents of a repo. Pure functions where possible, so the tests need no TTY.
 import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, relative, resolve, sep } from 'node:path';
@@ -12,20 +11,13 @@ const END = '<!-- flowfig:end -->';
 type Agent = {
   id: string;
   name: string;
-  /** Paths whose presence means the repo uses the agent. A trailing `/` means a directory. */
   marks: string[];
-  /** The file init writes, relative to the repo. */
   file: string;
-  /** `section` edits a file the user owns; `whole` owns the file. */
   kind: 'section' | 'whole';
-  /** Text before the marked block in a whole file. */
   head?: string;
   note?: string;
-  /** The MCP config file the agent reads, and the top-level key that holds the servers. `type` adds `"type": "stdio"`. */
   mcp?: { file: string; key: 'mcpServers' | 'servers'; type?: true; global?: string };
-  /** Shown in place of the MCP file when init cannot write the config. */
   mcpNote?: string;
-  /** A second file, a marked section in a file the user owns. Written only in a repo run, never with `--global`. */
   also?: { file: string; text: string };
 };
 
@@ -89,10 +81,9 @@ export const AGENTS: Agent[] = [
   },
 ];
 
-/** The ids of the agents that the repo at `dir` already uses. */
 export const detect = (dir: string): string[] => AGENTS.filter((a) => a.marks.some((m) => existsSync(join(dir, m)))).map((a) => a.id);
 
-/** Toggle the agents named by numbers ("1 3" or "1,3"). A number out of range and other text are ignored. */
+/** Toggle the agents named by numbers ("1 3" or "1,3"). Ignore bad input. */
 export function toggle(input: string, selected: Set<string>, count: number): Set<string> {
   const next = new Set(selected);
   for (const t of input.split(/[\s,]+/)) {
@@ -104,7 +95,6 @@ export function toggle(input: string, selected: Set<string>, count: number): Set
   return next;
 }
 
-/** The picker screen. */
 export function renderList(selected: Set<string>, detected: string[], dir: string): string {
   const rows = AGENTS.map((a, i) => {
     const found = detected.includes(a.id) ? `(${a.marks.find((m) => existsSync(join(dir, m)))} found)` : '';
@@ -121,24 +111,24 @@ export function renderList(selected: Set<string>, detected: string[], dir: strin
 
 const block = (text = AGENT_TEXT) => `${START}\n${text.trimEnd()}\n${END}\n`;
 
-/** The new file text, or `undefined` if the file belongs to the user and init must leave it. `old` is `undefined` for a missing file. */
+/** The new file text, or `undefined` if the user owns the file. */
 export function place(a: Agent, old: string | undefined): string | undefined {
   const mine = block();
   if (a.kind === 'whole') return old === undefined || old.includes(START) ? `${a.head ?? ''}${mine}` : undefined;
   return section(old, mine);
 }
 
-/** `old` with the marked block `mine` added or replaced. `undefined` if the block is open. */
 function section(old: string | undefined, mine: string): string | undefined {
   if (old === undefined) return mine;
   const s = old.indexOf(START),
     e = old.indexOf(END, s);
-  if (s !== -1 && e === -1) return undefined; // an open block: the next run would eat the text after START
+  // An open block: the next run would eat the text after START.
+  if (s !== -1 && e === -1) return undefined;
   if (s !== -1) return old.slice(0, s) + mine.trimEnd() + old.slice(e + END.length);
   return old + (old.endsWith('\n\n') ? '' : old.endsWith('\n') ? '\n' : '\n\n') + mine;
 }
 
-/** The MCP file with the flowfig entry merged in, or `undefined` when the file is not a JSON object that can hold it. */
+/** The MCP file with the flowfig entry, or `undefined` if the file cannot hold it. */
 export function registerMcp(a: Agent, old: string | undefined): string | undefined {
   if (!a.mcp) return undefined;
   let json: Record<string, unknown>;
@@ -150,24 +140,22 @@ export function registerMcp(a: Agent, old: string | undefined): string | undefin
   if (typeof json !== 'object' || json === null || Array.isArray(json)) return undefined;
   const servers = json[a.mcp.key] ?? {};
   if (typeof servers !== 'object' || servers === null || Array.isArray(servers)) return undefined;
-  if ('flowfig' in servers) return old; // the user may have pinned a version or set env: keep the entry
+  // Keep the entry: the user may have pinned a version.
+  if ('flowfig' in servers) return old;
   const entry = a.mcp.type ? { ...MCP_ENTRY, type: 'stdio' } : MCP_ENTRY;
   json[a.mcp.key] = { ...(servers as object), flowfig: entry };
   return JSON.stringify(json, null, 2) + '\n';
 }
 
-/** `✓ ` before a finished write. */
 const mark = (status: string) => (/^(created|updated|unchanged)$/.test(status) ? '✓ ' : '');
 
-/** The path to show: relative to the repo folder, or `~` for the home folder. */
 const shown = (path: string, base: string, global: boolean) => {
-  const rel = relative(base, path).split(sep).join('/'); // the output uses / on every system
+  const rel = relative(base, path).split(sep).join('/');
   return global ? `~/${rel}` : rel;
 };
 
 const HINT = 'run with -y or --agents <ids>';
 
-/** Run `flowfig init`. Returns the exit code. */
 export async function runInit(argv: string[]): Promise<number> {
   const args = [...argv];
   const flag = (n: string, ...alias: string[]) => [n, ...alias].some((x) => args.includes(x) && args.splice(args.indexOf(x), 1).length > 0);
@@ -260,8 +248,8 @@ export async function runInit(argv: string[]): Promise<number> {
       if (dry) mcpStatus = `would ${mcpStatus === 'created' ? 'create' : 'update'}`;
       else {
         mkdirSync(dirname(mcpPath), { recursive: true });
-        // Same-folder temp file, then rename: a crash or a parallel write cannot leave half a file (~/.claude.json holds user settings).
-        // Resolve a symlink first, so the rename replaces the target and not the link. Copy the old mode to the new file.
+        // Write a temp file, then rename: a crash cannot leave half of ~/.claude.json.
+        // Resolve a symlink first, so the rename replaces the target, not the link.
         const real = existsSync(mcpPath) ? realpathSync(mcpPath) : mcpPath;
         const tmp = `${real}.${process.pid}.tmp`;
         try {
@@ -286,7 +274,6 @@ function fail(message: string): number {
   return 2;
 }
 
-/** Ask on the terminal. Returns the chosen ids, or `undefined` if the user quits. */
 async function pick(start: Set<string>, detected: string[], dir: string): Promise<Set<string> | undefined> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   const ask = (q: string) => new Promise<string | undefined>((res) => (rl.once('close', () => res(undefined)), rl.question(q, res)));

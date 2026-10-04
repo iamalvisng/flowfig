@@ -4,8 +4,7 @@ import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import type { FlowProps } from './model.ts';
 
-// Node strips types but not JSX, so the player is tested from the build (`npm test` builds first).
-// Server markup covers the first frame only; clicks and the clock need a DOM.
+// Server markup shows the first frame only; clicks and the clock need a DOM.
 const { Flow } = await import(new URL('../dist/index.js', import.meta.url).href);
 const render = (props: FlowProps) => renderToString(createElement(Flow, props));
 
@@ -96,10 +95,8 @@ test("rail: 'only' draws the rail rows, the tabs and no map", () => {
 
 test('a lit box has the trail look on load, and the style holds the active look', () => {
   const html = render(fig);
-  // trail: 1 px accent border, no glow
   assert.ok(html.includes('border:1px solid var(--fig-accent'), 'trail border');
   assert.ok(!html.replace(/<style>.*?<\/style>/, '').includes('0 0 0 3px'), 'no glow on the trail');
-  // active: the class the tick toggles has a 2 px border and the glow
   assert.match(html, /\.flowfig-active[^{]*\{[^}]*border-width:2px[^}]*box-shadow:0 0 0 3px/);
 });
 
@@ -163,7 +160,6 @@ const lanesFig: FlowProps = {
 test('lanes: the player renders a grid with one band per lane and a grid column per box', () => {
   const html = render(lanesFig);
   assert.match(html, /grid-template-columns:\s*[\d.]+px repeat\(\d+,\s*max-content\)/);
-  // Five columns do not fit 830 px: block 1 holds 3 columns and all three lanes, block 2 holds 2 columns in two lanes.
   assert.equal((html.match(/data-fig-lane/g) ?? []).length, 5);
   assert.match(html, /grid-column:\s*3[^>]*><div data-fig="check"/);
   assert.match(html, /grid-column:\s*3[^>]*><div data-fig="audit"/);
@@ -172,10 +168,8 @@ test('lanes: the player renders a grid with one band per lane and a grid column 
 
 test('lanes: the last time column keeps 18 px on the right, and a box at the top does not crash', () => {
   const html = render(lanesFig);
-  // reject opens block 2, so its cell also holds the lead for the pill of its stub.
   assert.match(html, /padding:24px 18px 24px [\d.]+px[^>]*><div data-fig="reject"/);
   assert.match(html, /padding:24px 56px 24px 0[^>]*><div data-fig="ask"/);
-  // check has a stub to reject in block 2, so the gap after it grows to hold the pill.
   assert.ok(Number(/padding:24px ([\d.]+)px[^>]*><div data-fig="check"/.exec(html)![1]) > 56);
   assert.doesNotThrow(() => render({ lanes: true, layout: { direction: 'row', children: [{ id: 'a', label: 'A' }] }, edges: [] }));
 });
@@ -255,7 +249,6 @@ test('lanes wrap: the player shows the blocks of the SVG, each with its own lane
   const { cols, per } = lanePlan(demo.props);
   for (const n of nodes(demo.props.layout))
     assert.ok(blocks[Math.floor(cols.get(n.id)! / per)].includes(`data-fig="${n.id}"`), `${n.id} sits in the SVG's block`);
-  // An empty lane keeps the SVG's least band height of 86 px.
   assert.match(html, /grid-auto-rows:minmax\(86px, auto\)/);
 });
 

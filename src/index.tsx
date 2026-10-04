@@ -63,9 +63,8 @@ export { LIGHT, DARK } from './model.ts';
 const DEFAULTS: Required<FigTheme> = { ...LIGHT, font: 'inherit' };
 const v = (k: keyof FigTheme) => `var(--fig-${k}, ${DEFAULTS[k]})`;
 const MONO = 'var(--ifm-font-family-monospace, ui-monospace, SFMono-Regular, Menlo, monospace)';
-const NONE: never[] = []; // a stable default, so a memo keyed on it does not run every render
-const ACTIVE = 'flowfig-active'; // the box a packet has just reached
-// The active box reads --ff-hop (the tone of the hop that arrived), then --ff-box (the tone of the box), then the accent.
+const NONE: never[] = [];
+const ACTIVE = 'flowfig-active';
 const hue = `var(--ff-hop, var(--ff-box, ${v('accent')}))`;
 const glow = `0 0 0 3px color-mix(in srgb, ${hue} 18%, transparent)`;
 
@@ -110,7 +109,6 @@ const cardBody = (c: FigContent): ReactNode => {
             {r.meta != null && <span style={{ color: v('muted') }}> · {r.meta}</span>}
           </span>
         );
-        // A word-sized tag heads its row so the text keeps the full width; a number or no tag sits inline.
         return (r.tag?.length ?? 0) > 2 ? (
           <div key={i}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 1 }}>
@@ -132,8 +130,8 @@ const cardBody = (c: FigContent): ReactNode => {
 };
 
 /**
- * The interactive player for one figure: tabs for the steps, play and pause, speed, hover and full screen.
- * Give it a `FlowProps` spec. Use `toSvg` from `flowfig/svg` for a static animated SVG instead.
+ * The interactive player for one figure. Give it a `FlowProps` spec.
+ * Use `toSvg` from `flowfig/svg` for a static animated SVG.
  */
 export function Flow({
   layout,
@@ -149,13 +147,11 @@ export function Flow({
   today,
 }: FlowProps) {
   const tl = timeline && isLanesLayout(layout);
-  // A timeline with no steps of its own walks its dated items in date order, with no tab row.
   const synthetic = tl && !stepsIn.length;
   const steps = useMemo(
     () => (synthetic ? timelineBeats({ layout, edges, timeline, today }) : stepsIn),
     [synthetic, layout, edges, timeline, today, stepsIn],
   );
-  // The width of the timeline area in px: the server draws TL_AXIS_W, and the browser measures the real width after mount.
   const [axisW, setAxisW] = useState(TL_AXIS_W);
   const area = useRef<HTMLDivElement>(null);
   const root = useRef<HTMLDivElement>(null);
@@ -170,22 +166,19 @@ export function Flow({
   }, [full]);
   const dots = useRef<(SVGGElement | null)[]>([]);
   const chips = useRef<(HTMLDivElement | null)[]>([]);
-  const bar = useRef<HTMLDivElement>(null); // the active tab's progress line
+  const bar = useRef<HTMLDivElement>(null);
   const [beat, setBeat] = useState(0);
-  const [holding, setHolding] = useState(false); // the step hold: a timeline's today line rests at today
-  const [returning, setReturning] = useState(false); // the end of the last hold: the playhead moves back to the loop start
-  const firstLabel = useRef<string | null>(''); // the playhead date of the first mount, which shows at once; '' before the first render
+  const [holding, setHolding] = useState(false);
+  const [returning, setReturning] = useState(false);
+  const firstLabel = useRef<string | null>('');
   const paths = useRef<Record<string, SVGPathElement | null>>({});
   const [routed, setRouted] = useState<Routed[]>([]);
-  // Lane copies that grow because a stub there had no place clear of every edge path (see `tightCopies`).
   const [extraTall, setExtraTall] = useState<ReadonlySet<string>>(new Set());
-  // Lanes: the shared wrap plan (blocks, gaps, stubs), the same as the SVG at the default 830 px width.
   const lanePlan = useMemo(
     () =>
       lanes && !tl && isLanesLayout(layout)
         ? planLanes(
             { layout, edges, steps, lanes },
-            // A rail sets a least width, as in the SVG.
             { floor: withRail ? (layoutRail({ layout, edges, steps, rail: true }, 560)?.width ?? 0) : 0 },
           )
         : null,
@@ -193,7 +186,7 @@ export function Flow({
   );
   const [active, setActive] = useState<number | null>(steps.length ? 0 : null);
   const [playing, setPlaying] = useState(autoplay);
-  // The step's clock lives outside React: pausing freezes it, resizing keeps it, only a new step resets it.
+  // The clock lives outside React: pausing freezes it, resizing keeps it.
   const playingRef = useRef(playing);
   playingRef.current = playing;
   const [rate, setRate] = useState<1 | 2>(1);
@@ -203,7 +196,6 @@ export function Flow({
   const [hover, setHover] = useState<string | null>(null);
 
   const ids = useMemo(() => edges.map(edgeId), [edges]);
-  // A milestone is a diamond too, so its edges meet the tips.
   const tips = useMemo(
     () =>
       new Set([
@@ -218,7 +210,6 @@ export function Flow({
   );
   const step = active == null ? null : steps[active];
   const beats = useMemo(() => (step?.flow ?? []).map(toBeat), [step]);
-  // Every content each box's card will ever show. The card is sized to the largest, so text never gets cut and nothing jumps.
   const carded = useMemo(() => {
     const all = new Map<string, FigContent[]>();
     for (const b of steps.flatMap((s) => s.flow.map(toBeat)))
@@ -226,22 +217,18 @@ export function Flow({
     return all;
   }, [steps]);
   const cur = beats[beat];
-  // The narration: the latest `say` so far (a beat without one keeps the line before), else the step caption.
   const saidAt = beats.slice(0, beat + 1).findLastIndex((b) => b.say != null);
   const said = saidAt === -1 ? step?.caption : beats[saidAt].say;
-  // Content cards: everything the step has shown so far, latest wins.
   const shown = useMemo(
     () => Object.assign({}, ...beats.slice(0, beat + 1).map((b) => b.show)) as Record<string, FigContent>,
     [beats, beat],
   );
-  // The beat that last changed each card, so only a card whose content just changed animates in.
   const shownAt = useMemo(() => {
     const at: Record<string, number> = {};
     beats.slice(0, beat + 1).forEach((b, i) => Object.keys(b.show ?? {}).forEach((k) => (at[k] = i)));
     return at;
   }, [beats, beat]);
 
-  // The rail lays out in node terms, like the SVG, so both renderers draw the same numbers. Its width follows the measured map.
   const figure = useRef<HTMLElement>(null);
   const [mapW, setMapW] = useState(0);
   const railOnly = withRail === 'only';
@@ -249,15 +236,12 @@ export function Flow({
     () => (withRail ? layoutRail({ layout, edges, steps, rail: true }, railOnly ? 560 : mapW) : null),
     [withRail, railOnly, layout, edges, steps, mapW],
   );
-  // 'only' drops the map, but only when the rail has a hop to draw; a figure never renders empty.
   const noMap = railOnly && rail != null;
-  const jump = useRef<number | null>(null); // a rail click that asks for a beat of another step
+  const jump = useRef<number | null>(null);
   const [hoverEdge, setHoverEdge] = useState<string | null>(null);
-  // With reduced motion the player shows the last beat, so the rail marks every row as done.
   const [still, setStill] = useState(false);
   useEffect(() => setStill(window.matchMedia('(prefers-reduced-motion: reduce)').matches), []);
 
-  // Boxes with many edges on one side get taller so the edges and their labels have room.
   const minHeight = useMemo(() => {
     const out: Record<string, number> = {},
       inn: Record<string, number> = {};
@@ -271,19 +255,18 @@ export function Flow({
     };
   }, [edges]);
 
-  // Measure every box and redraw the edges whenever anything changes size.
   useEffect(() => {
     const el = root.current,
       box = outer.current;
-    if (!el || !box) return; // no map to measure with rail: 'only'
+    if (!el || !box) return;
     const measure = () => {
-      // Too wide for its container? Shrink it so the whole figure stays in view. Below half size, scroll instead.
       const scale = Math.max(0.5, Math.min(1, box.clientWidth / el.offsetWidth));
       setFit({ scale, height: el.offsetHeight * scale });
       setMapW(el.offsetWidth);
       if (area.current) setAxisW(area.current.offsetWidth);
       const base = el.getBoundingClientRect();
-      const k = base.width / el.offsetWidth; // the scale currently on screen; rects are measured unscaled
+      // Rects are measured unscaled: k is the scale on screen.
+      const k = base.width / el.offsetWidth;
       const rects: Record<string, Rect> = {};
       el.querySelectorAll<HTMLElement>('[data-fig]').forEach((n) => {
         const r = n.getBoundingClientRect();
@@ -299,9 +282,7 @@ export function Flow({
         const r = n.getBoundingClientRect();
         avoid.push({ x: (r.left - base.left) / k, y: (r.top - base.top) / k, w: r.width / k, h: r.height / k });
       });
-      // A timeline elbow keeps clear of the bars and milestones it does not connect, as in the SVG.
       if (tl) for (const n of nodes(layout)) if (rects[n.id]) avoid.push({ ...rects[n.id], box: true });
-      // Wrapped lanes: an edge between two blocks is two stubs with pills, clear of the boxes and the lane labels.
       const stubs = lanePlan?.stubs ?? new Map<string, string[]>();
       if (stubs.size) {
         for (const n of nodes(layout)) if (rects[n.id]) avoid.push(rects[n.id]);
@@ -310,13 +291,11 @@ export function Flow({
           avoid.push({ x: (r.left - base.left) / k, y: (r.top - base.top) / k, w: r.width / k, h: r.height / k });
         });
       }
-      // A wrapped lane end routes to the band of its block (`data-fig-copy`), as in the SVG.
       const bands: Record<string, Rect> = {};
       el.querySelectorAll<HTMLElement>('[data-fig-copy]').forEach((n) => {
         const r = n.getBoundingClientRect();
         bands[n.dataset.figCopy!] = { x: (r.left - base.left) / k, y: (r.top - base.top) / k, w: r.width / k, h: r.height / k };
       });
-      // A stub pill stays in the lanes, right of the gutter, as in the SVG.
       const blockRects = [...el.querySelectorAll<HTMLElement>('[data-fig-block]')].map((n) => n.getBoundingClientRect());
       const pillArea =
         stubs.size && blockRects.length
@@ -327,7 +306,6 @@ export function Flow({
               return { x, y: (y0 - base.top) / k, w: (x1 - base.left) / k - x, h: (y1 - y0) / k };
             })()
           : undefined;
-      // The band of an edge end, in the block of that end, as in the SVG.
       const laneBands: Record<string, Rect> = {};
       el.querySelectorAll<HTMLElement>('[data-fig-band]').forEach((n) => {
         const r = n.getBoundingClientRect();
@@ -374,13 +352,11 @@ export function Flow({
     return () => ro.disconnect();
   }, [edges, ids, layout, tips, noMap, lanes, tl, axisW, lanePlan, extraTall]);
 
-  // The same rules as `flowfig check`, on what the browser actually drew: real fonts, real wrapping. Each fault prints once.
   const reported = useRef(new Set<string>());
   useEffect(() => {
     const el = root.current,
       box = outer.current;
     const fig = figure.current;
-    // With rail: 'only' there is no map: the figure is the frame and the scene holds only the rail.
     if (!check || !fig || (!noMap && (!el || !box))) return;
     const base = (el ?? fig).getBoundingClientRect();
     const k = el ? base.width / el.offsetWidth : 1;
@@ -401,7 +377,6 @@ export function Flow({
             .map((t) => {
               const fontSize = parseFloat(getComputedStyle(t).fontSize);
               if (!n.dataset.diamond) return { text: t.textContent!, fontSize, room: t.clientWidth, need: t.scrollWidth };
-              // A diamond gives a line the width of its outline at the far edge of the line, and the line is as wide as its text.
               const [r, range] = [rel(t), document.createRange()];
               range.selectNodeContents(t);
               const far = Math.max(Math.abs(r.y - rect.y - rect.h / 2), Math.abs(r.y + r.h - rect.y - rect.h / 2));
@@ -414,13 +389,12 @@ export function Flow({
             }),
         };
       });
-    // Every visible leaf text counts, as in the SVG scene; the 9 px tag pills do not.
-    // The rail is a sibling of the map, so the rail queries start at the figure. An SVG <text> has no CSS box, so it skips clientWidth.
     const fonts = [...fig.querySelectorAll<Element>('*')]
       .filter(
         (t) =>
           !t.children.length &&
           t.textContent?.trim() &&
+          // An SVG <text> has no CSS box, so skip clientWidth.
           (t instanceof SVGElement || (t as HTMLElement).clientWidth > 0) &&
           !t.closest('[data-fig-tag],[aria-hidden]'),
       )
@@ -439,12 +413,10 @@ export function Flow({
       edges: [
         ...routed.flatMap((r): Scene['edges'] => {
           const e = edges[ids.indexOf(r.id)];
-          // A cross-block edge is two scene edges: each stub with its pill.
           if (r.stub)
             return r.stub.pts.map((pts, j) => ({ id: r.id, from: e.from, to: e.to, curve: r.curve, pts, label: labels[`${r.id}:${j}`] }));
           return [{ id: r.id, from: e.from, to: e.to, curve: r.curve, label: labels[r.id], ...(tl && { behind: true as const }) }];
         }),
-        // A rail pill is a label for label-overlap; its curve is a point at the pill center, so it can cross no box.
         ...(rail?.rows ?? []).flatMap((row) => {
           const r = row.kind === 'message' ? labels[`rail:${row.n}`] : undefined;
           if (row.kind !== 'message' || !r) return [];
@@ -476,13 +448,11 @@ export function Flow({
     }
   }, [check, routed, layout, edges, steps, ids, theme, rail, noMap, lanePlan]);
 
-  // Play the step's beats: each moves its packets (and their data cards) along its edges, then the next step starts.
   useEffect(() => {
     const gs = dots.current,
       cs = chips.current,
       edgeOf = Object.fromEntries(edges.map((e, i) => [ids[i], e]));
     if (clock.current.beats !== beats) {
-      // A rail click can open another step at a later beat; start the clock at that beat, not at 0.
       const j = jump.current ?? 0;
       jump.current = null;
       clock.current = { beats, elapsed: beats.slice(0, j).reduce((t, b) => t + beatMs(b, speed), 0) };
@@ -494,7 +464,7 @@ export function Flow({
       return void setBeat(beats.length - 1);
     }
     const ends = beats.reduce<number[]>((acc, b) => [...acc, (acc.at(-1) ?? 0) + beatMs(b, speed)], []);
-    const total = ends.at(-1)! + STEP_HOLD_MS; // The figure holds on the last beat before the next step.
+    const total = ends.at(-1)! + STEP_HOLD_MS;
     let raf = 0,
       last = performance.now(),
       shownBeat = -1;
@@ -513,7 +483,7 @@ export function Flow({
       setHolding(t >= ends.at(-1)!);
       setReturning(active === steps.length - 1 && t >= total - 400 * BASE_RATE);
       const start = i ? ends[i - 1] : 0;
-      const f = Math.min(1, (t - start) / speed); // the packet crosses in `speed`; the hold gives the rest
+      const f = Math.min(1, (t - start) / speed);
       const eased = f < 0.5 ? 2 * f * f : 1 - (-2 * f + 2) ** 2 / 2;
       const hops = t < ends.at(-1)! ? beats[i].hops : [];
       gs.forEach((g, j) => {
@@ -537,14 +507,12 @@ export function Flow({
           c.style.opacity = hops[j].data == null ? '0' : '1';
         }
       });
-      // A box is active from the packet arrival to the end of the step hold. The tick toggles the class and skips React.
       const arrived = new Map<string | undefined, string | undefined>();
       if (f >= 1)
         for (const h of beats[i].hops) {
           const to = h.back ? edgeOf[h.edge]?.from : edgeOf[h.edge]?.to;
           arrived.set(to, arrived.get(to) ?? (h.tone && TONES[h.tone]));
         }
-      // A focused box turns active at the beat start; in a timeline, when the today line arrives.
       if (t - start >= (tl ? 400 * BASE_RATE : 0)) for (const id of beats[i].focus ?? []) if (!arrived.has(id)) arrived.set(id, undefined);
       root.current?.querySelectorAll<HTMLElement>('[data-fig]').forEach((n) => {
         const on = arrived.has(n.dataset.fig ?? '');
@@ -554,8 +522,7 @@ export function Flow({
           else n.style.removeProperty('--ff-hop');
         }
         if (on === n.classList.contains(ACTIVE)) return;
-        if (!on) return void n.classList.remove(ACTIVE); // the transition fades the box
-        // The box turns active at once: no transition while the class arrives.
+        if (!on) return void n.classList.remove(ACTIVE);
         const keep = n.style.transition;
         n.style.transition = 'none';
         n.classList.add(ACTIVE);
@@ -573,8 +540,6 @@ export function Flow({
     };
   }, [beats, routed, noMap, speed, steps.length]);
 
-  // What to light up: the step's edges and their ends, or whatever touches the hovered box.
-  // A step lights the trail so far: every edge its beats have crossed, and every box it has filled.
   const trail = beats.slice(0, beat + 1).flatMap((b) => b.hops.map((h) => h.edge));
   const hoverEdgeIdx = hoverEdge == null ? -1 : ids.indexOf(hoverEdge);
   const litEdges = new Set<string>(
@@ -590,7 +555,6 @@ export function Flow({
   edges.forEach((e, i) => {
     if (litEdges.has(ids[i])) litNodes.add(e.from).add(e.to);
   });
-  // A toned hop colors its edge for its own beat only; the trail after it is the accent.
   const hopTone = (edge: string) => {
     const t = cur?.hops.find((h) => h.edge === edge && h.tone)?.tone;
     return t && TONES[t];
@@ -614,7 +578,6 @@ export function Flow({
     [tl, layout, edges, timeline, today, axisW],
   );
 
-  // A bar or a milestone of a timeline: placed by the shared layout, with the look of a box.
   const renderBar = (n: FigNode, it: { row: number; x: number; w: number; milestone: boolean; labelInside: boolean }) => {
     const lit = litNodes.has(n.id);
     const bt = n.tone && TONES[n.tone];
@@ -683,8 +646,6 @@ export function Flow({
   const renderItem = (item: FigNode | FigGroup, depth: number): ReactNode => {
     if (timelineFig && item === layout) {
       const lanesList = layout.children as FigGroup[];
-      // The playhead follows the latest dated focus in the step, and rests at the last date before one and in the hold.
-      // In the last 400 ms of the loop it moves back to the loop start, so the next loop starts in place, as in the SVG.
       const focused = still
         ? undefined
         : returning
@@ -696,8 +657,6 @@ export function Flow({
       const at = focused ? focused.x + (focused.milestone ? focused.w / 2 : 0) : home;
       const dateText = focused ? focused.date : timelineFig.lastDate;
       const rowsPx = timelineFig.rows.map((r) => r * TL_BAR_H + (r - 1) * TL_ROW_GAP + LANE_PAD * 2);
-      // The today line and the playhead line sit behind the bars (before them, at the bars' z-index); their labels sit on top.
-      // The playhead label waits for the line, except on the first mount, where the line starts in place.
       if (firstLabel.current === '') firstLabel.current = dateText;
       else if (firstLabel.current !== dateText) firstLabel.current = null;
       const marks = (front: boolean) =>
@@ -742,7 +701,6 @@ export function Flow({
             >
               {front && (
                 <span
-                  // The label remounts on a new date and stays hidden for the 400 ms move (wall time, like the line).
                   key={dateText}
                   style={{
                     position: 'absolute',
@@ -767,7 +725,6 @@ export function Flow({
           style={{
             display: 'grid',
             gridTemplateColumns: `max-content minmax(${TL_AXIS_W}px, 1fr) 18px`,
-            // The axis strip sits over the gap above the first band, as in the SVG.
             gridTemplateRows: `${TL_AXIS_H - LANE_ROW_GAP}px ${rowsPx.map((h) => h + 'px').join(' ')}`,
             rowGap: LANE_ROW_GAP,
             position: 'relative',
@@ -839,7 +796,6 @@ export function Flow({
     if (lanes && item === layout && isLanesLayout(layout)) {
       const { cols, starts, gaps, lead, blocks, gutter, tall } = lanePlan!;
       const count = blocks.length;
-      // One grid per block of `per` time columns, as in the SVG. A wrapped block shows only the lanes with a box in it.
       const grid = (bk: number) => {
         const m = starts[bk + 1] - starts[bk];
         const inBlock = (b: FigNode | FigGroup) => laneBlock(starts, cols.get((b as FigNode).id)!) === bk;
@@ -850,10 +806,7 @@ export function Flow({
             data-fig-block={bk}
             style={{
               display: 'grid',
-              // A wrapped block stretches to the widest block, so all bands share one width.
-              // Every block has the gutter of the plan, so the labels and the columns line up as in the SVG.
               gridTemplateColumns: `${gutter}px repeat(${m}, max-content)${count > 1 ? ' 1fr' : ''}`,
-              // An empty lane keeps the SVG's least band height: a 38 px label line plus the lane padding.
               gridAutoRows: `minmax(${38 + LANE_PAD * 2}px, auto)`,
               columnGap: 0,
               rowGap: LANE_ROW_GAP,
@@ -906,7 +859,6 @@ export function Flow({
                         gridRow: li + 1,
                         alignSelf: 'center',
                         zIndex: 1,
-                        // The space after each column and before a block's first column comes from the plan, as in the SVG.
                         padding: `${LANE_PAD}px ${gaps[cols.get(b.id)!]}px ${LANE_PAD + (tall.has(`${layout.children.indexOf(lane)}@${bk}`) || extraTall.has(`${layout.children.indexOf(lane)}@${bk}`) ? STUB_ROOM : 0)}px ${cols.get(b.id) === starts[bk] ? lead[bk] : 0}px`,
                       }}
                     >
@@ -978,7 +930,6 @@ export function Flow({
     const diamond = item.shape === 'decision';
     const store = item.shape === 'store';
     const card = carded.has(item.id);
-    // The sub of a diamond wraps as in the SVG, one div per line, so a line stays inside the outline.
     const dl = diamond && !card ? diamondLines(item, nodeWidth(item, false) + 70) : null;
     const bt = item.tone && TONES[item.tone];
     return (
@@ -1040,7 +991,6 @@ export function Flow({
           </svg>
         )}
         {store && (
-          // the cylinder's top rim
           <div
             style={{
               position: 'absolute',
@@ -1056,7 +1006,7 @@ export function Flow({
           />
         )}
         {item.mark && (
-          // the mark sits in the gap; the box border is 1 px, so the offsets add 1
+          // The box border is 1 px, so the offsets add 1.
           <span
             aria-hidden
             style={{
@@ -1107,7 +1057,6 @@ export function Flow({
               animation: shown[item.id] != null ? 'flowfig-in .35s ease-out' : undefined,
             }}
           >
-            {/* Invisible copies of every content stack in one grid cell and set the size; the real one sits on top. */}
             {carded.get(item.id)!.map((c, i) => (
               <div key={i} aria-hidden style={{ gridArea: '1 / 1', visibility: 'hidden' }}>
                 {cardBody(c)}
@@ -1171,13 +1120,12 @@ export function Flow({
       </button>
       <style>
         {'@keyframes flowfig-label{from{opacity:0}to{opacity:0}}@keyframes flowfig-in{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}' +
-          // The active box has a 2 px border, a tint and a glow. The padding shrinks by 1 px. The box size stays the same, so the edges keep their route.
+          // The 2 px active border takes 1 px of padding, so the box size stays.
           `.${ACTIVE}:not([data-diamond]){--ff-b:1px;border-width:2px!important;background:color-mix(in srgb, ${hue} 10%, ${v('surface')})!important;box-shadow:${glow}!important;border-color:${hue}!important}` +
           `.${ACTIVE} polygon{fill:color-mix(in srgb, ${hue} 10%, ${v('surface')});stroke:${hue};stroke-width:2px}`}
       </style>
       {!noMap && (
         <>
-          {/* The canvas: a dotted grid that runs to the figure's edges, with a line under it. */}
           <div
             style={{
               margin: full ? '-48px -24px 0' : '-20px -16px 0',
@@ -1188,7 +1136,7 @@ export function Flow({
               backgroundSize: '14px 14px',
             }}
           >
-            {/* ponytail: rows never wrap; wide figures shrink to fit, down to half size. Add a stacked mobile layout if that bites. */}
+            {/* ponytail: rows never wrap; wide figures shrink, down to half size. */}
             <div
               ref={outer}
               style={{
@@ -1205,8 +1153,6 @@ export function Flow({
                   transform: fit.scale < 1 ? `scale(${fit.scale})` : undefined,
                   transformOrigin: 'top left',
                   padding: 4,
-                  // room for edges that arc over or under the boxes
-                  // A stub does not arc.
                   paddingTop: edges.some((e, i) => e.around === 'above' && !lanePlan?.stubs.has(ids[i])) ? 44 : 4,
                   paddingBottom: edges.some(
                     (e, i) => (e.around === 'below' || (!e.around && lanePlan?.around.has(ids[i]))) && !lanePlan?.stubs.has(ids[i]),
@@ -1224,7 +1170,6 @@ export function Flow({
                     height: '100%',
                     overflow: 'visible',
                     pointerEvents: 'none',
-                    // A timeline dependency runs under the bars (z-index 1) and over the bands (0).
                     zIndex: tl ? 0 : undefined,
                   }}
                 >
@@ -1278,7 +1223,6 @@ export function Flow({
                         stroke="none"
                       />
                     );
-                    // A cross-block edge draws its two stubs; its full path only guides the packet, which jumps between the blocks.
                     if (r.stub) return [...r.stub.parts.map((d, j) => look(d, `${r.id}:${j}`)), guide];
                     return look(r.d, r.id, true);
                   })}
@@ -1329,7 +1273,6 @@ export function Flow({
                   if (!texts && (e.label == null || tl)) return [];
                   const on = litEdges.has(r.id);
                   const tone = hopTone(r.id);
-                  // A cross-block edge has two pills, one per stub, in place of its label.
                   const pills = texts
                     ? r.stub!.pills.map((p, j) => ({
                         key: `${r.id}:${j}`,
@@ -1398,7 +1341,6 @@ export function Flow({
           ))}
           {(() => {
             const st = railState(rail, active ?? 0);
-            // The lifelines run through the message rows only, so a phase header reads as one clear divider.
             const lines = rail.rows.flatMap((row, i) =>
               row.kind === 'message' && st[i].shown ? rail.columns.map((c) => `M ${c.x} ${st[i].y} V ${st[i].y + RAIL.row}`) : [],
             );
@@ -1476,7 +1418,6 @@ export function Flow({
                   {row.async &&
                     (() => {
                       const tagW = ASYNC_TAG_W;
-                      // The tag sits on the tail side of the pill, so it never hides the arrowhead.
                       const tx = !row.pill ? (x1 + x2) / 2 - tagW / 2 : x2 > x1 ? row.pill.x - tagW - 4 : row.pill.x + row.pill.w + 4;
                       return (
                         <>
@@ -1549,10 +1490,8 @@ export function Flow({
               style={iconBtn}
               onClick={() => setPlaying((p) => !p)}
             >
-              {/* pause: two bars; play: a triangle */}
               <Icon d={playing ? 'M5.5 4v8M10.5 4v8' : 'M5 3.5v9l7.5-4.5z'} fill={!playing} />
             </button>
-            {/* Tabs in a quiet track; the active one carries a progress line for the step that is playing. */}
             {!synthetic && (
               <div
                 role="tablist"
@@ -1574,7 +1513,7 @@ export function Flow({
                       role="tab"
                       aria-selected={on}
                       onClick={() => {
-                        clock.current.elapsed = 0; // replay from the start, even when it is already the active step
+                        clock.current.elapsed = 0;
                         setActive(i);
                         setPlaying(true);
                         setBeat(0);
@@ -1659,7 +1598,6 @@ export function Flow({
   );
 }
 
-/** A 16px stroke icon drawn from one SVG path. */
 function Icon({ d, fill = false }: { d: string; fill?: boolean }) {
   return (
     <svg

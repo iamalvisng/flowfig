@@ -41,7 +41,6 @@ test('verify passes a present file and symbol, fails a missing file or symbol', 
     assert.deepEqual(verify(figWith('src/a.ts'), { root }), []);
     assert.deepEqual(rules(verify(figWith('src/b.ts#login'), { root })), ['missing-file']);
     assert.deepEqual(rules(verify(figWith('src/a.ts#logout'), { root })), ['missing-symbol']);
-    // a whole word: `login` is not `loginAll`; regex characters in a symbol are literal
     assert.deepEqual(rules(verify(figWith('src/a.ts#logi'), { root })), ['missing-symbol']);
     assert.deepEqual(verify(figWith('src/a.ts#$get'), { root }), []);
   });
@@ -58,7 +57,7 @@ test('a figure with no link is a warning; a path outside the root is a missing f
 test('a link to a folder is a missing file, not a crash', () => {
   withRepo({ 'src/a.ts': '', '..x': '' }, (root) => {
     assert.deepEqual(rules(verify(figWith('src'), { root })), ['missing-file']);
-    assert.deepEqual(verify(figWith('..x'), { root }), []); // a name that starts with two dots is inside the root
+    assert.deepEqual(verify(figWith('..x'), { root }), []);
   });
 });
 

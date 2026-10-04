@@ -24,7 +24,6 @@ import { SKILL_DESCRIPTION } from './guide.ts';
 
 const cli = join(dirname(dirname(fileURLToPath(import.meta.url))), 'scripts', 'figure-svg.mjs');
 const made: string[] = [];
-// every folder goes on the list, so one hook removes them all, also after a failed test
 const tmp = (prefix = 'flowfig-init-') => {
   const dir = mkdtempSync(join(tmpdir(), prefix));
   made.push(dir);
@@ -71,8 +70,8 @@ test('toggle parses numbers, and renderList shows the marks', () => {
   assert.deepEqual([...toggle('1 3', new Set(['claude']), 7)].sort(), ['cursor']);
   const on = toggle('2,3', new Set(['claude']), 7);
   assert.deepEqual([...on].sort(), ['agents', 'claude', 'cursor']);
-  assert.deepEqual([...toggle('1 1', new Set(), 7)], []); // twice = off again
-  assert.deepEqual([...toggle('9 x', new Set(['kiro']), 7)], ['kiro']); // out of range and junk are ignored
+  assert.deepEqual([...toggle('1 1', new Set(), 7)], []);
+  assert.deepEqual([...toggle('9 x', new Set(['kiro']), 7)], ['kiro']);
   const dir = tmp();
   mkdirSync(join(dir, '.claude'));
   const text = renderList(new Set(['claude']), ['claude'], dir);
@@ -97,7 +96,6 @@ test('--agents agents adds a section and keeps the other text byte for byte', ()
     const again = run(['init', '--agents', 'agents'], dir);
     assert.match(again.stdout, /unchanged AGENTS\.md/);
     assert.equal(readFileSync(join(dir, 'AGENTS.md'), 'utf8'), after);
-    // text around the markers stays as it is on a second run
     writeFileSync(join(dir, 'AGENTS.md'), after + '\nTail.\n');
     run(['init', '--agents', 'agents'], dir);
     assert.ok(readFileSync(join(dir, 'AGENTS.md'), 'utf8').endsWith('\nTail.\n'));

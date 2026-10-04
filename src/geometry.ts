@@ -2,12 +2,11 @@ import { STUB } from './model.ts';
 export type Rect = { x: number; y: number; w: number; h: number };
 export type Side = 'l' | 'r' | 't' | 'b';
 export type Pt = { x: number; y: number };
-/** A cross-block edge of wrapped lanes: the two drawn stubs, their pills, and their points for `check`. `d` then holds both stubs,
- * so a packet runs the source stub and jumps to the target stub. */
+/** A cross-lane edge as two stubs, their pills and their points. */
 export type Stub = { parts: [string, string]; pills: [Rect, Rect]; pts: [Pt[], Pt[]]; short?: true; tight: [boolean, boolean] };
-/** `elbow` holds the corners of an elbow path, so `check` can test its straight runs. */
+/** `elbow` holds the corners of an elbow path for `check`. */
 export type Routed = { id: string; d: string; mid: Pt; curve: [Pt, Pt, Pt, Pt]; stub?: Stub; elbow?: Pt[] };
-/** A rect that a route keeps clear of. `box` marks a box: an elbow's horizontal runs keep clear of a box, not of a label. */
+/** A rect that a route keeps clear of. `box` marks a box. */
 export type Avoid = Rect & { box?: boolean };
 
 type Around = 'above' | 'below';
@@ -26,27 +25,16 @@ type Pick = {
   labelW?: number;
 };
 
-/** The least gap between a label pill and a lane border. */
 const LABEL_CLEAR = 4;
 const cx = (r: Rect) => r.x + r.w / 2;
 const cy = (r: Rect) => r.y + r.h / 2;
-/** A point on the cubic Bézier at `t`, as `check` samples an edge. */
 const bezier = ([p0, p1, p2, p3]: [Pt, Pt, Pt, Pt], t: number): Pt => {
   const u = 1 - t;
   const [a, b, c, d] = [u * u * u, 3 * u * u * t, 3 * u * t * t, t * t * t];
   return { x: a * p0.x + b * p1.x + c * p2.x + d * p3.x, y: a * p0.y + b * p1.y + c * p2.y + d * p3.y };
 };
 
-// Turns edges between measured boxes into curved SVG paths.
-// Boxes stacked on top of each other connect bottom->top, otherwise side->side.
-// Several edges leaving the same side of a box are spread out so they don't overlap,
-// except on `tips` boxes (diamonds), where they all meet at the point.
-// `elbow` draws a right-angle path, from a right end to a left end: its four curve points are the corners.
-// `sides` fixes the two sides an edge uses (a timeline uses right to left).
-// `around` makes an edge leave and enter from the top or bottom, arcing over whatever sits between.
-// `bands` (with `stub`) are the lane bands of the source and of the target: each pill stays inside its band, 4 px clear of the border.
-// `labelW` is the width of an edge's label pill: a stub pill keeps clear of it.
-// `stub` (wrapped lanes: the source pill width, the target pill width, and the width of a shorter source pill) draws a short stub from the source to a pill, and from a second pill into the target.
+/** Routes edges between measured boxes as curved SVG paths. `elbow` draws right-angle paths; `stub` splits a cross-lane edge in two. */
 export function route(
   edges: {
     id: string;
@@ -61,9 +49,9 @@ export function route(
   }[],
   rects: Record<string, Rect>,
   tips: Set<string> = new Set(),
-  avoid: Avoid[] = [], // what an elbow's vertical run and a stub pill must not cross (the timeline's outside labels; the boxes and gutters of lanes)
-  area?: Rect, // where a stub pill may sit: the lanes right of the gutter
-  lanes?: { bands: Rect[]; boxes: Rect[] }, // lane bands and boxes: an edge label (with `labelW`) moves along its path to sit inside one band
+  avoid: Avoid[] = [],
+  area?: Rect,
+  lanes?: { bands: Rect[]; boxes: Rect[] },
 ): Routed[] {
   const picks: Pick[] = [];
   for (const e of edges) {
@@ -89,7 +77,6 @@ export function route(
     picks.push({ ...e, a, b, sa, sb });
   }
 
-  // For every (box, side), list the edge ends that sit there, sorted by where the other end is.
   const ends = new Map<string, { pick: Pick; start: boolean }[]>();
   for (const pick of picks) {
     for (const start of [true, false]) {
@@ -107,7 +94,7 @@ export function route(
       const r = x.start ? x.pick.b : x.pick.a;
       return horiz ? cx(r) : cy(r);
     };
-    list.sort((p, q) => other(p) - other(q)); // stable: ties keep declaration order
+    list.sort((p, q) => other(p) - other(q));
     list.forEach((x, i) => {
       const r = x.start ? x.pick.a : x.pick.b;
       const f = tip ? 0.5 : (i + 1) / (list.length + 1);
@@ -123,16 +110,12 @@ export function route(
     });
   }
 
-  // The four points travel with the path string: `flowfig check` samples the curve, and nothing has to parse `d`.
   const drawn = (id: string, curve: [Pt, Pt, Pt, Pt], mid: Pt): Routed => {
     const [s, c1, c2, e] = curve;
     return { id, d: `M ${s.x} ${s.y} C ${c1.x} ${c1.y}, ${c2.x} ${c2.y}, ${e.x} ${e.y}`, mid, curve };
   };
-  // Stub pills are placed after the other edges. Each pill keeps clear of `avoid`, of the edge labels, of the pills and stubs
-  // before it, and of every edge path (sampled as `check` samples it).
   const pills: Rect[] = [];
   const paths: Pt[] = [];
-  // The same samples as segments: a stub line must not cross one.
   const runs: [Pt, Pt][] = [];
   const track = (pts: Pt[]) => {
     paths.push(...pts);
@@ -149,11 +132,6 @@ export function route(
     const s = anchor.get(p.id + ':s')!,
       e = anchor.get(p.id + ':e')!;
     if (p.stub) {
-      // The source pill goes right of the source and the target pill left of the target, at the nearest clear place: it slides
-      // away from the box in 8 px steps, and up or down inside the band in 4 px steps. The stub then runs on a slant. The last
-      // places are below and above the box. A place is clear if the pill and its stub keep clear of everything, and the pill stays
-      // inside its band. If no place is clear, the source pill tries its shorter text. If no place is clear then, the first place
-      // stays and `check` reports it.
       const [ow, iw, sw] = p.stub;
       const [sb, tb] = p.bands ?? [];
       const rows = (box: Rect, y0: number, band?: Rect) => {
@@ -162,13 +140,10 @@ export function route(
           : [box.y + box.h + 2, box.y - 20];
         return [y0, ...ys.filter((y) => y !== y0)];
       };
-      // A place and its stub. Beside the box, the stub runs from the box side to the near end of the pill. Under or over the box,
-      // it runs straight down or up between the box and the pill. `dir` is 1 for the source (box to pill), -1 for the target.
       const place = (box: Rect, from: Pt, dir: 1 | -1, r: Rect, side: boolean, tip: boolean): [Rect, Pt, Pt] => {
         let a: Pt, b: Pt;
         if (side) [a, b] = [from, { x: dir > 0 ? r.x : r.x + r.w, y: r.y + 9 }];
         else {
-          // A diamond has its point at the middle: the stub meets the point.
           const x = tip ? cx(box) : Math.min(Math.max(r.x + r.w / 2, box.x + 8, r.x + 8), box.x + box.w - 8, r.x + r.w - 8);
           const under = r.y >= box.y + box.h;
           [a, b] = [
@@ -183,7 +158,6 @@ export function route(
         const out: [Rect, Pt, Pt, number][] = [];
         for (let dx = STUB - 8 * Math.ceil((box.w + w) / 8); dx <= STUB + 240; dx += 8)
           for (const y of rows(box, from.y - 9, band)) {
-            // Closer than STUB to the box side, a pill sits under or over the box, with room for the stub.
             const x = dir > 0 ? from.x + dx : from.x - dx - w;
             if (dx < STUB && !(y >= box.y + box.h + STUB / 2 || y + 18 <= box.y - STUB / 2)) continue;
             if (dx < STUB && tip && !(x + 8 <= cx(box) && cx(box) <= x + w - 8)) continue;
@@ -191,7 +165,6 @@ export function route(
           }
         return out.sort((m, q) => m[3] - q[3]).map(([r, a, b]) => [r, a, b]);
       };
-      // A diamond with no room beside its point: the stub leaves the side point straight down or up, to a pill that spans its x.
       const along = (w: number, box: Rect, from: Pt, dir: 1 | -1, band?: Rect): [Rect, Pt, Pt][] => {
         if (!tips.has(dir > 0 ? p.from : p.to)) return [];
         const out: [Rect, Pt, Pt, number][] = [];
@@ -240,7 +213,6 @@ export function route(
       ];
       const seg = (a: Pt, b: Pt) =>
         Array.from({ length: 9 }, (_, i) => ({ x: a.x + ((b.x - a.x) * i) / 8, y: a.y + ((b.y - a.y) * i) / 8 }));
-      // A stub must not run through a box other than its own, nor through a pill or a label, nor cross an edge path.
       const free = (a: Pt, b: Pt, own: Rect) =>
         seg(a, b).every(
           (q) =>
@@ -251,8 +223,6 @@ export function route(
         (own: Rect, band: Rect | undefined, strict: boolean) =>
         ([r, a, b]: [Rect, Pt, Pt]) =>
           clear(r, band) && free(a, b, own) && (!strict || whole(a, b));
-      // The first place whose stub crosses no edge path. If none, the first place that clears everything else: in a dense
-      // figure no place may avoid every edge, and `check` then warns about the crossing.
       const first = (own: Rect, band: Rect | undefined, lists: [Rect, Pt, Pt][][]) =>
         [true, false].flatMap((strict) => lists.map((l, i) => [l.find(fits(own, band, strict)), i, !strict] as const)).find(([x]) => x);
       const hit = first(p.a, sb, [outs(ow), ...(sw == null ? [] : [outs(sw)])]);
@@ -284,10 +254,7 @@ export function route(
       };
     }
     if (p.elbow) {
-      // Under 16 px of gap, the elbow detours: out 8 px past the start, back to 8 px before the end, then forward into the target.
-      // A gap of 0 px or less takes the same detour.
       if (e.x - s.x < 16 && s.y === e.y) {
-        // One row: a straight line, since a detour would only double back.
         return { id: p.id, d: `M ${s.x} ${s.y} H ${e.x}`, mid: { x: (s.x + e.x) / 2, y: s.y }, curve: [s, s, e, e], elbow: [s, e] };
       }
       if (e.x - s.x < 16) {
@@ -302,12 +269,9 @@ export function route(
           elbow: [s, { x: mx, y: s.y }, { x: mx, y: my }, { x: ex, y: my }, { x: ex, y: e.y }, e],
         };
       }
-      // Over 16 px, the vertical run tries the midpoint, 8 px before the end, 8 px after the start, then any x in the gap.
-      // A vertical run keeps clear of every label and box; a horizontal run keeps clear of every box but the two ends.
       const own = (r: Rect) => [p.a, p.b].some((q) => q.x === r.x && q.y === r.y && q.w === r.w && q.h === r.h);
       const all = avoid.filter((r) => !own(r));
       const boxes = all.filter((r) => r.box);
-      // `m` is the margin: 2 px in the gap, 8 px on a detour, so a detour does not run along a box side.
       const vClear = (x: number, ya: number, yb: number, m = 2) =>
         !all.some((r) => x > r.x - m && x < r.x + r.w + m && Math.max(ya, yb) > r.y && Math.min(ya, yb) < r.y + r.h);
       const hClear = (y: number, xa: number, xb: number, list: Rect[] = boxes, m = 2) =>
@@ -318,14 +282,11 @@ export function route(
       );
       const mx = [mid, e.x - 8, s.x + 8, ...gap].find((x) => vClear(x, s.y, e.y) && hClear(s.y, s.x, x) && hClear(e.y, x, e.x));
       if (mx == null && boxes.length) {
-        // No x in the gap is clear: the elbow goes around. It runs right past the boxes in its way, along a clear row, back to
-        // a clear x at or before 8 px before the target, then down or up and forward into the target. The shortest clear
-        // detour wins; ties take the row nearest the middle.
         const right = Math.max(...boxes.map((r) => r.x + r.w)) + 12;
         const left = Math.min(...boxes.map((r) => r.x));
         const [top, bottom] = [Math.min(...boxes.map((r) => r.y)) - 12, Math.max(...boxes.map((r) => r.y + r.h)) + 12];
         let best: { len: number; off: number; x: number; y: number; ex: number } | undefined;
-        // ponytail: a grid search in 4 px steps, about 10^5 tries for a figure the size of the roadmap.
+        // ponytail: grid search in 4 px steps, about 10^5 tries on the roadmap.
         for (let x = s.x + 8; x <= right; x += 4) {
           if (!hClear(s.y, s.x, x)) continue;
           for (let ex = e.x - 8; ex >= left; ex -= 4) {
@@ -349,7 +310,6 @@ export function route(
           };
         }
       }
-      // If no path is clear, the midpoint stays and `check` reports the crossing.
       const x = mx ?? mid;
       const c1 = { x, y: s.y },
         c2 = { x, y: e.y };
@@ -362,7 +322,7 @@ export function route(
       };
     }
     if (p.around) {
-      // ponytail: arcs 50px past the two ends' boxes; a taller box in between can still be crossed.
+      // ponytail: arcs 50 px past the box ends; a taller box between can be crossed.
       const y = p.around === 'above' ? Math.min(p.a.y, p.b.y) - 50 : Math.max(p.a.y + p.a.h, p.b.y + p.b.h) + 50;
       return drawn(p.id, [s, { x: s.x, y }, { x: e.x, y }, e], { x: (s.x + e.x) / 2, y: (s.y + 6 * y + e.y) / 8 });
     }
@@ -386,9 +346,6 @@ export function route(
   return picks.map((p) => done.get(p)!);
 }
 
-/** The point of the path nearest its middle where a label pill of width `w` sits inside one band, LABEL_CLEAR from the border, clear of the boxes
- * and the earlier pills. If a short run leaves no such point, the pill keeps the x of a path point and moves up or down into the nearest
- * band, still on the path. If that fails too, the middle. Both renderers route through this, so they place the label alike. */
 function labelInBand(r: Routed, w: number, { bands, boxes }: { bands: Rect[]; boxes: Rect[] }, pills: Rect[]): Pt {
   const hit = (a: Rect, b: Rect, m: number) => a.x < b.x + b.w + m && b.x < a.x + a.w + m && a.y < b.y + b.h + m && b.y < a.y + a.h + m;
   const ts = Array.from({ length: 65 }, (_, i) => i / 64).sort((a, b) => Math.abs(a - 0.5) - Math.abs(b - 0.5));
@@ -410,7 +367,7 @@ function labelInBand(r: Routed, w: number, { bands, boxes }: { bands: Rect[]; bo
   return r.mid;
 }
 
-/** True if the segment a-b crosses the segment c-d. The ends of a-b are trimmed by 1.5 px, so a touch at a box side does not count. */
+/** True if segment a-b crosses c-d. The ends of a-b are trimmed by 1.5 px. */
 export function crosses(a: Pt, b: Pt, c: Pt, d: Pt): boolean {
   const len = Math.hypot(b.x - a.x, b.y - a.y);
   if (len < 4) return false;

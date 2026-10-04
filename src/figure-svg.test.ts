@@ -7,8 +7,6 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { AGENT_TEXT, GUIDE } from './guide.ts';
 
-// The CLI is how a figure actually gets made, and its promise is that a spec never has to be kept:
-// it goes in on stdin and comes back out of the SVG.
 const cli = join(dirname(dirname(fileURLToPath(import.meta.url))), 'scripts', 'figure-svg.mjs');
 const SPEC = {
   props: {
@@ -186,7 +184,6 @@ test('check prints the figure counts, and --json keeps the findings array', () =
   assert.ok(Array.isArray(JSON.parse(run(['check', '-', '--json'], JSON.stringify(spec)).stdout)));
 });
 
-// Bad use is exit 2 with a message, never a stack trace and never exit 1 (that code means "errors found").
 const bad = (args: string[], input = JSON.stringify(SPEC)) => {
   const dir = mkdtempSync(join(tmpdir(), 'figure-svg-'));
   try {
@@ -364,7 +361,7 @@ test('a render with --open opens the SVG; check --open and a failed render open 
   const dir = mkdtempSync(join(tmpdir(), 'figure-svg-'));
   try {
     mkdirSync(join(dir, 'tmp'));
-    // `true` stands in for the system opener: it starts, exits 0, and opens nothing. Windows has no `true`; node starts, fails on the page and opens nothing.
+    // Windows has no `true`: node is the opener there.
     const tmp = join(dir, 'tmp');
     const env = {
       ...process.env,
@@ -403,7 +400,6 @@ test('gif exits 2 for bad use, before a browser starts', () => {
     execFileSync('node', [cli, '-', one], { input: JSON.stringify(SPEC) });
     execFileSync('node', [cli, '-', none, '--no-check'], { input: JSON.stringify({ props: { ...SPEC.props, steps: [] } }) });
     writeFileSync(plain, '<svg xmlns="http://www.w3.org/2000/svg"></svg>');
-    // A missing CHROME_PATH: the run can never reach a real browser.
     const env = { ...process.env, CHROME_PATH: join(dir, 'no-such-chrome') };
     const cases: [string[], RegExp][] = [
       [[], /usage: flowfig gif/],
