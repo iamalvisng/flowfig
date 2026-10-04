@@ -1,6 +1,6 @@
 import { dirname } from 'node:path';
 import { codeFile, esc, langOf, locate, matchClose, outside, readFile, type CodeFile, type Lang, type Read } from './code.ts';
-import { importsOf, leadsTo } from './imports.ts';
+import { importsOf, leadsTo, type Import } from './imports.ts';
 import {
   ancestors,
   declIn,
@@ -94,6 +94,13 @@ const defaultIs = (ti: CodeFile, symbol: string) =>
 
 const label = (s: Src) => s.symbol ?? s.path;
 
+const twice = (fi: CodeFile, imps: Import[], n: string) =>
+  imps.filter((i) => i.local === n).length +
+    (fi.lang === 'py' && new RegExp(`^(?:(?:async\\s+)?def|class)\\s+${esc(n)}\\b|^${esc(n)}\\s*(?::[^=\\n]*)?=(?!=)`, 'm').test(fi.code)
+      ? 1
+      : 0) >
+  1;
+
 function viaResult(root: string, from: Src, to: Src | undefined, via: string, read: Read, cache: Map<string, CodeFile | null>) {
   const body = (s: Src) => {
     const file = codeFile(root, s.path, read, cache);
@@ -127,7 +134,8 @@ function fileResult(
   const used = (n: string) => word(n).test(body) && !shadows(body, n, fi.lang, fromName, whole);
   const names: string[] = [];
   let open: string | undefined;
-  for (const i of importsOf(root, fi, read)) {
+  const imps = importsOf(root, fi, read);
+  for (const i of imps) {
     if (i.local === '*' || i.local === '.') {
       const top = [
         ...ti.code.matchAll(
@@ -136,6 +144,7 @@ function fileResult(
       ]
         .map((m) => m[1] ?? m[2])
         .filter(used);
+      if (fi.lang === 'py' && top.length) return { result: 'unsure' as const, reason: `${top[0]} can come from a star import` };
       if (i.path == null) open ??= top.length ? i.local : undefined;
       else names.push(...top.filter((n) => leadsTo(root, i.path!, to.path, n, read, cache) != null));
       continue;
@@ -155,6 +164,7 @@ function fileResult(
     for (const m of ti.code.matchAll(/^(?:func|type|var|const)\s+([\p{L}_][\p{L}\p{N}_]*)/gmu)) names.push(m[1]);
   const hit = names.find(used);
   const who = label(from);
+  if (hit && twice(fi, imps, hit)) return { result: 'unsure' as const, reason: `${hit} has two bindings` };
   if (hit) return { result: 'found' as const, reason: `${who} uses ${hit} from ${to.path}` };
   if (open) return { result: 'unsure' as const, reason: `the import of ${open} is not read` };
   return { result: 'not-found' as const, reason: `${who} does not use ${to.path}` };
@@ -208,6 +218,7 @@ export function edgeResult(
     ti.lang === 'cs' ? normType(/^[^{;]*?\(\s*this\s+([\w.<>?]+)/.exec(ti.code.slice(tb.start, tb.end))?.[1], 'cs')?.name : null;
   const imps = importsOf(root, fi, read);
   const byLocal = new Map(imps.map((i) => [i.local, i]));
+  const pyStar = lang === 'py' && imps.some((i) => i.local === '*');
   const isDefault = defaultIs(ti, to.symbol);
   const reach = (path: string | null | undefined, name: string) => (path == null ? null : leadsTo(root, path, to.path, name, read, cache));
   const isCallee = (r: string | null) => r != null && (r === '*' || r === toName || (r === 'default' && isDefault));
@@ -237,21 +248,26 @@ export function edgeResult(
       if ((lang === 'java' || lang === 'cs') && owner && /^\s*[(<]/.test(body.slice(idx + n.length))) {
         if (!fromContainer) return unsure(`the class of ${who} is not known`);
         const r = reaches(cx, { kind: 'type', name: fromContainer, ctx: fi }, ownerDecl, owner, toName, to.path);
+        if (r === 'yes') return found('on this');
         const st = new RegExp(`^\\s*(?:import|using)\\s+static\\s+([\\w.]+?)(?:\\.(${esc(n)}|\\*))?\\s*;`, 'gm');
-        const own = fromDecl != null && [fromDecl, ...ancestors(cx, fromDecl).map((a) => a.d)].some((d) => d && defines(cx, d, n));
-        const inFile = (m: RegExpMatchArray) => lang === 'java' && to.path.endsWith(`${m[1].replace(/\./g, '/')}.java`);
-        const statics =
-          r === 'yes' || own
-            ? []
-            : [...fi.keep.matchAll(st)].filter((m) => (lang === 'cs' || m[2]) && !(inFile(m) && m[1].split('.').at(-1) !== owner));
-        if (statics.some(inFile)) return found('through a static import');
-        if (statics.length) return unsure(`the static import of ${n} is not read`);
-        return byReach(r, 'on this');
+        const statics = [...fi.keep.matchAll(st)].filter((m) => lang === 'cs' || m[2]);
+        if (!statics.length) return byReach(r, 'on this');
+        const exact = statics.filter((m) => m[2] === n);
+        const scope = fromParts.slice(0, -1).map((c) => declIn(fi, c));
+        const clear = scope.every((d) => {
+          const up = d && ancestors(cx, d);
+          return up && up.every((a) => a.d) && [d, ...up.map((a) => a.d!)].every((x) => !defines(cx, x, n));
+        });
+        const named = (m: RegExpMatchArray) =>
+          lang === 'java' && m[1].split('.').at(-1) === owner && to.path.endsWith(`${m[1].replace(/\./g, '/')}.java`);
+        if (exact.length === 1 && named(exact[0]) && clear) return found('through a static import');
+        return unsure(`the static import of ${n} is not read`);
       }
       if (lang === 'java' && owner && n !== owner) return ignore;
       if ((lang === 'java' || lang === 'cs' || lang === 'rs') && !owner && isUpper(n)) {
         const d = findType(cx, fi, n);
         if (d) return d.info.path === to.path ? found('as a type') : ignore;
+        if (lang === 'rs') return unsure(`the type ${n} is not read`);
       }
       if (owner && (lang === 'ts' || lang === 'py' || lang === 'go' || lang === 'rs')) {
         if (lang === 'ts' && new RegExp(`\\{[^}]*\\b${esc(n)}\\b[^}]*\\}\\s*=\\s*this\\b`).test(body)) {
@@ -263,7 +279,9 @@ export function edgeResult(
       }
       const dynamic = new RegExp(`\\{[^}]*\\b${esc(n)}\\b[^}]*\\}\\s*=\\s*(?:await\\s+)?(?:import|require)\\(`).test(body);
       if ((shadowed || (n === toName && !dynamic && localType(cx, fi, body, n, lang))) && n !== fromName) return ignore;
+      if (pyStar) return unsure(`${n} can come from a star import`);
       const bind = byLocal.get(n);
+      if (bind && twice(fi, imps, n)) return unsure(`${n} has two bindings`);
       if (bind?.path === null) return unsure(`the import of ${n} is not read`);
       if (bind) {
         const r = reach(bind.path, bind.name);
@@ -277,13 +295,14 @@ export function edgeResult(
       }
       if (same) return found('in the same file');
       if (lang === 'rs' && rustUses(fi, n, to.path)) return found('through a use item');
-      const stars = imps.filter((i) => i.local === '*' || i.local === '.');
-      if (stars.some((i) => isCallee(reach(i.path, n)))) return found('through a star import');
-      if (stars.some((i) => i.path == null)) return unsure(`the star import of ${n} is not read`);
+      const dots = imps.filter((i) => i.local === '.');
+      if (dots.some((i) => isCallee(reach(i.path, n)))) return found('through a dot import');
+      if (dots.some((i) => i.path == null)) return unsure(`the dot import of ${n} is not read`);
       return (lang === 'java' || lang === 'cs') && !owner ? unsure(`the import of ${n} is not read`) : ignore;
     }
     if (rc.complex) return unsure(rc.chain.length ? 'the receiver chain has a call' : 'the receiver is an expression');
     const chain = rc.chain;
+    if (pyStar && !shadows(body, chain[0], lang, fromName, whole)) return unsure(`${chain[0]} can come from a star import`);
     if (owner && chain.length === 1 && chain[0] === owner)
       return byReach(reaches(cx, { kind: 'type', name: owner, ctx: fi }, ownerDecl, owner, toName, to.path), 'through its class');
     const rt = receiver(cx, fi, body, chain, fromContainer, fromDecl);

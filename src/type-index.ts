@@ -7,7 +7,7 @@ export type Bind = { mod: string | null; imported: string; dir: boolean };
 type Globals = {
   types: Map<string, string[]>;
   impls: Map<string, Set<string>>;
-  aliases: Map<string, string>;
+  aliases: Map<string, { to: string; path: string }>;
   usings: Set<string>;
   projects: string[];
 };
@@ -76,7 +76,7 @@ export function global(cx: Ctx, lang: 'java' | 'cs' | 'rs'): Globals {
     }
     if (lang === 'cs') for (const m of src.matchAll(/^\s*global\s+using\s+([\w.]+)\s*;/gm)) g.usings.add(`${project(g, rel)}|${m[1]}`);
     if (lang !== 'rs') continue;
-    for (const m of src.matchAll(/\btype\s+(\w+)\s*(?:<[^>]*>)?\s*=\s*([^;]+);/g)) g.aliases.set(m[1], m[2]);
+    for (const m of src.matchAll(/\btype\s+(\w+)\s*(?:<[^>]*>)?\s*=\s*([^;]+);/g)) g.aliases.set(m[1], { to: m[2], path: rel });
     for (const m of src.matchAll(/\bimpl\b\s*(?:<[^>]*>)?\s*([\w:]+)(?:<[^>]*>)?\s+for\s+(?:&\s*)?([\w:]+)/g)) {
       const ty = lastSeg(m[2]);
       g.impls.set(ty, (g.impls.get(ty) ?? new Set()).add(lastSeg(m[1])));
@@ -160,8 +160,10 @@ function findType0(cx: Ctx, ctx: CodeFile, name: string, qual?: string | null): 
   }
   const all = (global(cx, lang).types.get(name) ?? []).map((p) => declIn(file(cx, p), name)).filter((d) => d != null);
   if (lang === 'rs') {
-    if (all.length <= 1) return all[0] ?? null;
-    const hits = all.filter((d) => rustUses(ctx, name, d.info.path));
+    const mods = qual ? [qual] : rustUsePaths(ctx, name);
+    if (!mods.length || mods.some((m) => !/^(crate|self|super)\b/.test(m))) return null;
+    if (all.length === 1) return all[0];
+    const hits = all.filter((d) => mods.some((m) => lastSeg(m) === rustMod(d.info.path)));
     return hits.length === 1 ? hits[0] : null;
   }
   const ns = (f: CodeFile) => /\bnamespace\s+([\w.]+)/.exec(f.code)?.[1] ?? '';
@@ -288,6 +290,32 @@ export function rustUses(fi: CodeFile, n: string, tp: string): boolean {
     if (new RegExp(`\\b${esc(mod)}::\\*`).test(m[1])) return true;
   }
   return false;
+}
+
+function expandUse(item: string): string[] {
+  const open = item.indexOf('{');
+  if (open < 0) return [item.trim()];
+  const close = matchClose(item, open);
+  const parts: string[] = [];
+  let depth = 0;
+  let last = open + 1;
+  for (let i = open + 1; i < close; i++) {
+    if (item[i] === '{') depth++;
+    else if (item[i] === '}') depth--;
+    else if (item[i] === ',' && depth === 0) {
+      parts.push(item.slice(last, i));
+      last = i + 1;
+    }
+  }
+  parts.push(item.slice(last, close));
+  return parts.filter((p) => p.trim()).flatMap((p) => expandUse(item.slice(0, open) + p.trim()));
+}
+
+function rustUsePaths(fi: CodeFile, n: string): string[] {
+  const paths = [...fi.keep.matchAll(/\buse\s+([^;]+);/g)].flatMap((m) => expandUse(m[1].replace(/\s+/g, ' ')));
+  const named = paths.filter((p) => (/\sas\s+(\w+)$/.exec(p)?.[1] ?? lastSeg(p)) === n);
+  if (named.length) return named.map((p) => (/\sas\s/.test(p) ? '#alias' : p.split('::').slice(0, -1).join('::')));
+  return paths.filter((p) => p.endsWith('::*')).map((p) => p.slice(0, -3));
 }
 
 export const rustMod = (tp: string) => (basename(tp) === 'mod.rs' ? basename(dirname(tp)) : basename(tp, '.rs'));

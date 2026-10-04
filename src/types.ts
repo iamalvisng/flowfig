@@ -374,14 +374,14 @@ function topLevel(fi: CodeFile): string {
   return out;
 }
 
-function rustUnwrap(cx: Ctx, raw: string, depth: number): string {
+function rustUnwrap(cx: Ctx, raw: string, depth: number, at?: string): [string, string | undefined] {
   const strip = (s: string) =>
     s
       .trim()
       .replace(/^&\s*('\w+\s+)?/, '')
       .replace(/^(mut|dyn|impl)\s+/, '');
   let t = strip(strip(raw));
-  if (depth > 4) return t;
+  if (depth > 4) return [t, at];
   const g = global(cx, 'rs');
   const w = /^([\w:]+)<(.+)>$/.exec(t);
   if (w) {
@@ -395,17 +395,18 @@ function rustUnwrap(cx: Ctx, raw: string, depth: number): string {
       arg += ch;
     }
     arg = arg.trim();
-    if (/^'\w+$/.test(arg)) return rustUnwrap(cx, W, depth + 1);
-    if (!g.types.has(W) && !g.impls.has(W) && !g.aliases.has(W)) return rustUnwrap(cx, arg, depth + 1);
+    if (/^'\w+$/.test(arg)) return rustUnwrap(cx, W, depth + 1, at);
+    if (!g.types.has(W) && !g.impls.has(W) && !g.aliases.has(W)) return rustUnwrap(cx, arg, depth + 1, at);
     t = W;
   }
   const alias = g.aliases.get(lastSeg(t.replace(/<.*$/, '')));
-  return alias ? rustUnwrap(cx, alias, depth + 1) : t;
+  return alias ? rustUnwrap(cx, alias.to, depth + 1, alias.path) : [t, at];
 }
 
 function typeFrom(cx: Ctx, raw: string, lang: Lang, ctx: CodeFile): Rt {
-  const n = normType(lang === 'rs' ? rustUnwrap(cx, raw, 0) : raw, lang);
-  return n ? { kind: 'type', name: n.name, qual: n.qual, ctx } : { kind: 'unknown' };
+  const [t, at] = lang === 'rs' ? rustUnwrap(cx, raw, 0) : [raw];
+  const n = normType(t, lang);
+  return n ? { kind: 'type', name: n.name, qual: n.qual, ctx: (at && file(cx, at)) || ctx } : { kind: 'unknown' };
 }
 
 const NO_RT: Rt = { kind: 'unknown' };

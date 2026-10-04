@@ -340,22 +340,20 @@ test('a namespace re-export leads only to the member that the body calls on it',
   assert.equal(run(files, 'src/signup.ts#signup', 'src/auth.ts#verify'), 'found');
 });
 
-test('a Java bare call goes to the own method before a static import', () => {
+test('a Java static import gives found only when it names the callee class and no class in scope declares the name', () => {
+  const auth = 'package a;\npublic class Auth {\n  public static void verify() {}\n}\nclass Helper {\n  static void verify() {}\n}\n';
   const files = {
-    'src/a/Auth.java': 'package a;\npublic class Auth {\n  public static void verify() {}\n}\n',
-    'src/b/Login.java': 'package b;\nimport static a.Auth.*;\npublic class Login {\n  void verify() {}\n  void login() { verify(); }\n}\n',
-  };
-  assert.equal(run(files, 'src/b/Login.java#Login.login', 'src/a/Auth.java#Auth.verify'), 'not-found');
-});
-
-test('a Java static import leads only to the class it names, not to another class in the same file', () => {
-  const files = {
-    'src/a/Auth.java':
-      'package a;\npublic class Auth {\n  public static void verify() {}\n}\nclass Helper {\n  static void verify() {}\n}\n',
+    'src/a/Auth.java': auth,
     'src/b/Login.java': 'package b;\nimport static a.Auth.verify;\npublic class Login {\n  void login() { verify(); }\n}\n',
+    'src/b/Outer.java':
+      'package b;\nimport static a.Auth.verify;\npublic class Outer {\n  void verify() {}\n  class Inner {\n    void login() { verify(); }\n  }\n}\n',
+    'src/b/Act.java':
+      'package b;\nimport static a.Auth.verify;\nimport android.app.Activity;\npublic class Act extends Activity {\n  void login() { verify(); }\n}\n',
   };
   assert.equal(run(files, 'src/b/Login.java#Login.login', 'src/a/Auth.java#Auth.verify'), 'found');
-  assert.equal(run(files, 'src/b/Login.java#Login.login', 'src/a/Auth.java#Helper.verify'), 'not-found');
+  assert.equal(run(files, 'src/b/Login.java#Login.login', 'src/a/Auth.java#Helper.verify'), 'unsure');
+  assert.equal(run(files, 'src/b/Outer.java#Outer.Inner.login', 'src/a/Auth.java#Auth.verify'), 'unsure');
+  assert.equal(run(files, 'src/b/Act.java#Act.login', 'src/a/Auth.java#Auth.verify'), 'unsure');
 });
 
 test('a type name unique in the repo but not imported is outside the repo: java.lang and a C# using', () => {
@@ -379,12 +377,8 @@ test('a Rust receiver type that the repo does not declare is unsure, not found b
   assert.equal(run(files, 'src/c.rs#f', 'src/ext.rs#Option.map'), 'unsure');
 });
 
-test('a star import, a Go dot import and a go.work module lead to the callee; an unresolved star import is unsure', () => {
+test('a Go dot import and a go.work module lead to the callee', () => {
   const files = {
-    'app/__init__.py': '',
-    'app/db.py': 'def save():\n    pass\n',
-    'app/api.py': 'from app.db import *\n\ndef create():\n    save()\n',
-    'app/vendor.py': 'from vendor.db import *\n\ndef create():\n    save()\n',
     'go.work': 'go 1.22\nuse (\n\t./svc\n\t./lib\n)\n',
     'svc/go.mod': 'module example.com/svc\n\nrequire example.com/lib v0.0.0\n',
     'lib/go.mod': 'module example.com/lib\n',
@@ -392,9 +386,55 @@ test('a star import, a Go dot import and a go.work module lead to the callee; an
     'svc/api/api.go': 'package api\nimport "example.com/lib/store"\nfunc Create() {\n\tstore.Save()\n}\n',
     'svc/dot/dot.go': 'package dot\nimport . "example.com/lib/store"\nfunc Create() {\n\tSave()\n}\n',
   };
-  assert.equal(run(files, 'app/api.py#create', 'app/db.py#save'), 'found');
-  assert.equal(run(files, 'app/api.py#create', 'app/db.py'), 'found');
-  assert.equal(run(files, 'app/vendor.py#create', 'app/db.py#save'), 'unsure');
   assert.equal(run(files, 'svc/api/api.go#Create', 'lib/store/store.go#Save'), 'found');
   assert.equal(run(files, 'svc/dot/dot.go#Create', 'lib/store/store.go#Save'), 'found');
+});
+
+test('a name that can come from a Python star import is unsure, never found or not found', () => {
+  const py = { 'app/__init__.py': '', 'app/db.py': 'def save():\n    pass\n', 'app/other.py': 'def save():\n    pass\n' };
+  const local = { ...py, 'app/api.py': 'from app.db import *\n\ndef save():\n    pass\n\ndef create():\n    save()\n' };
+  const late = { ...py, 'app/api.py': 'from app.other import save\nfrom app.db import *\n\ndef create():\n    save()\n' };
+  const all = {
+    ...py,
+    'app/db.py': "__all__ = ['load']\n\ndef save():\n    pass\n\ndef load():\n    pass\n",
+    'app/api.py': 'from app.db import *\nfrom vendor import *\n\ndef create():\n    save()\n',
+  };
+  assert.equal(run(local, 'app/api.py#create', 'app/db.py#save'), 'unsure');
+  assert.equal(run(late, 'app/api.py#create', 'app/db.py#save'), 'unsure');
+  assert.equal(run(all, 'app/api.py#create', 'app/db.py'), 'unsure');
+});
+
+test('a Python name bound by two imports, or by an import and a definition, is unsure', () => {
+  const py = { 'app/__init__.py': '', 'app/db.py': 'def save():\n    pass\n', 'app/other.py': 'def save():\n    pass\n' };
+  const two = { ...py, 'app/api.py': 'from app.db import save\nfrom app.other import save\n\ndef create():\n    save()\n' };
+  const redef = { ...py, 'app/api.py': 'from app.db import save\n\ndef save():\n    pass\n\ndef create():\n    save()\n' };
+  assert.equal(run(two, 'app/api.py#create', 'app/db.py#save'), 'unsure');
+  assert.equal(run(redef, 'app/api.py#create', 'app/db.py#save'), 'unsure');
+});
+
+test('a Rust type resolves to the repo only through the file, a crate, self or super path; another path is unsure', () => {
+  const err = 'pub struct Error {\n    code: u8,\n}\nimpl Error {\n    pub fn kind(&self) -> u8 {\n        self.code\n    }\n}\n';
+  const at = (c: string) => ({
+    'src/lib.rs': 'mod error;\nmod c;\n',
+    'src/error.rs': err,
+    'src/c.rs': `${c}fn f(e: Error) {\n    e.kind();\n}\n`,
+  });
+  const kind = (c: string) => run(at(c), 'src/c.rs#f', 'src/error.rs#Error.kind');
+  assert.equal(kind('use std::io::Error;\n'), 'unsure');
+  assert.equal(kind('use std::io::{self, Error};\n'), 'unsure');
+  assert.equal(kind(''), 'unsure');
+  assert.equal(kind('use crate::error::Error;\n'), 'found');
+  assert.equal(kind('use super::error::*;\n'), 'found');
+  const client = {
+    'src/lib.rs': 'mod client;\nmod c;\n',
+    'src/client.rs': 'pub struct Client;\nimpl Client {\n    pub fn get(&self) {}\n}\n',
+    'src/c.rs': 'use reqwest::Client;\nfn f(c: Client) {\n    c.get();\n}\n',
+  };
+  assert.equal(run(client, 'src/c.rs#f', 'src/client.rs#Client.get'), 'unsure');
+  const alias = {
+    ...client,
+    'src/client.rs': `${client['src/client.rs']}pub type Shared = Arc<Client>;\n`,
+    'src/c.rs': 'use crate::client::Shared;\nfn f(c: Shared) {\n    c.get();\n}\n',
+  };
+  assert.equal(run(alias, 'src/c.rs#f', 'src/client.rs#Client.get'), 'found');
 });
