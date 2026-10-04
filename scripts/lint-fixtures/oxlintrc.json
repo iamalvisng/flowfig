@@ -1,0 +1,11 @@
+{
+  "categories": { "correctness": "off" },
+  "jsPlugins": ["../lint-plugin.js"],
+  "rules": {
+    "no-console": "error",
+    "no-warning-comments": "error",
+    "flowfig/comments": "error",
+    "flowfig/test-asserts": ["error", { "assertNames": ["assert", "near"] }],
+    "flowfig/svg-snapshot": "error"
+  }
+}

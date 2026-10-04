@@ -8,6 +8,8 @@ repo=$(cd "$(dirname "$0")/.." && pwd)
 dir=$(mktemp -d)
 trap 'rm -rf "$dir"' EXIT
 
+node -e "if (Object.keys(require('$repo/package.json').dependencies ?? {}).length) process.exit(1)" || { echo 'package.json has a dependency'; exit 1; }
+
 tarball=$(cd "$repo" && npm pack --silent --pack-destination "$dir" | tail -n 1)
 cd "$dir"
 npm init -y >/dev/null
