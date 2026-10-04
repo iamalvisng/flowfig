@@ -122,17 +122,29 @@ function fileResult(
   read: Read,
   cache: Map<string, CodeFile | null>,
 ) {
-  const names = importsOf(root, fi, read)
-    .filter((i) => i.path != null && leadsTo(root, i.path, to.path, read, cache))
-    .map((i) => i.local);
+  const fromName = from.symbol?.split('.').at(-1);
+  const used = (n: string) => word(n).test(body) && !shadows(body, n, fi.lang, fromName, whole);
+  const names: string[] = [];
+  let open: string | undefined;
+  for (const i of importsOf(root, fi, read)) {
+    if (!used(i.local)) continue;
+    if (i.path == null) {
+      open ??= i.local;
+      continue;
+    }
+    const members =
+      i.name === '*' && langOf(i.path) != null
+        ? [...body.matchAll(new RegExp(`(?<![\\w$.])${esc(i.local)}\\s*\\.\\s*([\\w$]+)`, 'g'))].map((m) => m[1])
+        : [i.name];
+    if (members.some((m) => leadsTo(root, i.path!, to.path, m, read, cache) != null)) names.push(i.local);
+  }
   if (fi.lang === 'go' && dirname(from.path) === dirname(to.path) && from.path !== to.path)
     for (const m of ti.code.matchAll(/^(?:func|type|var|const)\s+([\p{L}_][\p{L}\p{N}_]*)/gmu)) names.push(m[1]);
-  const fromName = from.symbol?.split('.').at(-1);
-  const hit = names.find((n) => word(n).test(body) && !shadows(body, n, fi.lang, fromName, whole));
+  const hit = names.find(used);
   const who = label(from);
-  return hit
-    ? { result: 'found' as const, reason: `${who} uses ${hit} from ${to.path}` }
-    : { result: 'not-found' as const, reason: `${who} does not use ${to.path}` };
+  if (hit) return { result: 'found' as const, reason: `${who} uses ${hit} from ${to.path}` };
+  if (open) return { result: 'unsure' as const, reason: `the import of ${open} is not read` };
+  return { result: 'not-found' as const, reason: `${who} does not use ${to.path}` };
 }
 
 export function edgeResult(
@@ -183,9 +195,13 @@ export function edgeResult(
     ti.lang === 'cs' ? normType(/^[^{;]*?\(\s*this\s+([\w.<>?]+)/.exec(ti.code.slice(tb.start, tb.end))?.[1], 'cs')?.name : null;
   const imps = importsOf(root, fi, read);
   const byLocal = new Map(imps.map((i) => [i.local, i]));
-  const leads = (path: string | null) => path != null && leadsTo(root, path, to.path, read, cache);
+  const isDefault = defaultIs(ti, to.symbol);
+  const reach = (path: string | null | undefined, name: string) => (path == null ? null : leadsTo(root, path, to.path, name, read, cache));
+  const isCallee = (r: string | null) => r != null && (r === '*' || r === toName || (r === 'default' && isDefault));
   const names = new Set([toName]);
-  for (const i of imps) if (i.name === toName || (i.name === 'default' && leads(i.path) && defaultIs(ti, to.symbol))) names.add(i.local);
+  for (const i of imps)
+    if (i.name !== '*' && (i.path == null ? i.name === toName || (i.name === 'default' && isDefault) : isCallee(reach(i.path, i.name))))
+      names.add(i.local);
   const same = from.path === to.path || ((lang === 'go' || lang === 'java') && dirname(from.path) === dirname(to.path));
   const who = label(from);
   const found = (how: string): Verdict => ({ res: 'found', why: `${who} calls ${toName} ${how}` });
@@ -203,7 +219,13 @@ export function edgeResult(
         return findType(cx, fi, n)?.info.path === to.path ? found('with new') : not(`${who} creates another ${n}`);
       if ((lang === 'java' || lang === 'cs') && owner && /^\s*[(<]/.test(body.slice(idx + n.length))) {
         if (!fromContainer) return unsure(`the class of ${who} is not known`);
-        return byReach(reaches(cx, { kind: 'type', name: fromContainer, ctx: fi }, ownerDecl, owner, toName, to.path), 'on this');
+        const r = reaches(cx, { kind: 'type', name: fromContainer, ctx: fi }, ownerDecl, owner, toName, to.path);
+        const st = new RegExp(`^\\s*(?:import|using)\\s+static\\s+([\\w.]+?)(?:\\.(${esc(n)}|\\*))?\\s*;`, 'gm');
+        const statics = r === 'yes' ? [] : [...fi.keep.matchAll(st)].filter((m) => lang === 'cs' || m[2]);
+        if (statics.some((m) => lang === 'java' && to.path.endsWith(`${m[1].replace(/\./g, '/')}.java`)))
+          return found('through a static import');
+        if (statics.length) return unsure(`the static import of ${n} is not read`);
+        return byReach(r, 'on this');
       }
       if (lang === 'java' && owner && n !== owner) return ignore;
       if ((lang === 'java' || lang === 'cs' || lang === 'rs') && !owner && isUpper(n)) {
@@ -214,11 +236,12 @@ export function edgeResult(
         if (lang === 'ts' && new RegExp(`\\{[^}]*\\b${esc(n)}\\b[^}]*\\}\\s*=\\s*this\\b`).test(body)) return found('through this');
         return lang === 'rs' && same && n === toName ? found('in the same file') : ignore;
       }
-      if ((shadowed || (n === toName && localType(cx, fi, body, n, lang))) && n !== fromName) return ignore;
-      if (n !== toName) return found('through an alias');
+      const dynamic = new RegExp(`\\{[^}]*\\b${esc(n)}\\b[^}]*\\}\\s*=\\s*(?:await\\s+)?(?:import|require)\\(`).test(body);
+      if ((shadowed || (n === toName && !dynamic && localType(cx, fi, body, n, lang))) && n !== fromName) return ignore;
       const bind = byLocal.get(n);
-      if (bind && leads(bind.path)) return found('through an import');
-      if (!bind && same) return found('in the same file');
+      if (bind?.path === null) return unsure(`the import of ${n} is not read`);
+      if (bind) return isCallee(reach(bind.path, bind.name)) ? found(n === toName ? 'through an import' : 'through an alias') : ignore;
+      if (same) return found('in the same file');
       if (lang === 'rs' && rustUses(fi, n, to.path)) return found('through a use item');
       return (lang === 'java' || lang === 'cs') && !owner ? unsure(`the import of ${n} is not read`) : ignore;
     }
@@ -233,13 +256,14 @@ export function edgeResult(
         : not(`${who} uses another module`);
     }
     if (rt.kind === 'module') {
-      if (!rt.mod) return not(`${who} uses a module outside the repo`);
+      if (!rt.mod) return unsure(`the module of ${chain[0]} is not read`);
       if (owner && ownerDecl) return not(`${who} uses a module member for a method`);
-      return leads(rt.mod) ? found('through a module') : not(`${who} uses another module`);
+      return isCallee(reach(rt.mod, toName)) ? found('through a module') : not(`${who} uses another module`);
     }
     if (rt.kind === 'value') {
       if (owner) return unsure(`the type of ${chain.join('.')} is not read`);
-      return leads(rt.mod ?? null) ? found('through an imported value') : not(`${who} uses another value`);
+      if (rt.mod == null) return unsure(`the module of ${chain[0]} is not read`);
+      return reach(rt.mod, rt.name!) != null ? found('through an imported value') : not(`${who} uses another value`);
     }
     if (rt.kind === 'super')
       return fromDecl && ancestors(cx, fromDecl).some((x) => x.name === owner)

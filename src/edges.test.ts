@@ -185,6 +185,62 @@ test('one name bound to two types in one function: a call on it is unsure, not "
   assert.equal(run(files, 'src/run.ts#run', 'src/bold.ts#Bold.toText'), 'unsure');
 });
 
+test('an import that does not resolve is unsure; a workspace path, a go.mod, a src layout, a tsconfig alias and a re-export chain resolve', () => {
+  const files = {
+    'packages/auth/src/index.ts': 'export function verify() {}\n',
+    'apps/web/login.ts': "import { verify } from '@acme/auth';\nexport function login() { verify(); }\n",
+    'backend/go.mod': 'module example.com/app\n',
+    'backend/store/store.go': 'package store\nfunc Save() {}\n',
+    'backend/api/api.go': 'package api\nimport "example.com/app/store"\nfunc Create() { store.Save() }\n',
+    'src/app/__init__.py': '',
+    'src/app/db.py': 'def save():\n    pass\n',
+    'src/app/api.py': 'from app.db import save\n\ndef create():\n    save()\n',
+    'tsconfig.json': '{ "extends": "./tsconfig.base.json", "compilerOptions": { "paths": { "@auth": ["src/auth.ts"] } } }',
+    'tsconfig.base.json': '{ "compilerOptions": { "paths": { "@app/*": ["src/*"] } } }',
+    'src/auth.ts': 'export function verify() {}\n',
+    'src/a.ts': "import { verify } from '@auth';\nexport function a() { verify(); }\n",
+    'src/b.ts': "import { verify } from '@app/auth';\nexport function b() { verify(); }\n",
+    'src/barrel/index.ts': "export * from '../auth.ts';\n",
+    'src/index.ts': "export * from './barrel/index.ts';\n",
+    'src/c.ts': "import { verify } from './index.ts';\nexport function c() { verify(); }\n",
+    'src/d.ts': "export async function d() { const { verify } = await import('./auth.ts'); verify(); }\n",
+    'java/a/Auth.java': 'package a;\npublic class Auth {\n  public static void verify() {}\n}\n',
+    'java/b/Login.java': 'package b;\nimport static a.Auth.verify;\npublic class Login {\n  void login() { verify(); }\n}\n',
+  };
+  assert.equal(run(files, 'apps/web/login.ts#login', 'packages/auth/src/index.ts#verify'), 'unsure');
+  assert.equal(run(files, 'apps/web/login.ts#login', 'packages/auth/src/index.ts'), 'unsure');
+  assert.equal(run(files, 'backend/api/api.go#Create', 'backend/store/store.go#Save'), 'found');
+  assert.equal(run(files, 'src/app/api.py#create', 'src/app/db.py#save'), 'found');
+  for (const f of ['a', 'b', 'c', 'd']) assert.equal(run(files, `src/${f}.ts#${f}`, 'src/auth.ts#verify'), 'found', f);
+  assert.equal(run(files, 'java/b/Login.java#Login.login', 'java/a/Auth.java#Auth.verify'), 'found');
+});
+
+test('an import leads to the callee only through the callee file or a re-export of the same name', () => {
+  const files = {
+    'src/auth.ts': 'export function verify() {}\nexport function hash() {}\n',
+    'src/util.ts': "import { hash } from './auth.ts';\nexport function verify() { hash(); }\nexport function wrap() {}\n",
+    'src/a.ts': "import { verify } from './util.ts';\nexport function a() { verify(); }\n",
+    'src/b.ts': "import * as util from './util.ts';\nexport function b() { util.verify(); }\n",
+    'src/c.ts': "import { wrap } from './util.ts';\nexport function c() { wrap(); }\n",
+    'app/__init__.py': '',
+    'app/db/__init__.py': 'from .core import save\n',
+    'app/db/core.py': 'def save():\n    pass\n',
+    'app/api.py': 'from app.db import save\n\ndef create():\n    save()\n',
+  };
+  for (const f of ['a', 'b']) assert.equal(run(files, `src/${f}.ts#${f}`, 'src/auth.ts#verify'), 'not-found', f);
+  assert.equal(run(files, 'src/c.ts#c', 'src/auth.ts'), 'not-found');
+  assert.equal(run(files, 'app/api.py#create', 'app/db/core.py#save'), 'found');
+});
+
+test('an alias counts only when its import leads to the callee file', () => {
+  const files = {
+    'src/auth.ts': 'export function verify() {}\n',
+    'src/legacy.ts': 'export function verify() {}\n',
+    'src/login.ts': "import { verify as check } from './legacy.ts';\nexport function login() { check(); }\n",
+  };
+  assert.equal(run(files, 'src/login.ts#login', 'src/auth.ts#verify'), 'not-found');
+});
+
 test('an edge to a file outside the root is not checked, and its text is never read', () => {
   const read: Read = (full) =>
     full.endsWith('keys.ts') ? 'export const k = "hunter2";\n' : full.endsWith('a.ts') ? 'export function send() {}\n' : null;
