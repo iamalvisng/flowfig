@@ -1,5 +1,3 @@
-// The MCP server: the check, render, verify, diff and docs tools over stdio JSON-RPC, for an agent with no shell.
-// No SDK: the subset the clients need is small, and the package keeps its zero dependencies.
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { createInterface } from 'node:readline';
@@ -61,8 +59,8 @@ export const TOOLS = [
   },
 ];
 
-class Bad extends Error {} // bad params: a JSON-RPC error, not a tool result
-class Fault extends Error {} // a path that cannot be read or written: a tool result with isError
+class Bad extends Error {}
+class Fault extends Error {}
 
 const ok = (text: string, isError = false): Result =>
   isError ? { content: [{ type: 'text', text }], isError: true } : { content: [{ type: 'text', text }] };
@@ -71,14 +69,12 @@ const spec = (v: unknown, name: string) => {
   try {
     return loadSpec(v);
   } catch (e) {
-    // The message of a path failure already starts with the path.
     throw typeof v === 'string' ? new Fault((e as Error).message) : new Bad(`${name}: ${(e as Error).message}`);
   }
 };
 const need = (args: Record<string, unknown>, tool: string, keys: string[]) => {
   for (const k of keys) if (args[k] == null) throw new Bad(`${tool}: ${k} is required`);
 };
-/** A present argument must have its type; a number must be positive. */
 const types = (args: Record<string, unknown>, tool: string, want: Record<string, 'number' | 'string' | 'boolean'>) => {
   for (const [k, t] of Object.entries(want)) {
     const v = args[k];
@@ -147,13 +143,13 @@ function run(name: string, args: Record<string, unknown>): Result {
 const reply = (id: unknown, result: unknown): Response => ({ jsonrpc: '2.0', id, result });
 const fail = (id: unknown, code: number, message: string): Response => ({ jsonrpc: '2.0', id, error: { code, message } });
 
-/** One JSON-RPC message in, one response out; `undefined` for a notification. Pure, so the tests call it directly. */
+/** Returns `undefined` for a notification. */
 export function handle(message: unknown): Response | undefined {
   if (typeof message !== 'object' || message === null) return fail(null, -32600, 'invalid request');
   const { id, method, params } = message as { id?: unknown; method?: unknown; params?: Record<string, unknown> };
   const notification = id === undefined;
   if (typeof method !== 'string') return notification ? undefined : fail(id, -32600, 'invalid request');
-  if (notification) return undefined; // a notification gets no reply, and a call sent as one does not run
+  if (notification) return undefined;
   const info = { name: 'flowfig', version: VERSION };
   try {
     switch (method) {
@@ -189,7 +185,6 @@ export function handle(message: unknown): Response | undefined {
   }
 }
 
-/** Read one message per line from `input`, write one response per line to `output`. Returns when `input` ends. */
 export async function serve(input: NodeJS.ReadableStream, output: NodeJS.WritableStream): Promise<void> {
   const rl = createInterface({ input, crlfDelay: Infinity });
   for await (const line of rl) {

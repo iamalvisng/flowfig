@@ -1,27 +1,4 @@
 #!/usr/bin/env node
-/**
- * Render a figure as one animated SVG — for a README, a PR, an issue, a blog post — and check it first.
- *
- *   flowfig - out.svg < spec.json        # a spec on stdin: nothing is left on disk
- *   flowfig spec.json out.svg            # a spec file
- *   flowfig figure.ts out.svg            # a module whose default export is a spec
- *   flowfig --spec out.svg               # print back the spec the SVG carries
- *   flowfig check <input> [--json]       # list the faults; the input can also be an SVG this wrote
- *   flowfig verify <input>... [--root dir]   # check that the code each figure links to still exists
- *   flowfig diff <old> <new> [--json|--md]   # list the spec changes between two figures
- *   flowfig docs                         # print the full guide (Markdown)
- *   flowfig mcp                          # serve check, render, verify, diff and docs over MCP (stdio)
- *   flowfig init [dir]                   # write flowfig instructions for the coding agents of a repo
- *   flowfig draw "<question>" [--out out.svg]   # ask Claude Code for a figure, then check it
- *   flowfig open figure.svg              # show the figure in the default browser
- *   flowfig gif figure.svg [out.gif]     # write an animated GIF of the figure (needs Chrome, Edge, Chromium or Brave)
- *
- * A render checks first and writes nothing on an error (--no-check skips that). --strict makes warnings errors; --width and
- * --min-text set the page width and the smallest text the reader should get.
- * --open opens the rendered SVG in the default browser (render and draw).
- *
- * Every rendered SVG carries its own spec in <metadata>, so a figure is editable later without anyone having to keep the JSON.
- */
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -54,7 +31,6 @@ const USAGE = `usage: flowfig <-|spec.json|figure.ts> [out.svg] [--open]   rende
        flowfig open <figure.svg> [--html <path>]          show the figure in the default browser
        flowfig gif <figure.svg> [out.gif] [--step <n>] [--dark] [--fps <n>] [--scale <n>] [--mp4]   write an animated GIF
 flags for render and check: --strict (warnings are errors), --json, --width <px>, --min-text <px>, --no-check (render only)`;
-/** Bad use, not a bad figure: exit 2 with a message, not a stack trace. A declaration, so TypeScript narrows after a call. */
 function usage(message: string): never {
   console.error(message);
   process.exit(2);
@@ -84,7 +60,7 @@ if (args[0] === 'docs') {
 
 if (args[0] === 'mcp') {
   await serve(process.stdin, process.stdout);
-  // A pipe write is asynchronous: wait until the queued response lines are out before the exit.
+  // A pipe write is asynchronous: wait for the queued lines before the exit.
   await new Promise((done) => process.stdout.write('', () => done(undefined)));
   process.exit(0);
 }
@@ -109,7 +85,6 @@ if (args[0] === '--spec') {
   process.exit(0);
 }
 
-/** A spec from stdin, a JSON file, an SVG this wrote, or a module. Exit 2 with a message on any failure. */
 async function load(input: string): Promise<FlowProps> {
   try {
     if (input.endsWith('.json') || input.endsWith('.svg')) return loadSpec(input);
@@ -180,7 +155,6 @@ if (args[0] === 'gif') {
     usage(`${path}: ${(e as Error).message}`);
   }
   if (step !== undefined) {
-    // One step only: render the spec again with that step, so the loop holds that step alone.
     const props = (() => {
       try {
         return loadSpec(path);
@@ -204,26 +178,24 @@ if (args[0] === 'gif') {
     `${file} — ${frames} frame${frames === 1 ? '' : 's'}, ${(frames / fps).toFixed(1)} s, ${(bytes / 1048576).toFixed(1)} MB`;
 
   const temp = mkdtempSync(join(tmpdir(), 'flowfig-gif-'));
-  // A Ctrl-C can come while the browser starts, so cleanup waits for the start before it stops the browser.
   let launching: ReturnType<typeof launch> | undefined;
   let cleaning: Promise<void> | undefined;
   const cleanup = () =>
     (cleaning ??= (async () => {
       await (await launching?.catch(() => undefined))?.close();
       try {
-        // The retries cover Windows, where the browser can hold a file lock for a short time after the exit.
+        // Windows can hold a file lock briefly after the exit, so retry.
         rmSync(temp, { recursive: true, force: true, maxRetries: 10 });
       } catch (e) {
         console.error(`warning: could not remove ${temp}: ${(e as Error).message}`);
       }
     })());
-  // The output files of this run: a stop removes them, so no partial file stays.
   const written: string[] = [];
   let ffmpeg: ReturnType<typeof spawn> | undefined,
     ffmpegDone: Promise<unknown> = Promise.resolve(),
     stopped = 0;
   const yieldLoop = () => new Promise((done) => setImmediate(done));
-  // The handlers stay for the whole run: a second signal during the cleanup must not end the process before the cleanup ends.
+  // Keep the handlers: a second signal must not end the process mid-cleanup.
   const onSignal = (signal: NodeJS.Signals) => {
     if (stopped) return;
     stopped = signal === 'SIGINT' ? 130 : 143;
@@ -235,7 +207,7 @@ if (args[0] === 'gif') {
   };
   process.on('SIGINT', onSignal);
   process.on('SIGTERM', onSignal);
-  // The encode and the ffmpeg run give the event loop a turn, so a signal handler can run. A write comes straight after this check.
+  // A write comes right after this check, so a signal must run its handler first.
   const proceed = async () => {
     await yieldLoop();
     if (stopped) throw new Error('stopped');
@@ -247,7 +219,7 @@ if (args[0] === 'gif') {
     const viewport = { width: Math.ceil(Number(size[1])), height: Math.ceil(Number(size[2])) };
     const { pngs } = await captureFrames(browser.cdp, pageHtml(svg, basename(path)), { ...viewport, scale, fps, dark });
     const wait = delays(pngs.length, fps);
-    // The GIF keeps the PNG bytes, not the pixels: a decoded 2400 x 1600 frame is 15 MB.
+    // The GIF keeps the PNG bytes: a decoded 2400 x 1600 frame is 15 MB.
     const gif = await encodeGif(
       pngs.map((png, i) => ({ load: () => decodePng(png), delay: wait[i], same: i > 0 && png.equals(pngs[i - 1]) })),
     );
@@ -261,20 +233,36 @@ if (args[0] === 'gif') {
       );
     if (mp4) {
       const mp4Path = out.replace(/(\.gif)?$/, '.mp4');
-      // FLOWFIG_FFMPEG replaces the PATH lookup, so a test can hide ffmpeg and keep the full PATH.
       const ffmpegBin = process.env.FLOWFIG_FFMPEG ?? 'ffmpeg';
       if (spawnSync(ffmpegBin, ['-version']).error) console.error('gif: no ffmpeg on the PATH, so no MP4. The GIF is written.');
       else {
         await proceed();
         written.push(mp4Path);
-        // yuv420p needs an even width and height, so the pad filter adds a pixel where needed.
+        // yuv420p needs an even width and height, so the pad filter adds a pixel.
         ffmpeg = spawn(ffmpegBin, [
-          ...['-y', '-loglevel', 'error', '-f', 'image2pipe', '-framerate', String(fps), '-c:v', 'png', '-i', '-'],
-          ...['-vf', 'pad=ceil(iw/2)*2:ceil(ih/2)*2', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', mp4Path],
+          '-y',
+          '-loglevel',
+          'error',
+          '-f',
+          'image2pipe',
+          '-framerate',
+          String(fps),
+          '-c:v',
+          'png',
+          '-i',
+          '-',
+          '-vf',
+          'pad=ceil(iw/2)*2:ceil(ih/2)*2',
+          '-c:v',
+          'libx264',
+          '-pix_fmt',
+          'yuv420p',
+          mp4Path,
         ]);
         let stderr = '';
         ffmpeg.stderr!.on('data', (d: Buffer) => (stderr += d));
-        ffmpeg.stdin!.on('error', () => {}); // ffmpeg can exit before it reads all the input; the exit code reports that
+        // ffmpeg can exit early; the exit code reports that.
+        ffmpeg.stdin!.on('error', () => {});
         ffmpeg.stdin!.end(Buffer.concat(pngs));
         const status = await (ffmpegDone = new Promise<number | null>((done) => {
           ffmpeg!.once('error', () => done(-1));
@@ -294,7 +282,7 @@ if (args[0] === 'gif') {
   } finally {
     await cleanup();
   }
-  // A signal that came in the last turn runs its handler here, before the exit.
+  // A late signal runs its handler in this await, before the exit.
   await yieldLoop();
   if (stopped) written.forEach((f) => rmSync(f, { force: true }));
   process.exit(stopped || code);
@@ -317,10 +305,7 @@ const props = await load(input);
 const findings: Finding[] = skip ? [] : sortFindings(check(props, opts), strict);
 const errors = findings.filter((f) => f.severity === 'error').length;
 
-/** The findings for a person: one line each, colored only on a terminal, then the counts. A render prints them to stderr, next to
- * its own output. A clean render still prints `0 errors, 0 warnings`: the agent copies that line into its reply. */
 const report = (print: (s: string) => void, tty: boolean | undefined) => {
-  // The severity field is 8 characters wide, so the painted field keeps the same width.
   const paint = (s: string) =>
     tty && !process.env.NO_COLOR ? s.replace(/^(error {3}|warning )/, (w) => `\x1b[${w[0] === 'e' ? 31 : 33}m${w}\x1b[0m`) : s;
   for (const line of reportLines(props, findings, !skip)) print(paint(line));
@@ -335,7 +320,6 @@ if (command === 'check') {
 report(console.error, process.stderr.isTTY);
 if (errors) process.exit(1);
 const dest = out ?? (input === '-' ? 'figure.svg' : input.replace(/\.[^./\\]+$/, '') + '.svg');
-// The spec rides along in <metadata>: an SVG is then its own source, and no JSON has to be kept.
 const withSpec = svgWithSpec(props, opts);
 writeFileSync(dest, withSpec);
 console.log(`${dest} — ${(withSpec.length / 1024).toFixed(1)} kB`);

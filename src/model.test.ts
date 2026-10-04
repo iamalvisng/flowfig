@@ -33,9 +33,7 @@ test('toBeat reads every way a beat can be written', () => {
       { edge: 'y', back: true },
     ],
   });
-  // A hop object is a hop, not a beat, even though both are objects.
   assert.deepEqual(toBeat({ edge: 'x', data: 'chip' }), { hops: [{ edge: 'x', back: false, data: 'chip' }] });
-  // A beat keeps its other fields; no edges is a pause.
   assert.deepEqual(toBeat({ say: 'hold', show: { box: 'filled' }, ms: 900 }), {
     say: 'hold',
     show: { box: 'filled' },
@@ -148,7 +146,6 @@ const lanesFig: FlowProps = {
 
 test('laneColumns gives each box its first appearance in the steps, back hops to-first, then the rest, then at', () => {
   const cols = laneColumns(lanesFig);
-  // a: ask(0) check(1); b: pay(2); c back: get(3) then pay (seen); step no: reject(4); audit is in no step: 5, but at=1 wins
   assert.deepEqual(Object.fromEntries(cols), { ask: 0, check: 1, pay: 2, get: 3, reject: 4, audit: 1 });
 });
 
@@ -178,7 +175,6 @@ test('timelineLayout rounds the range to Monday and Sunday, and places bars', ()
   const l = timelineLayout(oct, 300);
   assert.equal(l.start, dayOf('2026-10-05'));
   assert.equal(l.end, dayOf('2026-10-25'));
-  // 21 days in 300 px.
   const day = 300 / 21;
   assert.ok(Math.abs(l.items[0].x - 2 * day) < 1e-9);
   assert.ok(Math.abs(l.items[0].w - 14 * day) < 1e-9);
@@ -191,7 +187,7 @@ test('timelineLayout rounds the range to Monday and Sunday, and places bars', ()
 });
 
 test('the week tick follows ISO 8601 at a year boundary', () => {
-  // 2026-01-01 is a Thursday, so the week of Monday 2025-12-29 is W1 of 2026.
+  // ISO week 1 of 2026 starts Monday 2025-12-29, because 2026-01-01 is a Thursday.
   const l = timelineLayout(tl([[{ id: 'a', from: '2025-12-30', to: '2026-01-02' }]]), 100);
   assert.equal(l.ticks[0].label, 'W1');
 });
@@ -248,7 +244,6 @@ test('today is the x of its date and grows the range on both sides', () => {
   assert.equal(before.start, dayOf('2026-09-14'));
   assert.equal(before.today, ((dayOf('2026-09-20')! - before.start) / (before.end - before.start + 1)) * 210);
   assert.equal(at('2026-11-10').end, dayOf('2026-11-15'));
-  // No today: no marker. The playhead rests at the last date.
   assert.equal(timelineLayout(oct, 210).today, null);
   assert.ok(Math.abs(timelineLayout(oct, 210).last! - 15 * 10) < 1e-9);
 });
@@ -325,7 +320,6 @@ test('a label beside a bar takes room: a milestone the next day gets a second ro
       [0, false],
     ],
   );
-  // Two items share a row only when their spans (label included) are 8 px apart.
   const end = (i: (typeof l.items)[number]) => i.x + i.w + 6 + textWidth(i.id, 13);
   assert.ok(l.items[2].x >= end(l.items[0]) + 8);
 });
@@ -368,11 +362,9 @@ test('lanePlan: a cross-block edge gets its pill texts, and the gaps next to its
       ['late', ['late → Rejected', 'from Review', '→ Rejected']],
     ],
   );
-  // ship is the last column of block 1; inspect is the first column of block 2.
   assert.ok(plan.gaps[plan.cols.get('ship')!] > 18);
   assert.ok(plan.lead[1] > 0 && plan.lead[0] === 0);
   assert.equal(lanePlan(demo.props, { width: 1400 }).stubs.size, 0);
-  // The split is the one without pills: the pill room never adds a block.
   assert.deepEqual(plan.starts, [0, 4, 7]);
 });
 
@@ -393,16 +385,13 @@ test('lanePlan: a diamond adds 70 px to its column, and a mono card row lowers t
 
 test('lanePlan: a block holds 2 columns at least; if 2 do not fit, the lanes keep one block', async () => {
   const { default: demo } = await import('../figures/returns-process.ts');
-  // At 600 px, 7 columns share 3 blocks as evenly as they can.
   assert.deepEqual(lanePlan(demo.props, { width: 600 }).starts, [0, 3, 5, 7]);
-  // At 200 px no block of 2 fits, so there is one block, and check reports small-text.
   const narrow = lanePlan(demo.props, { width: 200 });
   assert.deepEqual([narrow.blocks, narrow.starts], [[0], [0, 7]]);
 });
 
 test('lanePlan: the block split does not depend on the pill texts', async () => {
   const { default: demo } = await import('../figures/returns-process.ts');
-  // Only the two cross-block edges keep a label: one very long, then none.
   const withLabel = (label?: string) => ({
     ...demo.props,
     edges: demo.props.edges.map((e) => ({ ...e, label: ['arrive', 'late'].includes(e.id!) ? label : undefined })),

@@ -1,21 +1,16 @@
-// An animated GIF with no dependency: one global palette, LZW, and only the changed area of each later frame. Pure.
 import type { Image } from './png.ts';
 
-/** One frame: `load` returns the pixels (called twice per frame); `delay` is in centiseconds.
- * `same` says the pixels equal the frame before: the encoder then never calls `load`. */
+/** One frame. `load` returns the pixels, `delay` is in cs, `same` skips `load`. */
 export type GifFrame = { load: () => Image; delay: number; same?: boolean };
 
 /** The delay of each of `count` frames in cs. The sum is round(count * 100 / fps). */
 export function delays(count: number, fps: number): number[] {
-  // Each delay is a whole cs: the rounding error moves between frames and does not add up.
   return Array.from({ length: count }, (_, i) => Math.round(((i + 1) * 100) / fps) - Math.round((i * 100) / fps));
 }
 
-// A color bin: 5 bits per channel, 32768 bins.
 const binOf = (rgb: number) => ((rgb >> 9) & 0x7c00) | ((rgb >> 6) & 0x3e0) | ((rgb >> 3) & 0x1f);
 const channel = (bin: number, c: number) => (bin >> (10 - 5 * c)) & 31;
 
-/** Median cut: split the box with the widest channel range at its weighted median, until 256 boxes or one bin per box. */
 function medianCut(bins: number[], counts: Uint32Array): number[][] {
   const boxes = [bins];
   while (boxes.length < 256) {
@@ -45,7 +40,6 @@ function medianCut(bins: number[], counts: Uint32Array): number[][] {
   return boxes;
 }
 
-/** The palette: the exact colors if there are 256 or fewer, else median cut over the bins. No dither. */
 function palette(exact: Map<number, number> | null, counts: Uint32Array, sums: Float64Array) {
   const colors = new Uint8Array(768);
   if (exact) {
@@ -68,7 +62,6 @@ function palette(exact: Map<number, number> | null, counts: Uint32Array, sums: F
     }
     colors.set([Math.round(r / n), Math.round(g / n), Math.round(b / n)], k * 3);
   });
-  // Each bin maps to the palette color nearest to the mean color of the bin.
   const table = new Uint8Array(32768);
   for (const x of bins) {
     const r = sums[x * 3] / counts[x],
@@ -85,7 +78,6 @@ function palette(exact: Map<number, number> | null, counts: Uint32Array, sums: F
   return { colors, index: (rgb: number) => table[binOf(rgb)] };
 }
 
-/** GIF LZW: minimum code size 8, a clear code first, codes up to 12 bits, data in sub-blocks of 255 bytes or fewer. */
 function lzw(px: Uint8Array, width: number, rect: number[], byte: (v: number) => void): void {
   const [x0, y0, x1, y1] = rect;
   const CLEAR = 256,
@@ -130,7 +122,7 @@ function lzw(px: Uint8Array, width: number, rect: number[], byte: (v: number) =>
         dict.clear();
         [next, size] = [258, 9];
       } else {
-        // The decoder runs one code behind: grow the size when the new code no longer fits.
+        // The decoder runs one code behind: grow the size one code early.
         if (next >= 1 << size) size++;
         dict.set((prefix << 8) | k, next++);
       }
@@ -147,10 +139,9 @@ function lzw(px: Uint8Array, width: number, rect: number[], byte: (v: number) =>
 }
 
 /** An animated GIF that loops forever. All frames have the size of the first frame. */
-// It yields to the event loop between frames, so a signal handler can run while the encode goes on.
+// It yields between frames so a signal handler can run.
 export async function encodeGif(frames: GifFrame[]): Promise<Uint8Array> {
   if (!frames.length) throw new Error('a GIF needs at least one frame');
-  // Pass 1: count the colors of all frames.
   const counts = new Uint32Array(32768),
     sums = new Float64Array(32768 * 3);
   let exact: Map<number, number> | null = new Map(),
@@ -158,7 +149,6 @@ export async function encodeGif(frames: GifFrame[]): Promise<Uint8Array> {
     height = 0;
   for (let f = 0; f < frames.length; f++) {
     if (frames[f].same && f > 0) continue;
-    // A run of equal frames counts once, with the weight of the run.
     let weight = 1;
     while (f + weight < frames.length && frames[f + weight].same) weight++;
     await new Promise(setImmediate);
@@ -209,7 +199,6 @@ export async function encodeGif(frames: GifFrame[]): Promise<Uint8Array> {
   text('NETSCAPE2.0');
   bytes(3, 1, 0, 0, 0); // loop count 0: loop forever
 
-  // Pass 2: each frame as palette indices. A later frame sends only the rectangle that changed.
   let prev: Uint8Array | null = null;
   for (const frame of frames) {
     await new Promise(setImmediate);
@@ -238,7 +227,7 @@ export async function encodeGif(frames: GifFrame[]): Promise<Uint8Array> {
             rect[3] = y;
           }
     }
-    // No change: a 1 x 1 frame that paints the old color keeps the frame and its delay.
+    // A 1 x 1 frame in the old color keeps the frame and its delay.
     if (rect[2] < 0) rect = [0, 0, 0, 0];
     bytes(0x21, 0xf9, 4, 1 << 2); // disposal method 1: the next frame draws over this frame
     word(frame.delay);

@@ -1,4 +1,3 @@
-// What the CLI and the MCP server share: read a spec, write an SVG that carries its spec, and print the check lines.
 import { readFileSync } from 'node:fs';
 import { counts, type FlowProps } from './model.ts';
 import { toSvg, type Finding, type SvgOptions } from './svg.ts';
@@ -6,7 +5,6 @@ import { toSvg, type Finding, type SvgOptions } from './svg.ts';
 const SPEC_OPEN = '<metadata id="figure-spec"><![CDATA[';
 const SPEC_CLOSE = ']]></metadata>';
 
-/** The spec JSON inside an SVG this package wrote. */
 export function specOf(svg: string, name: string): string {
   const at = svg.indexOf(SPEC_OPEN);
   if (at === -1) throw new Error(`${name}: no figure spec inside this SVG`);
@@ -39,7 +37,6 @@ export function svgWithSpec(props: FlowProps, opts: SvgOptions = {}): string {
   return toSvg(props, opts).replace(/(<svg[^>]*>\n?)/, (tag) => `${tag}${SPEC_OPEN}${spec}${SPEC_CLOSE}\n`);
 }
 
-/** Errors first, then by rule name. `strict` makes every warning an error. */
 export function sortFindings(findings: Finding[], strict: boolean): Finding[] {
   return findings
     .map((f) => (strict ? { ...f, severity: 'error' as const } : f))

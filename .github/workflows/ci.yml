@@ -22,6 +22,7 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run format:check
+      - run: npm run lint
       - run: npm run svg -- check cached-request --strict
       - run: npm run svg -- check checkout --strict
       - run: bash scripts/pack-smoke.sh
@@ -38,6 +39,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck
+      - run: npm run lint
       - run: npm test
 
   figures:

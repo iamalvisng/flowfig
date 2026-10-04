@@ -1,4 +1,3 @@
-// `flowfig draw`: one command to the first figure. Claude Code reads the repo and renders; draw checks the result itself.
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, rmSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -12,7 +11,7 @@ const ALLOWED = 'Read,Glob,Grep,Bash(npx flowfig *)';
 const DISALLOWED = 'Edit,MultiEdit,NotebookEdit';
 const USAGE = 'usage: flowfig draw "<question>" [--out <path>] [--model <alias>] [--max-turns <n>] [--json] [--open]';
 
-/** A file name from the question: lower case, letters and digits, joined by -, at most 60 characters. */
+/** A file name from the question: at most 60 characters. */
 export function slug(question: string): string {
   const s = question
     .toLowerCase()
@@ -25,7 +24,6 @@ export function slug(question: string): string {
 
 const specPath = (out: string) => out.replace(/\.svg$/, '.json');
 
-/** The claude argv after the binary. The system prompt carries the agent text, the output path and the folder rule. */
 export function agentArgs(o: { question: string; out: string; cwd: string; maxTurns: number; model?: string }): string[] {
   const spec = specPath(o.out);
   const system = `${AGENT_TEXT.trimEnd()}\n\nWrite the spec to ${spec} with the Write tool. Then run exactly \`npx flowfig ${spec} ${o.out}\` as one command, alone on its line: no heredoc, no \`;\`, no \`&&\`, no pipe (the permission rule matches one plain command only). Then run \`npx flowfig verify ${o.out}\` the same way. Run every command from this folder, ${o.cwd}.`;
@@ -56,7 +54,6 @@ const fail = (message: string, code: number) => {
   return code;
 };
 
-/** Run `flowfig draw`. Prints, and returns the exit code. */
 export async function runDraw(argv: string[]): Promise<number> {
   const args = [...argv];
   const flag = (n: string) => args.includes(n) && args.splice(args.indexOf(n), 1).length > 0;
@@ -99,7 +96,7 @@ export async function runDraw(argv: string[]): Promise<number> {
   } catch (e) {
     return fail(`draw: ${(e as Error).message}`, 2);
   }
-  // A figure from an earlier run must not pass as this run's work: compare the mtime.
+  // Compare the mtime: a figure from an earlier run must not pass.
   const mtime = () => (existsSync(full) ? statSync(full).mtimeMs : undefined);
   const before = mtime();
   const run = spawnSync(bin, agentArgs({ question, out, cwd, maxTurns, model }), {
@@ -108,7 +105,7 @@ export async function runDraw(argv: string[]): Promise<number> {
     stdio: ['ignore', 'pipe', 'inherit'],
     maxBuffer: 64 * 1024 * 1024,
   });
-  // The JSON is the last line that starts with {: a warning line may come before it.
+  // The JSON is the last line that starts with {; a warning can come before.
   const line = (run.stdout ?? '')
     .split('\n')
     .reverse()
@@ -166,7 +163,6 @@ export async function runDraw(argv: string[]): Promise<number> {
   }
   stop();
   let code = errors || stopped !== undefined ? 1 : 0;
-  // The SVG is on disk also with findings, so the user can look at it.
   if (open) {
     try {
       const line = openedLine((await openSvg(full))[0]);

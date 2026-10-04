@@ -1,5 +1,3 @@
-// The lanes wrap on three returns figures that agents drew in an evaluation (eval-L). They have diamonds and long edge labels.
-// Before this test, two of them wrapped into blocks of 1 column, because the pill room of the stubs counted in the block width.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { check, render } from './svg.ts';

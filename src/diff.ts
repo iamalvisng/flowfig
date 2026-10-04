@@ -1,4 +1,3 @@
-// The spec diff: what a PR changed in a figure, by id. The SVG geometry follows from the spec, so the spec is the diff.
 import { edgeId, isGroup, str, toBeat, type FigNode, type FigEdge, type FigGroup, type FlowProps } from './model.ts';
 
 export type Change = {
@@ -9,11 +8,9 @@ export type Change = {
 };
 
 const show = (v: unknown) => (v == null ? '(none)' : `"${str(v)}"`);
-/** The fields that changed, as `name "old" -> "new"` parts; empty when equal. */
 const fields = <T>(a: T, b: T, names: (keyof T)[]) =>
   names.filter((k) => str(a[k]) !== str(b[k])).map((k) => `${String(k)} ${show(a[k])} -> ${show(b[k])}`);
 
-/** Compare two maps by key. The order is stable: changed first, then removed, then added. */
 function compare<T>(kind: Change['kind'], before: Map<string, T>, after: Map<string, T>, fieldsOf: (a: T, b: T) => string[]): Change[] {
   const out: Change[] = [];
   for (const [id, a] of before) {
@@ -44,7 +41,6 @@ const messages = (fig: FlowProps) =>
 export function diff(before: FlowProps, after: FlowProps): Change[] {
   const boxes = (f: FlowProps) => {
     const m = new Map<string, FigNode & { group?: string }>();
-    // The group is its label, else its id; the top level has none.
     const walk = (g: FigGroup, parent?: string) =>
       g.children.forEach((c) => (isGroup(c) ? walk(c, c.label != null ? str(c.label) : c.id) : m.set(c.id, { ...c, group: parent })));
     walk(f.layout);

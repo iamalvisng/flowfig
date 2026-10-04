@@ -1,4 +1,3 @@
-// An edge label of a lanes figure sits inside one lane band, 4 px from the border (the stub pills of wrapped lanes already did).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { check, render } from './svg.ts';
@@ -27,7 +26,6 @@ const lanesFig: FlowProps = {
   ],
 };
 
-// Two next columns: the gap is shorter than the label, so the label moves up into its band at the middle x.
 const tightFig: FlowProps = {
   ...lanesFig,
   layout: {

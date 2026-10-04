@@ -9,7 +9,6 @@ import { findBrowser } from './browser.ts';
 import { delays, encodeGif, type GifFrame } from './gif.ts';
 import type { Image } from './png.ts';
 
-/** GIF LZW decode, for the round trip. */
 function lzwDecode(data: number[], minSize: number): number[] {
   const clear = 1 << minSize,
     end = clear + 1;
@@ -48,7 +47,6 @@ function lzwDecode(data: number[], minSize: number): number[] {
   }
 }
 
-/** A small GIF decoder: the header, the global table, the loop count, and each frame drawn with disposal method 1. */
 function decodeGif(bytes: Uint8Array) {
   let at = 6;
   const u8 = () => bytes[at++];
@@ -137,7 +135,6 @@ test('frames with 3 colors give a palette that holds those 3 exact colors', asyn
 });
 
 test('a round trip gives back each frame, and a later frame holds only the changed rectangle', async () => {
-  // 96 x 96 pixels of noise in 200 colors: enough LZW codes to fill the table, so the encoder sends a clear code.
   let seed = 1;
   const noise = () => (seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) % 200;
   const colorOf = (n: number) => [n, (n * 7) & 255, (n * 13) & 255];
@@ -186,7 +183,6 @@ test('a same frame is never loaded, and the bytes equal those of a full load (30
 });
 
 test('300 colors make a 256-color palette, and each pixel stays within 16 per channel', async () => {
-  // A lattice of 300 colors, one color in each 5-bit bin: more colors than the palette holds.
   const img = image(30, 10, (x, y) => {
     const i = y * 30 + x;
     return [8 * (i % 10) + 4, 8 * (Math.floor(i / 10) % 10) + 4, 8 * Math.floor(i / 100) + 4];
@@ -201,10 +197,9 @@ test('a frame with another size throws', async () => {
   await assert.rejects(encodeGif([frame(image(2, 2, () => [0, 0, 0])), frame(image(3, 2, () => [0, 0, 0]))]), /frame 2 is 3 x 2/);
 });
 
-// End to end: the CLI with the real capture browser. The tests skip when this machine has none.
 const cli = join(dirname(dirname(fileURLToPath(import.meta.url))), 'scripts', 'figure-svg.mjs');
 const skip = !findBrowser({ platform: process.platform, env: process.env, exists: existsSync }).path;
-// child.kill('SIGINT') ends a Windows process at once: the handler of the CLI does not run. pgrep and pkill do not exist there.
+// On Windows, SIGINT ends the process at once, so the CLI handler does not run.
 const noSignal = process.platform === 'win32' && 'POSIX signals and pgrep need a POSIX system';
 const ONE = {
   props: {
@@ -218,7 +213,6 @@ const ONE = {
     steps: [{ label: 'write', flow: [{ edges: 'w', say: 'The client writes a row.' }] }],
   },
 };
-/** The temp folders of earlier gif runs. Another process can make one, so a test compares the list before and after. */
 const leftovers = () => readdirSync(tmpdir()).filter((n) => n.startsWith('flowfig-gif-'));
 const render = (dir: string, name: string, spec: object) => {
   const svg = join(dir, `${name}.svg`);
@@ -251,7 +245,6 @@ test('gif --dark paints the dark theme; the default is the light theme', { skip 
     const svg = render(dir, 'one', ONE);
     assert.equal(gif([svg, join(dir, 'light.gif'), '--fps', '1', '--scale', '1']).status, 0);
     assert.equal(gif([svg, join(dir, 'dark.gif'), '--fps', '1', '--scale', '1', '--dark']).status, 0);
-    // The pixel at (0, 0) is the figure background.
     const corner = (file: string) => [...decodeGif(readFileSync(join(dir, file))).frames[0].rgba.subarray(0, 3)];
     const sum = (c: number[]) => c[0] + c[1] + c[2];
     assert.ok(sum(corner('light.gif')) > sum(corner('dark.gif')) + 300, `${corner('light.gif')} vs ${corner('dark.gif')}`);
@@ -275,7 +268,7 @@ test('a figure with no animation makes one frame', { skip }, () => {
 
 test('Ctrl-C stops the run, stops the browser and removes the temp folder', { skip: skip || noSignal }, async () => {
   const dir = mkdtempSync(join(tmpdir(), 'gif-e2e-'));
-  // A private TMPDIR: tests in other files make temp folders at the same time, so the shared list is not stable.
+  // Other test files make temp folders at the same time: use a private TMPDIR.
   const priv = join(dir, 'tmp');
   mkdirSync(priv);
   const left = () => readdirSync(priv).filter((n) => n.startsWith('flowfig-gif-'));
@@ -283,12 +276,11 @@ test('Ctrl-C stops the run, stops the browser and removes the temp folder', { sk
     const svg = render(dir, 'one', ONE);
     const child = spawn(process.execPath, [cli, 'gif', svg, '--fps', '50'], { stdio: 'ignore', env: { ...process.env, TMPDIR: priv } });
     const exited = new Promise((done) => child.once('exit', done));
-    // The temp folder shows that the run started; a loaded machine can start late.
     for (let i = 0; i < 2400 && left().length === 0 && child.exitCode === null; i++) await new Promise((d) => setTimeout(d, 25));
     await new Promise((d) => setTimeout(d, 300));
     child.kill('SIGINT');
     const code = await exited;
-    // A fast machine can finish before the signal: then the exit is 0 and the GIF is there.
+    // A fast machine can exit 0 before the signal arrives.
     assert.ok(code === 130 || code === 0, String(code));
     if (code === 130) assert.equal(existsSync(join(dir, 'one.gif')), false);
     assert.deepEqual(left(), []);
@@ -297,7 +289,6 @@ test('Ctrl-C stops the run, stops the browser and removes the temp folder', { sk
   }
 });
 
-// A private TMPDIR makes the temp folder and the browser command line belong to this run only.
 for (const delay of [50, 300]) {
   test(`Ctrl-C ${delay} ms after the browser start begins leaves no browser and no temp folder`, { skip: skip || noSignal }, async () => {
     const dir = mkdtempSync(join(tmpdir(), 'gif-e2e-'));
@@ -310,7 +301,7 @@ for (const delay of [50, 300]) {
       const svg = render(dir, 'one', ONE);
       const child = spawn(process.execPath, [cli, 'gif', svg, '--fps', '50'], { stdio: 'ignore', env: { ...process.env, TMPDIR: priv } });
       const exited = new Promise((done) => child.once('exit', (code, signal) => done(code ?? signal)));
-      // The handler is set in the same tick as the temp folder, so wait for the folder (slow machines start late).
+      // A slow machine starts late: wait for the temp folder.
       for (let i = 0; i < 200 && left().length === 0; i++) await sleep(25);
       assert.equal(left().length, 1, 'the run made no temp folder');
       await sleep(delay);
@@ -347,7 +338,7 @@ test('gif --mp4 writes the MP4 with ffmpeg, and only the GIF without ffmpeg', { 
   const dir = mkdtempSync(join(tmpdir(), 'gif-e2e-'));
   try {
     const svg = render(dir, 'one', ONE);
-    // A missing FLOWFIG_FFMPEG hides ffmpeg. The PATH stays whole, so a Chrome shell script can start.
+    // Keep the whole PATH: the Chrome shell script needs it to start.
     const none = gif([svg, '--fps', '2', '--scale', '1', '--mp4'], { ...process.env, FLOWFIG_FFMPEG: join(dir, 'no-ffmpeg') });
     assert.equal(none.status, 0, none.stderr);
     assert.match(none.stderr, /gif: no ffmpeg on the PATH, so no MP4\. The GIF is written\./);

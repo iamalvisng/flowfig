@@ -1,5 +1,3 @@
-// The rules behind `flowfig check`. They never draw and never measure: a renderer gives a Scene, and these read it. So one rule set
-// covers the SVG (estimated text) and the React player (measured text), and any later view that gives a scene.
 import {
   DARK,
   LIGHT,
@@ -29,7 +27,7 @@ const warn = (rule: string, ids: string[], message: string): Finding => ({ rule,
 
 const groupIds = (g: FigGroup): string[] => [...(g.id ? [g.id] : []), ...g.children.flatMap((c) => (isGroup(c) ? groupIds(c) : []))];
 
-/** Ids that point nowhere, ids used twice, steps with nothing in them. The renderers skip these without a word. */
+/** Faults in the spec: dangling ids, duplicate ids, empty steps. The renderers skip them silently. */
 export function checkSpec(fig: FlowProps): Finding[] {
   const out: Finding[] = [];
   const boxIds = nodes(fig.layout).map((n) => n.id);
@@ -66,7 +64,6 @@ export function checkSpec(fig: FlowProps): Finding[] {
     if (e.quiet && !used.has(edges[i]))
       out.push(err('hidden-edge', [edges[i]], `edge "${edges[i]}" is quiet and no beat uses it, so the figure never shows it`));
   });
-  // A link with a bad form never verifies, so say so here, where the spec is checked.
   for (const [who, source] of owners(fig))
     if (source != null && !parseSource(source)) out.push(warn('bad-source', [], `${who}: source "${source}" is not path or path#symbol`));
   const marks = nodes(fig.layout).map((n) => n.mark);
@@ -95,7 +92,6 @@ export function checkSpec(fig: FlowProps): Finding[] {
         if (v != null && d == null) out.push(err('bad-date', [n.id], `box "${n.id}": ${name} "${v}" is not a real YYYY-MM-DD date`));
       if (f != null && t != null && t < f) out.push(err('bad-date', [n.id], `box "${n.id}": to ${n.to} is before from ${n.from}`));
     }
-    // A dependent item starts after its source ends. A milestone ends the day it starts.
     const span = new Map(
       nodes(fig.layout).map((n) => [n.id, [n.from && dayOf(n.from), (n.to && dayOf(n.to)) ?? (n.from && dayOf(n.from))] as const]),
     );
@@ -133,20 +129,18 @@ export function checkSpec(fig: FlowProps): Finding[] {
 
 export type CheckOptions = { width?: number; minText?: number };
 
-/** A point on the cubic Bézier at `t`. */
 const at = ([p0, p1, p2, p3]: [Pt, Pt, Pt, Pt], t: number): Pt => {
   const u = 1 - t;
   const [a, b, c, d] = [u * u * u, 3 * u * u * t, 3 * u * t * t, t * t * t];
   return { x: a * p0.x + b * p1.x + c * p2.x + d * p3.x, y: a * p0.y + b * p1.y + c * p2.y + d * p3.y };
 };
 const lerp = (p: Pt, q: Pt, t: number): Pt => ({ x: p.x + (q.x - p.x) * t, y: p.y + (q.y - p.y) * t });
-// The margins keep a touch from counting: an edge leaves along a border, and pills sit edge to edge.
+// Margins stop edges along a border and pills edge to edge from counting as touches.
 const inside = (p: Pt, r: Rect, pad: number) => p.x > r.x + pad && p.x < r.x + r.w - pad && p.y > r.y + pad && p.y < r.y + r.h - pad;
 const overlap = (a: Rect, b: Rect, pad: number) =>
   a.x + pad < b.x + b.w - pad && b.x + pad < a.x + a.w - pad && a.y + pad < b.y + b.h - pad && b.y + pad < a.y + a.h - pad;
 const px = (n: number) => Math.round(n * 10) / 10;
 
-/** Layout faults in what a renderer drew, and text that the target width shrinks below `minText`. */
 export function checkScene(scene: Scene, { width = 830, minText = 10 }: CheckOptions = {}): Finding[] {
   const out: Finding[] = [];
   for (const b of scene.boxes)
@@ -165,7 +159,6 @@ export function checkScene(scene: Scene, { width = 830, minText = 10 }: CheckOpt
       if (b.id !== e.from && b.id !== e.to && pts.some((p) => inside(p, b.rect, 2)))
         out.push(err('edge-crosses-box', [e.id, b.id], `edge "${e.id}" passes through box "${b.id}"`));
   }
-  // A stub pill (the label of an edge with `pts`) must not sit on another edge's path.
   const pills = scene.edges.filter((e) => e.pts && e.label);
   const under = new Set<string>();
   for (const e of scene.edges) {
@@ -179,7 +172,6 @@ export function checkScene(scene: Scene, { width = 830, minText = 10 }: CheckOpt
         out.push(err('label-overlap', [e.id, f.id], `edge "${e.id}" passes under the pill of edge "${f.id}"`));
       }
   }
-  // A stub line (a segment of an edge with `pts`) must not cross the path of another edge.
   const path = (e: SceneEdge) =>
     e.pts
       ? e.pts.slice(1).flatMap((q, k) => Array.from({ length: 17 }, (_, i) => lerp(e.pts![k], q, i / 16)))
@@ -195,7 +187,6 @@ export function checkScene(scene: Scene, { width = 830, minText = 10 }: CheckOpt
         out.push(warn('stub-crosses-edge', [f.id, e.id], `the stub of edge "${f.id}" crosses edge "${e.id}"`));
       }
     }
-  // A stub pill or an edge label sits inside one band: a pill across a band border reads as part of two lanes.
   for (const f of scene.edges.filter((e) => e.label))
     for (const l of scene.lanes ?? []) {
       const [p, r] = [f.label!, l.rect];
@@ -224,7 +215,6 @@ export function checkScene(scene: Scene, { width = 830, minText = 10 }: CheckOpt
   return out;
 }
 
-/** Red, green and blue from a hex, rgb() or hsl() color; null for a CSS variable or a named color. */
 function rgb(color: string): [number, number, number] | null {
   const s = color.trim().toLowerCase();
   let m = s.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/);
@@ -269,10 +259,9 @@ const PAIRS = [
   ['muted', 'tint'],
 ] as const;
 
-/** A color mixed over a base at pct %, per channel like the CSS color-mix. The default is the active-box tint: 10 % accent over the surface. */
 function tintOf(t: Colors, color = t.accent, base = t.surface, pct = 10): string {
   const [a, s] = [rgb(color), rgb(base)];
-  if (!a || !s) return base; // an unreadable color is reported by its own pairs
+  if (!a || !s) return base;
   return `rgb(${a.map((v, i) => (pct / 100) * v + (1 - pct / 100) * s[i]).join(',')})`;
 }
 
@@ -297,7 +286,6 @@ export function checkTheme(theme: FigTheme = {}): Finding[] {
         for (const c of [a, t[bg]]) if (!rgb(c)) unread.add(c);
       } else if (r < 4.5) out.push(err('low-contrast', [], `${name} theme: ${fg} on ${bg} has contrast ${r}:1 (minimum 4.5:1)`));
     }
-    // A toned box shows fg and muted text on its tone tint: 8 % over bg (off, trail) and 10 % over surface (active).
     for (const [tname, tone] of Object.entries(TONES)) {
       for (const bg of [tintOf(t, tone, t.bg, 8), tintOf(t, tone, t.surface, 10)]) {
         for (const fg of ['fg', 'muted'] as const) {

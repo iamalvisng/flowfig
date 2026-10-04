@@ -45,12 +45,11 @@ test('pageName keeps letters, digits, - and _ only', () => {
   assert.equal(pageName(join('docs', 'login_flow.svg')), 'login_flow.html');
 });
 
-/** A temp folder with a figure SVG, a temp folder for the page, and a fake opener that writes its argument to opened.log. */
 function setup() {
   const dir = mkdtempSync(join(tmpdir(), 'open-'));
   mkdirSync(join(dir, 'tmp'));
   spawnSync(process.execPath, [cli, '-', join(dir, 'fig.svg')], { input: JSON.stringify(SPEC) });
-  // Windows cannot start a shell script, so there node is the opener: it starts, fails on the page and writes no log.
+  // Windows cannot start a shell script, so node is the opener there.
   if (posix) {
     writeFileSync(join(dir, 'opener'), `#!/bin/sh\nprintf '%s' "$1" > "${join(dir, 'opened.log')}"\n`);
     chmodSync(join(dir, 'opener'), 0o755);
@@ -75,8 +74,8 @@ test('open writes the page to the temp folder and starts the opener with the pag
     assert.equal(r.stdout, `${page} — opened in the default browser\n${join(dir, 'copy.html')}\n`);
     assert.ok(readFileSync(page, 'utf8').includes(readFileSync(join(dir, 'fig.svg'), 'utf8')));
     assert.equal(readFileSync(join(dir, 'copy.html'), 'utf8'), readFileSync(page, 'utf8'));
-    if (!posix) return; // no log: the Windows opener is node, not a script
-    // The opener runs on after the CLI exits, so the test waits for its log.
+    if (!posix) return;
+    // The opener runs after the CLI exits, so wait for its log.
     const log = join(dir, 'opened.log');
     for (let i = 0; i < 100 && !(existsSync(log) && readFileSync(log, 'utf8')); i++) await sleep(50);
     assert.equal(readFileSync(log, 'utf8'), page);
@@ -91,7 +90,6 @@ test(
   () => {
     const dir = setup();
     try {
-      // The old fixed path: a planted symlink to a victim file.
       const victim = join(dir, 'victim.txt');
       writeFileSync(victim, 'keep');
       mkdirSync(join(dir, 'tmp', 'flowfig-open'));

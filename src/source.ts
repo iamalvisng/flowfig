@@ -1,4 +1,4 @@
-// Code links, pure: no Node import, so the React and SVG entries stay browser-safe. `verify` in verify.ts reads the disk.
+// No Node import: the React and SVG entries must stay browser-safe.
 import { edgeId, nodes, toBeat, type FlowProps } from './model.ts';
 
 /** `path` or `path#symbol`. No spaces, one `#` at most, both parts non-empty. `null` for a bad form. */
@@ -8,7 +8,7 @@ export function parseSource(s: string): { path: string; symbol?: string } | null
   return m[2] ? { path: m[1], symbol: m[2] } : { path: m[1] };
 }
 
-/** The GitHub anchor of a heading: lower case, only letters, digits, spaces and hyphens, spaces to hyphens. */
+// GitHub anchor rules: drop other characters, then spaces become hyphens.
 export const headingSlug = (text: string): string =>
   text
     .toLowerCase()

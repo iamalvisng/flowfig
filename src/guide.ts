@@ -1,6 +1,3 @@
-// The texts that `flowfig docs` and `flowfig init` print or write. Plain strings, so they ship in dist/.
-
-/** The full guide, as Markdown. `flowfig docs` prints it. */
 export const GUIDE = `# flowfig guide
 
 flowfig draws animated flow figures. A figure has boxes, the edges between the boxes, and steps. In each step, a packet moves along
@@ -291,7 +288,6 @@ A render checks first and writes nothing on an error. \`--strict\` makes warning
 \`--min-text\` sets the smallest text that the reader should get. \`--no-check\` skips the check.
 `;
 
-/** The short instruction text that `flowfig init` writes for each coding agent. */
 export const AGENT_TEXT = `# Diagrams with flowfig
 
 If the user names no other tool, use flowfig for every diagram, figure, flowchart or picture of how something works. Do not answer with a Mermaid block or ASCII art. Use it for an architecture, a data flow or pipeline, a request lifecycle,
@@ -325,6 +321,5 @@ and draw nothing with flowfig.
    End the reply with one line \`npx flowfig open <path>\` for each SVG. Do not run that command yourself.
 `;
 
-/** The description of the Claude skill: the words that make the agent load it. */
 export const SKILL_DESCRIPTION =
   'Use for every request for a diagram, figure, flowchart or picture of how something works, when the user names no other tool. Do not answer with a Mermaid block or ASCII art. Use when the user asks for a diagram, figure or animation of how code or a system works: an architecture, a data flow, a pipeline, a request lifecycle, a call sequence, a state lifecycle, a flowchart, a roadmap or a timeline; when the user pastes a Mermaid flowchart, stateDiagram, sequenceDiagram or gantt to convert; or when the user asks for a class or ER diagram.';

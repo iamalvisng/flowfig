@@ -1,0 +1,32 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc", "import"],
+  "jsPlugins": ["./scripts/lint-plugin.js"],
+  "ignorePatterns": ["scripts/lint-fixtures/**"],
+  "categories": { "correctness": "error" },
+  "rules": {
+    "no-console": "error",
+    "no-warning-comments": "error",
+    "flowfig/comments": "error"
+  },
+  "overrides": [
+    {
+      "files": ["src/cli.ts", "src/draw.ts", "src/init.ts", "src/open.ts", "scripts/**"],
+      "rules": { "no-console": "off" }
+    },
+    {
+      "files": ["src/**"],
+      "rules": {
+        "import/extensions": ["error", "always", { "ignorePackages": true, "ts": "always", "tsx": "always", "js": "never" }]
+      }
+    },
+    {
+      "files": ["src/*.test.ts"],
+      "rules": {
+        "no-console": "off",
+        "flowfig/test-asserts": ["error", { "assertNames": ["assert", "near"] }],
+        "flowfig/svg-snapshot": "error"
+      }
+    }
+  ]
+}

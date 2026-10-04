@@ -1,27 +1,31 @@
-// What a renderer drew, in one plain shape, so `flowfig check` can test any renderer: the SVG gives an estimated scene in node, the
-// React player a measured one in the browser.
 import type { Pt, Rect } from './geometry.ts';
 
-/** One line of text in a box. `need` is the measured width; without it, the check estimates the width. */
+/** `need` is the measured width; without it, `check` estimates it. */
 export type TextRun = { text: string; fontSize: number; room: number; need?: number; mono?: boolean };
 export type SceneBox = { id: string; rect: Rect; texts: TextRun[] };
-/** `step` marks a rail row: rows of two steps never show at the same time, so their labels cannot overlap. */
-/** `behind` marks an edge drawn under the boxes (a timeline dependency): `check` skips its crossing test. */
-/** `pts` are the corners of an edge drawn as straight runs (a cross-block lanes edge): `check` tests them in place of `curve`. */
 export type SceneEdge = {
   id: string;
   from: string;
   to: string;
   curve: [Pt, Pt, Pt, Pt];
+  /** Corners of a straight-run edge (cross-block lanes). `check` tests them, not `curve`. */
   pts?: Pt[];
   label?: Rect;
+  /** A rail row: rows of two steps never show together, so labels cannot overlap. */
   step?: number;
+  /** Drawn under the boxes (a timeline dependency): `check` skips the crossing test. */
   behind?: true;
-  /** The corners of a timeline elbow. `check` tests a `behind` edge against the boxes only when it has them. */
+  /** Timeline elbow corners. `check` tests a `behind` edge only when it has them. */
   elbow?: Pt[];
 };
-/** `minFont` is the smallest reading text in px, before any scale. Group frames are not boxes. */
-/** `lanes` are the lane bands of a swimlanes figure, one per lane and block, named by the lane label. A stub pill stays inside one. */
-export type Scene = { width: number; boxes: SceneBox[]; edges: SceneEdge[]; minFont: number; lanes?: { id: string; rect: Rect }[] };
-/** One fault that `flowfig check` found. `rule` names the check, for example `unknown-id`, `text-overflow`, `edge-crosses-box`, `label-overlap`, `small-text`, `low-contrast`. `ids` are the boxes or edges it names. */
+export type Scene = {
+  width: number;
+  boxes: SceneBox[];
+  edges: SceneEdge[];
+  /** The smallest reading text in px, before any scale. */
+  minFont: number;
+  /** The lane bands of a swimlanes figure. A stub pill stays inside one. */
+  lanes?: { id: string; rect: Rect }[];
+};
+/** One fault that `flowfig check` found. `ids` name the boxes or edges. */
 export type Finding = { rule: string; severity: 'error' | 'warning'; ids: string[]; message: string };
