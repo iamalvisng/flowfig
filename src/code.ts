@@ -281,52 +281,50 @@ function pyBody(code: string, start: number): Extent {
   return [start, end];
 }
 
+const E = '(?![\\p{L}\\p{N}_$])';
+
 function defPatterns(lang: Lang, name: string, inContainer: boolean): RegExp[] {
   const N = esc(name);
+  const re = (src: string) => new RegExp(src, 'gu');
   switch (lang) {
     case 'ts':
       return [
-        new RegExp(`\\bfunction\\s*\\*?\\s*${N}\\s*[<(]`, 'g'),
-        new RegExp(`\\b(class|interface|enum|namespace|module)\\s+${N}\\b`, 'g'),
-        new RegExp(`\\btype\\s+${N}\\b\\s*[<=]`, 'g'),
-        new RegExp(`\\b(const|let|var)\\s+${N}\\b\\s*[:=]`, 'g'),
-        new RegExp(
-          `(^|[\\n;{}])[ \\t]*((public|private|protected|static|async|readonly|override|abstract|get|set|declare)\\s+)*\\*?${N}\\s*[<(]`,
-          'g',
+        re(`\\bfunction\\s*\\*?\\s*${N}\\s*[<(]`),
+        re(`\\b(class|interface|enum|namespace|module)\\s+${N}${E}`),
+        re(`\\btype\\s+${N}${E}\\s*[<=]`),
+        re(`\\b(const|let|var)\\s+${N}${E}\\s*[:=]`),
+        re(`(^|[\\n;{}])[ \\t]*((public|private|protected|static|async|readonly|override|abstract|get|set|declare)\\s+)*\\*?${N}\\s*[<(]`),
+        re(
+          `(^|[\\n;{}])[ \\t]*((public|private|protected|static|readonly|override|declare)\\s+)*${N}\\s*[?!]?\\s*(:(?:[^=;\\n]|=>)*)?=(?![=>])`,
         ),
-        new RegExp(
-          `(^|[\\n;{}])[ \\t]*((public|private|protected|static|readonly|override|declare)\\s+)*${N}\\s*[?!]?\\s*(:[^=;\\n]*)?=(?!=)`,
-          'g',
-        ),
-        ...(inContainer ? [new RegExp(`(^|[\\n{,])[ \\t]*${N}\\s*[?]?:`, 'g')] : []),
+        re(`(^|[\\n;{}])[ \\t]*(module\\.)?exports\\.${N}\\s*=(?!=)`),
+        ...(inContainer ? [re(`(^|[\\n{,])[ \\t]*${N}\\s*[?]?:`)] : []),
       ];
     case 'py':
       return [
-        new RegExp(`(^|\\n)[ \\t]*(async\\s+)?def\\s+${N}\\s*\\(`, 'g'),
-        new RegExp(`(^|\\n)[ \\t]*class\\s+${N}\\b`, 'g'),
-        new RegExp(`(^|\\n)${inContainer ? '[ \\t]+' : ''}${N}\\s*(:[^=\\n]+)?=(?!=)`, 'g'),
+        re(`(^|\\n)[ \\t]*(async\\s+)?def\\s+${N}\\s*\\(`),
+        re(`(^|\\n)[ \\t]*class\\s+${N}${E}`),
+        re(`(^|\\n)${inContainer ? '[ \\t]+' : ''}${N}\\s*(:[^=\\n]+)?=(?!=)`),
       ];
     case 'go':
       return [
-        new RegExp(`\\bfunc\\s+${N}\\s*[\\[(]`, 'g'),
-        new RegExp(`\\bfunc\\s*\\([^)]*\\)\\s*${N}\\s*[\\[(]`, 'g'),
-        new RegExp(`\\btype\\s+${N}\\b`, 'g'),
-        new RegExp(`\\b(var|const)\\s+${N}\\b`, 'g'),
-        new RegExp(`(^|\\n)[ \\t]+${N}\\b(\\s*,\\s*\\w+)*\\s*(=|[\\w\\[*]+[^\\n]*=)`, 'g'),
-        new RegExp(`(^|\\n)[ \\t]+${N}\\s+(struct|interface)\\b`, 'g'),
-        ...(inContainer ? [new RegExp(`(^|\\n)[ \\t]+${N}\\s*(\\(|\\s+\\S)`, 'g')] : []),
+        re(`\\bfunc\\s+${N}\\s*[\\[(]`),
+        re(`\\bfunc\\s*\\([^)]*\\)\\s*${N}\\s*[\\[(]`),
+        re(`\\btype\\s+${N}${E}`),
+        re(`\\b(var|const)\\s+${N}${E}`),
+        re(`(^|\\n)[ \\t]+${N}${E}(\\s*,\\s*[\\p{L}\\p{N}_]+)*\\s*(=|[\\w\\[*]+[^\\n]*=)`),
+        re(`(^|\\n)[ \\t]+${N}\\s+(struct|interface)${E}`),
+        ...(inContainer ? [re(`(^|\\n)[ \\t]+${N}\\s*(\\(|\\s+\\S)`)] : []),
       ];
     case 'java':
     case 'cs':
       return [
-        new RegExp(`\\b(class|interface|enum|record|struct)\\s+${N}\\b`, 'g'),
-        new RegExp(`(^|[\\n;{}])[ \\t]*([\\w<>\\[\\],.?]+\\s+)+${N}\\s*(<[^>]*>)?\\s*\\(`, 'g'),
-        ...(inContainer
-          ? [new RegExp(`(^|[\\n;{}\\]])[ \\t]*([\\w<>\\[\\],.?]+\\s+)+${N}\\s*(=(?![=>])|;|\\{\\s*(get|set|init)\\b|=>)`, 'g')]
-          : []),
+        re(`\\b(class|interface|enum|record|struct)\\s+${N}${E}`),
+        re(`(^|[\\n;{}])[ \\t]*([\\w<>\\[\\],.?]+\\s+)+${N}\\s*(<[^>]*>)?\\s*\\(`),
+        re(`(^|[\\n;{}\\]])[ \\t]*([\\w<>\\[\\],.?]+\\s+)+${N}\\s*(=(?![=>])|;|\\{\\s*(get|set|init)\\b|=>)`),
       ];
     case 'rs':
-      return [new RegExp(`\\bfn\\s+${N}\\b`, 'g'), new RegExp(`\\b(struct|enum|trait|type|mod|const|static|union)\\s+${N}\\b`, 'g')];
+      return [re(`\\bfn\\s+${N}${E}`), re(`\\b(struct|enum|trait|type|mod|const|static|union)\\s+${N}${E}`)];
   }
 }
 
@@ -341,10 +339,32 @@ function depthAt(code: string, pos: number, lo: number): number {
   return d;
 }
 
-function findIn(code: string, lang: Lang, name: string, lo: number, hi: number, inContainer: boolean, receiver?: string): Extent | null {
+function inTypeBody(code: string, pos: number): boolean {
+  for (let i = pos, d = 0; i >= 0; i--) {
+    if (code[i] === '}') d++;
+    else if (code[i] === '{' && d-- === 0)
+      return /\b(class|interface|enum|record|struct)\b[^;{}]*$/.test(code.slice(Math.max(0, i - 300), i));
+  }
+  return false;
+}
+
+function pyMemberIndent(code: string, lo: number, hi: number): number {
+  const base = indentAt(code, lo);
+  let min = Infinity;
+  for (const line of code.slice(lo, hi).split('\n').slice(1)) {
+    const ind = /^[ \t]*/.exec(line)![0].length;
+    if (line.trim() && ind > base) min = Math.min(min, ind);
+  }
+  return min;
+}
+
+function findIn(code: string, lang: Lang, name: string, lo: number, hi: number, member: number | null, receiver?: string): Extent | null {
   if (KEYWORDS.has(name) && !/^(rs|py|go)$/.test(lang)) return null;
+  const inContainer = member != null;
+  const memberIndent = inContainer && lang === 'py' ? pyMemberIndent(code, lo, hi) : -1;
   const hits: { start: number; end: number; depth: number }[] = [];
-  for (const re of defPatterns(lang, name, inContainer)) {
+  const pats = defPatterns(lang, name, inContainer);
+  for (const re of pats) {
     re.lastIndex = lo;
     let m;
     while ((m = re.exec(code)) && m.index < hi) {
@@ -352,10 +372,16 @@ function findIn(code: string, lang: Lang, name: string, lo: number, hi: number, 
       const start = m.index + (m[0].length - m[0].trimStart().length);
       if (lang === 'go' && receiver != null && !/^\s*func\s*\(/.test(m[0])) continue;
       if (lang === 'go' && receiver != null && /^func\s*\(/.test(m[0])) {
-        const recv = /^func\s*\(([^)]*)\)/.exec(m[0])![1];
-        if (!new RegExp(`\\*?\\s*${esc(receiver)}\\b`).test(recv.trim().split(/\s+/).at(-1)!)) continue;
+        const recv = /^func\s*\(([^)]*)\)/
+          .exec(m[0])![1]
+          .trim()
+          .replace(/^\w+\s+/, '');
+        if (!new RegExp(`^\\*?\\s*${esc(receiver)}(\\[[^\\]]*\\])?$`).test(recv)) continue;
       }
-      if (code[nameAt - 1] === '.') continue;
+      if (code[nameAt - 1] === '.' && !/\bexports\.$/.test(code.slice(nameAt - 8, nameAt))) continue;
+      if (lang === 'ts' && /[?:=&|]\s*$/.test(code.slice(0, start))) continue;
+      if (lang === 'go' && !inContainer && m[0].includes('=') && depthAt(code, start, 0) > 0) continue;
+      if ((lang === 'java' || lang === 'cs') && re === pats.at(-1) && !inTypeBody(code, start)) continue;
       const ext = lang === 'py' ? pyBody(code, start) : braceBody(code, nameAt + name.length, start, lang);
       if (!ext) continue;
       const isMethodish = /\(\s*$/.test(m[0]) && !/\b(function|func|fn|def)\b/.test(m[0]);
@@ -380,9 +406,11 @@ function findIn(code: string, lang: Lang, name: string, lo: number, hi: number, 
       }
       if (lang === 'java' || lang === 'cs') {
         const pre = code.slice(start, nameAt);
-        if (/\b(new|return|else|throw|await|yield|case|in|is|as|out|ref|goto|var|using)\s*$/.test(pre) || /[=.]\s*$/.test(pre)) continue;
+        if (/\b(new|return|else|throw|await|yield|case|in|is|as|out|ref|goto|var|using|do)\s*$/.test(pre) || /[=.]\s*$/.test(pre)) continue;
       }
-      hits.push({ start, end: ext[1], depth: depthAt(code, start, lo) });
+      const depth = depthAt(code, start, lo);
+      if (inContainer && lang === 'py' ? indentAt(code, start) !== memberIndent : member != null && depth !== member) continue;
+      hits.push({ start, end: ext[1], depth });
     }
   }
   if (!hits.length) return null;
@@ -392,38 +420,43 @@ function findIn(code: string, lang: Lang, name: string, lo: number, hi: number, 
 
 function rustImpls(code: string, type: string): Extent[] {
   const out: Extent[] = [];
-  const re = new RegExp(`\\bimpl\\b[^{;]*?\\b${esc(type)}\\b[^{;]*\\{`, 'g');
+  const self = new RegExp(`^(\\w+::)*${esc(type)}\\s*(<.*>)?$`, 's');
+  const re = /\bimpl\b([^{;]*)\{/g;
   let m;
   while ((m = re.exec(code))) {
+    let head = m[1].replace(/\bwhere\b[^]*$/, '').trim();
+    if (head.startsWith('<')) {
+      let d = 0;
+      let k = 0;
+      do {
+        if (head[k] === '<') d++;
+        else if (head[k] === '>' && head[k - 1] !== '-') d--;
+      } while (d > 0 && ++k < head.length);
+      head = head.slice(k + 1).trim();
+    }
+    const forAt = head.search(/\bfor\s/);
+    if (!self.test(forAt < 0 ? head : head.slice(forAt + 3).trim())) continue;
     const open = m.index + m[0].length - 1;
     out.push([open, matchClose(code, open)]);
   }
   return out;
 }
 
-const cache = new Map<Read, Map<string, CodeFile | null>>();
-
-export function codeFile(root: string, path: string, read: Read = readFile): CodeFile | null {
+export function codeFile(root: string, path: string, read: Read = readFile, cache = new Map<string, CodeFile | null>()): CodeFile | null {
   const full = resolve(root, path);
-  let files = cache.get(read);
-  if (!files) cache.set(read, (files = new Map()));
-  if (files.has(full)) return files.get(full)!;
+  if (cache.has(full)) return cache.get(full)!;
   const lang = langOf(path);
   const raw = lang ? read(full) : null;
-  const text = raw?.replace(/\r\n/g, '\n');
+  const text = raw?.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n');
   const file = lang && text != null ? { path, lang, text, ...mask(text, lang) } : null;
-  files.set(full, file);
+  cache.set(full, file);
   return file;
-}
-
-export function clearCodeCache(): void {
-  cache.clear();
 }
 
 export function locate(file: CodeFile, symbol: string): { start: number; end: number } | null {
   const { code, lang } = file;
   const parts = symbol.split('.');
-  if (!parts.every((p) => /^[A-Za-z_$][\w$]*$/.test(p))) return null;
+  if (!parts.every((p) => /^[\p{L}_$][\p{L}\p{N}_$]*$/u.test(p))) return null;
   const hit = (r: Extent | null) => {
     if (!r) return null;
     let start = r[0];
@@ -436,16 +469,20 @@ export function locate(file: CodeFile, symbol: string): { start: number; end: nu
     }
     return { start, end: r[1] };
   };
-  if (parts.length === 1) return hit(findIn(code, lang, parts[0], 0, code.length, false));
+  if (parts.length === 1 && parts[0] === 'default' && lang === 'ts') {
+    const m = /\bexport\s+default\b/.exec(code);
+    return m && { start: m.index, end: code.length };
+  }
+  if (parts.length === 1) return hit(findIn(code, lang, parts[0], 0, code.length, null));
   if (lang === 'go' && parts.length === 2) {
-    const r = findIn(code, lang, parts[1], 0, code.length, false, parts[0]);
+    const r = findIn(code, lang, parts[1], 0, code.length, null, parts[0]);
     if (r && /^func\s*\(/.test(code.slice(r[0]))) return hit(r);
-    const t = findIn(code, lang, parts[0], 0, code.length, false);
-    return t ? hit(findIn(code, lang, parts[1], t[0] + 1, t[1], true)) : null;
+    const t = findIn(code, lang, parts[0], 0, code.length, null);
+    return t ? hit(findIn(code, lang, parts[1], t[0] + 1, t[1], 1)) : null;
   }
   if (lang === 'rs' && parts.length === 2) {
     for (const [a, b] of rustImpls(code, parts[0])) {
-      const r = findIn(code, lang, parts[1], a + 1, b, true);
+      const r = findIn(code, lang, parts[1], a + 1, b, 0);
       if (r) return hit(r);
     }
     return null;
@@ -453,7 +490,7 @@ export function locate(file: CodeFile, symbol: string): { start: number; end: nu
   let lo = 0;
   let hi = code.length;
   for (let k = 0; k < parts.length; k++) {
-    const r = findIn(code, lang, parts[k], lo, hi, k > 0);
+    const r = findIn(code, lang, parts[k], lo, hi, k > 0 ? 1 : null);
     if (!r) return null;
     if (k === parts.length - 1) return hit(r);
     lo = r[0] + 1;

@@ -121,3 +121,12 @@ test('verifyReport counts the boxes with a source and the boxes that pass', () =
     assert.equal(coverageLine('docs/f.svg', r.coverage), 'docs/f.svg: 1 of 3 boxes defined');
   });
 });
+
+test('verifyReport reads the file again on each call, so a fixed file passes', () => {
+  withRepo({ 'a.ts': '// login\n' }, (root) => {
+    const run = () => verifyReport(figWith('a.ts#login'), { root }).coverage.boxesDefined;
+    assert.equal(run(), 0);
+    writeFileSync(join(root, 'a.ts'), 'export function login() {}\n');
+    assert.equal(run(), 1);
+  });
+});

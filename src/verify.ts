@@ -2,7 +2,7 @@ import { isAbsolute, relative, resolve, sep } from 'node:path';
 import type { FlowProps } from './model.ts';
 import { headingSlug, links } from './source.ts';
 import type { Finding } from './scene.ts';
-import { codeFile, isDefined, readFile, type Read } from './code.ts';
+import { codeFile, isDefined, readFile, type CodeFile, type Read } from './code.ts';
 
 export { parseSource, headingSlug, owners, links, type Link } from './source.ts';
 
@@ -32,6 +32,7 @@ export function verifyReport(
       coverage,
     };
   const files = new Map<string, string | null>();
+  const parsed = new Map<string, CodeFile | null>();
   for (const l of all) {
     const full = resolve(root, l.path);
     const rel = relative(root, full);
@@ -43,7 +44,7 @@ export function verifyReport(
       findings.push({ rule, severity: 'error', ids: [], message: `${l.owner} -> ${l.source}: ${what}` });
     if (text == null) fail('missing-file', 'file not found');
     else if (l.symbol) {
-      const code = codeFile(root, l.path, read);
+      const code = codeFile(root, l.path, read, parsed);
       if (code) {
         if (!isDefined(code, l.symbol)) fail('missing-symbol', 'symbol not defined');
       } else if (

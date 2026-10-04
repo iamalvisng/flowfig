@@ -65,3 +65,39 @@ test('the extent of a Go struct ends at its closing brace, also at the end of th
   const ex = locate(go, 'X')!;
   assert.match(go.text.slice(ex.start, ex.end), /^type X struct \{\n {2}a int\n\}$/);
 });
+
+test('Owner.name needs a member of Owner itself, not a longer type name, a trait or a local', () => {
+  const no: [string, string, string][] = [
+    ['a.go', 'package s\ntype MyCache struct{}\nfunc (c *MyCache) Get() {}\n', 'Cache.Get'],
+    ['a.rs', 'trait Cache { fn put(&self); }\nimpl Cache for Store {\n    fn put(&self) {}\n}\n', 'Cache.put'],
+    ['b.rs', 'impl From<Cache> for Store {\n    fn from(c: Cache) -> Self { Store }\n}\n', 'Cache.from'],
+    ['a.ts', 'class Store {\n  put() {\n    const get = 1;\n    return { get: 1 };\n  }\n}\n', 'Store.get'],
+    ['a.py', 'class Store:\n    def put(self):\n        get = self.cache.get\n        foo(\n            get=1)\n', 'Store.get'],
+  ];
+  for (const [path, text, symbol] of no) assert.equal(isDefined(at(path, text), symbol), false, `${path} ${symbol}`);
+  assert.equal(isDefined(at('g.go', 'package s\ntype Cache[T any] struct{}\nfunc (c *Cache[T]) Get() {}\n'), 'Cache.Get'), true);
+  assert.equal(isDefined(at('c.rs', 'impl<T> Cache<T> {\n    fn get(&self) {}\n}\n'), 'Cache.get'), true);
+});
+
+test('a name the file only uses is not defined', () => {
+  const uses: [string, string][] = [
+    ['a.ts', 'export function make(\n  logout: () => void,\n) {}\n'],
+    ['b.ts', 'export const r = ok ?\n  logout() : null;\n'],
+    ['a.go', 'package a\nfunc f() {\n\tLogout, err = g()\n}\n'],
+    ['A.java', 'class A {\n  void f() {\n    do logout(); while (x);\n  }\n}\n'],
+  ];
+  for (const [path, text] of uses) assert.equal(isDefined(at(path, text), 'logout') || isDefined(at(path, text), 'Logout'), false, path);
+});
+
+test('a name the file defines is found: a field, an export, a default export, a BOM or non-ASCII letters', () => {
+  const yes: [string, string, string][] = [
+    ['Config.java', 'class Config {\n  static final int MAX_RETRIES = 3;\n}\n', 'MAX_RETRIES'],
+    ['A.cs', 'class A {\n  public string Login { get; set; }\n}\n', 'Login'],
+    ['a.cjs', 'exports.login = function () {};\nmodule.exports.logout = () => {};\n', 'logout'],
+    ['b.cjs', 'exports.login = function () {};\n', 'login'],
+    ['d.ts', 'export default function () {}\n', 'default'],
+    ['bom.py', '﻿def login():\n    pass\n', 'login'],
+    ['u.py', 'def données():\n    pass\n', 'données'],
+  ];
+  for (const [path, text, symbol] of yes) assert.equal(isDefined(at(path, text), symbol), true, `${path} ${symbol}`);
+});
