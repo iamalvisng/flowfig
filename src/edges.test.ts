@@ -461,3 +461,39 @@ test('a Rust function brought in by a use outside the crate is unsure; a crate u
   assert.equal(run(at('use std::fs::read;\n'), 'src/c.rs#f', 'src/fs.rs#read'), 'unsure');
   assert.equal(run(at('use crate::fs::read;\n'), 'src/c.rs#f', 'src/fs.rs#read'), 'found');
 });
+
+test('a middleware passed as a route argument is found; another middleware is not found', () => {
+  const files = {
+    'src/limit.ts': 'export function loginRateLimit(req, res, next) { next(); }\nexport function otherLimit(req, res, next) { next(); }\n',
+    'src/auth.ts':
+      "import { Router } from 'express';\nimport { loginRateLimit } from './limit.ts';\nexport const authRouter = Router();\n" +
+      'authRouter.post("/login", loginRateLimit, async (req, res) => { res.json({}); });\n',
+    'src/admin.ts': "import { otherLimit } from './limit.ts';\napp.post('/admin', otherLimit, async (req, res) => { res.json({}); });\n",
+  };
+  assert.equal(run(files, 'src/auth.ts', 'src/limit.ts#loginRateLimit'), 'found');
+  assert.equal(run(files, 'src/admin.ts', 'src/limit.ts#loginRateLimit'), 'not-found');
+});
+
+test('a route key is a source: its handler calls count, the calls of another route do not', () => {
+  const files = {
+    'src/session.ts': 'export function createSession() {}\n',
+    'src/auth.ts':
+      "import { createSession } from './session.ts';\n" +
+      'authRouter.post("/login", async (req, res) => { await createSession(); });\n' +
+      'authRouter.post("/logout", async (req, res) => { res.end(); });\n' +
+      'router.post("documents.archive", auth(), async (ctx) => { await createSession(); });\n' +
+      'const v = req.get("rearm", () => createSession());\n',
+  };
+  assert.equal(run(files, 'src/auth.ts#/login', 'src/session.ts#createSession'), 'found');
+  assert.equal(run(files, 'src/auth.ts#documents.archive', 'src/session.ts#createSession'), 'found');
+  assert.equal(run(files, 'src/auth.ts#/logout', 'src/session.ts#createSession'), 'not-found');
+  assert.equal(run(files, 'src/auth.ts#rearm', 'src/session.ts#createSession'), 'not-checked');
+});
+
+test('a call through a default export that wraps the callee is unsure, not "not found"', () => {
+  const files = {
+    'src/mover.ts': 'async function documentMover() {}\nexport default traceFunction({ spanName: "x" })(documentMover);\n',
+    'src/api.ts': "import documentMover from './mover.ts';\nexport function move() { documentMover(); }\n",
+  };
+  assert.equal(run(files, 'src/api.ts#move', 'src/mover.ts#documentMover'), 'unsure');
+});

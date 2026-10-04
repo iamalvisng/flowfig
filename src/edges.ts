@@ -1,5 +1,5 @@
 import { dirname } from 'node:path';
-import { codeFile, esc, langOf, locate, matchClose, outside, readFile, type CodeFile, type Lang, type Read } from './code.ts';
+import { codeFile, esc, langOf, locate, matchClose, outside, readFile, routeKeys, type CodeFile, type Lang, type Read } from './code.ts';
 import { importsOf, leadsTo, type Import } from './imports.ts';
 import {
   ancestors,
@@ -28,6 +28,12 @@ type Src = { path: string; symbol?: string };
 
 type Verdict = { res: 'found' | 'not' | 'unsure' | 'skip'; why: string };
 const word = (name: string) => new RegExp(`(?<![\\w$])${esc(name)}(?![\\w$])`);
+function place(file: CodeFile, symbol: string): { start: number; end: number; route?: true } | 'many' | null {
+  const at = locate(file, symbol);
+  if (at) return at;
+  const keys = routeKeys(file, symbol);
+  return keys.length > 1 ? 'many' : keys.length ? { ...keys[0], route: true } : null;
+}
 const IMPORT_LINES =
   /\b(?:import|export)\s+(?:type\s+)?[\w*\s,{}$]*?\bfrom\b|^[ \t]*(?:from|use|using|package|import)\b.*|.*\brequire\(.*/gm;
 const MODIFIERS = new Set([
@@ -197,18 +203,20 @@ export function edgeResult(
   const fi = codeFile(root, from.path, read, cache);
   const ti = codeFile(root, to.path, read, cache);
   if (!fi || !ti) return skip('a file is missing');
-  const at = from.symbol ? locate(fi, from.symbol) : { start: 0, end: fi.code.length };
+  const at = from.symbol ? place(fi, from.symbol) : { start: 0, end: fi.code.length };
   if (!at) return skip(`${from.symbol} is not defined`);
+  if (at === 'many') return { result: 'unsure', reason: `${from.symbol} is a route key in two calls` };
   if (to.symbol && !locate(ti, to.symbol)) return skip(`${to.symbol} is not defined`);
 
   const whole = !from.symbol;
+  const route = 'route' in at;
   let body = fi.code.slice(at.start, at.end);
   if (whole) body = body.replace(IMPORT_LINES, (m) => m.replace(/[^\n]/g, ' '));
   if (!to.symbol) return fileResult(root, fi, ti, body, whole, from, to, read, cache);
   const toParts = to.symbol.split('.');
   const toName = toParts.at(-1)!;
   const owner = toParts.length > 1 ? toParts.at(-2)! : null;
-  const fromParts = from.symbol?.split('.') ?? [];
+  const fromParts = route ? [] : (from.symbol?.split('.') ?? []);
   const fromName = fromParts.at(-1);
   const fromContainer = fromParts.length > 1 ? fromParts.at(-2)! : null;
   const cx = makeCtx(root, read, cache);
@@ -222,6 +230,7 @@ export function edgeResult(
   const byLocal = new Map(imps.map((i) => [i.local, i]));
   const pyStar = lang === 'py' && imps.some((i) => i.local === '*');
   const isDefault = defaultIs(ti, to.symbol);
+  const wrapped = !isDefault && new RegExp(`\\bexport\\s+default\\b[^;]*${word(toName).source}`).test(ti.code);
   const reach = (path: string | null | undefined, name: string) => (path == null ? null : leadsTo(root, path, to.path, name, read, cache));
   const isCallee = (r: string | null) => r != null && (r === '*' || r === toName || (r === 'default' && isDefault));
   const names = new Set([toName]);
@@ -231,7 +240,7 @@ export function edgeResult(
       word(i.local).test(body) &&
       (i.path == null
         ? i.name === toName || (i.name === 'default' && isDefault)
-        : isCallee(reach(i.path, i.name)) || reach(i.path, i.name) === '?')
+        : isCallee(reach(i.path, i.name)) || reach(i.path, i.name) === '?' || (wrapped && reach(i.path, i.name) === 'default'))
     )
       names.add(i.local);
   const same = from.path === to.path || ((lang === 'go' || lang === 'java') && dirname(from.path) === dirname(to.path));
@@ -282,7 +291,7 @@ export function edgeResult(
         return unsure(`${n} has no path to ${owner}`);
       }
       const dynamic = new RegExp(`\\{[^}]*\\b${esc(n)}\\b[^}]*\\}\\s*=\\s*(?:await\\s+)?(?:import|require)\\(`).test(body);
-      if ((shadowed || (n === toName && !dynamic && localType(cx, fi, body, n, lang))) && n !== fromName) return ignore;
+      if ((shadowed || (n === toName && !dynamic && localType(cx, fi, body, n, lang, !whole && !route))) && n !== fromName) return ignore;
       if (pyStar) return unsure(`${n} can come from a star import`);
       const bind = byLocal.get(n);
       if (bind && twice(fi, imps, n)) return unsure(`${n} has two bindings`);
@@ -290,6 +299,7 @@ export function edgeResult(
       if (bind) {
         const r = reach(bind.path, bind.name);
         if (r === '?') return unsure(`${n} can come from a star import`);
+        if (r === 'default' && wrapped) return unsure(`the default export wraps ${toName}`);
         if (!isCallee(r)) return ignore;
         if (r === '*') {
           const member = /^\s*\.\s*([\w$]+)/.exec(body.slice(idx + n.length))?.[1];

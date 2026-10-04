@@ -211,3 +211,10 @@ test('a via that is not a string is a bad source for check, and verify does not 
     assert.equal(verifyReport(fig, { root }).coverage.notChecked, 1);
   });
 });
+
+test('a route key in a handler call is a defined box; a req.get key is not', () => {
+  withRepo({ 'src/auth.ts': 'authRouter.post("/login", async (req, res) => {});\nconst v = req.get("rearm", () => 1);\n' }, (root) => {
+    assert.deepEqual(rules(verify(figWith('src/auth.ts#/login'), { root })), []);
+    assert.deepEqual(rules(verify(figWith('src/auth.ts#rearm'), { root })), ['missing-symbol']);
+  });
+});

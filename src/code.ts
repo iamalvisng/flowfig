@@ -532,4 +532,32 @@ export function locate(file: CodeFile, symbol: string): { start: number; end: nu
   return null;
 }
 
-export const isDefined = (file: CodeFile, symbol: string): boolean => locate(file, symbol) != null;
+const ROUTE_CALL = /([\w$.]+)\s*\.\s*(?:get|post|put|patch|delete|del|all|head|options|use|route)\s*\(\s*(['"`])([^'"`\n]*)\2\s*,/g;
+const HANDLER =
+  /^\s*(?:async\s+)?(?:function\b|\([^()]*\)\s*(?::[^=]*)?=>|[\w$]+\s*=>|(?!(?:null|true|false|undefined)\s*$)[A-Za-z_$][\w$.]*\s*$)/;
+
+export function routeKeys(file: CodeFile, key: string): { start: number; end: number }[] {
+  const out: { start: number; end: number }[] = [];
+  for (const m of file.keep.matchAll(ROUTE_CALL)) {
+    if (m[3] !== key || /^(req|request|res|response)$/.test(m[1].split('.').at(-1)!)) continue;
+    const open = m.index + m[0].indexOf('(');
+    if (file.code[open] !== '(' || file.code[m.index] !== m[1][0]) continue;
+    const close = matchClose(file.code, open);
+    const rest = file.code.slice(m.index + m[0].length, close);
+    let depth = 0;
+    let last = 0;
+    const args: string[] = [];
+    for (let i = 0; i <= rest.length; i++) {
+      const c = rest[i];
+      if (c === undefined || (c === ',' && depth === 0)) {
+        args.push(rest.slice(last, i));
+        last = i + 1;
+      } else if ('([{'.includes(c)) depth++;
+      else if (')]}'.includes(c)) depth--;
+    }
+    if (args.some((a) => HANDLER.test(a))) out.push({ start: open + 1, end: close });
+  }
+  return out;
+}
+
+export const isDefined = (file: CodeFile, symbol: string): boolean => locate(file, symbol) != null || routeKeys(file, symbol).length > 0;
