@@ -36,9 +36,8 @@ const chunk = (kind, body) => {
   return Buffer.concat([len, Buffer.from(kind, 'latin1'), body, Buffer.alloc(4)]);
 };
 const png = () => {
-  const raw = Buffer.alloc(H * (W * 3 + 1));
-  for (let y = 0; y < H; y++)
-    for (let x = 0; x < W; x++) raw.fill(Math.floor(Math.random() * 256), y * (W * 3 + 1) + 1 + x * 3, y * (W * 3 + 1) + 4 + x * 3);
+  const raw = require('node:crypto').randomBytes(H * (W * 3 + 1));
+  for (let y = 0; y < H; y++) raw[y * (W * 3 + 1)] = 0;
   const ihdr = Buffer.alloc(13);
   ihdr.writeUInt32BE(W, 0);
   ihdr.writeUInt32BE(H, 4);
