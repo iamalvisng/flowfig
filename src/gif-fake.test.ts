@@ -58,7 +58,8 @@ input.on('data', (d) => {
     if (m.method === 'Runtime.evaluate') result = { result: { value: { loop: FRAMES * 20, x: 0, y: 0, width: W, height: H } } };
     if (m.method === 'Page.captureScreenshot') {
       result = { data: png().toString('base64') };
-      if (++shots === FRAMES) fs.writeFileSync(process.env.FAKE_MARKER, 'x'); // the encode starts now
+      if (++shots === Number(process.env.FAKE_CRASH_AT)) process.exit(1);
+      if (shots === FRAMES) fs.writeFileSync(process.env.FAKE_MARKER, 'x'); // the encode starts now
     }
     reply({ id: m.id, result });
   }
@@ -166,6 +167,19 @@ test('a GIF over 10 MB gives a warning with the size and the way to shrink it', 
     const r = run(dir, [], env(dir, 1500));
     assert.equal(r.status, 0, r.stderr);
     assert.match(r.stderr, /warning: .*fig\.gif is \d+\.\d MB, over 10 MB\. Try --step <n>, a lower --fps or a lower --scale\./);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a browser that exits during the capture gives exit 1, an error, no GIF and no temp folder', { skip: !posix, timeout: 30000 }, () => {
+  const dir = setup();
+  try {
+    const r = run(dir, [], env(dir, 40, { FAKE_CRASH_AT: '2' }));
+    assert.equal(r.status, 1);
+    assert.match(r.stderr, /^gif: /);
+    assert.equal(existsSync(join(dir, 'fig.gif')), false);
+    assert.deepEqual(left(dir), []);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
