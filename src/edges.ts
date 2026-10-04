@@ -85,6 +85,30 @@ function viaResult(root: string, from: Src, to: Src | undefined, via: string, re
   return { result: 'found' as const, reason: `"${via}" is in ${label(from)} and in ${label(to)}` };
 }
 
+function fileResult(
+  root: string,
+  fi: CodeFile,
+  ti: CodeFile,
+  body: string,
+  whole: boolean,
+  from: Src,
+  to: Src,
+  read: Read,
+  cache: Map<string, CodeFile | null>,
+) {
+  const names = importsOf(root, fi, read)
+    .filter((i) => i.path != null && leadsTo(root, i.path, to.path, read, cache))
+    .map((i) => i.local);
+  if (fi.lang === 'go' && dirname(from.path) === dirname(to.path) && from.path !== to.path)
+    for (const m of ti.code.matchAll(/^(?:func|type|var|const)\s+([\p{L}_][\p{L}\p{N}_]*)/gmu)) names.push(m[1]);
+  const fromName = from.symbol?.split('.').at(-1);
+  const hit = names.find((n) => word(n).test(body) && !shadows(body, n, fi.lang, fromName, whole));
+  const who = label(from);
+  return hit
+    ? { result: 'found' as const, reason: `${who} uses ${hit} from ${to.path}` }
+    : { result: 'not-found' as const, reason: `${who} does not use ${to.path}` };
+}
+
 export function edgeResult(
   root: string,
   caller: string,
@@ -99,7 +123,7 @@ export function edgeResult(
   if (!from) return skip('the caller has no source');
   if (callee === caller) return skip('both boxes have the same source');
   if (via) return viaResult(root, from, to, via, read, cache);
-  if (!to?.symbol) return skip('the callee has no symbol');
+  if (!to) return skip('the callee has no source');
   const supported = (p: Src) => {
     const lang = langOf(p.path);
     return lang != null && EDGE_LANGS.has(lang);
@@ -110,11 +134,12 @@ export function edgeResult(
   if (!fi || !ti) return skip('a file is missing');
   const at = from.symbol ? locate(fi, from.symbol) : { start: 0, end: fi.code.length };
   if (!at) return skip(`${from.symbol} is not defined`);
-  if (!locate(ti, to.symbol)) return skip(`${to.symbol} is not defined`);
+  if (to.symbol && !locate(ti, to.symbol)) return skip(`${to.symbol} is not defined`);
 
   const whole = !from.symbol;
   let body = fi.code.slice(at.start, at.end);
   if (whole) body = body.replace(IMPORT_LINES, (m) => m.replace(/[^\n]/g, ' '));
+  if (!to.symbol) return fileResult(root, fi, ti, body, whole, from, to, read, cache);
   const toName = to.symbol.split('.').at(-1)!;
   const toContainer = to.symbol.includes('.') ? to.symbol.split('.')[0] : null;
   const fromName = from.symbol?.split('.').at(-1);

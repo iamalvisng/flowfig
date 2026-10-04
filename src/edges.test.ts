@@ -74,3 +74,17 @@ test('a CRLF file and a callee import written with ./ give the same result as LF
   };
   assert.equal(run(files, 'src/login.ts#login', 'src/auth.ts#verify'), 'found');
 });
+
+test('a callee file with no symbol is found when the caller uses a name from it', () => {
+  const files = {
+    'src/auth.ts': 'export function verify() {}\n',
+    'src/login.ts': "import { verify } from './auth.ts';\nexport function login() { verify(); }\n",
+    'src/other.ts': 'export function other() { verify(); }\n',
+    'go.mod': 'module example.com/app\n',
+    'api/a.go': 'package api\nfunc Create() { Save() }\n',
+    'api/b.go': 'package api\nfunc Save() {}\n',
+  };
+  assert.equal(run(files, 'src/login.ts#login', 'src/auth.ts'), 'found');
+  assert.equal(run(files, 'src/other.ts#other', 'src/auth.ts'), 'not-found');
+  assert.equal(run(files, 'api/a.go#Create', 'api/b.go'), 'found');
+});
