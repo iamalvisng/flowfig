@@ -17,6 +17,7 @@ import { diff, formatDiff } from './diff.ts';
 import { loadSpec, reportLines, sortFindings, specOf, svgWithSpec } from './load.ts';
 import type { FlowProps } from './model.ts';
 import { check, render, toSvg, type Finding } from './svg.ts';
+import { checkRendered } from './check.ts';
 import { links, verify, type Link } from './verify.ts';
 
 const USAGE = `usage: flowfig <-|spec.json|figure.ts> [out.svg] [--open]   render a figure; a spec on stdin with -
@@ -303,7 +304,7 @@ if (!input) usage(USAGE);
 const props = await load(input);
 
 const rendered = skip ? undefined : render(props, opts);
-const findings: Finding[] = rendered ? sortFindings(check(props, opts, rendered.scene), strict) : [];
+const findings: Finding[] = rendered ? sortFindings(checkRendered(props, opts, rendered.scene), strict) : [];
 const errors = findings.filter((f) => f.severity === 'error').length;
 
 const report = (print: (s: string) => void, tty: boolean | undefined) => {

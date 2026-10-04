@@ -2,7 +2,7 @@
 import { route, type Pt, type Rect, type Side } from './geometry.ts';
 import { foldedLabel, groupBox, layoutRail, railState, RAIL, type Rail } from './rail.ts';
 import { textWidth, wrap } from './text.ts';
-import { checkScene, checkSpec, checkTheme, type CheckOptions } from './check.ts';
+import { checkRendered, planFor, type CheckOptions } from './check.ts';
 import type { Finding, Scene, SceneBox, SceneEdge } from './scene.ts';
 export type { CheckOptions } from './check.ts';
 export type { Finding, Scene } from './scene.ts';
@@ -34,7 +34,6 @@ import {
   LANE_BLOCK_GAP,
   FRAME_SIDE,
   laneGutter as gutterOf,
-  lanePlan,
   STUB_ROOM,
   laneBlock,
   laneEnd,
@@ -1029,24 +1028,12 @@ ${said.join('\n')}
   return { svg, scene };
 }
 
-function planFor(fig: FlowProps, opts: SvgOptions): LanePlan | null {
-  if (fig.timeline || !fig.lanes || !isLanesLayout(fig.layout)) return null;
-  const floor = fig.rail ? (layoutRail(fig, 560)?.width ?? 0) : 0;
-  return lanePlan(fig, { width: opts.width, minText: opts.minText, padding: opts.padding ?? 24, floor });
-}
-
 /** One self-contained animated SVG string for the figure. Needs no React and no browser. */
 export function toSvg(fig: FlowProps, opts: SvgOptions = {}): string {
   return render(fig, opts).svg;
 }
 
 /** Every fault `flowfig check` knows about, for this figure as the SVG lays it out. */
-export function check(fig: FlowProps, opts: SvgOptions & CheckOptions = {}, scene = render(fig, opts).scene): Finding[] {
-  const lost = (planFor(fig, opts)?.lost ?? []).map((id): Finding => ({
-    rule: 'lane-end-block',
-    severity: 'warning',
-    ids: [id],
-    message: `edge "${id}" ends at a lane that no block on its side shows; the edge uses the nearest block`,
-  }));
-  return [...checkSpec(fig), ...checkScene(scene, opts), ...lost, ...checkTheme({ ...fig.theme, ...opts.theme })];
+export function check(fig: FlowProps, opts: SvgOptions & CheckOptions = {}): Finding[] {
+  return checkRendered(fig, opts, render(fig, opts).scene);
 }
