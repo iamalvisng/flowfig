@@ -83,6 +83,19 @@ function goModule(root: string, from: string, read: Read): { mod?: string; dir: 
   }
 }
 
+function goWork(root: string, from: string, read: Read): { mod: string; dir: string }[] {
+  for (let d = posix.dirname(from); ; d = posix.dirname(d)) {
+    const text = readIn(root, posix.join(d, 'go.work'), read);
+    if (text != null)
+      return [...text.matchAll(/^\s*(?:use\s+)?"?(\.[^\s")]*)"?\s*$/gm)].flatMap((m) => {
+        const dir = posix.join(d, m[1]);
+        const mod = /module\s+(\S+)/.exec(readIn(root, posix.join(dir, 'go.mod'), read) ?? '')?.[1];
+        return mod ? [{ mod, dir }] : [];
+      });
+    if (d === '.') return [];
+  }
+}
+
 const goRequired = (text: string, p: string) =>
   [...text.matchAll(/^\s*(?:require\s+)?([\w.~-]+\/[\w.~/-]+)\s+v\S+/gm)].some(
     (m) => (p === m[1] || p.startsWith(`${m[1]}/`)) && !new RegExp(`^\\s*(?:replace\\s+)?${esc(m[1])}\\b[^\\n]*=>`, 'm').test(text),
@@ -137,14 +150,19 @@ export function importsOf(root: string, file: CodeFile, read: Read): Import[] {
       add('*', m[3] ?? m[1].split('.')[0], resolvePy(root, path, m[1], read, top));
   } else if (lang === 'go') {
     const { mod, dir, text } = goModule(root, path, read);
+    let work: { mod: string; dir: string }[] | undefined;
     for (const m of keep.matchAll(/^\s*(?:import\s+)?(\w+|\.|_)?\s*"([^"]+)"/gm)) {
       const p = m[2];
-      const to =
-        mod && (p === mod || p.startsWith(`${mod}/`))
-          ? posix.join(dir, p.slice(mod.length + 1))
-          : p.split('/')[0].includes('.') && !goRequired(text, p)
-            ? null
-            : OUTSIDE;
+      const inside = (w: { mod?: string; dir: string }) => w.mod && (p === w.mod || p.startsWith(`${w.mod}/`));
+      const own = [
+        { mod, dir },
+        ...(p.split('/')[0].includes('.') && !inside({ mod, dir }) ? (work ??= goWork(root, path, read)) : []),
+      ].find(inside);
+      const to = own
+        ? posix.join(own.dir, p.slice(own.mod!.length + 1))
+        : p.split('/')[0].includes('.') && !goRequired(text, p)
+          ? null
+          : OUTSIDE;
       add('*', m[1] ?? p.split('/').at(-1)!, to);
     }
   }

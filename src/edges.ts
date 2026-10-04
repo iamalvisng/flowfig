@@ -4,6 +4,7 @@ import { importsOf, leadsTo } from './imports.ts';
 import {
   ancestors,
   declIn,
+  defines,
   findType,
   inTypePosition,
   isUpper,
@@ -127,6 +128,18 @@ function fileResult(
   const names: string[] = [];
   let open: string | undefined;
   for (const i of importsOf(root, fi, read)) {
+    if (i.local === '*' || i.local === '.') {
+      const top = [
+        ...ti.code.matchAll(
+          /^(?:(?:async\s+)?def|class|func|type|var|const)\s+([\p{L}_][\p{L}\p{N}_]*)|^([\p{L}_][\p{L}\p{N}_]*)\s*=(?!=)/gmu,
+        ),
+      ]
+        .map((m) => m[1] ?? m[2])
+        .filter(used);
+      if (i.path == null) open ??= top.length ? i.local : undefined;
+      else names.push(...top.filter((n) => leadsTo(root, i.path!, to.path, n, read, cache) != null));
+      continue;
+    }
     if (!used(i.local)) continue;
     if (i.path == null) {
       open ??= i.local;
@@ -225,9 +238,13 @@ export function edgeResult(
         if (!fromContainer) return unsure(`the class of ${who} is not known`);
         const r = reaches(cx, { kind: 'type', name: fromContainer, ctx: fi }, ownerDecl, owner, toName, to.path);
         const st = new RegExp(`^\\s*(?:import|using)\\s+static\\s+([\\w.]+?)(?:\\.(${esc(n)}|\\*))?\\s*;`, 'gm');
-        const statics = r === 'yes' ? [] : [...fi.keep.matchAll(st)].filter((m) => lang === 'cs' || m[2]);
-        if (statics.some((m) => lang === 'java' && to.path.endsWith(`${m[1].replace(/\./g, '/')}.java`)))
-          return found('through a static import');
+        const own = fromDecl != null && [fromDecl, ...ancestors(cx, fromDecl).map((a) => a.d)].some((d) => d && defines(cx, d, n));
+        const inFile = (m: RegExpMatchArray) => lang === 'java' && to.path.endsWith(`${m[1].replace(/\./g, '/')}.java`);
+        const statics =
+          r === 'yes' || own
+            ? []
+            : [...fi.keep.matchAll(st)].filter((m) => (lang === 'cs' || m[2]) && !(inFile(m) && m[1].split('.').at(-1) !== owner));
+        if (statics.some(inFile)) return found('through a static import');
         if (statics.length) return unsure(`the static import of ${n} is not read`);
         return byReach(r, 'on this');
       }
@@ -248,9 +265,21 @@ export function edgeResult(
       if ((shadowed || (n === toName && !dynamic && localType(cx, fi, body, n, lang))) && n !== fromName) return ignore;
       const bind = byLocal.get(n);
       if (bind?.path === null) return unsure(`the import of ${n} is not read`);
-      if (bind) return isCallee(reach(bind.path, bind.name)) ? found(n === toName ? 'through an import' : 'through an alias') : ignore;
+      if (bind) {
+        const r = reach(bind.path, bind.name);
+        if (!isCallee(r)) return ignore;
+        if (r === '*') {
+          const member = /^\s*\.\s*([\w$]+)/.exec(body.slice(idx + n.length))?.[1];
+          if (member == null) return unsure(`the use of ${n} is not read`);
+          if (member !== toName) return ignore;
+        }
+        return found(n === toName ? 'through an import' : 'through an alias');
+      }
       if (same) return found('in the same file');
       if (lang === 'rs' && rustUses(fi, n, to.path)) return found('through a use item');
+      const stars = imps.filter((i) => i.local === '*' || i.local === '.');
+      if (stars.some((i) => isCallee(reach(i.path, n)))) return found('through a star import');
+      if (stars.some((i) => i.path == null)) return unsure(`the star import of ${n} is not read`);
       return (lang === 'java' || lang === 'cs') && !owner ? unsure(`the import of ${n} is not read`) : ignore;
     }
     if (rc.complex) return unsure(rc.chain.length ? 'the receiver chain has a call' : 'the receiver is an expression');

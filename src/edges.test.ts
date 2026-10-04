@@ -329,6 +329,35 @@ test('one edge on a 200 KB body with a long number array takes under 1 s', () =>
   assert.ok(Date.now() - t < 1000, `${Date.now() - t} ms`);
 });
 
+test('a namespace re-export leads only to the member that the body calls on it', () => {
+  const files = {
+    'src/auth.ts': 'export function verify() {}\nexport function hash() {}\n',
+    'src/index.ts': "export * as auth from './auth.ts';\n",
+    'src/login.ts': "import { auth } from './index.ts';\nexport function login() { auth.hash(); }\n",
+    'src/signup.ts': "import { auth } from './index.ts';\nexport function signup() { auth.verify(); }\n",
+  };
+  assert.equal(run(files, 'src/login.ts#login', 'src/auth.ts#verify'), 'not-found');
+  assert.equal(run(files, 'src/signup.ts#signup', 'src/auth.ts#verify'), 'found');
+});
+
+test('a Java bare call goes to the own method before a static import', () => {
+  const files = {
+    'src/a/Auth.java': 'package a;\npublic class Auth {\n  public static void verify() {}\n}\n',
+    'src/b/Login.java': 'package b;\nimport static a.Auth.*;\npublic class Login {\n  void verify() {}\n  void login() { verify(); }\n}\n',
+  };
+  assert.equal(run(files, 'src/b/Login.java#Login.login', 'src/a/Auth.java#Auth.verify'), 'not-found');
+});
+
+test('a Java static import leads only to the class it names, not to another class in the same file', () => {
+  const files = {
+    'src/a/Auth.java':
+      'package a;\npublic class Auth {\n  public static void verify() {}\n}\nclass Helper {\n  static void verify() {}\n}\n',
+    'src/b/Login.java': 'package b;\nimport static a.Auth.verify;\npublic class Login {\n  void login() { verify(); }\n}\n',
+  };
+  assert.equal(run(files, 'src/b/Login.java#Login.login', 'src/a/Auth.java#Auth.verify'), 'found');
+  assert.equal(run(files, 'src/b/Login.java#Login.login', 'src/a/Auth.java#Helper.verify'), 'not-found');
+});
+
 test('a type name unique in the repo but not imported is outside the repo: java.lang and a C# using', () => {
   const files = {
     'src/a/Process.java': 'package a;\npublic class Process {\n  public void destroy() {}\n}\n',
@@ -348,4 +377,24 @@ test('a Rust receiver type that the repo does not declare is unsure, not found b
     'src/c.rs': 'fn f(x: Option<u8>) {\n    x.map(|v| v + 1);\n}\n',
   };
   assert.equal(run(files, 'src/c.rs#f', 'src/ext.rs#Option.map'), 'unsure');
+});
+
+test('a star import, a Go dot import and a go.work module lead to the callee; an unresolved star import is unsure', () => {
+  const files = {
+    'app/__init__.py': '',
+    'app/db.py': 'def save():\n    pass\n',
+    'app/api.py': 'from app.db import *\n\ndef create():\n    save()\n',
+    'app/vendor.py': 'from vendor.db import *\n\ndef create():\n    save()\n',
+    'go.work': 'go 1.22\nuse (\n\t./svc\n\t./lib\n)\n',
+    'svc/go.mod': 'module example.com/svc\n\nrequire example.com/lib v0.0.0\n',
+    'lib/go.mod': 'module example.com/lib\n',
+    'lib/store/store.go': 'package store\nfunc Save() {}\n',
+    'svc/api/api.go': 'package api\nimport "example.com/lib/store"\nfunc Create() {\n\tstore.Save()\n}\n',
+    'svc/dot/dot.go': 'package dot\nimport . "example.com/lib/store"\nfunc Create() {\n\tSave()\n}\n',
+  };
+  assert.equal(run(files, 'app/api.py#create', 'app/db.py#save'), 'found');
+  assert.equal(run(files, 'app/api.py#create', 'app/db.py'), 'found');
+  assert.equal(run(files, 'app/vendor.py#create', 'app/db.py#save'), 'unsure');
+  assert.equal(run(files, 'svc/api/api.go#Create', 'lib/store/store.go#Save'), 'found');
+  assert.equal(run(files, 'svc/dot/dot.go#Create', 'lib/store/store.go#Save'), 'found');
 });

@@ -18,7 +18,7 @@ import {
   type Decl,
 } from './type-index.ts';
 
-export { makeCtx, bindings, declIn, ancestors, file, findType, rustMod, rustUses, type Ctx, type Decl } from './type-index.ts';
+export { makeCtx, bindings, declIn, defines, ancestors, file, findType, rustMod, rustUses, type Ctx, type Decl } from './type-index.ts';
 
 export type Reach = 'yes' | 'no' | 'unsure';
 export type Rt = {
