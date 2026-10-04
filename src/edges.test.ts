@@ -1,12 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { relative, resolve } from 'node:path';
 import type { Read } from './code.ts';
 import { edgeResult } from './edges.ts';
 
+const ROOT = resolve('/r');
 const repo = (files: Record<string, string>): Read =>
-  Object.assign((full: string) => files[full.replace(/\\/g, '/').replace(/^\/r\//, '')] ?? null, { files: () => Object.keys(files) });
+  Object.assign((full: string) => files[relative(ROOT, full).replace(/\\/g, '/')] ?? null, { files: () => Object.keys(files) });
 const run = (files: Record<string, string>, caller: string, callee?: string, via?: string) =>
-  edgeResult('/r', caller, callee, via, repo(files)).result;
+  edgeResult(ROOT, caller, callee, via, repo(files)).result;
 
 test('an edge is found when the caller calls the callee through an import, an alias or a re-export', () => {
   const files = {
@@ -306,8 +308,8 @@ test('a call on a name that only looks like the callee class is not found', () =
 test('an edge to a file outside the root is not checked, and its text is never read', () => {
   const read: Read = (full) =>
     full.endsWith('keys.ts') ? 'export const k = "hunter2";\n' : full.endsWith('a.ts') ? 'export function send() {}\n' : null;
-  assert.equal(edgeResult('/r', 'src/a.ts#send', '../secret/keys.ts', 'hunter2', read).result, 'not-checked');
-  assert.equal(edgeResult('/r', '../secret/keys.ts', 'src/a.ts#send', 'hunter2', read).result, 'not-checked');
+  assert.equal(edgeResult(ROOT, 'src/a.ts#send', '../secret/keys.ts', 'hunter2', read).result, 'not-checked');
+  assert.equal(edgeResult(ROOT, '../secret/keys.ts', 'src/a.ts#send', 'hunter2', read).result, 'not-checked');
 });
 
 test('via in a file of a language that verify does not read is not checked', () => {
