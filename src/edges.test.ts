@@ -510,6 +510,17 @@ test('a route key is a source: its handler calls count, the calls of another rou
   assert.equal(run(files, 'src/auth.ts#rearm', 'src/session.ts#createSession'), 'not-checked');
 });
 
+test('a not-found edge with no import path to the callee file asks for via', () => {
+  const files = {
+    'src/a.ts': 'export function a() {}\n',
+    'src/b.ts': "import { a } from './a.ts';\nexport function b() {}\n",
+    'src/c.ts': 'export function c() {}\n',
+  };
+  const reason = (caller: string) => edgeResult(ROOT, caller, 'src/a.ts#a', undefined, repo(files)).reason;
+  assert.match(reason('src/c.ts#c'), /if this edge crosses a process, add via$/);
+  assert.doesNotMatch(reason('src/b.ts#b'), /add via/);
+});
+
 test('a call through a default export that wraps the callee is unsure, not "not found"', () => {
   const files = {
     'src/mover.ts': 'async function documentMover() {}\nexport default traceFunction({ spanName: "x" })(documentMover);\n',

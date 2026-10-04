@@ -220,9 +220,18 @@ export function edgeResult(
 
   const whole = !from.symbol;
   const route = 'route' in at;
+  const hint = () =>
+    from.path === to.path ||
+    ((fi.lang === 'go' || fi.lang === 'java') && dirname(from.path) === dirname(to.path)) ||
+    importsOf(root, fi, read).some((i) => i.path != null && leadsTo(root, i.path, to.path, i.name, read, cache) != null)
+      ? ''
+      : '; if this edge crosses a process, add via';
   let body = fi.code.slice(at.start, at.end);
   if (whole) body = body.replace(IMPORT_LINES, (m) => m.replace(/[^\n]/g, ' '));
-  if (!to.symbol) return fileResult(root, fi, ti, body, whole, from, to, read, cache);
+  if (!to.symbol) {
+    const r = fileResult(root, fi, ti, body, whole, from, to, read, cache);
+    return r.result === 'not-found' ? { ...r, reason: r.reason + hint() } : r;
+  }
   const toParts = to.symbol.split('.');
   const toName = toParts.at(-1)!;
   const owner = toParts.length > 1 ? toParts.at(-2)! : null;
@@ -389,5 +398,5 @@ export function edgeResult(
   }
   const pick = verdicts.find((v) => v.res === 'found') ?? verdicts.find((v) => v.res === 'unsure');
   if (pick) return { result: pick.res === 'found' ? 'found' : 'unsure', reason: pick.why };
-  return { result: 'not-found', reason: `${who} does not call ${toName}` };
+  return { result: 'not-found', reason: `${who} does not call ${toName}${hint()}` };
 }
