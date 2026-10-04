@@ -107,7 +107,7 @@ const image = (width: number, height: number, color: (x: number, y: number) => n
 };
 const frame = (img: Image, delay = 5): GifFrame => ({ load: () => img, delay });
 
-test('delays spreads the rounding over the frames', () => {
+test('a GIF keeps the loop length when each frame delay rounds', () => {
   assert.deepEqual(delays(6, 30), [3, 4, 3, 3, 4, 3]);
   assert.equal(
     delays(20, 20).reduce((a, b) => a + b, 0),

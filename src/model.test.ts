@@ -20,7 +20,7 @@ import {
 } from './model.ts';
 import type { FigBeat, FigGroup, FigNode, FlowProps } from './model.ts';
 
-test('toBeat reads every way a beat can be written', () => {
+test('each documented way to write a beat gives the same hops', () => {
   assert.deepEqual(toBeat('a->b'), { hops: [{ edge: 'a->b', back: false }] });
   assert.deepEqual(toBeat(['x', { edge: 'y', back: true }]), {
     hops: [
@@ -55,7 +55,7 @@ test('a row gap grows to hold the widest edge label between two of its children'
   assert.equal(groupGap({ ...row, direction: 'column' }, [{ from: 'a', to: 'b', label: long }]), 28);
 });
 
-test('beatMs gives an explicit ms as written', () => {
+test('a beat with ms lasts that long, also when the caption needs more time', () => {
   const say = 'a b c d e f g h i j';
   assert.equal(beatMs({ hops: [] }, 900), 900);
   assert.equal(beatMs({ hops: [], say }, 900), 900 + 2800);
@@ -103,7 +103,7 @@ const lanesFig: FlowProps = {
   ],
 };
 
-test('laneColumns gives each box its first appearance in the steps, back hops to-first, then the rest, then at', () => {
+test('lanes: each box takes the time column of its first hop; at wins', () => {
   const cols = laneColumns(lanesFig);
   assert.deepEqual(Object.fromEntries(cols), { ask: 0, check: 1, pay: 2, get: 3, reject: 4, audit: 1 });
 });
@@ -120,7 +120,7 @@ const tl = (items: Record<string, unknown>[][], extra: Partial<FlowProps> = {}):
 // 2026-10-05 is a Monday, 2026-10-11 a Sunday.
 const oct = tl([[{ id: 'a', from: '2026-10-07', to: '2026-10-20' }]]);
 
-test('timelineLayout rounds the range to Monday and Sunday, and places bars', () => {
+test('a timeline range starts on a Monday and ends on a Sunday, and bars sit at their dates', () => {
   const l = timelineLayout(oct, 300);
   assert.equal(l.start, dayOf('2026-10-05'));
   assert.equal(l.end, dayOf('2026-10-25'));
@@ -233,7 +233,7 @@ test('an item with a bad from is left out of the layout and the beats', () => {
   assert.deepEqual(timelineBeats(f)[0].flow, [{ focus: ['b'], light: ['b'], say: 'b, 7 Oct' }]);
 });
 
-test('timelineBeats has one beat per item in date order, saying the label, the dates and the sub', () => {
+test('a timeline with no steps plays one beat per item in date order', () => {
   const f = tl([
     [{ id: 'a', from: '2026-10-09', to: '2026-10-10' }],
     [
@@ -273,12 +273,12 @@ test('a label beside a bar takes room: a milestone the next day gets a second ro
   assert.ok(l.items[2].x >= end(l.items[0]) + 8);
 });
 
-test('counts reads the synthetic step of a timeline with no steps', () => {
+test('the figure line counts the one synthetic step of a timeline', () => {
   const c = counts(tl([[{ id: 'a', from: '2026-10-05', to: '2026-10-09' }]]));
   assert.deepEqual([c.steps, c.messages], [1, 0]);
 });
 
-test('playheadItem: the first dated focus id wins, a beat with none keeps the earlier item, and a step start has none', () => {
+test('the playhead goes to the first dated focus id; a beat with no focus keeps it', () => {
   const items = [{ id: 'invoice' }, { id: 'ga' }];
   const beats = [{ focus: ['nope', 'ga', 'invoice'] }, {}, { focus: ['invoice'] }, { say: 'x' }];
   assert.equal(playheadItem(items, beats, 0)?.id, 'ga');
@@ -288,14 +288,14 @@ test('playheadItem: the first dated focus id wins, a beat with none keeps the ea
   assert.equal(playheadItem(items, [{}], 0), undefined);
 });
 
-test('lanePlan: n is the largest column count per block that keeps the text readable at the width', async () => {
+test('lanes wrap: a block holds the most columns that keep the text readable', async () => {
   const { default: demo } = await import('../figures/returns-process.ts');
   assert.equal(lanePlan(demo.props).per, 4);
   assert.equal(lanePlan(demo.props, { width: 1400 }).per, 7);
   assert.equal(lanePlan(lanesFig, { width: 1200 }).per, Math.max(...laneColumns(lanesFig).values()) + 1);
 });
 
-test('lanePlan: a cross-block edge gets its pill texts, and the gaps next to its ends grow into free room only', async () => {
+test('lanes wrap: a cross-block edge gets its pill texts, and the gaps next to its ends grow into free room only', async () => {
   const { default: demo } = await import('../figures/returns-process.ts');
   const plan = lanePlan(demo.props);
   assert.deepEqual(
@@ -311,7 +311,7 @@ test('lanePlan: a cross-block edge gets its pill texts, and the gaps next to its
   assert.deepEqual(plan.starts, [0, 4, 7]);
 });
 
-test('lanePlan: a diamond adds 70 px to its column, and a mono card row lowers the smallest font to 10.5 px', async () => {
+test('lanes wrap: a diamond adds 70 px to its column, and a mono card row lowers the smallest font to 10.5 px', async () => {
   const { default: demo } = await import('../figures/returns-process.ts');
   const diamond = structuredClone(demo.props);
   ((diamond.layout.children[1] as FigGroup).children[0] as FigNode).shape = 'decision';
@@ -326,14 +326,14 @@ test('lanePlan: a diamond adds 70 px to its column, and a mono card row lowers t
   assert.equal(card(true), 2);
 });
 
-test('lanePlan: a block holds 2 columns at least; if 2 do not fit, the lanes keep one block', async () => {
+test('lanes wrap: a block holds 2 columns at least; if 2 do not fit, the lanes keep one block', async () => {
   const { default: demo } = await import('../figures/returns-process.ts');
   assert.deepEqual(lanePlan(demo.props, { width: 600 }).starts, [0, 3, 5, 7]);
   const narrow = lanePlan(demo.props, { width: 200 });
   assert.deepEqual([narrow.blocks, narrow.starts], [[0], [0, 7]]);
 });
 
-test('lanePlan: the block split does not depend on the pill texts', async () => {
+test('lanes wrap: the block split does not depend on the pill texts', async () => {
   const { default: demo } = await import('../figures/returns-process.ts');
   const withLabel = (label?: string) => ({
     ...demo.props,

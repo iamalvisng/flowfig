@@ -64,14 +64,14 @@ const diamond = (label: string, sub?: string): FlowProps => ({
   edges: [],
 });
 
-test('M1: no place in the Support band avoids the edge, so the lane grows and the pill sits under its box with no crossing', () => {
+test('a stub with no clear place in its band grows the lane, and its pill sits under its box', () => {
   assert.deepEqual(check(m1), []);
   assert.ok(!lanePlan(m1).tall.has('1@2'));
   const bands = render(m1).scene.lanes!.filter((l) => l.id === 'Support agent');
   assert.equal(bands.at(-1)!.rect.h, 101 + STUB_ROOM);
 });
 
-test('M2: the sub of a diamond wraps inside the outline, and check reports no overflow', () => {
+test('the sub of a diamond wraps inside the outline, and check finds no overflow', () => {
   const fig = diamond('In 30 days?', 'Checks delivery date and reason');
   assert.equal(check(fig).length, 0);
   const w = 100 + 70;
@@ -89,7 +89,7 @@ test('a diamond whose text fits keeps its size and one line', () => {
   assert.equal(diamondLines({ id: 'd', label: 'Late?', shape: 'decision' }, 170).h, 62);
 });
 
-test('the SVG diamond is as tall as diamondLines says', () => {
+test('the SVG diamond has the height that the layout gives it', () => {
   const fig = diamond('In 30 days?', 'Checks delivery date and reason');
   const item = fig.layout.children[0] as never;
   const pts = render(fig)

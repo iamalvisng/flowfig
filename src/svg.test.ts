@@ -1096,7 +1096,7 @@ test("lanes wrap: a stub pill sits on no edge path, or check reports it (the rev
   assert.equal(under.size, 0);
 });
 
-test('lanes wrap: a lanes figure with no box keeps the width of 0.4.0', () => {
+test('lanes wrap: a lanes figure with no box draws at the base width with no NaN', () => {
   const empty: FlowProps = {
     lanes: true,
     layout: { direction: 'column', children: [{ id: 'a', label: 'Alpha', children: [] }] },

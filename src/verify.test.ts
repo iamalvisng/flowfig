@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { links, parseSource, verify } from './verify.ts';
 import type { FlowProps } from './model.ts';
 
-test('parseSource reads a path and an optional symbol', () => {
+test('a source link must be path or path#symbol with no space', () => {
   assert.deepEqual(parseSource('src/a.ts'), { path: 'src/a.ts' });
   assert.deepEqual(parseSource('src/a.ts#f'), { path: 'src/a.ts', symbol: 'f' });
   for (const bad of ['', 'a.ts#', '#f', 'a b.ts', 'a.ts#f#g', 'a.ts#f g']) assert.equal(parseSource(bad), null, bad);
@@ -61,7 +61,7 @@ test('a link to a folder is a missing file, not a crash', () => {
   });
 });
 
-test('links lists every well-formed link with its owner', () => {
+test('verify lists each well-formed link with the box, edge or hop that owns it', () => {
   const fig: FlowProps = {
     layout: {
       children: [

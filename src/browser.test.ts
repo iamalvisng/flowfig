@@ -62,7 +62,7 @@ const WIN_ENV = {
   LOCALAPPDATA: 'C:\\Users\\a\\AppData\\Local',
 };
 
-test('findBrowser on macOS checks Chrome, Edge, Chromium and Brave in that order', () => {
+test('the browser search takes the first installed browser and lists only the paths before it', () => {
   const r = findBrowser({ platform: 'darwin', env: {}, exists: has(MAC('Chromium')) });
   assert.equal(r.path, MAC('Chromium'));
   assert.deepEqual(r.checked, [MAC('Google Chrome'), MAC('Microsoft Edge'), MAC('Chromium')]);
@@ -71,7 +71,7 @@ test('findBrowser on macOS checks Chrome, Edge, Chromium and Brave in that order
   assert.deepEqual(l.checked, LINUX.slice(0, 3));
 });
 
-test('findBrowser on Windows checks each program folder that is set, joined with backslashes', () => {
+test('on Windows the browser search joins each set program folder with backslashes', () => {
   const edge = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
   const r = findBrowser({ platform: 'win32', env: WIN_ENV, exists: has(edge) });
   assert.equal(r.path, edge);
@@ -92,7 +92,7 @@ test('CHROME_PATH wins over a standard path, and a missing CHROME_PATH is the on
   });
 });
 
-test('launch starts the browser in headless mode and resolves after Browser.getVersion', { skip: !posix }, async () => {
+test('the browser starts headless with a private profile and is ready after Browser.getVersion', { skip: !posix }, async () => {
   const dir = fake();
   try {
     const { close } = await launch(join(dir, 'chrome'), join(dir, 'profile'));
@@ -113,7 +113,7 @@ test('launch starts the browser in headless mode and resolves after Browser.getV
   }
 });
 
-test('send settles by id, an error reply rejects, and once gets the event of its session', { skip: !posix }, async () => {
+test('a CDP reply settles its own command, an error reply rejects, an event goes to its session', { skip: !posix }, async () => {
   const dir = fake();
   const { cdp, close } = await launch(join(dir, 'chrome'), join(dir, 'profile'));
   try {
@@ -161,33 +161,29 @@ test('launch rejects when the browser exits at the start', { skip: !posix }, asy
   }
 });
 
-test(
-  'captureFrames returns the frames in time order when tabs capture in parallel',
-  { skip: cpus().length < 2 && 'one core gives one tab' },
-  async () => {
-    const seek = new Map<string | undefined, number>();
-    let targets = 0;
-    const cdp: Cdp = {
-      once: async () => ({}),
-      send: async (method, params: any = {}, sessionId) => {
-        await new Promise((done) => setTimeout(done, Math.random() * 5));
-        if (method === 'Target.createTarget') return { targetId: `t${targets++}` };
-        if (method === 'Target.attachToTarget') return { sessionId: `s${params.targetId}` };
-        if (method === 'Page.getFrameTree') return { frameTree: { frame: { id: 'f' } } };
-        if (method === 'Runtime.evaluate') {
-          const t = /currentTime = ([\d.]+)/.exec(params.expression);
-          if (!t) return { result: { value: { loop: 1000, x: 0, y: 0, width: 10, height: 10 } } };
-          seek.set(sessionId, Number(t[1]));
-          return { result: { value: undefined } };
-        }
-        if (method === 'Page.captureScreenshot') return { data: Buffer.from(String(seek.get(sessionId))).toString('base64') };
-        return {};
-      },
-    };
-    const { pngs } = await captureFrames(cdp, '', { width: 10, height: 10, scale: 1, fps: 40, dark: false });
-    assert.deepEqual(
-      pngs.map((p) => Number(p.toString())),
-      Array.from({ length: 40 }, (_, i) => i * 25),
-    );
-  },
-);
+test('frames from parallel tabs come back in time order', { skip: cpus().length < 2 && 'one core gives one tab' }, async () => {
+  const seek = new Map<string | undefined, number>();
+  let targets = 0;
+  const cdp: Cdp = {
+    once: async () => ({}),
+    send: async (method, params: any = {}, sessionId) => {
+      await new Promise((done) => setTimeout(done, Math.random() * 5));
+      if (method === 'Target.createTarget') return { targetId: `t${targets++}` };
+      if (method === 'Target.attachToTarget') return { sessionId: `s${params.targetId}` };
+      if (method === 'Page.getFrameTree') return { frameTree: { frame: { id: 'f' } } };
+      if (method === 'Runtime.evaluate') {
+        const t = /currentTime = ([\d.]+)/.exec(params.expression);
+        if (!t) return { result: { value: { loop: 1000, x: 0, y: 0, width: 10, height: 10 } } };
+        seek.set(sessionId, Number(t[1]));
+        return { result: { value: undefined } };
+      }
+      if (method === 'Page.captureScreenshot') return { data: Buffer.from(String(seek.get(sessionId))).toString('base64') };
+      return {};
+    },
+  };
+  const { pngs } = await captureFrames(cdp, '', { width: 10, height: 10, scale: 1, fps: 40, dark: false });
+  assert.deepEqual(
+    pngs.map((p) => Number(p.toString())),
+    Array.from({ length: 40 }, (_, i) => i * 25),
+  );
+});

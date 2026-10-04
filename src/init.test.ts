@@ -33,7 +33,7 @@ after(() => made.forEach((d) => rmSync(d, { recursive: true, force: true })));
 const run = (args: string[], cwd: string, env: Record<string, string> = {}, input?: string) =>
   spawnSync('node', [cli, ...args], { cwd, input, encoding: 'utf8', env: { ...process.env, ...env } });
 
-test('detect finds each agent from its marker, and none in an empty dir', () => {
+test('init finds each agent from its marker file or folder', () => {
   const marks: Record<string, string[]> = {
     claude: ['.claude/', 'CLAUDE.md'],
     agents: ['AGENTS.md'],
@@ -66,7 +66,7 @@ test('detect finds each agent from its marker, and none in an empty dir', () => 
   }
 });
 
-test('toggle parses numbers, and renderList shows the marks', () => {
+test('the numbered picker toggles agents by number and marks the found agents', () => {
   assert.deepEqual([...toggle('1 3', new Set(['claude']), 7)].sort(), ['cursor']);
   const on = toggle('2,3', new Set(['claude']), 7);
   assert.deepEqual([...on].sort(), ['agents', 'claude', 'cursor']);
@@ -233,7 +233,7 @@ test('--global -y writes only the Claude skill under HOME, and no file in the di
   }
 });
 
-test('registerMcp merges one entry and keeps every other key and server', () => {
+test('init adds the flowfig MCP entry and keeps every other key and server', () => {
   const claude = AGENTS.find((a) => a.id === 'claude')!;
   assert.equal(
     registerMcp(claude, undefined),
@@ -368,7 +368,7 @@ const ROWS = [
 const state = (over: Partial<PickState> = {}): PickState => ({ rows: ROWS, sel: new Set(['claude']), mcp: true, cursor: 0, ...over });
 const asState = (r: ReturnType<typeof keyStep>) => r as PickState;
 
-test('keyStep: move wraps, space toggles an agent and the MCP row, a toggles all', () => {
+test('the picker: arrows wrap, space toggles an agent or the MCP row, a toggles all', () => {
   assert.equal(asState(keyStep(state(), { name: 'down' })).cursor, 1);
   assert.equal(asState(keyStep(state({ cursor: 2 }), { name: 'j' })).cursor, 0);
   assert.equal(asState(keyStep(state(), { name: 'up' })).cursor, 2);
@@ -381,14 +381,14 @@ test('keyStep: move wraps, space toggles an agent and the MCP row, a toggles all
   assert.equal(keyStep(state(), { name: 'x' }) !== 'cancel', true);
 });
 
-test('keyStep: Enter confirms; Esc, q and Ctrl-C cancel', () => {
+test('the picker: Enter confirms; Esc, q and Ctrl-C cancel', () => {
   assert.equal(keyStep(state(), { name: 'return' }), 'confirm');
   assert.equal(keyStep(state(), { name: 'escape' }), 'cancel');
   assert.equal(keyStep(state(), { name: 'q' }), 'cancel');
   assert.equal(keyStep(state(), { name: 'c', ctrl: true }), 'cancel');
 });
 
-test('screen with colour off: exact lines, no escape code, and the file lists share one column', () => {
+test('the picker without colour has no escape code and one column for the file lists', () => {
   const lines = screen(state(), { color: false, width: 120 });
   assert.equal(lines.join('\n').includes('\x1b'), false);
   assert.equal(lines.length, 16);
@@ -401,7 +401,7 @@ test('screen with colour off: exact lines, no escape code, and the file lists sh
   assert.equal(rows[1], '  [ ] AGENTS.md   (not detected)  AGENTS.md');
 });
 
-test('screen: a narrow terminal gets the plain version line, and a long row is cut', () => {
+test('the picker on a narrow terminal cuts each line to the width', () => {
   const narrow = screen(state(), { color: false, width: 30 });
   assert.equal(narrow[0], `flowfig ${VERSION}`);
   assert.equal(narrow[1], '');

@@ -34,13 +34,13 @@ const SPEC = {
   },
 };
 
-test('openerFor gives the opener of each system', () => {
+test('open starts the system opener; on Windows it quotes the page path', () => {
   assert.deepEqual(openerFor('darwin', '/t/a.html'), { cmd: 'open', args: ['/t/a.html'], verbatim: false });
   assert.deepEqual(openerFor('linux', '/t/a.html'), { cmd: 'xdg-open', args: ['/t/a.html'], verbatim: false });
   assert.deepEqual(openerFor('win32', 'C:\\t\\a b.html'), { cmd: 'cmd', args: ['/c', 'start', '""', '"C:\\t\\a b.html"'], verbatim: true });
 });
 
-test('pageName keeps letters, digits, - and _ only', () => {
+test('the page name keeps only letters, digits, - and _', () => {
   assert.equal(pageName('my figure&v2.svg'), 'my-figure-v2.html');
   assert.equal(pageName(join('docs', 'login_flow.svg')), 'login_flow.html');
 });

@@ -47,7 +47,7 @@ function png(width: number, height: number, type: number, pixels: number[], filt
 
 const FILTERS = [0, 1, 2, 3, 4];
 
-test('decodePng reverses the five row filters of an RGBA PNG', () => {
+test('the PNG decoder gives back the exact pixels for all five row filters', () => {
   const pixels = Array.from({ length: 3 * 5 * 4 }, (_, i) => (i * 37 + 11) & 255);
   const img = decodePng(png(3, 5, 6, pixels, FILTERS));
   assert.equal(img.width, 3);
@@ -55,7 +55,7 @@ test('decodePng reverses the five row filters of an RGBA PNG', () => {
   assert.deepEqual([...img.data], pixels);
 });
 
-test('decodePng gives alpha 255 to an RGB PNG', () => {
+test('an RGB screenshot gets alpha 255', () => {
   const pixels = Array.from({ length: 3 * 5 * 3 }, (_, i) => (i * 53 + 7) & 255);
   const rgba = pixels.flatMap((v, i) => (i % 3 === 2 ? [v, 255] : [v]));
   assert.deepEqual([...decodePng(png(3, 5, 2, pixels, FILTERS)).data], rgba);

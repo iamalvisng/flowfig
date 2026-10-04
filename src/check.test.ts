@@ -364,7 +364,7 @@ test('an unknown focus id is an unknown-id error', () => {
   assert.deepEqual(f[0].ids, ['nope']);
 });
 
-test('checkScene: a stub (pts) through a box is edge-crosses-box, and an edge through a stub pill is label-overlap', () => {
+test('a stub line through a box is edge-crosses-box; an edge through a stub pill is label-overlap', () => {
   const box = (id: string, x: number, y: number): SceneBox => ({ id, rect: { x, y, w: 100, h: 40 }, texts: [] });
   const p = (x: number, y: number): Pt => ({ x, y });
   const base: Scene = { width: 600, minFont: 12, boxes: [box('a', 0, 0), box('b', 300, 0), box('c', 150, 200)], edges: [] };
@@ -380,7 +380,7 @@ test('checkScene: a stub (pts) through a box is edge-crosses-box, and an edge th
   );
 });
 
-test('checkScene: a stub pill across a lane border is label-overlap; a pill inside its lane is fine', () => {
+test('a pill or an edge label across a lane border is label-overlap', () => {
   const p = (x: number, y: number): Pt => ({ x, y });
   const lane = { id: 'Support', rect: { x: 0, y: 0, w: 400, h: 100 } };
   const stub = (y: number) => ({
@@ -410,7 +410,7 @@ test('checkScene: a stub pill across a lane border is label-overlap; a pill insi
   );
 });
 
-test('checkScene: a timeline elbow (behind, with corners) through a box it does not connect is edge-crosses-box', () => {
+test('a timeline elbow through a box it does not connect is edge-crosses-box', () => {
   const box = (id: string, x: number, y: number): SceneBox => ({ id, rect: { x, y, w: 100, h: 40 }, texts: [] });
   const p = (x: number, y: number): Pt => ({ x, y });
   const boxes = [box('a', 0, 0), box('b', 300, 200), box('c', 150, 100)];
