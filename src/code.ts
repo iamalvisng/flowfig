@@ -215,13 +215,7 @@ function braceBody(code: string, from: number, start: number, lang: Lang): Exten
       if (--pd < 0) return null;
     } else if (pd === 0) {
       if (c === ';') return [start, i + 1];
-      if (
-        c === '\n' &&
-        lang === 'go' &&
-        !/[,({[=+\-*/|&.:]\s*$/.test(code.slice(Math.max(start, i - 40), i)) &&
-        code.slice(start, i).includes('=')
-      )
-        return [start, i];
+      if (c === '\n' && lang === 'go' && !/[,({[=+\-*/|&.:]\s*$/.test(code.slice(Math.max(start, i - 40), i))) return [start, i];
       if (c === '}') return null;
       if (c === '=' && code[i + 1] === '>' && lang === 'ts') {
         let k = i + 2;
@@ -246,7 +240,8 @@ function braceBody(code: string, from: number, start: number, lang: Lang): Exten
       }
       if (c === '{') {
         const before = code.slice(Math.max(0, i - 12), i).trimEnd();
-        if (/[:|&<,]$/.test(before) || /\b(interface|struct)$/.test(before)) {
+        const goTypeDecl = lang === 'go' && /^type\s+\w+(\[[^\]]*\])?\s+(struct|interface)\s*$/.test(code.slice(start, i));
+        if (!goTypeDecl && (/[:|&<,]$/.test(before) || /\b(interface|struct)$/.test(before))) {
           i = matchClose(code, i) + 1;
           continue;
         }
@@ -364,7 +359,7 @@ function findIn(code: string, lang: Lang, name: string, lo: number, hi: number, 
       const ext = lang === 'py' ? pyBody(code, start) : braceBody(code, nameAt + name.length, start, lang);
       if (!ext) continue;
       const isMethodish = /\(\s*$/.test(m[0]) && !/\b(function|func|fn|def)\b/.test(m[0]);
-      if (isMethodish && lang !== 'py') {
+      if (isMethodish && lang !== 'py' && !(lang === 'go' && inContainer)) {
         const p = code.indexOf('(', nameAt);
         const close = matchClose(code, p);
         const after = code.slice(close + 1).match(/^\s*(\S)/)?.[1];
@@ -429,7 +424,18 @@ export function locate(file: CodeFile, symbol: string): { start: number; end: nu
   const { code, lang } = file;
   const parts = symbol.split('.');
   if (!parts.every((p) => /^[A-Za-z_$][\w$]*$/.test(p))) return null;
-  const hit = (r: Extent | null) => (r ? { start: r[0], end: r[1] } : null);
+  const hit = (r: Extent | null) => {
+    if (!r) return null;
+    let start = r[0];
+    for (;;) {
+      const prevEnd = code.lastIndexOf('\n', start - 1);
+      if (prevEnd < 0) break;
+      const prevStart = code.lastIndexOf('\n', prevEnd - 1) + 1;
+      if (!/^\s*@/.test(code.slice(prevStart, prevEnd))) break;
+      start = prevStart;
+    }
+    return { start, end: r[1] };
+  };
   if (parts.length === 1) return hit(findIn(code, lang, parts[0], 0, code.length, false));
   if (lang === 'go' && parts.length === 2) {
     const r = findIn(code, lang, parts[1], 0, code.length, false, parts[0]);

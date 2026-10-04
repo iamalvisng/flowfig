@@ -59,3 +59,9 @@ test('masking a 5000-line file takes under 200 ms', () => {
   assert.equal(isDefined(at('big.ts', big), 'v4999'), true);
   assert.ok(performance.now() - t < 200);
 });
+
+test('the extent of a Go struct ends at its closing brace, also at the end of the file', () => {
+  const go = at('x.go', 'package x\ntype X struct {\n  a int\n}');
+  const ex = locate(go, 'X')!;
+  assert.match(go.text.slice(ex.start, ex.end), /^type X struct \{\n {2}a int\n\}$/);
+});
