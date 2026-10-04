@@ -266,6 +266,26 @@ test('verify checks the links of one or more figures against --root', () => {
   }
 });
 
+test('verify prints one count line per figure, and --json gives the counts', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'figure-svg-'));
+  try {
+    writeFileSync(join(dir, 'a.ts'), 'export function a() {}\n// b\n');
+    const children = [
+      { id: 'a', label: 'Client', source: 'a.ts#a' },
+      { id: 'b', label: 'Server', source: 'a.ts#b' },
+    ];
+    const spec = join(dir, 'f.json');
+    writeFileSync(spec, JSON.stringify({ props: { ...SPEC.props, layout: { children } } }));
+    const text = run(['verify', spec, '--root', dir]);
+    assert.equal(text.status, 1);
+    assert.match(text.stdout, new RegExp(`1 error, 0 warnings\\n${spec.replace(/\W/g, '\\$&')}: 1 of 2 boxes defined`));
+    const json = JSON.parse(run(['verify', spec, '--root', dir, '--json']).stdout);
+    assert.deepEqual(json.coverage, [{ figure: spec, boxes: 2, boxesDefined: 1 }]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('verify reads the source of a spec back out of a rendered SVG', () => {
   const dir = mkdtempSync(join(tmpdir(), 'figure-svg-'));
   try {

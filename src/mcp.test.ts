@@ -140,7 +140,7 @@ test('verify goes on after a bad path, and a wrong argument type is -32602', () 
     const r = call('verify', { paths: [join(dir, 'gone.json'), join(dir, 'ok.json')], root: dir });
     assert.equal(r.result.isError, true);
     assert.match(text(r), /^error {4}missing-file {7}.*gone\.json: /);
-    assert.match(text(r), /ok\.json: no box.*\n1 error, 1 warning$/);
+    assert.match(text(r), /ok\.json: no box.*\n1 error, 1 warning\n.*ok\.json: 0 of 0 boxes defined$/);
     const code = (name: string, args: unknown) =>
       (handle(req(1, 'tools/call', { name, arguments: args })) as { error: { code: number } }).error.code;
     assert.equal(code('verify', { paths: 'a.json' }), -32602);
@@ -159,6 +159,21 @@ test('a notification gets no reply, and a protocolVersion that is not a string f
   assert.equal(handle({ jsonrpc: '2.0', method: 'tools/call', params: { name: 'docs' } }), undefined);
   const r = handle(req(1, 'initialize', { protocolVersion: 123 })) as { result: { protocolVersion: string } };
   assert.equal(r.result.protocolVersion, '2025-11-25');
+});
+
+test('the verify tool prints the box counts', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'mcp-'));
+  try {
+    writeFileSync(join(dir, 'a.ts'), 'export function a() {}\n// b\n');
+    const children = [
+      { id: 'a', label: 'Client', source: 'a.ts#a' },
+      { id: 'b', label: 'Server', source: 'a.ts#b' },
+    ];
+    writeFileSync(join(dir, 'f.json'), JSON.stringify({ props: { ...props, layout: { children } } }));
+    assert.match(text(call('verify', { paths: [join(dir, 'f.json')], root: dir })), /1 of 2 boxes defined/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('the verify tool prints the findings in the order of the CLI verify', () => {

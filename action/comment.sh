@@ -51,7 +51,13 @@ faults=$(node -e '
   const { findings } = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
   for (const f of findings) console.log(`- ${f.severity} \`${f.rule}\` ${f.figure}: ${f.message}`);
 ' "$tmp/verify.json")
-if [ -n "$faults" ]; then body+=$'\n'"### verify"$'\n'"$faults"$'\n'; fi
+counts=$(node -e '
+  const { coverage = [] } = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+  for (const c of coverage) console.log(`- ${c.figure}: ${c.boxesDefined} of ${c.boxes} boxes defined`);
+' "$tmp/verify.json")
+if [ -n "$faults$counts" ]; then body+=$'\n'"### verify"$'\n'; fi
+if [ -n "$faults" ]; then body+="$faults"$'\n'; fi
+if [ -n "$counts" ]; then body+="$counts"$'\n'; fi
 
 if [ "$FORK" = "true" ]; then echo "flowfig: no comment on a fork PR (read-only token)"; exit $status; fi
 # One comment per PR: update the earlier one, found by the marker.

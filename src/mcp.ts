@@ -6,7 +6,7 @@ import { GUIDE } from './guide.ts';
 import { loadSpec, reportLines, sortFindings, svgWithSpec } from './load.ts';
 import { check, render } from './svg.ts';
 import { checkRendered } from './check.ts';
-import { verify } from './verify.ts';
+import { coverageLine, verifyReport } from './verify.ts';
 import { VERSION } from './version.ts';
 
 export type Response = { jsonrpc: '2.0'; id: unknown; result?: unknown; error?: { code: number; message: string } };
@@ -115,6 +115,7 @@ function run(name: string, args: Record<string, unknown>): Result {
     types(args, name, { root: 'string', strict: 'boolean' });
     const root = args.root == null ? process.cwd() : String(args.root);
     const lines: string[] = [];
+    const counts: string[] = [];
     let errors = 0;
     for (const p of args.paths as string[]) {
       let props;
@@ -126,13 +127,15 @@ function run(name: string, args: Record<string, unknown>): Result {
         lines.push(`${'error'.padEnd(8)} ${'missing-file'.padEnd(18)} ${e.message}`);
         continue;
       }
-      const findings = sortFindings([...check(props), ...verify(props, { root })], args.strict === true);
+      const report = verifyReport(props, { root });
+      counts.push(coverageLine(p, report.coverage));
+      const findings = sortFindings([...check(props), ...report.findings], args.strict === true);
       errors += findings.filter((f) => f.severity === 'error').length;
       lines.push(...findings.map((f) => `${f.severity.padEnd(8)} ${f.rule.padEnd(18)} ${p}: ${f.message}`));
     }
     const n = (k: number, w: string) => `${k} ${w}${k === 1 ? '' : 's'}`;
     const total = lines.length;
-    lines.push(`${n(errors, 'error')}, ${n(total - errors, 'warning')}`);
+    lines.push(`${n(errors, 'error')}, ${n(total - errors, 'warning')}`, ...counts);
     return ok(lines.join('\n'), errors > 0);
   }
   if (name === 'diff') {

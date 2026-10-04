@@ -18,7 +18,7 @@ import { loadSpec, reportLines, sortFindings, specOf, svgWithSpec } from './load
 import type { FlowProps } from './model.ts';
 import { check, render, toSvg, type Finding } from './svg.ts';
 import { checkRendered } from './check.ts';
-import { links, verify, type Link } from './verify.ts';
+import { coverageLine, links, verifyReport, type Coverage, type Link } from './verify.ts';
 
 const USAGE = `usage: flowfig <-|spec.json|figure.ts> [out.svg] [--open]   render a figure; a spec on stdin with -
        flowfig check <-|spec.json|figure.ts|figure.svg>   list the faults; the input can be an SVG this wrote
@@ -108,18 +108,22 @@ if (args[0] === 'verify') {
   if (!args.length) usage('verify needs at least one figure');
   const findings: (Finding & { figure: string })[] = [];
   const all: (Link & { figure: string })[] = [];
+  const coverage: (Coverage & { figure: string })[] = [];
   for (const input of args) {
     const props = await load(input);
-    const found = sortFindings([...check(props), ...verify(props, { root })], strict).map((f) => ({ ...f, figure: input }));
+    const report = verifyReport(props, { root });
+    const found = sortFindings([...check(props), ...report.findings], strict).map((f) => ({ ...f, figure: input }));
     findings.push(...found);
+    coverage.push({ figure: input, ...report.coverage });
     all.push(...links(props).map((l) => ({ ...l, figure: input })));
   }
   const errors = findings.filter((f) => f.severity === 'error').length;
-  if (json) console.log(JSON.stringify({ findings, links: all }, null, 2));
+  if (json) console.log(JSON.stringify({ findings, links: all, coverage }, null, 2));
   else {
     const n = (k: number, word: string) => `${k} ${word}${k === 1 ? '' : 's'}`;
     for (const f of findings) console.log(`${f.severity.padEnd(8)} ${f.rule.padEnd(18)} ${f.figure}: ${f.message}`);
     console.log(`${n(errors, 'error')}, ${n(findings.length - errors, 'warning')}`);
+    for (const c of coverage) console.log(coverageLine(c.figure, c));
   }
   process.exit(errors ? 1 : 0);
 }
