@@ -1050,8 +1050,17 @@ test('lanes wrap: a figure that fits renders byte for byte as before the wrap', 
   // Change this hash only for a planned layout change.
   assert.equal(
     createHash('sha256').update(toSvg(refund.props)).digest('hex'),
-    'd2604a6aa8357826dceedbfc80e4728f2b2e0f30f5326586c0ee34cc082d56a3',
+    '93b552a730dcc739ccee7c15e73984aeb17801f1efaa05f78d4496491f27d402',
   );
+});
+
+test('a box or edge that keeps its look over many beats gets one keyframe for the run', async () => {
+  const { default: returns } = await import('../figures/returns-process.ts');
+  const repeats = [...toSvg(returns.props).matchAll(/@keyframes \S+ \{ (.*) \}\n/g)].filter(([, body]) => {
+    const looks = [...body.matchAll(/\{ ([^}]*) \}/g)].map((m) => m[1]);
+    return looks.some((look, i) => look === looks[i - 1]);
+  });
+  assert.deepEqual(repeats, []);
 });
 
 const crossFig: FlowProps = {

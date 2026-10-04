@@ -448,13 +448,23 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
 
   const css: string[] = [];
   const seen = new Map<string, string>();
+  const runs = (values: string[]) => {
+    const out: string[] = [];
+    for (let i = 0; i < segs.length;) {
+      let j = i;
+      while (j + 1 < segs.length && values[j + 1] === values[i]) j++;
+      out.push(`${pct(segs[i].t0 / total)},${pct(segs[j].t1 / total - 0.0001)} { ${values[i]} }`);
+      i = j + 1;
+    }
+    return out.join(' ');
+  };
   const anim = (on: boolean[], onCss: string, offCss: string, prefix: string): string => {
     if (!segs.length || on.every((x) => !x)) return '';
     const key = prefix + on.map((x) => (x ? 1 : 0)).join('');
     if (!seen.has(key)) {
       const name = `a${seen.size}`;
       seen.set(key, name);
-      const frames = segs.map((s, i) => `${pct(s.t0 / total)},${pct(s.t1 / total - 0.0001)} { ${on[i] ? onCss : offCss} }`).join(' ');
+      const frames = runs(on.map((x) => (x ? onCss : offCss)));
       css.push(`@keyframes ${name} { ${frames} }\n.${name} { animation: ${name} ${n2(total)}s infinite step-end; }`);
     }
     return seen.get(key)!;
@@ -471,7 +481,7 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
     if (!seen.has(key)) {
       const name = `a${seen.size}`;
       seen.set(key, name);
-      const kf = segs.map((s, i) => `${pct(s.t0 / total)},${pct(s.t1 / total - 0.0001)} { ${values[i]} }`).join(' ');
+      const kf = runs(values);
       css.push(`@keyframes ${name} { ${kf} }\n.${name} { animation: ${name} ${n2(total)}s infinite step-end; }`);
     }
     return seen.get(key)!;
@@ -489,11 +499,18 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
       ? ([toneTint(c, 'var(--surface)', 10), c, 2, `drop-shadow(0 0 4px ${c})`] as const)
       : (['var(--tint)', 'var(--accent)', 2, 'drop-shadow(0 0 4px var(--accent))'] as const);
   };
+  const hopsAt = new Map<string, typeof hops>();
+  for (const h of hops) {
+    const k = `${h.si}:${h.bi}:${h.dest}`;
+    const list = hopsAt.get(k);
+    if (list) list.push(h);
+    else hopsAt.set(k, [h]);
+  }
   const boxAnim = (id: string, shape: boolean, boxTone?: string): string => {
     const pieces: { a: number; b: number; look: 'off' | 'trail' | 'active'; hop?: string; ramp?: number }[] = [];
     segs.forEach((s, i) => {
       if (!litNodes[i].has(id)) return void pieces.push({ a: s.t0, b: s.t1, look: 'off' });
-      const here = hops.filter((h) => h.dest === id && h.si === s.si && h.bi === s.bi);
+      const here = hopsAt.get(`${s.si}:${s.bi}:${id}`) ?? [];
       const focused = beats[s.si][s.bi].focus?.includes(id);
       const arrive = Math.min(...here.map((h) => h.t1), focused ? Math.min(s.t0 + (tl ? RAMP : 0), s.t1) : s.t1, s.t1);
       if (arrive > s.t0) pieces.push({ a: s.t0, b: arrive, look: 'trail' });
@@ -505,12 +522,16 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
       end.b -= FADE;
       pieces.push({ a: end.b, b: end.b + FADE, look: pieces[0].look, hop: pieces[0].hop, ramp: FADE - 0.0002 * total });
     }
-    const kf = pieces.map((q, k) => {
+    const merged: { a: number; b: number; css: string }[] = [];
+    pieces.forEach((q, k) => {
       const ramp = q.ramp ?? (q.look !== 'active' && pieces[k - 1]?.look === 'active' ? Math.min(FADE, (q.b - q.a) / 2) : 0);
       const [fill, stroke, width, filter] = looks(q.look, boxTone, q.hop);
       const css = `${shape ? `fill: ${fill}; ` : ''}stroke: ${stroke}; stroke-width: ${width}${shape ? `; filter: ${filter}` : ''}`;
-      return `${pct((q.a + ramp) / total)},${pct(q.b / total - 0.0001)} { ${css} }`;
+      const last = merged.at(-1);
+      if (last?.css === css) last.b = q.b;
+      else merged.push({ a: q.a + ramp, b: q.b, css });
     });
+    const kf = merged.map((f) => `${pct(f.a / total)},${pct(f.b / total - 0.0001)} { ${f.css} }`);
     const key = (shape ? 'B' : 'R') + kf.join(' ');
     if (!seen.has(key)) {
       const name = `a${seen.size}`;
