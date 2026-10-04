@@ -68,8 +68,10 @@ export function checkSpec(fig: FlowProps): Finding[] {
     if (e.quiet && !used.has(edges[i]))
       out.push(err('hidden-edge', [edges[i]], `edge "${edges[i]}" is quiet and no beat uses it, so the figure never shows it`));
   });
-  for (const [who, source] of owners(fig))
+  for (const [who, source, via] of owners(fig)) {
     if (source != null && !parseSource(source)) out.push(warn('bad-source', [], `${who}: source "${source}" is not path or path#symbol`));
+    if (via != null && !/^\S+$/.test(via)) out.push(warn('bad-source', [], `${who}: via "${via}" is empty or has white space`));
+  }
   const marks = nodes(fig.layout).map((n) => n.mark);
   const starts = marks.filter((m) => m === 'start').length;
   const ends = marks.filter((m) => m === 'end').length;

@@ -60,6 +60,8 @@ export type FigEdge = {
   quiet?: boolean;
   /** Code this draws: `path` or `path#symbol` from the repo root. Checked by `flowfig verify`. */
   source?: string;
+  /** The route, queue, topic or table that carries this edge. Checked by `flowfig verify`. */
+  via?: string;
 };
 /** One packet on one edge. A string is the edge `id`. */
 export type FigHop =
@@ -77,6 +79,8 @@ export type FigHop =
       async?: boolean;
       /** Code this draws: `path` or `path#symbol` from the repo root. Checked by `flowfig verify`. */
       source?: string;
+      /** The route, queue, topic or table that carries this edge. Checked by `flowfig verify`. */
+      via?: string;
     };
 /** One moment of a step. No edges means a pause. */
 export type FigBeat = {
@@ -155,7 +159,7 @@ export type Figure = { title: string; source?: string; props: FlowProps };
 
 /** A beat with every hop spelled out: an edge id and a direction. */
 export type Beat = Omit<FigBeat, 'edges'> & {
-  hops: { edge: string; back: boolean; data?: ReactNode; tone?: FigTone; async?: boolean; source?: string }[];
+  hops: { edge: string; back: boolean; data?: ReactNode; tone?: FigTone; async?: boolean; source?: string; via?: string }[];
 };
 export const toBeat = (b: FigHop | FigHop[] | FigBeat): Beat => {
   const isBeat = typeof b === 'object' && !Array.isArray(b) && !('edge' in b);

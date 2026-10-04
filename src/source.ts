@@ -18,12 +18,14 @@ export const headingSlug = (text: string): string =>
 export type Link = { owner: string; source: string; path: string; symbol?: string };
 
 /** Every box, edge and hop with its raw `source`, well-formed or not. The one owner list that `links` and `checkSpec` share. */
-export function owners(fig: FlowProps): [string, string | undefined][] {
+export function owners(fig: FlowProps): [string, string | undefined, string | undefined][] {
   return [
-    ...nodes(fig.layout).map((n): [string, string | undefined] => [`box "${n.id}"`, n.source]),
-    ...fig.edges.map((e): [string, string | undefined] => [`edge "${edgeId(e)}"`, e.source]),
+    ...nodes(fig.layout).map((n): [string, string | undefined, string | undefined] => [`box "${n.id}"`, n.source, undefined]),
+    ...fig.edges.map((e): [string, string | undefined, string | undefined] => [`edge "${edgeId(e)}"`, e.source, e.via]),
     ...(fig.steps ?? []).flatMap((s) =>
-      s.flow.flatMap((b) => toBeat(b).hops.map((h): [string, string | undefined] => [`hop on "${h.edge}"`, h.source])),
+      s.flow.flatMap((b) =>
+        toBeat(b).hops.map((h): [string, string | undefined, string | undefined] => [`hop on "${h.edge}"`, h.source, h.via]),
+      ),
     ),
   ];
 }

@@ -187,9 +187,9 @@ function mask(src: string, lang: Lang): { code: string; keep: string } {
 
 type Extent = [number, number];
 
-const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+export const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-function matchClose(code: string, open: number): number {
+export function matchClose(code: string, open: number): number {
   const pair = { '{': '}', '(': ')', '[': ']' }[code[open] as '{' | '(' | '['];
   let d = 0;
   for (let i = open; i < code.length; i++) {

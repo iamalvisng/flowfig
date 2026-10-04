@@ -280,7 +280,10 @@ test('verify prints one count line per figure, and --json gives the counts', () 
     assert.equal(text.status, 1);
     assert.match(text.stdout, new RegExp(`1 error, 0 warnings\\n${spec.replace(/\W/g, '\\$&')}: 1 of 2 boxes defined`));
     const json = JSON.parse(run(['verify', spec, '--root', dir, '--json']).stdout);
-    assert.deepEqual(json.coverage, [{ figure: spec, boxes: 2, boxesDefined: 1 }]);
+    assert.deepEqual(
+      json.coverage.map(({ figure, boxes, boxesDefined }: Record<string, unknown>) => ({ figure, boxes, boxesDefined })),
+      [{ figure: spec, boxes: 2, boxesDefined: 1 }],
+    );
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

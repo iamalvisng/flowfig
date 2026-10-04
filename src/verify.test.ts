@@ -117,7 +117,7 @@ test('verifyReport counts the boxes with a source and the boxes that pass', () =
       edges: [],
     };
     const r = verifyReport(fig, { root });
-    assert.deepEqual(r.coverage, { boxes: 3, boxesDefined: 1 });
+    assert.deepEqual({ boxes: r.coverage.boxes, boxesDefined: r.coverage.boxesDefined }, { boxes: 3, boxesDefined: 1 });
     assert.equal(coverageLine('docs/f.svg', r.coverage), 'docs/f.svg: 1 of 3 boxes defined');
   });
 });
@@ -129,4 +129,39 @@ test('verifyReport reads the file again on each call, so a fixed file passes', (
     writeFileSync(join(root, 'a.ts'), 'export function login() {}\n');
     assert.equal(run(), 1);
   });
+});
+
+test('verifyReport gives each edge a result, warns on not found, and --strict makes it an error', () => {
+  withRepo(
+    {
+      'src/auth.ts': 'export function verify() {}\nexport function reset() {}\n',
+      'src/login.ts': "import { verify } from './auth.ts';\nexport function login() { verify(); }\n",
+    },
+    (root) => {
+      const fig: FlowProps = {
+        layout: {
+          children: [
+            { id: 'l', label: 'Login', source: 'src/login.ts#login' },
+            { id: 'v', label: 'Verify', source: 'src/auth.ts#verify' },
+            { id: 'r', label: 'Reset', source: 'src/auth.ts#reset' },
+            { id: 'u', label: 'User' },
+          ],
+        },
+        edges: [
+          { from: 'l', to: 'v' },
+          { from: 'l', to: 'r' },
+          { from: 'u', to: 'l' },
+        ],
+      };
+      const r = verifyReport(fig, { root });
+      assert.deepEqual(
+        { found: r.coverage.found, notFound: r.coverage.notFound, notChecked: r.coverage.notChecked },
+        { found: 1, notFound: 1, notChecked: 1 },
+      );
+      assert.deepEqual(
+        r.findings.map((f) => [f.rule, f.severity]),
+        [['edge-not-found', 'warning']],
+      );
+    },
+  );
 });
