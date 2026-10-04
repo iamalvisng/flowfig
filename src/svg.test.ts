@@ -45,10 +45,8 @@ const fig: FlowProps = {
 test('draws every label, the edge and its packets', () => {
   const svg = toSvg(fig);
   for (const label of ['Checkout', 'calls in', 'Orders', 'APP', 'placeOrder()']) assert.ok(svg.includes(label), label);
-  // one packet per hop, both riding the same routed path
   assert.equal(svg.match(/<animateMotion/g)?.length, 2);
   assert.equal(svg.match(/<mpath /g)?.length, 2);
-  // the returning packet runs the path backwards
   assert.ok(svg.includes('keyPoints="1;1;0;0"'));
 });
 
@@ -69,7 +67,6 @@ test('is a standalone, themeable, script-free image', () => {
   assert.ok(!svg.includes('<script'), 'no scripts: GitHub would strip them');
   assert.ok(svg.includes('@media (prefers-color-scheme: dark)'), 'dark mode');
   assert.ok(!svg.includes('@font-face') && !svg.includes('http://fonts'), 'no font to fetch');
-  // every class is a single attribute — two would make it invalid XML
   for (const tag of svg.match(/<[a-z]+[^>]*>/g) ?? [])
     assert.ok((tag.match(/ class="/g)?.length ?? 0) <= 1, `two class attributes: ${tag.slice(0, 80)}`);
 });
@@ -200,7 +197,6 @@ test('a rail pill in the scene is the drawn pill, in the map coordinates', () =>
   const railX = Number(svg.match(/<g transform="translate\(([\d.-]+) 0\)"><rect/)![1]);
   const drawn = svg.slice(svg.indexOf('class="railrow')).match(/<rect [^>]*rx="9"[^>]*\/>/)![0];
   const label = scene.edges.find((e) => e.id === 'rail:1')!.label!;
-  // The SVG writes one decimal.
   assert.ok(Math.abs(label.x + mapX - (num(drawn, 'x') + railX)) <= 0.05, 'x');
   assert.ok(Math.abs(label.y + mapY - num(drawn, 'y')) <= 0.05, 'y');
   assert.ok(Math.abs(label.w - num(drawn, 'width')) <= 0.05, 'width');
@@ -216,7 +212,6 @@ test('a folded rail: each counter sits on its phase row and moves with it; the h
     ],
   };
   const svg = toSvg(many);
-  // A phase row: the move group (the first phase never moves), the open label, the folded label, then one counter per beat.
   const phases = [
     ...svg.matchAll(
       /<g(?: class="(a\d+)")?><g[^>]*><text [^>]*y="([\d.]+)" class="railphase">(\w+)<\/text>.*?<\/g><g[^>]*><text [^>]*class="railphase muted">.*?<\/g>((?:<text [^>]*>\d+ of 13<\/text>)+)<\/g>/g,
@@ -234,7 +229,6 @@ test('a folded rail: each counter sits on its phase row and moves with it; the h
       'counter on the phase row',
     );
   }
-  // 6 beats in each step, so 6 counters each; the parallel beat has one counter.
   assert.deepEqual(
     phases.map((p) => p[4].match(/ of 13/g)!.length),
     [6, 6],
@@ -266,7 +260,7 @@ test('a folded phase label has the muted class, and the style gives that class t
   const svg = toSvg(many);
   assert.match(svg, /<text [^>]*class="railphase muted">/);
   const css = svg.match(/<style>([\s\S]*?)<\/style>/)![1];
-  // The last rule that sets a fill for both classes wins, so it must be the muted one.
+  // In CSS the last fill rule wins, so the muted rule must come last.
   const rules = [...css.matchAll(/^([^{\n]+)\{\s*fill:\s*([^;]+);/gm)].filter(([, sel]) =>
     /(^|,\s*)\.railphase\.muted\b|(^|,\s*)\.muted\b|(^|,\s*)\.railphase\b/.test(sel),
   );
@@ -354,7 +348,6 @@ const look = (fill: string, stroke: string, w: number) => `fill: var(--${fill});
 const ACTIVE_LOOK = look('tint', 'accent', 2) + '; filter: drop-shadow(0 0 4px var(--accent))';
 const TRAIL_LOOK = look('bg', 'accent', 1) + '; filter: drop-shadow(0 0 0 transparent)';
 const OFF_LOOK = look('bg', 'border', 1) + '; filter: drop-shadow(0 0 0 transparent)';
-/** The keyframes of the box with this label. */
 const boxFrames = (svg: string, label: string) => {
   const cls = svg.match(new RegExp(`class="(a\\d+)"/><text[^>]*class="label">${label}</text>`))![1];
   return svg.match(new RegExp(`@keyframes ${cls} \\{ ([^\\n]*) \\}`))![1];
@@ -393,12 +386,10 @@ test('a box turns active when the packet arrives, and the ramp back to trail las
   );
   const svg = toSvg(abc);
   const { beat, total, p, eps, travel } = timing(2);
-  // b: trail until the packet arrives, active to the beat end, then a 400 ms ramp to trail
   const b = boxFrames(svg, 'B');
   assert.ok(b.startsWith(`0%,${eps(travel)} { ${TRAIL_LOOK}`), b);
   assert.ok(b.includes(`${p(travel)},${eps(beat)} { ${ACTIVE_LOOK}`), b);
   assert.ok(b.includes(`${p(beat + 0.4)},${eps(total)} { ${TRAIL_LOOK}`), b);
-  // c: off during beat 1, trail until the arrival in beat 2
   const c = boxFrames(svg, 'C');
   assert.ok(c.startsWith(`0%,${eps(beat)} { ${OFF_LOOK}`), c);
   assert.ok(c.includes(`${p(beat + travel)}`), c);
@@ -416,7 +407,6 @@ test('the wrap: the last active look ramps to the first look before 100 %', () =
   );
   const { beat, hold, total, p, eps, travel } = timing(1);
   const b = boxFrames(toSvg(abc), 'B');
-  // active through the hold, less the last 400 ms; the ramp to the first look (trail) ends at the loop end
   assert.ok(b.includes(`${p(travel)},${eps(beat + hold - 0.4)} { ${ACTIVE_LOOK}`), b);
   assert.ok(b.endsWith(`${p(total * 0.9998)},${eps(total)} { ${TRAIL_LOOK} }`), b);
   assert.ok(!b.includes('100%'), b);
@@ -437,11 +427,8 @@ test('the active look lasts through the step hold, for a back hop and for two ho
   );
   const { beat, hold, p, eps, travel } = timing(1, 2);
   const step = beat + hold;
-  // b (a forward hop) and c (the destination of the back hop) are both active until the step ends
   for (const l of ['B', 'C']) assert.ok(boxFrames(svg, l).includes(`${p(travel)},${eps(step)} { ${ACTIVE_LOOK}`), l);
-  // d is the source of the back hop: it stays trail
   assert.ok(!boxFrames(svg, 'D').includes('stroke-width: 2'));
-  // c is off in step 2: it ramps from active to off over 400 ms after the step ends
   assert.ok(boxFrames(svg, 'C').includes(`${p(step + 0.4)},${eps(step + beat + hold)} { ${OFF_LOOK}`));
 });
 
@@ -469,7 +456,6 @@ test('a red hop colors the packet, the lit edge and the arrival look; the trail 
   const b = boxFrames(svg, 'B');
   assert.ok(b.includes('stroke: #ef4444; stroke-width: 2; filter: drop-shadow(0 0 4px #ef4444)'), 'active look');
   assert.ok(b.includes('stroke: var(--accent); stroke-width: 1'), 'trail stays accent');
-  // the edge of the plain hop stays accent
   assert.ok(svg.includes('{ stroke: var(--accent); stroke-width: 2 }'), 'plain edge');
 });
 
@@ -499,7 +485,6 @@ test('a box with a tone has its border and tint in the off look', () => {
 
 test('the checkout figure keeps its keyframe count when no tone applies (the map and the rail share keyframes)', async () => {
   const { default: fig } = await import('../figures/checkout.ts');
-  // 46 is the count in docs/checkout.svg at 6e04605, before tones.
   assert.equal((toSvg(fig.props).match(/@keyframes/g) ?? []).length, 46);
 });
 
@@ -619,12 +604,11 @@ const lanesFig: FlowProps = {
 };
 
 test('lanes: boxes in one time column share x across lanes; the bands span the width; a lane label sits in the gutter', () => {
-  // Five columns wrap at 830 px; a wider page keeps them in one block.
   const { scene, svg } = render(lanesFig, { width: 1200 });
   const rect = (id: string) => scene.boxes.find((b) => b.id === id)!.rect;
-  assert.equal(rect('check').x, rect('audit').x); // both column 1
+  assert.equal(rect('check').x, rect('audit').x);
   assert.ok(rect('ask').x < rect('check').x && rect('check').x < rect('pay').x);
-  assert.ok(rect('ask').y < rect('check').y && rect('check').y < rect('pay').y); // lane order top to bottom
+  assert.ok(rect('ask').y < rect('check').y && rect('check').y < rect('pay').y);
   assert.match(svg, /CUSTOMER/);
   const bands = [...svg.matchAll(/<rect[^>]*class="lane[ "][^>]*>/g)];
   assert.equal(bands.length, 3);
@@ -651,7 +635,6 @@ test('lanes: an empty lane still draws, a decision widens its column, and the ra
       ],
     },
   };
-  // A wide page keeps one block: only one block draws an empty lane.
   const { svg, scene } = render(fig, { width: 1600 });
   assert.match(svg, /EMPTY/);
   const w = (id: string) => scene.boxes.find((b) => b.id === id)!.rect.w;
@@ -664,7 +647,7 @@ test('lanes: a box at the top draws the normal layout and check reports the rule
   assert.ok(check(top).some((f) => f.rule === 'lanes-need-column'));
   const { scene } = render(lanesFig);
   const y = (id: string) => scene.boxes.find((b) => b.id === id)!.rect.y;
-  assert.ok(y('check') - y('ask') > 20 + 2 * 24); // a lane band plus the gap between bands
+  assert.ok(y('check') - y('ask') > 20 + 2 * 24);
   const bad: FlowProps = {
     ...lanesFig,
     layout: { direction: 'column', children: [{ label: 'One', children: [{ id: 'p', label: 'P', at: -1 }] }] },
@@ -791,7 +774,6 @@ test('timeline: a dependency leaves the right end of the from bar, enters the le
   assert.equal(e.curve[0].x, a.x + a.w);
   assert.equal(e.curve[3].x, b.x);
   assert.ok(svg.indexOf('id="p-') < svg.indexOf('rx="6"'), 'the edge comes before the bars');
-  // A deep-stacked pair that share days still leaves right and enters left.
   const same = render({ ...tlFig, edges: [{ from: 'build', to: 'spec' }] }).scene.edges[0];
   assert.equal(same.curve[0].x, b.x + b.w);
 });
@@ -816,7 +798,7 @@ test('timeline: the roadmap demo has no label over another item in a row', async
 
 test('timeline: a bar holds the active look during its beat and the trail after', () => {
   const svg = toSvg(tlFig);
-  const spec = svg.match(/<rect [^>]*height="\d+" rx="6"[^>]*class="(a\d+)"/)![1]; // the first bar in date order is Spec
+  const spec = svg.match(/<rect [^>]*height="\d+" rx="6"[^>]*class="(a\d+)"/)![1];
   const kf = svg.match(new RegExp(`@keyframes ${spec} \\{([^\\n]*)\\}\\n`))![1];
   const frames = kf.split(/\} ?(?=[\d.]+%)/);
   const look = (f: string) => (f.includes('stroke-width: 2') ? 'active' : f.includes('stroke: var(--accent)') ? 'trail' : 'off');
@@ -834,7 +816,6 @@ test('timeline: in the roadmap demo each dependency path has right angles only',
   const svg = toSvg({ ...demo.props, timeline: true } as FlowProps);
   const paths = [...svg.matchAll(/<path id="p-[^"]*" d="([^"]*)"/g)].map((m) => m[1]);
   assert.ok(paths.length > 0, 'the demo has dependency paths');
-  // A run in the gap has three parts; a detour around a box has five.
   for (const d of paths) assert.match(d, /^M [\d.-]+ [\d.-]+ H [\d.-]+ V [\d.-]+ H [\d.-]+( V [\d.-]+ H [\d.-]+)?$/, `elbow: ${d}`);
 });
 
@@ -914,7 +895,6 @@ test('timeline: a beat with no focus keeps the earlier playhead position', () =>
 
 test('timeline: a playhead date label that would meet the "today" label moves to the tick row', () => {
   const rowOf = (svg: string, text: string) => +svg.match(new RegExp(`<text [^>]* y="([\\d.]+)"[^>]*>${text}</text>`))![1];
-  // inv starts 2026-10-05; today 2026-10-10 puts the date label 5 days (about 41 px) left of today.
   const near = toSvg(tlFocus([['inv']], '2026-10-10'));
   assert.notEqual(rowOf(near, '5 Oct'), rowOf(near, 'today'));
   const far = toSvg(tlFocus([['inv']], '2026-12-20'));
@@ -927,7 +907,7 @@ test('timeline: in the roadmap demo no dependency run crosses an outside label',
   const { scene } = render(props);
   const beta = scene.boxes.find((b) => b.id === 'beta')!.rect;
   const e = scene.edges.find((x) => x.id === 'usage-page')!;
-  const run = e.curve[1].x; // the vertical run of the elbow
+  const run = e.curve[1].x;
   assert.ok(run < beta.x + beta.w + 4 || run > beta.x + beta.w + 6 + textWidth('Beta', 13) + 2, `run at ${run} clear of the Beta label`);
 });
 
@@ -944,7 +924,6 @@ test('timeline: the playhead date label shows only after the line arrives, and a
   assert.ok(mid[0][0] - inv[0][1] >= 0.39, `the second label waits ${mid[0][0] - inv[0][1]} s for the line`);
 });
 
-// The Q4 roadmap with full labels: the last bar and the last milestone have no room right of them.
 const endFig = (ga: string): FlowProps => ({
   timeline: true,
   today: '2026-10-19',
@@ -1040,10 +1019,8 @@ test('lanes wrap: seven columns at 830 px draw as two blocks that hold only thei
   const { default: demo } = await import('../figures/returns-process.ts');
   const bands = (width?: number) =>
     [...render(demo.props, { width }).svg.matchAll(/class="lane[^>]*\/><text[^>]*>([A-Z]+)</g)].map((m) => m[1]);
-  // Block 1 holds Customer and Support; block 2 holds Support, Warehouse and Finance.
   assert.deepEqual(bands(), ['CUSTOMER', 'SUPPORT', 'SUPPORT', 'WAREHOUSE', 'FINANCE']);
   assert.deepEqual(check(demo.props, { width: 830 }), []);
-  // The block count comes from the width: a wider page holds all seven columns in one block.
   assert.deepEqual(bands(1400), ['CUSTOMER', 'SUPPORT', 'WAREHOUSE', 'FINANCE']);
 });
 
@@ -1057,11 +1034,9 @@ test('lanes wrap: a cross-block edge is two stubs with pills that clear every bo
     const parts = scene.edges.filter((e) => e.id === id);
     assert.equal(parts.length, 2, `${id} has two stubs`);
     for (const t of texts) assert.ok(svg.includes(`>${t}</text>`), t);
-    // The guide path holds both stubs: a second M is the jump between the blocks.
     const d = svg.match(new RegExp(`<path id="p-${id}" d="([^"]+)" fill="none" stroke="none"`))![1];
     assert.equal(d.match(/M/g)!.length, 2);
   }
-  // The target stub enters Inspect from the left.
   const inspect = scene.boxes.find((b) => b.id === 'inspect')!.rect;
   const [p, q] = scene.edges.filter((e) => e.id === 'arrive')[1].pts!;
   assert.ok(p.x < q.x && q.x === inspect.x);
@@ -1072,7 +1047,7 @@ test('lanes wrap: a cross-block edge is two stubs with pills that clear every bo
 test('lanes wrap: a figure that fits renders byte for byte as before the wrap', async () => {
   const { createHash } = await import('node:crypto');
   const { default: refund } = await import('../figures/refund-process.ts');
-  // The hash of toSvg on main at c008cf5 (0.4.0), then with the "ticket" label moved into its lane band (lane-labels).
+  // Change this hash only for a planned layout change.
   assert.equal(
     createHash('sha256').update(toSvg(refund.props)).digest('hex'),
     'd2604a6aa8357826dceedbfc80e4728f2b2e0f30f5326586c0ee34cc082d56a3',
@@ -1196,14 +1171,13 @@ test('lanes wrap: a block with no box is not drawn', async () => {
   const far = structuredClone(demo.props);
   ((far.layout.children[1] as FigGroup).children.find((b) => (b as FigNode).id === 'rejected') as FigNode).at = 20;
   assert.deepEqual(lanePlan(far).blocks, [0, 1, 5]);
-  // The bands step by one lane gap (20 px) or one block gap (40 px), never more.
   const ys = [...render(far).svg.matchAll(/<rect x="[\d.]+" y="([\d.]+)" width="[\d.]+" height="([\d.]+)"[^>]*class="lane/g)].map((m) => [
     +m[1],
     +m[2],
   ]);
   const steps = ys.slice(1).map(([y], i) => Math.round(y - ys[i][0] - ys[i][1]));
   assert.deepEqual([...new Set(steps)].sort(), [20, 40]);
-  // This test is about the blocks; a stub that has no place clear of an edge in this moved figure is a warning of its own.
+  // Skip stub-crosses-edge: this moved figure has a stub with no clear place.
   assert.deepEqual(
     check(far).filter((f) => f.rule !== 'stub-crosses-edge'),
     [],
@@ -1221,16 +1195,13 @@ test('lanes wrap: no wrap when the wrap cannot make the text readable (min-text 
 test('lanes wrap: an edge to a lane routes to the band of the right block, and a lane with no block near is reported', async () => {
   const { default: demo } = await import('../figures/returns-process.ts');
   const withEdge = (to: string, from = 'open') => ({ ...demo.props, edges: [...demo.props.edges, { id: 'lane', from, to }] });
-  // finance shows only in block 2, so open -> finance is a stub.
   const finance = withEdge('finance');
   assert.ok(lanePlan(finance).stubs.has('lane'));
   assert.equal(render(finance).scene.edges.filter((e) => e.id === 'lane').length, 2);
   assert.deepEqual(check(finance), []);
-  // support shows in block 1, so open -> support stays in block 1.
   const support = withEdge('support');
   assert.deepEqual(lanePlan(support).ends.get('lane'), [0, 0]);
   assert.deepEqual(check(support), []);
-  // customer ends with ship; close sits in a later block, so close -> customer has no block at or after it.
   const back = withEdge('customer', 'close');
   assert.deepEqual(lanePlan(back).lost, ['lane']);
   assert.ok(check(back).some((f) => f.rule === 'lane-end-block'));

@@ -91,13 +91,12 @@ test('elbow: boxes on one row draw a straight forward line, with no detour', () 
 test('an elbow moves its vertical run clear of an outside label, then falls back to the midpoint', () => {
   const rects = { a: { x: 0, y: 0, w: 100, h: 28 }, b: { x: 300, y: 60, w: 100, h: 28 } };
   const elbow = [{ id: 'e', from: 'a', to: 'b', sides: ['r', 'l'] as ['r', 'l'], elbow: true }];
-  // the midpoint x is 200; the label spans 150 to 250
   const label = { x: 150, y: 10, w: 100, h: 28 };
   assert.match(route(elbow, rects, new Set(), [])[0].d, /H 200 V/, 'no label: the midpoint');
   assert.match(route(elbow, rects, new Set(), [label])[0].d, /H 292 V/, 'a label at the midpoint: 8 px before the end');
-  const wide = { x: 150, y: 10, w: 150, h: 28 }; // reaches the target too
+  const wide = { x: 150, y: 10, w: 150, h: 28 };
   assert.match(route(elbow, rects, new Set(), [wide])[0].d, /H 108 V/, 'then 8 px after the start');
-  const off = { x: 150, y: 200, w: 100, h: 28 }; // below the run
+  const off = { x: 150, y: 200, w: 100, h: 28 };
   assert.match(route(elbow, rects, new Set(), [off])[0].d, /H 200 V/, 'a label off the run is ignored');
 });
 
@@ -105,20 +104,14 @@ test('stub: each pill takes the first clear place, else the first place', () => 
   const rects = { a: { x: 0, y: 0, w: 100, h: 50 }, b: { x: 400, y: 300, w: 100, h: 50 } };
   const pills = (avoid: { x: number; y: number; w: number; h: number }[]) =>
     route([{ id: 'e', from: 'a', to: 'b', stub: [60, 60] }], rects, new Set(), avoid)[0].stub!.pills.map((p) => [p.x, p.y]);
-  // 1: right of the source, left of the target.
   assert.deepEqual(pills([]), [
     [112, 16],
     [328, 316],
   ]);
-  // 2: right and under the bottom edge.
   assert.deepEqual(pills([{ x: 110, y: 14, w: 70, h: 22 }])[0], [112, 52]);
-  // 3: right and over the top edge.
   assert.deepEqual(pills([{ x: 110, y: 14, w: 70, h: 60 }])[0], [112, -20]);
-  // 5: below the source (4, one pill lower, is taken too).
   assert.deepEqual(pills([{ x: 110, y: -30, w: 70, h: 110 }])[0], [20, 62]);
-  // The target pill: left and under the bottom edge, when its left place is taken (under and over tie; under comes first).
   assert.deepEqual(pills([{ x: 320, y: 312, w: 70, h: 22 }])[1], [328, 352]);
-  // No clear place: the first place stays, and check reports it.
   assert.deepEqual(pills([{ x: -1000, y: -1000, w: 3000, h: 3000 }]), [
     [112, 16],
     [328, 316],
@@ -132,7 +125,6 @@ test('stub: a pill keeps clear of the path of another edge', () => {
     c: { x: 112, y: -100, w: 40, h: 20 },
     d: { x: 112, y: 200, w: 40, h: 20 },
   };
-  // c -> d runs down through the first place of the source pill.
   const [, e] = route(
     [
       { id: 'cd', from: 'c', to: 'd' },
@@ -150,7 +142,6 @@ test('stub: a stub line does not cross the path of another edge', () => {
     c: { x: 96, y: -100, w: 20, h: 20 },
     d: { x: 96, y: 200, w: 20, h: 20 },
   };
-  // c -> d runs down at x 106: the pill at [112, 16] is clear of it, but its stub (100 to 112, at y 25) crosses it.
   const [, e] = route(
     [
       { id: 'cd', from: 'c', to: 'd' },
@@ -171,10 +162,8 @@ test('stub: with a band, a pill stays inside it, 4 px from the border, and slide
   const inside = (r: { x: number; y: number; w: number; h: number }) =>
     r.x >= band.x + 4 && r.x + r.w <= band.x + band.w - 4 && r.y >= band.y + 4 && r.y + r.h <= band.y + band.h - 4;
   assert.deepEqual([pills([]).x, pills([]).y], [112, 36]);
-  // A box right of the source takes the first place: the pill moves up or down in the band, or further right, and stays inside.
   const moved = pills([{ x: 110, y: 30, w: 70, h: 30 }]);
   assert.ok(inside(moved) && !(moved.x === 112 && moved.y === 36));
-  // No place inside the band: the first place stays, and check reports it.
   const stuck = pills([{ x: -1000, y: -1000, w: 3000, h: 3000 }]);
   assert.deepEqual([stuck.x, stuck.y], [112, 36]);
 });
@@ -186,10 +175,8 @@ test('an elbow keeps clear of a box it does not connect: a clear x in the gap, e
     { ...rects.a, box: true },
     { ...rects.b, box: true },
   ];
-  // A box over the midpoint: the run takes 8 px before the end.
   const mid = { x: 150, y: 80, w: 100, h: 28, box: true };
   assert.match(route(elbow, rects, new Set(), [...own, mid])[0].d, /H 292 V/);
-  // A box over the whole gap: the elbow goes around it, on its right, and every run clears it.
   const wide = { x: 104, y: 80, w: 250, h: 28, box: true };
   const [r] = route(elbow, rects, new Set(), [...own, wide]);
   assert.equal(r.elbow!.length, 6, 'a five-run detour');
@@ -203,6 +190,5 @@ test('an elbow keeps clear of a box it does not connect: a clear x in the gap, e
     assert.ok(!hit, `run ${k} crosses the box`);
   }
   assert.ok(r.elbow![1].x >= wide.x + wide.w + 8, 'the detour passes right of the box');
-  // A label (no box flag) over the whole gap does not move a horizontal run, and no detour is drawn for a label alone.
   assert.match(route(elbow, rects, new Set(), [{ x: 104, y: 80, w: 250, h: 28 }])[0].d, /^M 100 14 H 200 V 214 H 300$/);
 });

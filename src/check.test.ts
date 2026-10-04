@@ -85,7 +85,6 @@ test('an edge through a box it does not connect is an error; its own ends are no
   assert.deepEqual(rules(checkScene(through)), ['edge-crosses-box']);
   const behind = scene({ boxes, edges: [{ id: 'ab', from: 'a', to: 'b', curve: line(100, 20, 400, 20), behind: true }] });
   assert.deepEqual(checkScene(behind), [], 'an edge behind the boxes crosses none');
-  // The same ends, but the control points lift the curve over box m.
   const over: [Pt, Pt, Pt, Pt] = [
     { x: 100, y: 20 },
     { x: 100, y: -80 },
@@ -137,7 +136,6 @@ test('the built-in light and dark themes pass', () => {
 
 test('a custom theme with low contrast is an error', () => {
   const f = checkTheme({ muted: '#bbbbbb' }).filter((x) => !/box tint/.test(x.message));
-  // muted fails on bg and on the tint
   assert.deepEqual(rules(f), ['low-contrast', 'low-contrast']);
   assert.match(f[0].message, /custom theme: muted on bg/);
 });
@@ -183,7 +181,7 @@ test('white text on the fill of each tone has contrast 4.5:1', () => {
 });
 
 test('a custom muted color with low contrast on a tone tint is an error', () => {
-  // #767676 has 4.54:1 on white; on the 10 % tone tint over the surface it falls below 4.5:1
+  // #767676 has 4.54:1 on white, but less than 4.5:1 on the tint.
   const f = checkTheme({ muted: '#767676', surface: '#ffffff', bg: '#ffffff' });
   assert.ok(
     f.some((x) => x.rule === 'low-contrast' && /muted on the \w+ box tint/.test(x.message)),
@@ -347,7 +345,6 @@ test('timeline-dependency-order: an item that starts on or before its source end
   assert.deepEqual(rules(f), ['timeline-dependency-order']);
   assert.equal(f[0].severity, 'warning');
   assert.equal(f[0].message, '"b" does not start after "a" ends');
-  // The bar of "a" covers its last day, so a start on that day is not after the end.
   assert.deepEqual(rules(checkSpec(two('2026-10-09'))), ['timeline-dependency-order']);
   assert.deepEqual(checkSpec(two('2026-10-10')), []);
   assert.deepEqual(checkSpec(two('2026-10-12')), []);
@@ -365,9 +362,7 @@ test('checkScene: a stub (pts) through a box is edge-crosses-box, and an edge th
   const base: Scene = { width: 600, minFont: 12, boxes: [box('a', 0, 0), box('b', 300, 0), box('c', 150, 200)], edges: [] };
   const stub = { id: 's', from: 'a', to: 'b', curve: [p(100, 20), p(100, 20), p(100, 20), p(100, 20)] as [Pt, Pt, Pt, Pt] };
   const rules = (s: Scene) => checkScene(s).map((f) => f.rule);
-  // The stub runs from a down through c.
   assert.deepEqual(rules({ ...base, edges: [{ ...stub, pts: [p(100, 20), p(200, 20), p(200, 260)] }] }), ['edge-crosses-box']);
-  // Edge e runs straight across the pill of stub s.
   const pill = { x: 112, y: 100, w: 60, h: 18 };
   const e = { id: 'e', from: 'a', to: 'b', curve: [p(50, 109), p(150, 109), p(250, 109), p(350, 109)] as [Pt, Pt, Pt, Pt] };
   const found = checkScene({ ...base, edges: [{ ...stub, pts: [p(100, 20), p(112, 109)], label: pill }, e] });
@@ -403,9 +398,7 @@ test('checkScene: a timeline elbow (behind, with corners) through a box it does 
   const curve = [p(100, 20), p(200, 20), p(200, 220), p(300, 220)] as [Pt, Pt, Pt, Pt];
   const edge = { id: 'e', from: 'a', to: 'b', curve, behind: true as const };
   const found = (e: Scene['edges'][0]) => checkScene({ width: 600, minFont: 12, boxes, edges: [e] }).map((f) => [f.rule, f.ids]);
-  // The vertical run at x 200 passes through c.
   assert.deepEqual(found({ ...edge, elbow: [...curve] }), [['edge-crosses-box', ['e', 'c']]]);
   assert.deepEqual(found(edge), [], 'a behind edge with no corners is skipped');
-  // A run at x 120, left of c, is clear.
   assert.deepEqual(found({ ...edge, elbow: [p(100, 20), p(120, 20), p(120, 220), p(300, 220)] }), []);
 });

@@ -1,5 +1,3 @@
-// A decision box that ends a wrap block, with its outcome in the next block: its source pill finds a place inside the band and the
-// figure. Both specs came from a grader run (returns process, 830 px).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { check, render } from './svg.ts';

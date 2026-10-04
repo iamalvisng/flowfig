@@ -38,7 +38,6 @@ test('agentArgs holds print mode, the allowlist, the turn cap, the system prompt
   assert.equal(agentArgs({ question: 'q', out: 'o.svg', cwd: '/r', maxTurns: 5, model: 'sonnet' }).at(-1), 'sonnet');
 });
 
-// The fake claude: logs its argv, then acts on FAKE_MODE. It renders with the real CLI, so the SVG carries a spec.
 const SPEC = JSON.stringify({
   props: {
     layout: {
@@ -128,7 +127,6 @@ test('draw exits 1 when the agent writes no figure, when the figure has a fault,
     const stopped = draw(dir, 'stopped', ['q', '--out', 'x3.svg']);
     assert.equal(stopped.status, 1);
     assert.match(stopped.stderr, /draw: claude stopped \(error_max_turns\)/);
-    // an old clean figure must not pass when the agent writes nothing
     assert.equal(draw(dir, 'ok', ['q', '--out', 'old.svg']).status, 0);
     const stale = draw(dir, 'none', ['q', '--out', 'old.svg']);
     assert.equal(stale.status, 1);

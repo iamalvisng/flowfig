@@ -25,7 +25,7 @@ test('pageHtml keeps the SVG text and its spec unchanged', () => {
   assert.ok(page.startsWith('<!doctype html>'));
   assert.ok(page.includes(svg));
   assert.match(page, /<metadata id="figure-spec"><!\[CDATA\[/);
-  // A $ pattern in the SVG stays as it is: the page does not use String.replace on the SVG.
+  // String.replace reads $ patterns, so the page must not use it on the SVG.
   assert.ok(pageHtml('<svg>$& $1 $$</svg>', 'x.svg').includes('<svg>$& $1 $$</svg>'));
 });
 
