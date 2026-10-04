@@ -58,7 +58,7 @@ for (const [name, fig] of [
       );
     }
     assert.deepEqual(
-      check(lanesFig).filter((f) => f.rule === 'label-overlap'),
+      check(fig).filter((f) => f.rule === 'label-overlap'),
       [],
     );
   });
