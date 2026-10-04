@@ -216,7 +216,7 @@ export function edgeResult(
     if (!rc) {
       if (inTypePosition(body, idx, lang)) return ignore;
       if (owner && n === owner && /\bnew\s+$/.test(body.slice(Math.max(0, idx - 10), idx)))
-        return findType(cx, fi, n)?.info.path === to.path ? found('with new') : not(`${who} creates another ${n}`);
+        return byReach(reaches(cx, { kind: 'type', name: n, ctx: fi }, ownerDecl, owner, toName, to.path), 'with new');
       if ((lang === 'java' || lang === 'cs') && owner && /^\s*[(<]/.test(body.slice(idx + n.length))) {
         if (!fromContainer) return unsure(`the class of ${who} is not known`);
         const r = reaches(cx, { kind: 'type', name: fromContainer, ctx: fi }, ownerDecl, owner, toName, to.path);
@@ -233,8 +233,12 @@ export function edgeResult(
         if (d) return d.info.path === to.path ? found('as a type') : ignore;
       }
       if (owner && (lang === 'ts' || lang === 'py' || lang === 'go' || lang === 'rs')) {
-        if (lang === 'ts' && new RegExp(`\\{[^}]*\\b${esc(n)}\\b[^}]*\\}\\s*=\\s*this\\b`).test(body)) return found('through this');
-        return lang === 'rs' && same && n === toName ? found('in the same file') : ignore;
+        if (lang === 'ts' && new RegExp(`\\{[^}]*\\b${esc(n)}\\b[^}]*\\}\\s*=\\s*this\\b`).test(body)) {
+          if (!fromContainer) return unsure(`the class of ${who} is not known`);
+          return byReach(reaches(cx, { kind: 'type', name: fromContainer, ctx: fi }, ownerDecl, owner, toName, to.path), 'through this');
+        }
+        if (lang !== 'rs' || !same || n !== toName || new RegExp(`^(pub\\s+)?fn\\s+${esc(n)}\\b`, 'm').test(fi.code)) return ignore;
+        return unsure(`${n} has no path to ${owner}`);
       }
       const dynamic = new RegExp(`\\{[^}]*\\b${esc(n)}\\b[^}]*\\}\\s*=\\s*(?:await\\s+)?(?:import|require)\\(`).test(body);
       if ((shadowed || (n === toName && !dynamic && localType(cx, fi, body, n, lang))) && n !== fromName) return ignore;
@@ -247,7 +251,8 @@ export function edgeResult(
     }
     if (rc.complex) return unsure(rc.chain.length ? 'the receiver chain has a call' : 'the receiver is an expression');
     const chain = rc.chain;
-    if (owner && chain.length === 1 && chain[0] === owner) return found('through its class');
+    if (owner && chain.length === 1 && chain[0] === owner)
+      return byReach(reaches(cx, { kind: 'type', name: owner, ctx: fi }, ownerDecl, owner, toName, to.path), 'through its class');
     const rt = receiver(cx, fi, body, chain, fromContainer, fromDecl);
     if (rt.kind === 'rsmod') {
       if (owner && ownerDecl) return not(`${who} uses a module path for a method`);
@@ -269,7 +274,7 @@ export function edgeResult(
       return fromDecl && ancestors(cx, fromDecl).some((x) => x.name === owner)
         ? found('through super')
         : not(`${who} calls super of another class`);
-    if (rt.kind !== 'type') return unsure(`the type of ${chain.join('.')} is not known`);
+    if (rt.kind !== 'type' || rt.name === '#top') return unsure(`the type of ${chain.join('.')} is not known`);
     if (!owner) return not(`${who} calls a free function on a typed receiver`);
     if (extType) {
       if (rt.name === extType) return found('as an extension');

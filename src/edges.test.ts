@@ -241,6 +241,68 @@ test('an alias counts only when its import leads to the callee file', () => {
   assert.equal(run(files, 'src/login.ts#login', 'src/auth.ts#verify'), 'not-found');
 });
 
+test('a receiver of a top type is unsure: any, unknown, object, Go error, Java Object', () => {
+  const files = {
+    'src/cache.ts': 'export class Cache {\n  delete(k: string) {}\n}\n',
+    'src/any.ts': "export function f(c: any) { c.delete('k'); }\n",
+    'src/unknown.ts': "export function f(c: unknown) { c.delete('k'); }\n",
+    'src/object.ts': "export function f(c: object) { c.delete('k'); }\n",
+    'go.mod': 'module example.com/app\n',
+    'e/e.go': 'package e\ntype MyErr struct{}\nfunc (m *MyErr) Error() string { return "" }\n',
+    'e/use.go': 'package e\nfunc Show(err error) string {\n\treturn err.Error()\n}\n',
+    'j/Money.java': 'public class Money {\n  public String toString() { return ""; }\n}\n',
+    'j/A.java': 'public class A {\n  String f(Object o) { return o.toString(); }\n}\n',
+  };
+  for (const t of ['any', 'unknown', 'object']) assert.equal(run(files, `src/${t}.ts#f`, 'src/cache.ts#Cache.delete'), 'unsure', t);
+  assert.equal(run(files, 'e/use.go#Show', 'e/e.go#MyErr.Error'), 'unsure');
+  assert.equal(run(files, 'j/A.java#A.f', 'j/Money.java#Money.toString'), 'unsure');
+});
+
+test('a receiver type the rules cannot read is unsure; a generic bound and a Go embedded struct are read', () => {
+  const files = {
+    'src/cache.ts': 'export class Cache {\n  delete(k: string) {}\n}\n',
+    'src/bound.ts': "import { Cache } from './cache.ts';\nexport function f<T extends Cache>(c: T) { c.delete('k'); }\n",
+    'src/mail.ts': 'export class Mail {\n  send() {}\n}\n',
+    'src/shape.ts': 'type Port = { send(): void };\nexport function notify(p: Port) { p.send(); }\n',
+    'app/__init__.py': '',
+    'app/port.py': 'from typing import Protocol\n\nclass Port(Protocol):\n    def send(self): ...\n',
+    'app/mail.py': 'class Mail:\n    def send(self):\n        pass\n',
+    'app/use.py': 'from app.port import Port\n\ndef notify(p: Port):\n    p.send()\n',
+    'go.mod': 'module example.com/app\n',
+    'store/driver.go': 'package store\ntype Driver interface {\n\tPut() error\n\tClose() error\n}\n',
+    'store/base.go': 'package store\ntype Base struct{}\nfunc (b *Base) Close() error { return nil }\n',
+    'store/s3.go': 'package store\ntype S3 struct {\n\tBase\n}\nfunc (s *S3) Put() error { return nil }\n',
+    'store/use.go': 'package store\nfunc Save(d Driver) error {\n\treturn d.Put()\n}\n',
+    'j/MyHandler.java': 'import org.lib.AbstractHandler;\npublic class MyHandler extends AbstractHandler {\n  public void handle() {}\n}\n',
+    'j/A.java': 'import org.lib.Handler;\npublic class A {\n  void f(Handler h) { h.handle(); }\n}\n',
+    'r/a.rs': 'use std::io::Write;\nstruct Out;\nimpl Out {\n    fn flush(&mut self) {}\n}\nfn f(w: &mut dyn Write) {\n    w.flush();\n}\n',
+  };
+  assert.equal(run(files, 'src/bound.ts#f', 'src/cache.ts#Cache.delete'), 'found');
+  assert.equal(run(files, 'store/use.go#Save', 'store/s3.go#S3.Put'), 'found');
+  assert.equal(run(files, 'src/shape.ts#notify', 'src/mail.ts#Mail.send'), 'unsure');
+  assert.equal(run(files, 'app/use.py#notify', 'app/mail.py#Mail.send'), 'unsure');
+  assert.equal(run(files, 'j/A.java#A.f', 'j/MyHandler.java#MyHandler.handle'), 'unsure');
+  assert.equal(run(files, 'r/a.rs#f', 'r/a.rs#Out.flush'), 'unsure');
+});
+
+test('a call on a name that only looks like the callee class is not found', () => {
+  const files = {
+    'src/cache.ts': 'export class Cache {\n  get() {}\n  static load() {}\n}\n',
+    'src/other/cache.ts': 'export class Cache {\n  static load() {}\n}\n',
+    'src/log.ts': 'export class Log {\n  get() {}\n  run() { const { get } = this; get(); }\n}\n',
+    'src/a.ts': "import { Cache } from './other/cache.ts';\nexport function f() { Cache.load(); }\n",
+    'src/lib.rs': 'fn process() {}\nstruct Cache;\nimpl Cache {\n    fn process(&self) {}\n}\nfn run() {\n    process();\n}\n',
+    'go.mod': 'module example.com/app\n',
+    'store/store.go': 'package store\ntype Store struct{}\nfunc (s *Store) Save() {}\n',
+    'api/store.go': 'package api\ntype Store struct{}\nfunc (s *Store) Save() {}\n',
+    'api/api.go': 'package api\nfunc Create(s *Store) {\n\ts.Save()\n}\n',
+  };
+  assert.equal(run(files, 'src/log.ts#Log.run', 'src/cache.ts#Cache.get'), 'not-found');
+  assert.equal(run(files, 'src/a.ts#f', 'src/cache.ts#Cache.load'), 'not-found');
+  assert.equal(run(files, 'src/lib.rs#run', 'src/lib.rs#Cache.process'), 'not-found');
+  assert.equal(run(files, 'api/api.go#Create', 'store/store.go#Store.Save'), 'not-found');
+});
+
 test('an edge to a file outside the root is not checked, and its text is never read', () => {
   const read: Read = (full) =>
     full.endsWith('keys.ts') ? 'export const k = "hunter2";\n' : full.endsWith('a.ts') ? 'export function send() {}\n' : null;

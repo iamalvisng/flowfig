@@ -1,5 +1,5 @@
-import { basename, dirname } from 'node:path';
-import { esc, locate, matchClose, type CodeFile, type Lang } from './code.ts';
+import { dirname } from 'node:path';
+import { esc, langOf, locate, matchClose, type CodeFile, type Lang } from './code.ts';
 import { resolvePy } from './imports.ts';
 import {
   ancestors,
@@ -18,7 +18,7 @@ import {
   type Decl,
 } from './type-index.ts';
 
-export { makeCtx, bindings, declIn, ancestors, file, findType, type Ctx, type Decl } from './type-index.ts';
+export { makeCtx, bindings, declIn, ancestors, file, findType, rustMod, rustUses, type Ctx, type Decl } from './type-index.ts';
 
 export type Reach = 'yes' | 'no' | 'unsure';
 export type Rt = {
@@ -86,11 +86,13 @@ export function receiverChain(body: string, idx: number, lang: Lang): { chain: s
 }
 
 const PRIM = new Set(
-  'string number boolean any unknown void object int str float bool dict list set tuple bytes error byte rune int64 int32 uint float64 String Object Integer Long Boolean long double char Vec HashMap'.split(
+  'string number boolean void int str float bool dict list set tuple bytes byte rune int64 int32 uint float64 String Integer Long Boolean long double char Vec HashMap'.split(
     ' ',
   ),
 );
+const TOP = new Set(['any', 'unknown', 'object', 'Object', 'error', 'Any', 'dynamic']);
 const EXTERNAL = { name: '#external' };
+const TOP_TYPE = { name: '#top' };
 
 export function normType(raw: string | undefined, lang: Lang): { name: string; qual?: string | null } | null {
   if (!raw) return null;
@@ -119,7 +121,8 @@ export function normType(raw: string | undefined, lang: Lang): { name: string; q
   }
   if (lang === 'go') {
     t = t.replace(/^\*+/, '');
-    if (/^(\[|map\[|chan\b|func\b|interface\s*\{)/.test(t)) return EXTERNAL;
+    if (/^interface\s*\{/.test(t)) return TOP_TYPE;
+    if (/^(\[|map\[|chan\b|func\b)/.test(t)) return EXTERNAL;
   }
   if (lang === 'rs') {
     for (;;) {
@@ -137,6 +140,7 @@ export function normType(raw: string | undefined, lang: Lang): { name: string; q
   if (!m) return null;
   const segs = m[1].split(/\.|::/);
   const name = segs.at(-1)!;
+  if (TOP.has(name) && (segs.length === 1 || name === 'Any')) return TOP_TYPE;
   if (PRIM.has(name) && segs.length === 1) return EXTERNAL;
   return { name, qual: segs.length > 1 ? segs.slice(0, -1).join('.') : null };
 }
@@ -224,9 +228,9 @@ function localType0(cx: Ctx, info: CodeFile, text: string, n: string, lang: Lang
       if (/\blambda\b[^:]*$/.test(pre)) continue;
       if (m.index < head.length || /(^|\n)[ \t]*$/.test(pre)) tries.push({ type: m[1] });
     }
-    let m = new RegExp(`(^|\\n)[ \\t]*${N}\\s*=\\s*(?:[\\w]+\\.)*([A-Z]\\w*)\\s*\\(`).exec(text);
+    let m = new RegExp(`(^|\\n)[ \\t]*${N}\\s*=\\s*((?:[\\w]+\\.)*[A-Z]\\w*)\\s*\\(`).exec(text);
     if (m) tries.push({ type: m[2] });
-    m = new RegExp(`(^|\\n)[ \\t]*${N}\\s*=\\s*(?:[a-z_]\\w*\\.)*([A-Z]\\w*)\\.\\w+(\\.\\w+)*\\s*\\(`).exec(text);
+    m = new RegExp(`(^|\\n)[ \\t]*${N}\\s*=\\s*((?:[a-z_]\\w*\\.)*[A-Z]\\w*)\\.\\w+(\\.\\w+)*\\s*\\(`).exec(text);
     if (m) tries.push({ type: m[2] });
     if (
       !tries.length &&
@@ -279,6 +283,11 @@ function localType0(cx: Ctx, info: CodeFile, text: string, n: string, lang: Lang
       if (bound) t.type = bound[1];
     }
   }
+  if (lang === 'ts' || lang === 'java')
+    for (const t of tries) {
+      const bound = t.type && new RegExp(`[<,]\\s*${esc(t.type.trim())}\\s+extends\\s+([\\w$.]+)`).exec(head);
+      if (bound) t.type = bound[1];
+    }
   if (new Set(tries.map((t) => t.type ?? t.ctor)).size > 1) return { declared: true };
   return tries[0] ?? null;
 }
@@ -564,42 +573,87 @@ export function receiver(
   return cur ?? unknown;
 }
 
-function unread(cx: Ctx, rt: Rt): boolean {
-  const ctx = rt.ctx;
-  if (!ctx) return false;
-  if (ctx.lang === 'go') return true;
-  if (ctx.lang !== 'ts' && ctx.lang !== 'py') return false;
-  return bindings(cx, ctx).has(rt.qual ? rt.qual.split('.')[0] : rt.name!);
-}
+const TS_GLOBALS = new Set([
+  'Map',
+  'Set',
+  'WeakMap',
+  'WeakSet',
+  'Array',
+  'ReadonlyArray',
+  'ReadonlyMap',
+  'Promise',
+  'Date',
+  'RegExp',
+  'Error',
+  'Record',
+]);
+const tsMethods = (d: Decl) =>
+  [
+    ...d.info.code
+      .slice(d.start, d.end)
+      .matchAll(/(?:^|[\n;{,])[ \t]*(?:readonly\s+)?([A-Za-z_$][\w$]*)\s*\??\s*(?::\s*)?(?:<[^>]*>\s*)?\(/g),
+  ].map((m) => m[1]);
+const pyMethods = (d: Decl) => [...d.info.code.slice(d.start, d.end).matchAll(/\n[ \t]+(?:async\s+)?def\s+(\w+)/g)].map((m) => m[1]);
 
 export function reaches(cx: Ctx, rt: Rt, ownerDecl: Decl | null, owner: string, method: string, ownerPath: string): Reach {
-  const lang = ownerDecl?.info.lang;
+  if (rt.name === '#top') return 'unsure';
   if (rt.name === '#external') return 'no';
-  const sameDir = (rd: Decl) => dirname(rd.info.path) === dirname(ownerPath);
-  const goIface = lang === 'go' && rt.qual ? findType(cx, rt.ctx!, rt.name, rt.qual) : null;
-  if (rt.name === owner && !(goIface?.kind === 'interface' && !sameDir(goIface))) {
-    if (lang === 'go' && rt.qual) {
-      if (!goIface) return 'unsure';
-      if (!sameDir(goIface)) return 'no';
-    }
-    if (lang === 'java' || lang === 'ts' || lang === 'py') {
-      const rd = findType(cx, rt.ctx!, rt.name, rt.qual);
-      if (rd && rd.info.path !== ownerPath) return 'no';
-    }
-    return 'yes';
+  const lang = langOf(ownerPath);
+  const ambiguous = (name: string) => lang === 'rs' && (global(cx, 'rs').types.get(name)?.length ?? 0) > 1;
+  const same = (a: Decl, b: Decl) =>
+    a.name === b.name && (lang === 'go' ? dirname(a.info.path) === dirname(b.info.path) : a.info.path === b.info.path);
+  const match = (a: { name: string; d: Decl | null }, d: Decl | null): Reach => {
+    if (ambiguous(a.name)) return 'unsure';
+    if (a.d && d) return same(a.d, d) ? 'yes' : 'no';
+    return lang === 'rs' && d ? 'yes' : 'unsure';
+  };
+  const rd = findType(cx, rt.ctx!, rt.name, rt.qual);
+  if (rt.name === owner) {
+    if (!rd) return lang === 'rs' && !global(cx, 'rs').types.has(owner) ? 'yes' : 'unsure';
+    const own =
+      lang === 'go' ? dirname(rd.info.path) === dirname(ownerPath) : rd.info.path === ownerPath || (lang === 'rs' && !ambiguous(owner));
+    if (own) return 'yes';
+    if (rd.kind !== 'interface') return 'no';
   }
   if (!ownerDecl) return 'unsure';
-  if (ancestors(cx, ownerDecl).some((a) => a.name === rt.name)) return 'yes';
-  const rd = findType(cx, rt.ctx!, rt.name, rt.qual);
-  if (lang === 'go' && rd?.kind === 'interface') {
-    const need = goIfaceMethods(rd);
-    const have = goMethods(cx, ownerDecl);
-    return need.includes(method) && need.every((x) => have.has(x)) ? 'yes' : 'no';
+  const anc = ancestors(cx, ownerDecl);
+  for (const a of anc.filter((x) => x.name === rt.name)) {
+    const r = match(a, rd);
+    if (r !== 'no') return r;
   }
-  if (!rd) return unread(cx, rt) ? 'unsure' : 'no';
+  if (!rd) {
+    if (lang === 'ts' && TS_GLOBALS.has(rt.name!) && !rt.qual && !bindings(cx, rt.ctx!).has(rt.name!)) return 'no';
+    const nominal =
+      (lang === 'java' || lang === 'cs') &&
+      !global(cx, lang).types.has(rt.name!) &&
+      anc.every((a) => a.d) &&
+      !new RegExp(`<[^<>()]*\\b${esc(rt.name!)}\\b`).test(rt.ctx?.code ?? '') &&
+      (lang === 'cs' || new RegExp(`^\\s*import\\s+[\\w.]+\\.${esc(rt.name!)}\\s*;`, 'm').test(rt.ctx?.keep ?? ''));
+    return nominal ? 'no' : 'unsure';
+  }
+  if (lang === 'go' && rd.kind === 'interface') {
+    const ra = ancestors(cx, rd);
+    const need = [...goIfaceMethods(rd), ...ra.flatMap((a) => (a.d ? goIfaceMethods(a.d) : []))];
+    const have = new Set([...goMethods(cx, ownerDecl), ...anc.flatMap((a) => (a.d ? [...goMethods(cx, a.d)] : []))]);
+    const needOpen = ra.some((a) => !a.d);
+    const haveOpen = anc.some((a) => !a.d);
+    if (need.some((x) => !have.has(x)) && !haveOpen) return 'no';
+    if (!need.includes(method) && !needOpen) return 'no';
+    return needOpen || haveOpen ? 'unsure' : 'yes';
+  }
+  const shape =
+    lang === 'ts' && rd.kind === 'interface'
+      ? tsMethods(rd)
+      : lang === 'py' && ancestors(cx, rd).some((a) => a.name === 'Protocol')
+        ? pyMethods(rd)
+        : null;
+  if (shape?.includes(method) && shape.every((m) => defines(cx, ownerDecl, m))) return 'unsure';
   if (defines(cx, rd, method) && rd.info.path !== ownerPath) return 'no';
   for (const a of ancestors(cx, rd)) {
-    if (a.name === owner) return 'yes';
+    if (a.name === owner) {
+      const r = match(a, ownerDecl);
+      if (r !== 'no') return r;
+    }
     if (a.d && defines(cx, a.d, method) && a.d.info.path !== ownerPath) return 'no';
   }
   return 'no';
@@ -615,14 +669,3 @@ export function inTypePosition(body: string, idx: number, lang: Lang): boolean {
   if (lang === 'py' && /(^|\n)[ \t]*[\w.]+\s*:\s*$/.test(pre)) return true;
   return /:\s*[\w$.]+<\s*$/.test(pre) || /(Optional|List)\[\s*$/.test(pre);
 }
-
-export function rustUses(fi: CodeFile, n: string, tp: string): boolean {
-  const mod = rustMod(tp);
-  for (const m of fi.keep.matchAll(/\buse\s+([^;]+);/g)) {
-    if (new RegExp(`\\b${esc(n)}\\b`).test(m[1]) && new RegExp(`\\b${esc(mod)}\\b`).test(m[1])) return true;
-    if (new RegExp(`\\b${esc(mod)}::\\*`).test(m[1])) return true;
-  }
-  return false;
-}
-
-export const rustMod = (tp: string) => (basename(tp) === 'mod.rs' ? basename(dirname(tp)) : basename(tp, '.rs'));
