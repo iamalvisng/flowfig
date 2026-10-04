@@ -1,9 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { check, render } from './svg.ts';
-import { checkScene } from './check.ts';
 import type { FlowProps } from './model.ts';
-import type { Scene } from './scene.ts';
 
 const lanesFig: FlowProps = {
   lanes: true,
@@ -60,28 +58,10 @@ for (const [name, fig] of [
       );
     }
     assert.deepEqual(
-      check(lanesFig).filter((f) => f.rule === 'label-overlap'),
+      check(fig).filter((f) => f.rule === 'label-overlap'),
       [],
     );
   });
-
-test('checkScene: an edge label across a lane border is label-overlap', () => {
-  const pt = { x: 0, y: 0 };
-  const scene: Scene = {
-    width: 400,
-    minFont: 12,
-    boxes: [],
-    edges: [{ id: 'e', from: 'a', to: 'b', curve: [pt, pt, pt, pt], label: { x: 100, y: 91, w: 50, h: 18 } }],
-    lanes: [
-      { id: 'Support', rect: { x: 0, y: 0, w: 400, h: 100 } },
-      { id: 'Billing', rect: { x: 0, y: 100, w: 400, h: 100 } },
-    ],
-  };
-  assert.deepEqual(
-    checkScene(scene).map((f) => f.message),
-    ['the label of edge "e" crosses the border of lane "Support"', 'the label of edge "e" crosses the border of lane "Billing"'],
-  );
-});
 
 test('a figure without lanes keeps its label at the middle of the edge', () => {
   const fig: FlowProps = {

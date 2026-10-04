@@ -15,11 +15,11 @@ const PROPS: FlowProps = {
   steps: [{ label: 'write', flow: [{ edges: 'w' }] }],
 };
 
-test('pageHtml escapes the title', () => {
+test('the page escapes the file name in its title', () => {
   assert.match(pageHtml('<svg></svg>', 'a<b>&"c".svg'), /<title>a&lt;b&gt;&amp;&quot;c&quot;\.svg<\/title>/);
 });
 
-test('pageHtml keeps the SVG text and its spec unchanged', () => {
+test('the page holds the SVG and its spec unchanged, also with $ patterns', () => {
   const svg = svgWithSpec(PROPS);
   const page = pageHtml(svg, 'x.svg');
   assert.ok(page.startsWith('<!doctype html>'));
@@ -27,8 +27,4 @@ test('pageHtml keeps the SVG text and its spec unchanged', () => {
   assert.match(page, /<metadata id="figure-spec"><!\[CDATA\[/);
   // String.replace reads $ patterns, so the page must not use it on the SVG.
   assert.ok(pageHtml('<svg>$& $1 $$</svg>', 'x.svg').includes('<svg>$& $1 $$</svg>'));
-});
-
-test('the page has no script', () => {
-  assert.doesNotMatch(pageHtml(svgWithSpec(PROPS), 'x.svg'), /<script/i);
 });

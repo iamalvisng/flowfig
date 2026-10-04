@@ -47,7 +47,7 @@ function png(width: number, height: number, type: number, pixels: number[], filt
 
 const FILTERS = [0, 1, 2, 3, 4];
 
-test('decodePng reverses the five row filters of an RGBA PNG', () => {
+test('the PNG decoder gives back the exact pixels for all five row filters', () => {
   const pixels = Array.from({ length: 3 * 5 * 4 }, (_, i) => (i * 37 + 11) & 255);
   const img = decodePng(png(3, 5, 6, pixels, FILTERS));
   assert.equal(img.width, 3);
@@ -55,19 +55,16 @@ test('decodePng reverses the five row filters of an RGBA PNG', () => {
   assert.deepEqual([...img.data], pixels);
 });
 
-test('decodePng gives alpha 255 to an RGB PNG', () => {
+test('an RGB screenshot gets alpha 255', () => {
   const pixels = Array.from({ length: 3 * 5 * 3 }, (_, i) => (i * 53 + 7) & 255);
   const rgba = pixels.flatMap((v, i) => (i % 3 === 2 ? [v, 255] : [v]));
   assert.deepEqual([...decodePng(png(3, 5, 2, pixels, FILTERS)).data], rgba);
 });
 
-test('decodePng throws on a bad signature and on a PNG it does not support', () => {
+test('the PNG decoder rejects a PNG it cannot read', () => {
   assert.throws(() => decodePng(Buffer.from('not a png at all')), /not a PNG: bad signature/);
   assert.throws(() => decodePng(png(1, 1, 6, [0, 0, 0, 0], [0], 16)), /unsupported PNG: bit depth 16/);
   assert.throws(() => decodePng(png(1, 1, 3, [0, 0, 0], [0])), /unsupported PNG: color type 3/);
-});
-
-test('decodePng throws on an interlaced PNG, on no IHDR and on image data that is too short', () => {
   const ok = png(1, 1, 6, [1, 2, 3, 4], [0]);
   const interlaced = Buffer.from(ok);
   interlaced[28] = 1;

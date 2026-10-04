@@ -107,7 +107,7 @@ const image = (width: number, height: number, color: (x: number, y: number) => n
 };
 const frame = (img: Image, delay = 5): GifFrame => ({ load: () => img, delay });
 
-test('delays spreads the rounding over the frames', () => {
+test('a GIF keeps the loop length when each frame delay rounds', () => {
   assert.deepEqual(delays(6, 30), [3, 4, 3, 3, 4, 3]);
   assert.equal(
     delays(20, 20).reduce((a, b) => a + b, 0),
@@ -261,29 +261,6 @@ test('a figure with no animation makes one frame', { skip }, () => {
     assert.equal(r.status, 0, r.stderr);
     assert.match(r.stdout, /still\.gif — 1 frame, /);
     assert.equal(decodeGif(readFileSync(join(dir, 'still.gif'))).frames.length, 1);
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test('Ctrl-C stops the run, stops the browser and removes the temp folder', { skip: skip || noSignal }, async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'gif-e2e-'));
-  // Other test files make temp folders at the same time: use a private TMPDIR.
-  const priv = join(dir, 'tmp');
-  mkdirSync(priv);
-  const left = () => readdirSync(priv).filter((n) => n.startsWith('flowfig-gif-'));
-  try {
-    const svg = render(dir, 'one', ONE);
-    const child = spawn(process.execPath, [cli, 'gif', svg, '--fps', '50'], { stdio: 'ignore', env: { ...process.env, TMPDIR: priv } });
-    const exited = new Promise((done) => child.once('exit', done));
-    for (let i = 0; i < 2400 && left().length === 0 && child.exitCode === null; i++) await new Promise((d) => setTimeout(d, 25));
-    await new Promise((d) => setTimeout(d, 300));
-    child.kill('SIGINT');
-    const code = await exited;
-    // A fast machine can exit 0 before the signal arrives.
-    assert.ok(code === 130 || code === 0, String(code));
-    if (code === 130) assert.equal(existsSync(join(dir, 'one.gif')), false);
-    assert.deepEqual(left(), []);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

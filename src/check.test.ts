@@ -300,7 +300,15 @@ test('a correct timeline has no findings', () => {
 });
 
 test('bad-date: not a date, a date that does not exist, to before from, a bad today', () => {
-  for (const n of [{ from: 'soon' }, { from: '2026-02-30' }, { from: '2026-2-3' }, { to: 'x' }, { to: '2026-10-01' }])
+  for (const n of [
+    { from: 'soon' },
+    { from: '2026-02-30' },
+    { from: '2026-02-29' },
+    { from: '2026-13-01' },
+    { from: '2026-2-3' },
+    { to: 'x' },
+    { to: '2026-10-01' },
+  ])
     assert.deepEqual(rules(checkSpec(tlFig(n))), ['bad-date'], JSON.stringify(n));
   assert.deepEqual(rules(checkSpec(tlFig({}, { today: '10/07' }))), ['bad-date']);
 });
@@ -356,7 +364,7 @@ test('an unknown focus id is an unknown-id error', () => {
   assert.deepEqual(f[0].ids, ['nope']);
 });
 
-test('checkScene: a stub (pts) through a box is edge-crosses-box, and an edge through a stub pill is label-overlap', () => {
+test('a stub line through a box is edge-crosses-box; an edge through a stub pill is label-overlap', () => {
   const box = (id: string, x: number, y: number): SceneBox => ({ id, rect: { x, y, w: 100, h: 40 }, texts: [] });
   const p = (x: number, y: number): Pt => ({ x, y });
   const base: Scene = { width: 600, minFont: 12, boxes: [box('a', 0, 0), box('b', 300, 0), box('c', 150, 200)], edges: [] };
@@ -372,7 +380,7 @@ test('checkScene: a stub (pts) through a box is edge-crosses-box, and an edge th
   );
 });
 
-test('checkScene: a stub pill across a lane border is label-overlap; a pill inside its lane is fine', () => {
+test('a pill or an edge label across a lane border is label-overlap', () => {
   const p = (x: number, y: number): Pt => ({ x, y });
   const lane = { id: 'Support', rect: { x: 0, y: 0, w: 400, h: 100 } };
   const stub = (y: number) => ({
@@ -389,9 +397,20 @@ test('checkScene: a stub pill across a lane border is label-overlap; a pill insi
     checkScene(scene(98)).map((f) => [f.rule, f.message]),
     [['label-overlap', 'the pill of edge "s" crosses the border of lane "Support"']],
   );
+  const labeled: Scene = {
+    width: 400,
+    minFont: 12,
+    boxes: [],
+    edges: [{ id: 'e', from: 'a', to: 'b', curve: [p(0, 0), p(0, 0), p(0, 0), p(0, 0)], label: { x: 100, y: 91, w: 50, h: 18 } }],
+    lanes: [lane, { id: 'Billing', rect: { x: 0, y: 100, w: 400, h: 100 } }],
+  };
+  assert.deepEqual(
+    checkScene(labeled).map((f) => f.message),
+    ['the label of edge "e" crosses the border of lane "Support"', 'the label of edge "e" crosses the border of lane "Billing"'],
+  );
 });
 
-test('checkScene: a timeline elbow (behind, with corners) through a box it does not connect is edge-crosses-box', () => {
+test('a timeline elbow through a box it does not connect is edge-crosses-box', () => {
   const box = (id: string, x: number, y: number): SceneBox => ({ id, rect: { x, y, w: 100, h: 40 }, texts: [] });
   const p = (x: number, y: number): Pt => ({ x, y });
   const boxes = [box('a', 0, 0), box('b', 300, 200), box('c', 150, 100)];

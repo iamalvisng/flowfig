@@ -11,13 +11,13 @@ import { AGENT_TEXT } from './guide.ts';
 const cli = join(dirname(dirname(fileURLToPath(import.meta.url))), 'dist', 'cli.js');
 const posix = process.platform !== 'win32';
 
-test('slug makes a file name from the question', () => {
+test('draw names the file from the question, and uses figure for a question with no letters', () => {
   assert.equal(slug('How does login work?'), 'how-does-login-work');
   assert.equal(slug('???'), 'figure');
   assert.ok(slug('a'.repeat(100) + ' b').length <= 60);
 });
 
-test('agentArgs holds print mode, the allowlist, the turn cap, the system prompt and the model', () => {
+test('draw gives the agent read tools and flowfig commands only, and no edit tool', () => {
   const a = agentArgs({ question: 'q "x" $y', out: 'docs/x.svg', cwd: '/repo', maxTurns: 40 });
   assert.deepEqual(a.slice(0, 2), ['-p', 'q "x" $y']);
   for (const pair of [

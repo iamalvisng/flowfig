@@ -196,7 +196,7 @@ test('flowfig mcp loses no line when the reader is slow', async () => {
   assert.equal(out.trimEnd().split('\n').length, 50);
 });
 
-test('VERSION equals the version in package.json', () => {
+test('the CLI and the MCP server report the package.json version', () => {
   const pkg = JSON.parse(readFileSync(join(dirname(dirname(fileURLToPath(import.meta.url))), 'package.json'), 'utf8'));
   assert.equal(VERSION, pkg.version);
 });

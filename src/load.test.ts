@@ -18,7 +18,7 @@ const props: FlowProps = {
   steps: [{ label: 'write', flow: ['w'] }],
 };
 
-test('loadSpec reads an object, a { props } object, a .json file and an SVG with a spec', () => {
+test('a spec loads from an object, JSON or SVG; a bad input names its path', () => {
   const dir = mkdtempSync(join(tmpdir(), 'load-'));
   try {
     assert.deepEqual(loadSpec(props), props);
@@ -38,13 +38,13 @@ test('loadSpec reads an object, a { props } object, a .json file and an SVG with
   }
 });
 
-test('svgWithSpec carries the spec and escapes ]]>', () => {
+test('the spec in the SVG survives a ]]> in a label', () => {
   const svg = svgWithSpec({ ...props, steps: [{ label: 'x]]>y', flow: ['w'] }] });
   assert.match(svg, /<metadata id="figure-spec"><!\[CDATA\[/);
   assert.doesNotMatch(svg.slice(svg.indexOf('CDATA[') + 6, svg.indexOf(']]></metadata>')), /\]\]>/);
 });
 
-test('reportLines gives the finding lines, the counts and the figure line, sorted errors first', () => {
+test('the report lists errors first, then the counts and the figure line', () => {
   const bad = { ...props, edges: [{ id: 'w', from: 'a', to: 'zzz', label: 'write' }] };
   const lines = reportLines(bad, sortFindings(check(bad), false));
   assert.match(lines[0], /^error {4}unknown-id/);

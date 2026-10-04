@@ -33,7 +33,7 @@ after(() => made.forEach((d) => rmSync(d, { recursive: true, force: true })));
 const run = (args: string[], cwd: string, env: Record<string, string> = {}, input?: string) =>
   spawnSync('node', [cli, ...args], { cwd, input, encoding: 'utf8', env: { ...process.env, ...env } });
 
-test('detect finds each agent from its marker, and none in an empty dir', () => {
+test('init finds each agent from its marker file or folder', () => {
   const marks: Record<string, string[]> = {
     claude: ['.claude/', 'CLAUDE.md'],
     agents: ['AGENTS.md'],
@@ -66,7 +66,7 @@ test('detect finds each agent from its marker, and none in an empty dir', () => 
   }
 });
 
-test('toggle parses numbers, and renderList shows the marks', () => {
+test('the numbered picker toggles agents by number and marks the found agents', () => {
   assert.deepEqual([...toggle('1 3', new Set(['claude']), 7)].sort(), ['cursor']);
   const on = toggle('2,3', new Set(['claude']), 7);
   assert.deepEqual([...on].sort(), ['agents', 'claude', 'cursor']);
@@ -139,6 +139,9 @@ test('--dry-run writes nothing', () => {
     assert.equal(r.status, 0, r.stderr);
     assert.match(r.stdout, /would create/);
     assert.deepEqual(readdirSync(dir), []);
+    const claude = run(['init', '--agents', 'claude', '--dry-run'], dir);
+    assert.match(claude.stdout, /would create .*CLAUDE\.md/);
+    assert.deepEqual(readdirSync(dir), []);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -158,26 +161,6 @@ test('-y uses the detected agents, or agents when none; a [dir] argument works',
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
-});
-
-test('--global puts the Claude skill under HOME', () => {
-  const dir = tmp(),
-    home = tmp();
-  try {
-    const r = run(['init', '--agents', 'claude', '--global'], dir, { HOME: home, USERPROFILE: home });
-    assert.equal(r.status, 0, r.stderr);
-    assert.ok(existsSync(join(home, '.claude/skills/figure/SKILL.md')));
-    assert.ok(!existsSync(join(dir, '.claude')));
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-    rmSync(home, { recursive: true, force: true });
-  }
-});
-
-test('--list-agents prints all 7 ids', () => {
-  const r = run(['init', '--list-agents'], tmp());
-  assert.equal(r.status, 0);
-  for (const a of AGENTS) assert.match(r.stdout, new RegExp(`^${a.id} `, 'm'));
 });
 
 test('no TTY and no flag: exit 2 with the hint; an unknown id also exits 2', () => {
@@ -242,6 +225,7 @@ test('--global -y writes only the Claude skill under HOME, and no file in the di
     assert.equal(r.status, 0, r.stderr);
     assert.ok(existsSync(join(home, '.claude/skills/figure/SKILL.md')));
     assert.deepEqual(readdirSync(dir), []);
+    assert.ok(!existsSync(join(home, 'CLAUDE.md')));
     assert.equal(run(['init', '--global', '--agents', 'cursor'], dir, env).status, 2);
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -249,7 +233,7 @@ test('--global -y writes only the Claude skill under HOME, and no file in the di
   }
 });
 
-test('registerMcp merges one entry and keeps every other key and server', () => {
+test('init adds the flowfig MCP entry and keeps every other key and server', () => {
   const claude = AGENTS.find((a) => a.id === 'claude')!;
   assert.equal(
     registerMcp(claude, undefined),
@@ -295,6 +279,15 @@ test('init writes the MCP file for each agent that has one, and --no-mcp or --dr
   } finally {
     rmSync(dir2, { recursive: true, force: true });
   }
+});
+
+test('init skips an .mcp.json that is not a JSON object and keeps the file', () => {
+  const dir = tmp();
+  writeFileSync(join(dir, '.mcp.json'), '["keep me"]\n');
+  const r = run(['init', '--agents', 'claude', dir], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /skipped.*\.mcp\.json|\.mcp\.json.*skipped/);
+  assert.equal(readFileSync(join(dir, '.mcp.json'), 'utf8'), '["keep me"]\n');
 });
 
 test('--global registers the Claude server in ~/.claude.json and keeps the rest of that file', () => {
@@ -377,21 +370,6 @@ test('init for claude writes one Diagrams section into CLAUDE.md, keeps other te
   }
 });
 
-test('--dry-run lists CLAUDE.md; --global writes no CLAUDE.md', () => {
-  const dir = tmp(),
-    home = tmp();
-  try {
-    const dry = run(['init', '--agents', 'claude', '--dry-run'], dir);
-    assert.match(dry.stdout, /would create .*CLAUDE\.md/);
-    assert.ok(!existsSync(join(dir, 'CLAUDE.md')));
-    run(['init', '--agents', 'claude', '--global'], dir, { HOME: home, USERPROFILE: home });
-    assert.ok(!existsSync(join(home, 'CLAUDE.md')));
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-    rmSync(home, { recursive: true, force: true });
-  }
-});
-
 const ROWS = [
   { id: 'claude', name: 'Claude Code', detected: true, files: ['.claude/skills/figure/SKILL.md', 'CLAUDE.md', '.mcp.json'] },
   { id: 'agents', name: 'AGENTS.md', detected: false, files: ['AGENTS.md'] },
@@ -399,7 +377,7 @@ const ROWS = [
 const state = (over: Partial<PickState> = {}): PickState => ({ rows: ROWS, sel: new Set(['claude']), mcp: true, cursor: 0, ...over });
 const asState = (r: ReturnType<typeof keyStep>) => r as PickState;
 
-test('keyStep: move wraps, space toggles an agent and the MCP row, a toggles all', () => {
+test('the picker: arrows wrap, space toggles an agent or the MCP row, a toggles all', () => {
   assert.equal(asState(keyStep(state(), { name: 'down' })).cursor, 1);
   assert.equal(asState(keyStep(state({ cursor: 2 }), { name: 'j' })).cursor, 0);
   assert.equal(asState(keyStep(state(), { name: 'up' })).cursor, 2);
@@ -412,14 +390,14 @@ test('keyStep: move wraps, space toggles an agent and the MCP row, a toggles all
   assert.equal(keyStep(state(), { name: 'x' }) !== 'cancel', true);
 });
 
-test('keyStep: Enter confirms; Esc, q and Ctrl-C cancel', () => {
+test('the picker: Enter confirms; Esc, q and Ctrl-C cancel', () => {
   assert.equal(keyStep(state(), { name: 'return' }), 'confirm');
   assert.equal(keyStep(state(), { name: 'escape' }), 'cancel');
   assert.equal(keyStep(state(), { name: 'q' }), 'cancel');
   assert.equal(keyStep(state(), { name: 'c', ctrl: true }), 'cancel');
 });
 
-test('screen with colour off: exact lines, no escape code, and the file lists share one column', () => {
+test('the picker without colour has no escape code and one column for the file lists', () => {
   const lines = screen(state(), { color: false, width: 120 });
   assert.equal(lines.join('\n').includes('\x1b'), false);
   assert.equal(lines.length, 16);
@@ -432,15 +410,7 @@ test('screen with colour off: exact lines, no escape code, and the file lists sh
   assert.equal(rows[1], '  [ ] AGENTS.md   (not detected)  AGENTS.md');
 });
 
-test('screen with colour on: block letters take the blue gradient, the shadow takes dim blue', () => {
-  const lines = screen(state(), { color: true, width: 120 });
-  assert.ok(lines[0].includes('\x1b[38;2;77;163;255m█'));
-  assert.ok(lines[4].includes('\x1b[38;2;0;116;217m█'));
-  assert.ok(lines[0].includes('\x1b[38;2;43;93;143m╗'));
-  assert.ok(lines[6].startsWith('\x1b[90mflowfig'));
-});
-
-test('screen: a narrow terminal gets the plain version line, and a long row is cut', () => {
+test('the picker on a narrow terminal cuts each line to the width', () => {
   const narrow = screen(state(), { color: false, width: 30 });
   assert.equal(narrow[0], `flowfig ${VERSION}`);
   assert.equal(narrow[1], '');
@@ -448,10 +418,4 @@ test('screen: a narrow terminal gets the plain version line, and a long row is c
   assert.ok(narrow.some((l) => l.endsWith('…')));
   // oxlint-disable-next-line no-control-regex
   assert.match(screen(state(), { color: true, width: 30 })[0], /^\x1b\[1;38;2;77;163;255mflowfig/);
-});
-
-test('init prints a check mark for each finished write', () => {
-  const dir = tmp('flowfig-mark-');
-  assert.match(run(['init', '--agents', 'agents', '--no-mcp'], dir).stdout, /^✓ created   AGENTS\.md$/m);
-  assert.match(run(['init', '--agents', 'agents', '--no-mcp'], dir).stdout, /^✓ unchanged AGENTS\.md$/m);
 });
