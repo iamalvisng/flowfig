@@ -11,7 +11,38 @@ export function delays(count: number, fps: number): number[] {
 const binOf = (rgb: number) => ((rgb >> 9) & 0x7c00) | ((rgb >> 6) & 0x3e0) | ((rgb >> 3) & 0x1f);
 // Little-endian: a pixel word is A B G R, so this swaps R and B.
 const rgbOf = (v: number) => ((v & 255) << 16) | (v & 0xff00) | ((v >> 16) & 255);
+const CROP_LIMIT = 64 << 20;
+
+type Crop = { x0: number; y0: number; x1: number; y1: number; px: Uint32Array };
+
+function changedBox(a: Uint32Array, b: Uint32Array, width: number, height: number): [number, number, number, number] | null {
+  let x0 = width,
+    x1 = -1,
+    y0 = -1,
+    y1 = -1;
+  for (let y = 0; y < height; y++) {
+    const o = y * width;
+    let lo = 0;
+    while (lo < width && a[o + lo] === b[o + lo]) lo++;
+    if (lo === width) continue;
+    let hi = width - 1;
+    while (a[o + hi] === b[o + hi]) hi--;
+    if (lo < x0) x0 = lo;
+    if (hi > x1) x1 = hi;
+    if (y0 < 0) y0 = y;
+    y1 = y;
+  }
+  return y1 < 0 ? null : [x0, y0, x1, y1];
+}
+
 const channel = (bin: number, c: number) => (bin >> (10 - 5 * c)) & 31;
+
+function cropOf(px: Uint32Array, [x0, y0, x1, y1]: number[], width: number): Uint32Array {
+  const w = x1 - x0 + 1,
+    out = new Uint32Array(w * (y1 - y0 + 1));
+  for (let y = y0; y <= y1; y++) out.set(px.subarray(y * width + x0, y * width + x1 + 1), (y - y0) * w);
+  return out;
+}
 
 function medianCut(bins: number[], counts: Uint32Array): number[][] {
   const boxes = [bins];
@@ -149,6 +180,9 @@ export async function encodeGif(frames: GifFrame[]): Promise<Uint8Array> {
   let exact: Map<number, number> | null = new Map(),
     width = 0,
     height = 0;
+  let before: Uint32Array | null = null,
+    kept = 0;
+  const crops: (Crop | null | undefined)[] = [];
   for (let f = 0; f < frames.length; f++) {
     if (frames[f].same && f > 0) continue;
     let weight = 1;
@@ -179,6 +213,17 @@ export async function encodeGif(frames: GifFrame[]): Promise<Uint8Array> {
       }
     }
     add(last, run);
+    const box = before ? changedBox(px, before, width, height) : [0, 0, width - 1, height - 1];
+    if (!box) crops[f] = null;
+    else {
+      const [x0, y0, x1, y1] = box;
+      const size = (x1 - x0 + 1) * (y1 - y0 + 1) * 4;
+      if (kept + size <= CROP_LIMIT) {
+        kept += size;
+        crops[f] = { x0, y0, x1, y1, px: before ? cropOf(px, box, width) : px };
+      }
+    }
+    before = px;
   }
   const { colors, index } = palette(exact, counts, sums);
 
@@ -210,19 +255,28 @@ export async function encodeGif(frames: GifFrame[]): Promise<Uint8Array> {
   bytes(3, 1, 0, 0, 0); // loop count 0: loop forever
 
   let prev: Uint8Array | null = null;
-  for (const frame of frames) {
+  for (let i = 0; i < frames.length; i++) {
+    const frame = frames[i],
+      crop = crops[i];
     await new Promise(setImmediate);
     let cur: Uint8Array = prev!;
-    if (!(frame.same && prev)) {
-      const { data } = frame.load();
+    if (crop === null && prev) cur = prev;
+    else if (!(frame.same && prev)) {
       cur = new Uint8Array(width * height);
-      const px = new Uint32Array(data.buffer, data.byteOffset, data.length >> 2);
       let last = -1,
         k = 0;
-      for (let p = 0; p < cur.length; p++) {
-        const v = px[p] & 0xffffff;
+      const put = (p: number, v: number) => {
+        v &= 0xffffff;
         if (v !== last) [last, k] = [v, index(rgbOf(v))];
         cur[p] = k;
+      };
+      if (crop) {
+        if (prev) cur.set(prev);
+        for (let y = crop.y0, q = 0; y <= crop.y1; y++) for (let x = crop.x0; x <= crop.x1; x++) put(y * width + x, crop.px[q++]);
+      } else {
+        const { data } = frame.load();
+        const px = new Uint32Array(data.buffer, data.byteOffset, data.length >> 2);
+        for (let p = 0; p < cur.length; p++) put(p, px[p]);
       }
     }
     let rect = [0, 0, width - 1, height - 1];
@@ -233,7 +287,7 @@ export async function encodeGif(frames: GifFrame[]): Promise<Uint8Array> {
       const a32 = wide ? new Uint32Array(cur.buffer) : cur,
         b32 = wide ? new Uint32Array(prev.buffer) : prev,
         row = wide ? width >> 2 : width;
-      for (let y = 0; y < height; y++) {
+      for (let y = crop?.y0 ?? 0; y <= (crop?.y1 ?? height - 1); y++) {
         let x = y * row;
         const end = x + row;
         while (x < end && a32[x] === b32[x]) x++;
