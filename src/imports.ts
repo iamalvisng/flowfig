@@ -176,7 +176,7 @@ function reexports(root: string, file: CodeFile, name: string, read: Read): [str
   if (file.lang === 'py') {
     if (new RegExp(`^(?:(?:async\\s+)?def|class)\\s+${N}\\b|^${N}\\s*[:=]`, 'm').test(file.code)) return out;
     for (const i of importsOf(root, file, read))
-      if (i.local === name || i.local === '*') out.push([i.path, i.local === '*' ? name : i.name]);
+      if (i.local === name || i.local === '*') out.push([i.path, i.local === '*' ? '?' : i.name]);
     return out;
   }
   if (file.lang !== 'ts') return out;
@@ -217,9 +217,11 @@ export function leadsTo(
   if (langOf(fromPath) == null) return posix.dirname(toPath) === fromPath ? name : null;
   const file = depth < 5 ? codeFile(root, fromPath, read, cache) : null;
   if (!file) return null;
+  let star = false;
   for (const [path, inner] of reexports(root, file, name, read)) {
-    const r = path == null ? null : leadsTo(root, path, toPath, inner, read, cache, depth + 1);
-    if (r != null) return r;
+    const r = path == null || inner === '?' ? null : leadsTo(root, path, toPath, inner, read, cache, depth + 1);
+    if (r === '?' || inner === '?') star = true;
+    else if (r != null) return r;
   }
-  return null;
+  return star ? '?' : null;
 }

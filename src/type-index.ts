@@ -283,13 +283,10 @@ export function defines(cx: Ctx, d: Decl, n: string): boolean {
   return locate(d.info, `${d.name}.${n}`) != null;
 }
 
-export function rustUses(fi: CodeFile, n: string, tp: string): boolean {
-  const mod = rustMod(tp);
-  for (const m of fi.keep.matchAll(/\buse\s+([^;]+);/g)) {
-    if (new RegExp(`\\b${esc(n)}\\b`).test(m[1]) && new RegExp(`\\b${esc(mod)}\\b`).test(m[1])) return true;
-    if (new RegExp(`\\b${esc(mod)}::\\*`).test(m[1])) return true;
-  }
-  return false;
+export function rustUses(fi: CodeFile, n: string, tp: string): 'yes' | 'no' | 'outside' {
+  const mods = rustUsePaths(fi, n);
+  if (mods.some((m) => !/^(crate|self|super)\b/.test(m))) return 'outside';
+  return mods.some((m) => lastSeg(m) === rustMod(tp)) ? 'yes' : 'no';
 }
 
 function expandUse(item: string): string[] {

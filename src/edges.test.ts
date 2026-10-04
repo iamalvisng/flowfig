@@ -438,3 +438,24 @@ test('a Rust type resolves to the repo only through the file, a crate, self or s
   };
   assert.equal(run(alias, 'src/c.rs#f', 'src/client.rs#Client.get'), 'found');
 });
+
+test('a Python re-export through a star import is unsure, not found', () => {
+  const files = {
+    'app/__init__.py': 'from app.db import *\n',
+    'app/db.py': 'def save():\n    pass\n',
+    'main.py': 'from app import save\n\ndef create():\n    save()\n',
+    'alias.py': 'from app import save as s\n\ndef create():\n    s()\n',
+  };
+  assert.equal(run(files, 'main.py#create', 'app/db.py#save'), 'unsure');
+  assert.equal(run(files, 'alias.py#create', 'app/db.py#save'), 'unsure');
+});
+
+test('a Rust function brought in by a use outside the crate is unsure; a crate use is found', () => {
+  const at = (u: string) => ({
+    'src/lib.rs': 'mod fs;\nmod c;\n',
+    'src/fs.rs': 'pub fn read() {}\n',
+    'src/c.rs': `${u}fn f() {\n    read();\n}\n`,
+  });
+  assert.equal(run(at('use std::fs::read;\n'), 'src/c.rs#f', 'src/fs.rs#read'), 'unsure');
+  assert.equal(run(at('use crate::fs::read;\n'), 'src/c.rs#f', 'src/fs.rs#read'), 'found');
+});
