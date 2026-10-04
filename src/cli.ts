@@ -16,7 +16,7 @@ import { decodePng } from './png.ts';
 import { diff, formatDiff } from './diff.ts';
 import { loadSpec, reportLines, sortFindings, specOf, svgWithSpec } from './load.ts';
 import type { FlowProps } from './model.ts';
-import { check, toSvg, type Finding } from './svg.ts';
+import { check, render, toSvg, type Finding } from './svg.ts';
 import { links, verify, type Link } from './verify.ts';
 
 const USAGE = `usage: flowfig <-|spec.json|figure.ts> [out.svg] [--open]   render a figure; a spec on stdin with -
@@ -302,7 +302,8 @@ if (!input) usage(USAGE);
 
 const props = await load(input);
 
-const findings: Finding[] = skip ? [] : sortFindings(check(props, opts), strict);
+const rendered = skip ? undefined : render(props, opts);
+const findings: Finding[] = rendered ? sortFindings(check(props, opts, rendered.scene), strict) : [];
 const errors = findings.filter((f) => f.severity === 'error').length;
 
 const report = (print: (s: string) => void, tty: boolean | undefined) => {
@@ -320,7 +321,7 @@ if (command === 'check') {
 report(console.error, process.stderr.isTTY);
 if (errors) process.exit(1);
 const dest = out ?? (input === '-' ? 'figure.svg' : input.replace(/\.[^./\\]+$/, '') + '.svg');
-const withSpec = svgWithSpec(props, opts);
+const withSpec = svgWithSpec(props, opts, rendered?.svg);
 writeFileSync(dest, withSpec);
 console.log(`${dest} — ${(withSpec.length / 1024).toFixed(1)} kB`);
 if (open) {

@@ -1041,12 +1041,12 @@ export function toSvg(fig: FlowProps, opts: SvgOptions = {}): string {
 }
 
 /** Every fault `flowfig check` knows about, for this figure as the SVG lays it out. */
-export function check(fig: FlowProps, opts: SvgOptions & CheckOptions = {}): Finding[] {
+export function check(fig: FlowProps, opts: SvgOptions & CheckOptions = {}, scene = render(fig, opts).scene): Finding[] {
   const lost = (planFor(fig, opts)?.lost ?? []).map((id): Finding => ({
     rule: 'lane-end-block',
     severity: 'warning',
     ids: [id],
     message: `edge "${id}" ends at a lane that no block on its side shows; the edge uses the nearest block`,
   }));
-  return [...checkSpec(fig), ...checkScene(render(fig, opts).scene, opts), ...lost, ...checkTheme({ ...fig.theme, ...opts.theme })];
+  return [...checkSpec(fig), ...checkScene(scene, opts), ...lost, ...checkTheme({ ...fig.theme, ...opts.theme })];
 }
