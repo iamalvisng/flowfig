@@ -1,0 +1,459 @@
+import { readFileSync, statSync } from 'node:fs';
+import { extname, resolve } from 'node:path';
+
+export type Lang = 'ts' | 'py' | 'go' | 'java' | 'cs' | 'rs';
+export type Read = (full: string) => string | null;
+export type CodeFile = {
+  path: string;
+  lang: Lang;
+  text: string;
+  code: string;
+  keep: string;
+};
+
+const LANGS: Record<string, Lang> = {
+  '.ts': 'ts',
+  '.tsx': 'ts',
+  '.mts': 'ts',
+  '.cts': 'ts',
+  '.js': 'ts',
+  '.jsx': 'ts',
+  '.mjs': 'ts',
+  '.cjs': 'ts',
+  '.py': 'py',
+  '.go': 'go',
+  '.java': 'java',
+  '.cs': 'cs',
+  '.rs': 'rs',
+};
+
+export const langOf = (path: string): Lang | null => LANGS[extname(path)] ?? null;
+
+export const readFile: Read = (full) => {
+  try {
+    return statSync(full).isFile() ? readFileSync(full, 'utf8') : null;
+  } catch {
+    return null;
+  }
+};
+
+const blank = (s: string) => s.replace(/[^\n]/g, ' ');
+const wordBefore = (s: string, end: number) => /(\w+)$/.exec(s.slice(Math.max(0, end - 12), end))?.[1] ?? '';
+
+function mask(src: string, lang: Lang): { code: string; keep: string } {
+  let code = '';
+  let keep = '';
+  const n = src.length;
+  let i = 0;
+  const push = (txt: string, kind: 'code' | 'string' | 'comment') => {
+    code += kind === 'code' ? txt : blank(txt);
+    keep += kind === 'comment' ? blank(txt) : txt;
+  };
+  if (lang === 'py') {
+    while (i < n) {
+      const c = src[i];
+      if (c === '#') {
+        const e = src.indexOf('\n', i);
+        const end = e < 0 ? n : e;
+        push(src.slice(i, end), 'comment');
+        i = end;
+        continue;
+      }
+      const m = /^([rRbBuUfF]{0,2})('''|"""|'|")/.exec(src.slice(i, i + 5));
+      if (m && (m[1] === '' || !/[\w]/.test(src[i - 1] ?? ''))) {
+        const q = m[2];
+        let j = i + m[0].length;
+        while (j < n) {
+          if (src[j] === '\\') j += 2;
+          else if (src.startsWith(q, j)) {
+            j += q.length;
+            break;
+          } else if (q.length === 1 && src[j] === '\n') break;
+          else j++;
+        }
+        const bodyAt = i + m[0].length;
+        const closeAt = Math.max(bodyAt, j - q.length);
+        push(src.slice(i, bodyAt), 'code');
+        push(src.slice(bodyAt, closeAt), 'string');
+        push(src.slice(closeAt, j), 'code');
+        i = j;
+        continue;
+      }
+      push(c, 'code');
+      i++;
+    }
+    return { code, keep };
+  }
+  const stack: number[] = [];
+  let depth = 0;
+  let prevSig = '';
+  while (i < n) {
+    const c = src[i];
+    const d = src[i + 1];
+    if (c === '/' && d === '/') {
+      const e = src.indexOf('\n', i);
+      const end = e < 0 ? n : e;
+      push(src.slice(i, end), 'comment');
+      i = end;
+      continue;
+    }
+    if (c === '/' && d === '*') {
+      const e = src.indexOf('*/', i + 2);
+      const end = e < 0 ? n : e + 2;
+      push(src.slice(i, end), 'comment');
+      i = end;
+      continue;
+    }
+    if (lang === 'ts' && c === '/' && /^$|[(,=:[!&|?{};]$/.test(prevSig)) {
+      let j = i + 1;
+      let cls = false;
+      while (j < n && src[j] !== '\n') {
+        if (src[j] === '\\') j += 2;
+        else if (src[j] === '/' && !cls) break;
+        else {
+          if (src[j] === '[') cls = true;
+          else if (src[j] === ']') cls = false;
+          j++;
+        }
+      }
+      if (src[j] === '/') {
+        push('/', 'code');
+        push(src.slice(i + 1, j), 'string');
+        push('/', 'code');
+        i = j + 1;
+        prevSig = 'x';
+        continue;
+      }
+    }
+    if (lang === 'rs' && c === "'" && /[A-Za-z_]/.test(d ?? '') && src[i + 2] !== "'") {
+      push(c, 'code');
+      i++;
+      continue;
+    }
+    const tpl = lang === 'ts' && c === '`';
+    const raw = (lang === 'go' && c === '`') || (lang === 'cs' && c === '@' && d === '"');
+    if (c === '"' || c === "'" || tpl || raw || (c === '}' && stack.length && stack.at(-1) === depth)) {
+      let open = c;
+      if (c === '}') {
+        stack.pop();
+        depth--;
+      }
+      if (raw && c === '@') open = '"';
+      const startQ = c === '@' ? i + 2 : i + 1;
+      const q = c === '}' ? '`' : open;
+      const triple = (lang === 'java' || lang === 'cs') && src.startsWith('"""', i);
+      let j = triple ? i + 3 : startQ;
+      let enterTpl = false;
+      while (j < n) {
+        if (triple) {
+          if (src.startsWith('"""', j)) break;
+          j++;
+          continue;
+        }
+        if (src[j] === '\\' && !raw) j += 2;
+        else if (raw && c === '@' && src[j] === '"' && src[j + 1] === '"') j += 2;
+        else if (src[j] === q) break;
+        else if (q === '`' && lang === 'ts' && src[j] === '$' && src[j + 1] === '{') {
+          enterTpl = true;
+          break;
+        } else if (!raw && q !== '`' && src[j] === '\n') break;
+        else j++;
+      }
+      const head = c === '}' ? 1 : startQ - i;
+      push(src.slice(i, i + head), 'code');
+      push(src.slice(i + head, j), 'string');
+      if (enterTpl) {
+        push('${', 'code');
+        depth++;
+        stack.push(depth);
+        i = j + 2;
+        prevSig = '{';
+        continue;
+      }
+      const tail = triple ? 3 : 1;
+      push(src.slice(j, j + tail), 'code');
+      i = j + tail;
+      prevSig = 'x';
+      continue;
+    }
+    if (c === '{') depth++;
+    else if (c === '}') depth--;
+    push(c, 'code');
+    if (!/\s/.test(c)) prevSig = /\w/.test(c) ? (/^(return|typeof|case|in|of)$/.test(wordBefore(src, i + 1)) ? '(' : 'x') : c;
+    i++;
+  }
+  return { code, keep };
+}
+
+type Extent = [number, number];
+
+const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+function matchClose(code: string, open: number): number {
+  const pair = { '{': '}', '(': ')', '[': ']' }[code[open] as '{' | '(' | '['];
+  let d = 0;
+  for (let i = open; i < code.length; i++) {
+    if (code[i] === code[open]) d++;
+    else if (code[i] === pair && --d === 0) return i;
+  }
+  return code.length - 1;
+}
+
+const indentAt = (code: string, pos: number) => {
+  const ls = code.lastIndexOf('\n', pos - 1) + 1;
+  return /^[ \t]*/.exec(code.slice(ls))![0].length;
+};
+
+function braceBody(code: string, from: number, start: number, lang: Lang): Extent | null {
+  let i = from;
+  let pd = 0;
+  const defIndent = indentAt(code, start);
+  while (i < code.length) {
+    const c = code[i];
+    if (c === '(' || c === '[') pd++;
+    else if (c === ')' || c === ']') {
+      if (--pd < 0) return null;
+    } else if (pd === 0) {
+      if (c === ';') return [start, i + 1];
+      if (
+        c === '\n' &&
+        lang === 'go' &&
+        !/[,({[=+\-*/|&.:]\s*$/.test(code.slice(Math.max(start, i - 40), i)) &&
+        code.slice(start, i).includes('=')
+      )
+        return [start, i];
+      if (c === '}') return null;
+      if (c === '=' && code[i + 1] === '>' && lang === 'ts') {
+        let k = i + 2;
+        while (/\s/.test(code[k])) k++;
+        if (code[k] !== '{') {
+          let pd2 = 0;
+          for (let j = k; j < code.length; j++) {
+            const ch = code[j];
+            if ('([{'.includes(ch)) pd2++;
+            else if (')]}'.includes(ch)) {
+              if (--pd2 < 0) return [start, j];
+            } else if (pd2 === 0 && (ch === ';' || ch === ',')) return [start, j];
+            else if (pd2 === 0 && ch === '\n') {
+              const next = code.slice(j + 1).match(/^[ \t]*(\S)/);
+              if (next && indentAt(code, j + 1) <= defIndent && !/[.?:|&+]/.test(next[1])) return [start, j];
+            }
+          }
+          return [start, code.length];
+        }
+        i = k;
+        continue;
+      }
+      if (c === '{') {
+        const before = code.slice(Math.max(0, i - 12), i).trimEnd();
+        if (/[:|&<,]$/.test(before) || /\b(interface|struct)$/.test(before)) {
+          i = matchClose(code, i) + 1;
+          continue;
+        }
+        return [start, matchClose(code, i) + 1];
+      }
+    }
+    i++;
+  }
+  return null;
+}
+
+function pyBody(code: string, start: number): Extent {
+  const ind = indentAt(code, start);
+  let i = start;
+  let pd = 0;
+  for (; i < code.length; i++) {
+    const c = code[i];
+    if ('([{'.includes(c)) pd++;
+    else if (')]}'.includes(c)) pd--;
+    else if (c === ':' && pd === 0 && /^[ \t]*(\n|$)/.test(code.slice(i + 1, i + 200))) break;
+    else if (c === '\n' && pd === 0 && !code.slice(start, i).endsWith('\\')) {
+      if (!/^\s*(async\s+)?(def|class)\b/.test(code.slice(code.lastIndexOf('\n', start - 1) + 1))) return [start, i];
+    }
+  }
+  let j = code.indexOf('\n', i);
+  if (j < 0) return [start, code.length];
+  let end = j;
+  while (j < code.length) {
+    const ls = j + 1;
+    const le = code.indexOf('\n', ls) < 0 ? code.length : code.indexOf('\n', ls);
+    const line = code.slice(ls, le);
+    if (line.trim() && indentAt(code, ls) <= ind) break;
+    if (line.trim()) end = le;
+    j = le;
+    if (le >= code.length) break;
+  }
+  return [start, end];
+}
+
+function defPatterns(lang: Lang, name: string, inContainer: boolean): RegExp[] {
+  const N = esc(name);
+  switch (lang) {
+    case 'ts':
+      return [
+        new RegExp(`\\bfunction\\s*\\*?\\s*${N}\\s*[<(]`, 'g'),
+        new RegExp(`\\b(class|interface|enum|namespace|module)\\s+${N}\\b`, 'g'),
+        new RegExp(`\\btype\\s+${N}\\b\\s*[<=]`, 'g'),
+        new RegExp(`\\b(const|let|var)\\s+${N}\\b\\s*[:=]`, 'g'),
+        new RegExp(
+          `(^|[\\n;{}])[ \\t]*((public|private|protected|static|async|readonly|override|abstract|get|set|declare)\\s+)*\\*?${N}\\s*[<(]`,
+          'g',
+        ),
+        new RegExp(
+          `(^|[\\n;{}])[ \\t]*((public|private|protected|static|readonly|override|declare)\\s+)*${N}\\s*[?!]?\\s*(:[^=;\\n]*)?=(?!=)`,
+          'g',
+        ),
+        ...(inContainer ? [new RegExp(`(^|[\\n{,])[ \\t]*${N}\\s*[?]?:`, 'g')] : []),
+      ];
+    case 'py':
+      return [
+        new RegExp(`(^|\\n)[ \\t]*(async\\s+)?def\\s+${N}\\s*\\(`, 'g'),
+        new RegExp(`(^|\\n)[ \\t]*class\\s+${N}\\b`, 'g'),
+        new RegExp(`(^|\\n)${inContainer ? '[ \\t]+' : ''}${N}\\s*(:[^=\\n]+)?=(?!=)`, 'g'),
+      ];
+    case 'go':
+      return [
+        new RegExp(`\\bfunc\\s+${N}\\s*[\\[(]`, 'g'),
+        new RegExp(`\\bfunc\\s*\\([^)]*\\)\\s*${N}\\s*[\\[(]`, 'g'),
+        new RegExp(`\\btype\\s+${N}\\b`, 'g'),
+        new RegExp(`\\b(var|const)\\s+${N}\\b`, 'g'),
+        new RegExp(`(^|\\n)[ \\t]+${N}\\b(\\s*,\\s*\\w+)*\\s*(=|[\\w\\[*]+[^\\n]*=)`, 'g'),
+        new RegExp(`(^|\\n)[ \\t]+${N}\\s+(struct|interface)\\b`, 'g'),
+        ...(inContainer ? [new RegExp(`(^|\\n)[ \\t]+${N}\\s*(\\(|\\s+\\S)`, 'g')] : []),
+      ];
+    case 'java':
+    case 'cs':
+      return [
+        new RegExp(`\\b(class|interface|enum|record|struct)\\s+${N}\\b`, 'g'),
+        new RegExp(`(^|[\\n;{}])[ \\t]*([\\w<>\\[\\],.?]+\\s+)+${N}\\s*(<[^>]*>)?\\s*\\(`, 'g'),
+        ...(inContainer
+          ? [new RegExp(`(^|[\\n;{}\\]])[ \\t]*([\\w<>\\[\\],.?]+\\s+)+${N}\\s*(=(?![=>])|;|\\{\\s*(get|set|init)\\b|=>)`, 'g')]
+          : []),
+      ];
+    case 'rs':
+      return [new RegExp(`\\bfn\\s+${N}\\b`, 'g'), new RegExp(`\\b(struct|enum|trait|type|mod|const|static|union)\\s+${N}\\b`, 'g')];
+  }
+}
+
+const KEYWORDS = new Set(['if', 'for', 'while', 'switch', 'catch', 'return', 'new', 'await', 'typeof', 'else', 'do', 'throw']);
+
+function depthAt(code: string, pos: number, lo: number): number {
+  let d = 0;
+  for (let i = lo; i < pos; i++) {
+    if (code[i] === '{') d++;
+    else if (code[i] === '}') d--;
+  }
+  return d;
+}
+
+function findIn(code: string, lang: Lang, name: string, lo: number, hi: number, inContainer: boolean, receiver?: string): Extent | null {
+  if (KEYWORDS.has(name) && !/^(rs|py|go)$/.test(lang)) return null;
+  const hits: { start: number; end: number; depth: number }[] = [];
+  for (const re of defPatterns(lang, name, inContainer)) {
+    re.lastIndex = lo;
+    let m;
+    while ((m = re.exec(code)) && m.index < hi) {
+      const nameAt = m.index + m[0].lastIndexOf(name);
+      const start = m.index + (m[0].length - m[0].trimStart().length);
+      if (lang === 'go' && receiver != null && !/^\s*func\s*\(/.test(m[0])) continue;
+      if (lang === 'go' && receiver != null && /^func\s*\(/.test(m[0])) {
+        const recv = /^func\s*\(([^)]*)\)/.exec(m[0])![1];
+        if (!new RegExp(`\\*?\\s*${esc(receiver)}\\b`).test(recv.trim().split(/\s+/).at(-1)!)) continue;
+      }
+      if (code[nameAt - 1] === '.') continue;
+      const ext = lang === 'py' ? pyBody(code, start) : braceBody(code, nameAt + name.length, start, lang);
+      if (!ext) continue;
+      const isMethodish = /\(\s*$/.test(m[0]) && !/\b(function|func|fn|def)\b/.test(m[0]);
+      if (isMethodish && lang !== 'py') {
+        const p = code.indexOf('(', nameAt);
+        const close = matchClose(code, p);
+        const after = code.slice(close + 1).match(/^\s*(\S)/)?.[1];
+        if (
+          !after ||
+          !(
+            after === '{' ||
+            after === ':' ||
+            (lang !== 'ts' && /[\w=]/.test(after)) ||
+            (after === ';' && (lang === 'java' || lang === 'cs'))
+          )
+        )
+          continue;
+        if (lang === 'java' || lang === 'cs') {
+          const pre = code.slice(start, nameAt);
+          if (/\b(new|return|else|throw)\s*$/.test(pre) || /[=.]\s*$/.test(pre)) continue;
+        }
+      }
+      if (lang === 'java' || lang === 'cs') {
+        const pre = code.slice(start, nameAt);
+        if (/\b(new|return|else|throw|await|yield|case|in|is|as|out|ref|goto|var|using)\s*$/.test(pre) || /[=.]\s*$/.test(pre)) continue;
+      }
+      hits.push({ start, end: ext[1], depth: depthAt(code, start, lo) });
+    }
+  }
+  if (!hits.length) return null;
+  hits.sort((a, b) => a.depth - b.depth || a.start - b.start);
+  return [hits[0].start, hits[0].end];
+}
+
+function rustImpls(code: string, type: string): Extent[] {
+  const out: Extent[] = [];
+  const re = new RegExp(`\\bimpl\\b[^{;]*?\\b${esc(type)}\\b[^{;]*\\{`, 'g');
+  let m;
+  while ((m = re.exec(code))) {
+    const open = m.index + m[0].length - 1;
+    out.push([open, matchClose(code, open)]);
+  }
+  return out;
+}
+
+const cache = new Map<Read, Map<string, CodeFile | null>>();
+
+export function codeFile(root: string, path: string, read: Read = readFile): CodeFile | null {
+  const full = resolve(root, path);
+  let files = cache.get(read);
+  if (!files) cache.set(read, (files = new Map()));
+  if (files.has(full)) return files.get(full)!;
+  const lang = langOf(path);
+  const raw = lang ? read(full) : null;
+  const text = raw?.replace(/\r\n/g, '\n');
+  const file = lang && text != null ? { path, lang, text, ...mask(text, lang) } : null;
+  files.set(full, file);
+  return file;
+}
+
+export function clearCodeCache(): void {
+  cache.clear();
+}
+
+export function locate(file: CodeFile, symbol: string): { start: number; end: number } | null {
+  const { code, lang } = file;
+  const parts = symbol.split('.');
+  if (!parts.every((p) => /^[A-Za-z_$][\w$]*$/.test(p))) return null;
+  const hit = (r: Extent | null) => (r ? { start: r[0], end: r[1] } : null);
+  if (parts.length === 1) return hit(findIn(code, lang, parts[0], 0, code.length, false));
+  if (lang === 'go' && parts.length === 2) {
+    const r = findIn(code, lang, parts[1], 0, code.length, false, parts[0]);
+    if (r && /^func\s*\(/.test(code.slice(r[0]))) return hit(r);
+    const t = findIn(code, lang, parts[0], 0, code.length, false);
+    return t ? hit(findIn(code, lang, parts[1], t[0] + 1, t[1], true)) : null;
+  }
+  if (lang === 'rs' && parts.length === 2) {
+    for (const [a, b] of rustImpls(code, parts[0])) {
+      const r = findIn(code, lang, parts[1], a + 1, b, true);
+      if (r) return hit(r);
+    }
+    return null;
+  }
+  let lo = 0;
+  let hi = code.length;
+  for (let k = 0; k < parts.length; k++) {
+    const r = findIn(code, lang, parts[k], lo, hi, k > 0);
+    if (!r) return null;
+    if (k === parts.length - 1) return hit(r);
+    lo = r[0] + 1;
+    hi = r[1];
+  }
+  return null;
+}
+
+export const isDefined = (file: CodeFile, symbol: string): boolean => locate(file, symbol) != null;

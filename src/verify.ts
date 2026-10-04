@@ -1,20 +1,12 @@
-import { readFileSync, statSync } from 'node:fs';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 import type { FlowProps } from './model.ts';
 import { headingSlug, links } from './source.ts';
 import type { Finding } from './scene.ts';
+import { readFile } from './code.ts';
 
 export { parseSource, headingSlug, owners, links, type Link } from './source.ts';
 
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-function read(full: string): string | null {
-  try {
-    return statSync(full).isFile() ? readFileSync(full, 'utf8') : null;
-  } catch {
-    return null;
-  }
-}
 
 const hasHeading = (text: string, slug: string) =>
   text.split('\n').some((line) => {
@@ -32,7 +24,7 @@ export function verify(fig: FlowProps, { root = process.cwd() }: { root?: string
     const full = resolve(root, l.path);
     const rel = relative(root, full);
     const outside = isAbsolute(l.path) || rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel);
-    if (!files.has(full)) files.set(full, outside ? null : read(full));
+    if (!files.has(full)) files.set(full, outside ? null : readFile(full));
     const text = files.get(full);
     if (text == null) out.push({ rule: 'missing-file', severity: 'error', ids: [], message: `${l.owner} -> ${l.source}: file not found` });
     else if (
