@@ -266,23 +266,33 @@ test('verify checks the links of one or more figures against --root', () => {
   }
 });
 
-test('verify prints one count line per figure, and --json gives the counts', () => {
+test('verify prints the edge counts and the unsure edges, and an unsure edge never fails the run', () => {
   const dir = mkdtempSync(join(tmpdir(), 'figure-svg-'));
   try {
-    writeFileSync(join(dir, 'a.ts'), 'export function a() {}\n// b\n');
+    writeFileSync(join(dir, 'cache.ts'), 'export class Cache {\n  delete(k: string) {}\n}\n');
+    writeFileSync(join(dir, 'log.ts'), 'export class Log {\n  delete(k: string) {}\n}\n');
+    writeFileSync(
+      join(dir, 'a.ts'),
+      "import { Cache } from './cache.ts';\nimport { Log } from './log.ts';\n" +
+        'export class A {\n  constructor(private cache: Cache, private log: Log) {}\n' +
+        '  viaCache() { this.cache.delete("k"); }\n  viaLog() { this.log.delete("k"); }\n  viaAny(x) { x.delete("k"); }\n}\n',
+    );
     const children = [
-      { id: 'a', label: 'Client', source: 'a.ts#a' },
-      { id: 'b', label: 'Server', source: 'a.ts#b' },
+      { id: 'a', label: 'A' },
+      { id: 'cache', label: 'Cache', source: 'cache.ts#Cache.delete' },
     ];
+    const edges = ['viaCache', 'viaLog', 'viaAny'].map((m) => ({ id: m, from: 'a', to: 'cache', source: `a.ts#A.${m}` }));
     const spec = join(dir, 'f.json');
-    writeFileSync(spec, JSON.stringify({ props: { ...SPEC.props, layout: { children } } }));
+    writeFileSync(join(dir, 'f.json'), JSON.stringify({ props: { ...SPEC.props, layout: { children }, edges, steps: [] } }));
     const text = run(['verify', spec, '--root', dir]);
-    assert.equal(text.status, 1);
-    assert.match(text.stdout, new RegExp(`1 error, 0 warnings\\n${spec.replace(/\W/g, '\\$&')}: 1 of 2 boxes defined`));
+    assert.equal(text.status, 0);
+    assert.match(text.stdout, /: 1 of 1 boxes defined; edges: 1 found, 1 not found, 1 unsure, 0 not checked\n/);
+    assert.match(text.stdout, /\nunsure {3}edge "viaAny": /);
+    assert.equal(run(['verify', spec, '--root', dir, '--strict']).status, 1);
     const json = JSON.parse(run(['verify', spec, '--root', dir, '--json']).stdout);
     assert.deepEqual(
-      json.coverage.map(({ figure, boxes, boxesDefined }: Record<string, unknown>) => ({ figure, boxes, boxesDefined })),
-      [{ figure: spec, boxes: 2, boxesDefined: 1 }],
+      json.coverage[0].unsureEdges.map((e: { id: string }) => e.id),
+      ['viaAny'],
     );
   } finally {
     rmSync(dir, { recursive: true, force: true });

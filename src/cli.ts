@@ -18,7 +18,7 @@ import { loadSpec, reportLines, sortFindings, specOf, svgWithSpec } from './load
 import type { FlowProps } from './model.ts';
 import { check, render, toSvg, type Finding } from './svg.ts';
 import { checkRendered } from './check.ts';
-import { coverageLine, links, verifyReport, type Coverage, type Link } from './verify.ts';
+import { coverageLine, links, unsureLines, verifyReport, type Coverage, type Link } from './verify.ts';
 
 const USAGE = `usage: flowfig <-|spec.json|figure.ts> [out.svg] [--open]   render a figure; a spec on stdin with -
        flowfig check <-|spec.json|figure.ts|figure.svg>   list the faults; the input can be an SVG this wrote
@@ -123,7 +123,10 @@ if (args[0] === 'verify') {
     const n = (k: number, word: string) => `${k} ${word}${k === 1 ? '' : 's'}`;
     for (const f of findings) console.log(`${f.severity.padEnd(8)} ${f.rule.padEnd(18)} ${f.figure}: ${f.message}`);
     console.log(`${n(errors, 'error')}, ${n(findings.length - errors, 'warning')}`);
-    for (const c of coverage) console.log(coverageLine(c.figure, c));
+    for (const c of coverage) {
+      console.log(coverageLine(c.figure, c));
+      for (const l of unsureLines(c)) console.log(l);
+    }
   }
   process.exit(errors ? 1 : 0);
 }

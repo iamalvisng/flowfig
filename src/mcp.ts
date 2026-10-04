@@ -6,7 +6,7 @@ import { GUIDE } from './guide.ts';
 import { loadSpec, reportLines, sortFindings, svgWithSpec } from './load.ts';
 import { check, render } from './svg.ts';
 import { checkRendered } from './check.ts';
-import { coverageLine, verifyReport } from './verify.ts';
+import { coverageLine, unsureLines, verifyReport } from './verify.ts';
 import { VERSION } from './version.ts';
 
 export type Response = { jsonrpc: '2.0'; id: unknown; result?: unknown; error?: { code: number; message: string } };
@@ -128,7 +128,7 @@ function run(name: string, args: Record<string, unknown>): Result {
         continue;
       }
       const report = verifyReport(props, { root });
-      counts.push(coverageLine(p, report.coverage));
+      counts.push(coverageLine(p, report.coverage), ...unsureLines(report.coverage));
       const findings = sortFindings([...check(props), ...report.findings], args.strict === true);
       errors += findings.filter((f) => f.severity === 'error').length;
       lines.push(...findings.map((f) => `${f.severity.padEnd(8)} ${f.rule.padEnd(18)} ${p}: ${f.message}`));

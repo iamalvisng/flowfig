@@ -27,7 +27,13 @@ export type Coverage = {
 
 const emptyCoverage = (): Coverage => ({ boxes: 0, boxesDefined: 0, found: 0, notFound: 0, unsure: 0, notChecked: 0, unsureEdges: [] });
 
-export const coverageLine = (figure: string, c: Coverage) => `${figure}: ${c.boxesDefined} of ${c.boxes} boxes defined`;
+export const coverageLine = (figure: string, c: Coverage) =>
+  `${figure}: ${c.boxesDefined} of ${c.boxes} boxes defined` +
+  (c.found + c.notFound + c.unsure + c.notChecked
+    ? `; edges: ${c.found} found, ${c.notFound} not found, ${c.unsure} unsure, ${c.notChecked} not checked`
+    : '');
+
+export const unsureLines = (c: Coverage) => c.unsureEdges.map((e) => `unsure   edge "${e.id}": ${e.reason}`);
 
 /** The links against the files under `root`. A path outside `root` counts as a missing file. */
 export function verifyReport(

@@ -161,16 +161,20 @@ test('a notification gets no reply, and a protocolVersion that is not a string f
   assert.equal(r.result.protocolVersion, '2025-11-25');
 });
 
-test('the verify tool prints the box counts', () => {
+test('the verify tool prints the edge counts and the unsure edges', () => {
   const dir = mkdtempSync(join(tmpdir(), 'mcp-'));
   try {
-    writeFileSync(join(dir, 'a.ts'), 'export function a() {}\n// b\n');
+    writeFileSync(join(dir, 'cache.ts'), 'export class Cache {\n  delete(k: string) {}\n}\n');
+    writeFileSync(join(dir, 'a.ts'), 'export class A {\n  viaAny(x) { x.delete("k"); }\n}\n');
     const children = [
-      { id: 'a', label: 'Client', source: 'a.ts#a' },
-      { id: 'b', label: 'Server', source: 'a.ts#b' },
+      { id: 'a', label: 'A', source: 'a.ts#A.viaAny' },
+      { id: 'cache', label: 'Cache', source: 'cache.ts#Cache.delete' },
     ];
-    writeFileSync(join(dir, 'f.json'), JSON.stringify({ props: { ...props, layout: { children } } }));
-    assert.match(text(call('verify', { paths: [join(dir, 'f.json')], root: dir })), /1 of 2 boxes defined/);
+    const edges = [{ id: 'e', from: 'a', to: 'cache' }];
+    writeFileSync(join(dir, 'f.json'), JSON.stringify({ props: { ...props, layout: { children }, edges, steps: [] } }));
+    const r = call('verify', { paths: [join(dir, 'f.json')], root: dir });
+    assert.match(text(r), /2 of 2 boxes defined; edges: 0 found, 0 not found, 1 unsure, 0 not checked\nunsure {3}edge "e": /);
+    assert.notEqual(r.result.isError, true);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

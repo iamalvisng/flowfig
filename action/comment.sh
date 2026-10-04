@@ -53,7 +53,11 @@ faults=$(node -e '
 ' "$tmp/verify.json")
 counts=$(node -e '
   const { coverage = [] } = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
-  for (const c of coverage) console.log(`- ${c.figure}: ${c.boxesDefined} of ${c.boxes} boxes defined`);
+  for (const c of coverage) {
+    const e = (c.found ?? 0) + (c.notFound ?? 0) + (c.unsure ?? 0) + (c.notChecked ?? 0);
+    console.log(`- ${c.figure}: ${c.boxesDefined} of ${c.boxes} boxes defined` + (e ? `; edges: ${c.found} found, ${c.notFound} not found, ${c.unsure} unsure, ${c.notChecked} not checked` : ""));
+    for (const u of c.unsureEdges ?? []) console.log(`  - unsure edge "${u.id}": ${u.reason}`);
+  }
 ' "$tmp/verify.json")
 if [ -n "$faults$counts" ]; then body+=$'\n'"### verify"$'\n'; fi
 if [ -n "$faults" ]; then body+="$faults"$'\n'; fi
