@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { links, parseSource, verify } from './verify.ts';
+import { coverageLine, links, parseSource, verify, verifyReport } from './verify.ts';
 import type { FlowProps } from './model.ts';
 
 test('a source link must be path or path#symbol with no space', () => {
@@ -84,14 +84,40 @@ test('verify lists each well-formed link with the box, edge or hop that owns it'
   ]);
 });
 
-test('a Markdown heading is a valid symbol; a code file gets the word search only', () => {
-  const files = { 'docs/sop.md': '## Step 3: Approve the refund\n### Notes\n## A/B test (v2)\n', 'src/a.ts': '// ## Step 3\n' };
-  withRepo(files, (root) => {
-    const run = (s: string) => rules(verify(figWith(s), { root }));
-    assert.deepEqual(run('docs/sop.md#step-3-approve-the-refund'), []);
-    assert.deepEqual(run('docs/sop.md#notes'), []);
-    assert.deepEqual(run('docs/sop.md#ab-test-v2'), []);
-    assert.deepEqual(run('docs/sop.md#step-4'), ['missing-symbol']);
-    assert.deepEqual(run('src/a.ts#step-3'), ['missing-symbol']);
+test('a box symbol in a code file must be defined; a mention, a comment or a string is not enough', () => {
+  withRepo(
+    {
+      'src/a.ts': 'export function login() {}\n// logout\nconst s = "reset";\nlogoutAll();\n',
+      'docs/sop.md': '# Refund an order\n',
+      'notes.txt': 'login',
+    },
+    (root) => {
+      const run = (source: string) => verify(figWith(source), { root }).map((f) => f.message);
+      assert.deepEqual(run('src/a.ts#login'), []);
+      for (const s of ['logout', 'reset', 'logoutAll'])
+        assert.deepEqual(run(`src/a.ts#${s}`), [`box "a" -> src/a.ts#${s}: symbol not defined`]);
+      assert.deepEqual(run('docs/sop.md#refund-an-order'), []);
+      assert.deepEqual(run('notes.txt#login'), []);
+      assert.deepEqual(run('notes.txt#logout'), ['box "a" -> notes.txt#logout: symbol not found']);
+    },
+  );
+});
+
+test('verifyReport counts the boxes with a source and the boxes that pass', () => {
+  withRepo({ 'src/a.ts': 'export function a() {}\n', 'img.png': '\x89PNG\r\n\x1a\n\0\0' }, (root) => {
+    const fig: FlowProps = {
+      layout: {
+        children: [
+          { id: 'a', label: 'A', source: 'src/a.ts#a' },
+          { id: 'b', label: 'B', source: 'src/a.ts#b' },
+          { id: 'c', label: 'C', source: 'img.png#x' },
+          { id: 'd', label: 'D' },
+        ],
+      },
+      edges: [],
+    };
+    const r = verifyReport(fig, { root });
+    assert.deepEqual(r.coverage, { boxes: 3, boxesDefined: 1 });
+    assert.equal(coverageLine('docs/f.svg', r.coverage), 'docs/f.svg: 1 of 3 boxes defined');
   });
 });
