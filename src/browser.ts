@@ -1,4 +1,3 @@
-// The capture browser of `flowfig gif`: find it, start it in headless mode, and talk CDP to it over a pipe. Node only.
 import { spawn, spawnSync } from 'node:child_process';
 import { win32 } from 'node:path';
 import type { Readable, Writable } from 'node:stream';
@@ -23,7 +22,7 @@ const WINDOWS = [
   'Chromium\\Application\\chrome.exe',
 ];
 
-/** The first capture browser that exists. `CHROME_PATH` wins. Pure apart from `exists`. */
+/** The first capture browser that exists. `CHROME_PATH` wins. */
 export function findBrowser(o: {
   platform: NodeJS.Platform;
   env: Record<string, string | undefined>;
@@ -64,22 +63,22 @@ export function launch(path: string, profile: string, timeoutMs = 30_000): Promi
     '--no-default-browser-check',
     '--hide-scrollbars',
     '--mute-audio',
-    // The GPU raster gave a different pixel run to run on a rounded corner, and a bigger GIF.
+    // GPU raster gave different pixels run to run on rounded corners.
     '--disable-gpu',
-    // A transform animation (the timeline playhead) runs on the compositor thread, so a seek can draw a stale x under load.
+    // A seek can draw a stale transform x under load on the compositor thread.
     '--disable-threaded-animation',
   ];
-  // Chrome refuses to start as root without it, for example in a Docker container.
+  // Chrome refuses to start as root without it, for example in Docker.
   if (process.getuid?.() === 0) args.push('--no-sandbox');
   const child = spawn(path, [...args, 'about:blank'], {
     stdio: ['ignore', 'ignore', 'pipe', 'pipe', 'pipe'],
-    // Its own process group, so close can stop the helpers too. Not on Windows: there it opens a console window.
+    // Not on Windows: a process group there opens a console window.
     detached: process.platform !== 'win32',
   });
-  // The browser reads commands on fd 3 and writes replies on fd 4. A NUL byte ends each message.
+  // The browser reads fd 3 and writes fd 4. A NUL byte ends each message.
   const out = child.stdio[3] as Writable,
     input = child.stdio[4] as Readable;
-  out.on('error', () => {}); // a write after the exit fails; the exit handler below rejects the commands
+  out.on('error', () => {});
   let tail = '',
     dead: Error | null = null,
     nextId = 1;
@@ -91,26 +90,24 @@ export function launch(path: string, profile: string, timeoutMs = 30_000): Promi
     for (const w of [...pending.values(), ...events.splice(0)]) w.reject(dead);
     pending.clear();
   };
-  // The browser starts helper processes in its process group. A helper can outlive the browser and keep a pipe open.
+  // A helper can outlive the browser and keep a pipe open.
   const killGroup = () => {
     try {
-      // Windows has no process group: taskkill /T stops the helpers of the browser too.
+      // Windows has no process group: taskkill /T stops the helpers.
       if (process.platform === 'win32') {
         if (child.pid) spawnSync('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true });
         child.kill('SIGKILL');
       } else if (child.pid) process.kill(-child.pid, 'SIGKILL');
-    } catch {
-      // the group is already gone
-    }
+    } catch {}
   };
   const closed = new Promise<void>((done) => {
     const end = (e: Error) => (stop(e), done());
     const stopped = (code: number | null) => new Error(`the browser stopped (exit ${code}): ${tail.trim()}`);
     child.once('error', end);
     child.once('exit', (code) => {
-      out.destroy(); // the write end of fd 3 does not close by itself, and 'close' waits for it
+      out.destroy(); // The write end of fd 3 does not close by itself.
       killGroup();
-      setTimeout(() => end(stopped(code)), 1000).unref(); // in case a pipe stays open after the group kill
+      setTimeout(() => end(stopped(code)), 1000).unref(); // A pipe can stay open after the group kill.
     });
     child.once('close', (code) => end(stopped(code)));
   });
@@ -135,7 +132,6 @@ export function launch(path: string, profile: string, timeoutMs = 30_000): Promi
     if (start < chunk.length) parts.push(chunk.subarray(start));
   });
 
-  /** A promise that rejects after the timeout; `add` registers the waiter, `drop` removes it. */
   const timed = (label: string, add: (w: Waiter) => void, drop: () => void, ms = timeoutMs) =>
     new Promise<any>((resolve, reject) => {
       if (dead) return reject(dead);
@@ -168,7 +164,7 @@ export function launch(path: string, profile: string, timeoutMs = 30_000): Promi
       );
     },
   };
-  // No Browser.close: the profile is a temp folder with nothing to keep, and Chrome takes about 10 s to exit after it.
+  // Chrome takes about 10 s to exit after Browser.close.
   const close = async () => {
     killGroup();
     await closed;
@@ -199,12 +195,11 @@ export async function captureFrames(
     return r.result.value;
   };
   await send('Emulation.setDeviceMetricsOverride', { width: o.width, height: o.height, deviceScaleFactor: o.scale, mobile: false });
-  // The figure picks its theme with a media query, so the run sets the query and leaves the SVG as it is.
   await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: o.dark ? 'dark' : 'light' }] });
-  // The page goes in as content, not as a file: a snap browser has a private /tmp and cannot read the temp folder.
+  // A snap browser has a private /tmp and cannot read the temp folder.
   const { frameTree } = await send('Page.getFrameTree');
   await send('Page.setDocumentContent', { frameId: frameTree.frame.id, html });
-  // CSS animations are in getAnimations(). The packet moves with SMIL, which only the <svg> element controls.
+  // The packet moves with SMIL, which only the <svg> element controls.
   const info = await run(`(async () => {
     await document.fonts.ready;
     const svg = document.querySelector('svg');
@@ -226,7 +221,7 @@ export async function captureFrames(
     await run(`(() => {
       for (const a of document.getAnimations()) a.currentTime = ${t};
       document.querySelector('svg').setCurrentTime(${t / 1000});
-      // two frames: one frame can fire before the browser draws the new time under load
+      // One frame can fire before the browser draws the new time under load.
       return new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
     })()`);
     const { data } = await send('Page.captureScreenshot', { format: 'png', clip });

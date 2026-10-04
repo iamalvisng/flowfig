@@ -1,4 +1,4 @@
-// Read the PNG screenshots of the capture browser. Only what Chrome writes: 8-bit RGB or RGBA, no interlace.
+// Reads only what Chrome writes: 8-bit RGB or RGBA, no interlace.
 import { inflateSync } from 'node:zlib';
 
 /** RGBA pixels, 4 bytes per pixel, rows top to bottom. */
@@ -13,7 +13,6 @@ export function decodePng(png: Uint8Array): Image {
     height = 0,
     bpp = 0;
   const idat: Uint8Array[] = [];
-  // The CRC of each chunk is not checked: the PNG comes from the browser over a local pipe.
   for (let at = 8; at + 8 <= png.length;) {
     const len = view.getUint32(at);
     const kind = String.fromCharCode(...png.subarray(at + 4, at + 8));
@@ -38,7 +37,7 @@ export function decodePng(png: Uint8Array): Image {
   for (let y = 0; y < height; y++) {
     const filter = raw[y * (stride + 1)];
     const row = raw.subarray(y * (stride + 1) + 1, (y + 1) * (stride + 1));
-    // Undo the row filter in place. A Uint8Array write keeps the low 8 bits, as the PNG standard needs.
+    // A Uint8Array write keeps the low 8 bits, as the PNG standard needs.
     if (filter === 1) for (let x = bpp; x < stride; x++) row[x] += row[x - bpp];
     else if (filter === 2) for (let x = 0; x < stride; x++) row[x] += prev[x];
     else if (filter === 3) for (let x = 0; x < stride; x++) row[x] += ((x >= bpp ? row[x - bpp] : 0) + prev[x]) >> 1;
