@@ -51,8 +51,14 @@ export function resolveTs(root: string, from: string, spec: string, read: Read):
   return spec.startsWith('node:') || builtinModules.includes(spec.split('/')[0]) ? OUTSIDE : null;
 }
 
-export function resolvePy(root: string, from: string, mod: string, read: Read): string | null {
-  const bases: string[] = [];
+function pyTop(root: string, from: string, read: Read): string {
+  let d = posix.dirname(from);
+  while (d !== '.' && has(root, `${d}/__init__.py`, read)) d = posix.dirname(d);
+  return d;
+}
+
+export function resolvePy(root: string, from: string, mod: string, read: Read, top?: string): string | null {
+  const hit = (b: string) => [`${b}.py`, `${b}/__init__.py`].find((p) => has(root, p, read)) ?? null;
   if (mod.startsWith('.')) {
     const dots = /^\.+/.exec(mod)![0].length;
     let d = posix.dirname(from);
@@ -60,14 +66,11 @@ export function resolvePy(root: string, from: string, mod: string, read: Read): 
       if (d === '.') return null;
       d = posix.dirname(d);
     }
-    bases.push(posix.join(d, mod.slice(dots).replace(/\./g, '/')));
-  } else {
-    const rel = mod.replace(/\./g, '/');
-    let d = posix.dirname(from);
-    while (d !== '.' && has(root, `${d}/__init__.py`, read)) d = posix.dirname(d);
-    bases.push(rel, posix.join(d, rel));
+    return hit(posix.join(d, mod.slice(dots).replace(/\./g, '/')));
   }
-  return bases.flatMap((b) => [`${b}.py`, `${b}/__init__.py`]).find((p) => has(root, p, read)) ?? null;
+  const rel = mod.replace(/\./g, '/');
+  const d = top ?? pyTop(root, from, read);
+  return hit(rel) ?? (d === '.' ? null : hit(posix.join(d, rel)));
 }
 
 function goModule(root: string, from: string, read: Read): { mod?: string; dir: string; text: string } {
@@ -118,19 +121,20 @@ export function importsOf(root: string, file: CodeFile, read: Read): Import[] {
       else add('*', m[1], to);
     }
   } else if (lang === 'py') {
+    const top = pyTop(root, path, read);
     for (const m of keep.matchAll(/^[ \t]*from\s+([\w.]+)\s+import\s+(\([^)]*\)|[^\n]+)/gm)) {
-      const to = resolvePy(root, path, m[1], read);
+      const to = resolvePy(root, path, m[1], read, top);
       for (const part of m[2].replace(/[()]/g, '').split(',')) {
         const p = part.trim();
         if (!p) continue;
         const [a, b] = p.split(/\s+as\s+/).map((x) => x.trim());
-        const sub = resolvePy(root, path, (m[1].endsWith('.') ? m[1] : `${m[1]}.`) + a, read);
+        const sub = resolvePy(root, path, (m[1].endsWith('.') ? m[1] : `${m[1]}.`) + a, read, top);
         if (sub) add('*', b ?? a, sub);
         else add(a, b ?? a, to);
       }
     }
     for (const m of keep.matchAll(/^[ \t]*import\s+([\w.]+)(\s+as\s+(\w+))?/gm))
-      add('*', m[3] ?? m[1].split('.')[0], resolvePy(root, path, m[1], read));
+      add('*', m[3] ?? m[1].split('.')[0], resolvePy(root, path, m[1], read, top));
   } else if (lang === 'go') {
     const { mod, dir, text } = goModule(root, path, read);
     for (const m of keep.matchAll(/^\s*(?:import\s+)?(\w+|\.|_)?\s*"([^"]+)"/gm)) {

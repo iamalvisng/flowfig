@@ -200,7 +200,11 @@ export function edgeResult(
   const isCallee = (r: string | null) => r != null && (r === '*' || r === toName || (r === 'default' && isDefault));
   const names = new Set([toName]);
   for (const i of imps)
-    if (i.name !== '*' && (i.path == null ? i.name === toName || (i.name === 'default' && isDefault) : isCallee(reach(i.path, i.name))))
+    if (
+      i.name !== '*' &&
+      word(i.local).test(body) &&
+      (i.path == null ? i.name === toName || (i.name === 'default' && isDefault) : isCallee(reach(i.path, i.name)))
+    )
       names.add(i.local);
   const same = from.path === to.path || ((lang === 'go' || lang === 'java') && dirname(from.path) === dirname(to.path));
   const who = label(from);
