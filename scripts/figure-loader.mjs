@@ -1,6 +1,4 @@
-// A figure imports `../src`, which resolves to the JSX React entry — fine for vite, unparseable for
-// plain node. Point that one specifier at the model-only shim so `node` can render a figure to SVG
-// without a build step. Everything else resolves normally.
+// Node cannot parse the JSX entry at ../src, so point it at the shim.
 const shim = new URL('../src/node-figures.ts', import.meta.url).href;
 
 export function resolve(specifier, context, next) {
