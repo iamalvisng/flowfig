@@ -8,24 +8,28 @@ const props: Figure['props'] = {
     gap: 90,
     children: [
       { id: 'browser', label: 'Browser' },
-      { label: 'Edge', direction: 'column', children: [{ id: 'gateway', label: 'Gateway' }] },
+      { label: 'Edge', direction: 'column', children: [{ id: 'gateway', label: 'Gateway', source: 'examples/shop/gateway.ts#checkout' }] },
       {
         label: 'Order service',
         direction: 'column',
         gap: 36,
         children: [
-          { id: 'orders', label: 'Orders', width: 170, source: 'figures/checkout.ts#orders' },
-          { id: 'db', label: 'Orders DB', shape: 'store', width: 170 },
+          { id: 'orders', label: 'Orders', width: 170, source: 'examples/shop/orders.ts#createOrder' },
+          { id: 'db', label: 'Orders DB', shape: 'store', width: 170, source: 'examples/shop/db.ts#insertOrder' },
         ],
       },
-      { label: 'External', direction: 'column', children: [{ id: 'payments', label: 'Payments' }] },
+      {
+        label: 'External',
+        direction: 'column',
+        children: [{ id: 'payments', label: 'Payments', source: 'examples/shop/payments.ts#charge' }],
+      },
     ],
   },
   edges: [
     { id: 'submit', from: 'browser', to: 'gateway', label: 'POST /checkout' },
-    { id: 'create', from: 'gateway', to: 'orders', label: 'createOrder' },
-    { id: 'charge', from: 'orders', to: 'payments', label: 'charge', source: 'figures/checkout.ts#charge' },
-    { id: 'insert', from: 'orders', to: 'db', label: 'INSERT' },
+    { id: 'create', from: 'gateway', to: 'orders', label: 'createOrder', source: 'examples/shop/gateway.ts#checkout' },
+    { id: 'charge', from: 'orders', to: 'payments', label: 'charge', source: 'examples/shop/orders.ts#createOrder' },
+    { id: 'insert', from: 'orders', to: 'db', label: 'INSERT', source: 'examples/shop/orders.ts#createOrder' },
   ],
   steps: [
     {
