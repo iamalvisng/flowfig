@@ -279,6 +279,7 @@ function localType0(cx: Ctx, info: CodeFile, text: string, n: string, lang: Lang
       if (bound) t.type = bound[1];
     }
   }
+  if (new Set(tries.map((t) => t.type ?? t.ctor)).size > 1) return { declared: true };
   return tries[0] ?? null;
 }
 
@@ -574,11 +575,12 @@ function unread(cx: Ctx, rt: Rt): boolean {
 export function reaches(cx: Ctx, rt: Rt, ownerDecl: Decl | null, owner: string, method: string, ownerPath: string): Reach {
   const lang = ownerDecl?.info.lang;
   if (rt.name === '#external') return 'no';
-  if (rt.name === owner) {
+  const sameDir = (rd: Decl) => dirname(rd.info.path) === dirname(ownerPath);
+  const goIface = lang === 'go' && rt.qual ? findType(cx, rt.ctx!, rt.name, rt.qual) : null;
+  if (rt.name === owner && !(goIface?.kind === 'interface' && !sameDir(goIface))) {
     if (lang === 'go' && rt.qual) {
-      const rd = findType(cx, rt.ctx!, rt.name, rt.qual);
-      if (!rd) return 'unsure';
-      if (dirname(rd.info.path) !== dirname(ownerPath)) return 'no';
+      if (!goIface) return 'unsure';
+      if (!sameDir(goIface)) return 'no';
     }
     if (lang === 'java' || lang === 'ts' || lang === 'py') {
       const rd = findType(cx, rt.ctx!, rt.name, rt.qual);

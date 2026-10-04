@@ -164,3 +164,23 @@ test('a receiver typed by a call result is found when the return type is declare
   assert.equal(run(files, 'api/api.go#Create', 'user/user.go#User.Save'), 'found');
   assert.equal(run(files, 'app/job.py#run', 'app/models.py#Alert.notify'), 'found');
 });
+
+test('a Go interface and a struct with the same name in two packages: a call on the interface is found', () => {
+  const files = {
+    'go.mod': 'module example.com/app\n',
+    'blob/blob.go': 'package blob\ntype Driver interface {\n\tPut(key string) error\n}\n',
+    'blob/s3/s3.go': 'package s3\ntype Driver struct{}\nfunc (c *Driver) Put(key string) error { return nil }\n',
+    'api/save.go': 'package api\nimport "example.com/app/blob"\nfunc save(d blob.Driver) error {\n\treturn d.Put("k")\n}\n',
+  };
+  assert.equal(run(files, 'api/save.go#save', 'blob/s3/s3.go#Driver.Put'), 'found');
+});
+
+test('one name bound to two types in one function: a call on it is unsure, not "not found"', () => {
+  const files = {
+    'src/base.ts': 'export class Node { toText() {} }\nexport class Mark { toText() {} }\n',
+    'src/bold.ts': "import { Mark } from './base.ts';\nexport class Bold extends Mark {\n  toText() {}\n}\n",
+    'src/run.ts':
+      "import { Node, Mark } from './base.ts';\nexport function run(xs: Node[], ys: Mark[]) {\n  xs.map((e: Node) => e.toText());\n  ys.map((e: Mark) => e.toText());\n}\n",
+  };
+  assert.equal(run(files, 'src/run.ts#run', 'src/bold.ts#Bold.toText'), 'unsure');
+});
