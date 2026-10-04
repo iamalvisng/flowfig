@@ -153,18 +153,41 @@ export function route(
         }
         return dir > 0 ? [r, a, b] : [r, b, a];
       };
-      const beside = (w: number, box: Rect, from: Pt, dir: 1 | -1, band?: Rect): [Rect, Pt, Pt][] => {
+      function* beside(w: number, box: Rect, from: Pt, dir: 1 | -1, band?: Rect): Generator<[Rect, Pt, Pt]> {
         const tip = tips.has(dir > 0 ? p.from : p.to);
-        const out: [Rect, Pt, Pt, number][] = [];
-        for (let dx = STUB - 8 * Math.ceil((box.w + w) / 8); dx <= STUB + 240; dx += 8)
-          for (const y of rows(box, from.y - 9, band)) {
-            const x = dir > 0 ? from.x + dx : from.x - dx - w;
-            if (dx < STUB && !(y >= box.y + box.h + STUB / 2 || y + 18 <= box.y - STUB / 2)) continue;
-            if (dx < STUB && tip && !(x + 8 <= cx(box) && cx(box) <= x + w - 8)) continue;
-            out.push([...place(box, from, dir, { x, y, w, h: 18 }, dx >= STUB, tip), Math.abs(dx - STUB) + Math.abs(y + 9 - from.y)]);
+        const ys = rows(box, from.y - 9, band)
+          .map((y, i) => ({ y, d: Math.abs(y + 9 - from.y), i }))
+          .sort((m, q) => m.d - q.d || m.i - q.i);
+        const heap: { dx: number; x: number; k: number; key: number; i: number }[] = [];
+        for (let dx = STUB - 8 * Math.ceil((box.w + w) / 8); dx <= STUB + 240; dx += 8) {
+          const x = dir > 0 ? from.x + dx : from.x - dx - w;
+          if (dx < STUB && tip && !(x + 8 <= cx(box) && cx(box) <= x + w - 8)) continue;
+          if (ys.length) heap.push({ dx, x, k: 0, key: Math.abs(dx - STUB) + ys[0].d, i: heap.length });
+        }
+        // Equal keys must keep the dx order, then the row order, or a pill moves.
+        const less = (m: (typeof heap)[number], q: (typeof heap)[number]) => m.key < q.key || (m.key === q.key && m.i < q.i);
+        heap.sort((m, q) => m.key - q.key || m.i - q.i);
+        while (heap.length) {
+          const h = heap[0];
+          const { y } = ys[h.k++];
+          if (h.k < ys.length) h.key = Math.abs(h.dx - STUB) + ys[h.k].d;
+          else {
+            const last = heap.pop()!;
+            if (heap.length) heap[0] = last;
           }
-        return out.sort((m, q) => m[3] - q[3]).map(([r, a, b]) => [r, a, b]);
-      };
+          for (let i = 0; ;) {
+            const l = 2 * i + 1;
+            let m = i;
+            if (l < heap.length && less(heap[l], heap[m])) m = l;
+            if (l + 1 < heap.length && less(heap[l + 1], heap[m])) m = l + 1;
+            if (m === i) break;
+            [heap[i], heap[m]] = [heap[m], heap[i]];
+            i = m;
+          }
+          if (h.dx < STUB && !(y >= box.y + box.h + STUB / 2 || y + 18 <= box.y - STUB / 2)) continue;
+          yield place(box, from, dir, { x: h.x, y, w, h: 18 }, h.dx >= STUB, tip);
+        }
+      }
       const along = (w: number, box: Rect, from: Pt, dir: 1 | -1, band?: Rect): [Rect, Pt, Pt][] => {
         if (!tips.has(dir > 0 ? p.from : p.to)) return [];
         const out: [Rect, Pt, Pt, number][] = [];
@@ -183,34 +206,34 @@ export function route(
           }
         return out.sort((m, q) => m[3] - q[3]).map(([r, a, b]) => [r, a, b]);
       };
-      const outs = (w: number): [Rect, Pt, Pt][] => [
-        ...beside(w, p.a, s, 1, sb),
-        [
+      function* outs(w: number): Generator<[Rect, Pt, Pt]> {
+        yield* beside(w, p.a, s, 1, sb);
+        yield [
           { x: cx(p.a) - w / 2, y: p.a.y + p.a.h + STUB, w, h: 18 },
           { x: cx(p.a), y: p.a.y + p.a.h },
           { x: cx(p.a), y: p.a.y + p.a.h + STUB },
-        ],
-        [
+        ];
+        yield [
           { x: cx(p.a) - w / 2, y: p.a.y - STUB - 18, w, h: 18 },
           { x: cx(p.a), y: p.a.y },
           { x: cx(p.a), y: p.a.y - STUB },
-        ],
-        ...along(w, p.a, s, 1, sb),
-      ];
-      const ins: [Rect, Pt, Pt][] = [
-        ...beside(iw, p.b, e, -1, tb),
-        [
+        ];
+        yield* along(w, p.a, s, 1, sb);
+      }
+      function* ins(): Generator<[Rect, Pt, Pt]> {
+        yield* beside(iw, p.b, e, -1, tb);
+        yield [
           { x: cx(p.b) - iw / 2, y: p.b.y - STUB - 18, w: iw, h: 18 },
           { x: cx(p.b), y: p.b.y - STUB },
           { x: cx(p.b), y: p.b.y },
-        ],
-        [
+        ];
+        yield [
           { x: cx(p.b) - iw / 2, y: p.b.y + p.b.h + STUB, w: iw, h: 18 },
           { x: cx(p.b), y: p.b.y + p.b.h + STUB },
           { x: cx(p.b), y: p.b.y + p.b.h },
-        ],
-        ...along(iw, p.b, e, -1, tb),
-      ];
+        ];
+        yield* along(iw, p.b, e, -1, tb);
+      }
       const seg = (a: Pt, b: Pt) =>
         Array.from({ length: 9 }, (_, i) => ({ x: a.x + ((b.x - a.x) * i) / 8, y: a.y + ((b.y - a.y) * i) / 8 }));
       const free = (a: Pt, b: Pt, own: Rect) =>
@@ -223,15 +246,19 @@ export function route(
         (own: Rect, band: Rect | undefined, strict: boolean) =>
         ([r, a, b]: [Rect, Pt, Pt]) =>
           clear(r, band) && free(a, b, own) && (!strict || whole(a, b));
-      const first = (own: Rect, band: Rect | undefined, lists: [Rect, Pt, Pt][][]) =>
-        [true, false].flatMap((strict) => lists.map((l, i) => [l.find(fits(own, band, strict)), i, !strict] as const)).find(([x]) => x);
-      const hit = first(p.a, sb, [outs(ow), ...(sw == null ? [] : [outs(sw)])]);
+      const first = (own: Rect, band: Rect | undefined, lists: (() => Iterable<[Rect, Pt, Pt]>)[]) => {
+        for (const strict of [true, false]) {
+          const ok = fits(own, band, strict);
+          for (const [i, list] of lists.entries()) for (const c of list()) if (ok(c)) return [c, i, !strict] as const;
+        }
+      };
+      const hit = first(p.a, sb, [() => outs(ow), ...(sw == null ? [] : [() => outs(sw)])]);
       const cut = hit?.[1] === 1;
-      const [po, o1, o2] = hit?.[0] ?? outs(ow)[0];
+      const [po, o1, o2] = hit?.[0] ?? outs(ow).next().value!;
       pills.push(po);
       track(seg(o1, o2));
       const hit2 = first(p.b, tb, [ins]);
-      const [pi, i1, i2] = hit2?.[0] ?? ins[0];
+      const [pi, i1, i2] = hit2?.[0] ?? ins().next().value!;
       pills.push(pi);
       track(seg(i1, i2));
       const line = (a: Pt, b: Pt) => `M ${a.x} ${a.y} L ${b.x} ${b.y}`;
