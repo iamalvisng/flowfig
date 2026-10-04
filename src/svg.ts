@@ -36,7 +36,6 @@ import {
   groupGap,
   isGroup,
   isRows,
-  LANE_GAP,
   LANE_PAD,
   LANE_ROW_GAP,
   LANE_BLOCK_GAP,

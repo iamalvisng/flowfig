@@ -448,6 +448,7 @@ test('screen: a narrow terminal gets the plain version line, and a long row is c
   assert.equal(narrow[1], '');
   assert.ok(narrow.every((l) => l.length <= 29));
   assert.ok(narrow.some((l) => l.endsWith('…')));
+  // oxlint-disable-next-line no-control-regex
   assert.match(screen(state(), { color: true, width: 30 })[0], /^\x1b\[1;38;2;77;163;255mflowfig/);
 });
 

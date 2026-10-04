@@ -471,6 +471,7 @@ export function Flow({
       const key = f.rule + ':' + f.ids.join() + ':' + f.message;
       if (reported.current.has(key)) continue;
       reported.current.add(key);
+      // oxlint-disable-next-line no-console
       console.warn(`flowfig check: ${f.severity} ${f.rule}: ${f.message}`);
     }
   }, [check, routed, layout, edges, steps, ids, theme, rail, noMap, lanePlan]);
@@ -837,7 +838,6 @@ export function Flow({
     }
     if (lanes && item === layout && isLanesLayout(layout)) {
       const { cols, starts, gaps, lead, blocks, gutter, tall } = lanePlan!;
-      const n = Math.max(0, ...cols.values()) + 1;
       const count = blocks.length;
       // One grid per block of `per` time columns, as in the SVG. A wrapped block shows only the lanes with a box in it.
       const grid = (bk: number) => {

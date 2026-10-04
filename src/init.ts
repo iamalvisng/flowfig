@@ -98,7 +98,8 @@ export function toggle(input: string, selected: Set<string>, count: number): Set
   for (const t of input.split(/[\s,]+/)) {
     const n = /^\d+$/.test(t) ? Number(t) : 0;
     const id = n >= 1 && n <= count ? AGENTS[n - 1].id : undefined;
-    if (id) next.has(id) ? next.delete(id) : next.add(id);
+    if (id && next.has(id)) next.delete(id);
+    else if (id) next.add(id);
   }
   return next;
 }

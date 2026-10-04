@@ -269,8 +269,24 @@ if (args[0] === 'gif') {
         written.push(mp4Path);
         // yuv420p needs an even width and height, so the pad filter adds a pixel where needed.
         ffmpeg = spawn(ffmpegBin, [
-          ...['-y', '-loglevel', 'error', '-f', 'image2pipe', '-framerate', String(fps), '-c:v', 'png', '-i', '-'],
-          ...['-vf', 'pad=ceil(iw/2)*2:ceil(ih/2)*2', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', mp4Path],
+          '-y',
+          '-loglevel',
+          'error',
+          '-f',
+          'image2pipe',
+          '-framerate',
+          String(fps),
+          '-c:v',
+          'png',
+          '-i',
+          '-',
+          '-vf',
+          'pad=ceil(iw/2)*2:ceil(ih/2)*2',
+          '-c:v',
+          'libx264',
+          '-pix_fmt',
+          'yuv420p',
+          mp4Path,
         ]);
         let stderr = '';
         ffmpeg.stderr!.on('data', (d: Buffer) => (stderr += d));

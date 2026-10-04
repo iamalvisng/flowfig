@@ -103,7 +103,8 @@ export function keyStep(s: PickState, k: Key): PickState | 'confirm' | 'cancel' 
     if (s.cursor === last) return { ...s, mcp: !s.mcp };
     const id = s.rows[s.cursor].id;
     const sel = new Set(s.sel);
-    sel.has(id) ? sel.delete(id) : sel.add(id);
+    if (sel.has(id)) sel.delete(id);
+    else sel.add(id);
     return { ...s, sel };
   }
   if (k.name === 'a') return { ...s, sel: s.sel.size === last ? new Set() : new Set(s.rows.map((r) => r.id)) };
