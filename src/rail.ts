@@ -1,12 +1,7 @@
-// The rail: a figure's steps as a compact lifeline diagram under the map. The map shows where each part runs; the rail shows when each
-// message goes, in which direction, and with what payload. One pure layout, so the SVG and the React player draw the same numbers.
 import type { Rect } from './geometry.ts';
 import { edgeId, isGroup, labelPillW, str, toBeat, type FigGroup, type FigNode, type FigTone, type FlowProps } from './model.ts';
 import { textWidth } from './text.ts';
 
-// band: the band-label line; cols: the column-label row; bandInset: a band's inset from its outer column edges, so two adjacent
-// bands keep 16 px between them; clear: the space between a phase label or counter and a line; inset: the space a parallel band
-// leaves around its arrows and pills.
 export const RAIL = {
   gap: 24,
   band: 20,
@@ -29,7 +24,6 @@ export type RailRow =
       step: number;
       label: string;
       messages: number;
-      /** The divider: it starts after the open label or after the folded label, and ends before the counter. */
       line: { open: number; folded: number; end: number };
     }
   | {
@@ -49,7 +43,7 @@ export type RailRow =
 export type RailState = { y: number; shown: boolean };
 export type Rail = {
   width: number;
-  /** The y where the first row starts: below the band-label line (if a band exists) and the column labels. */
+  /** The y where the first row starts. */
   head: number;
   height: number;
   columns: RailColumn[];
@@ -61,10 +55,8 @@ export type Rail = {
   states: RailState[][];
 };
 
-/** The folded phase text. Both renderers and the layout use it, so the measured width matches the drawn width. */
 export const foldedLabel = (row: { label: string; messages: number }) => `▸ ${row.label} · ${row.messages} messages`;
 
-/** Rail columns follow this order, so a reader meets the boxes in the same order on the rail as on the map. */
 const order = (item: FigNode | FigGroup): { id: string; label: string }[] =>
   isGroup(item)
     ? [...(item.id ? [{ id: item.id, label: str(item.label) }] : []), ...item.children.flatMap(order)]
@@ -79,9 +71,6 @@ export function layoutRail(fig: FlowProps, mapWidth: number): Rail | null {
   const edges = new Map(fig.edges.map((e) => [edgeId(e), e]));
   const layoutIds = new Set(order(fig.layout).map((o) => o.id));
 
-  // The messages first: they decide which columns exist.
-  // Filter hops on both: the edge must exist, and both its endpoints must be in the layout.
-  // checkSpec reports the missing id; the rail must not fail on it.
   type Msg = { step: number; beat: number; edge: string; back: boolean; text: string; async: boolean; tone?: FigTone };
   const perStep: Msg[][][] = steps.map((s, si) =>
     s.flow.map(toBeat).map((b, bi) =>
@@ -109,13 +98,10 @@ export function layoutRail(fig: FlowProps, mapWidth: number): Rail | null {
   const cols = order(fig.layout).filter((c) => used.has(c.id));
   const index = new Map(cols.map((c, i) => [c.id, i]));
 
-  // Every column gets the same width: at least RAIL.minCol, wide enough for each label and pill, and together as wide as the map.
-  // A column label also needs room for the band inset on each side.
   let need: number = RAIL.minCol;
   for (const c of cols) need = Math.max(need, textWidth(c.label, 12) + 16 + RAIL.bandInset * 2);
   for (const m of msgs) if (m.text) need = Math.max(need, labelPillW(m.text) + 16);
 
-  // The phase labels start at RAIL.pad and the counters end at width - RAIL.pad. No band border comes within RAIL.clear of them.
   const folds = msgs.length > RAIL.maxOpen;
   const labelW = (text: string) => textWidth(text, 13, true);
   const counterW = (() => {
@@ -129,8 +115,6 @@ export function layoutRail(fig: FlowProps, mapWidth: number): Rail | null {
     }),
   );
 
-  // Bands: each labeled group around the columns it holds, RAIL.bandInset inside their outer edges; a nested group sits 4 px inside
-  // its parent and one label line (RAIL.band) below it. The height comes later.
   const place = (left: number, right: number, colW: number) => {
     const width = left + colW * cols.length + right;
     const columns: RailColumn[] = cols.map((c, i) => ({ id: c.id, label: c.label, x: left + colW * (i + 0.5), w: colW }));
@@ -147,7 +131,6 @@ export function layoutRail(fig: FlowProps, mapWidth: number): Rail | null {
     };
     walk(fig.layout, 0);
     const borders = bands.flatMap((b) => [b.rect.x, b.rect.x + b.rect.w]);
-    // How far the columns must move in from each side, so every band border clears the label and the counter.
     const dl = Math.max(0, RAIL.pad + widest + RAIL.clear - Math.min(Infinity, ...borders));
     const dr = Math.max(0, Math.max(-Infinity, ...borders) - (width - RAIL.pad - counterW - RAIL.clear));
     return { width, columns, bands, dl, dr };
@@ -159,14 +142,12 @@ export function layoutRail(fig: FlowProps, mapWidth: number): Rail | null {
   for (let k = 0; placed.dl > 0.01 || placed.dr > 0.01; k++) {
     left += placed.dl;
     right += placed.dr;
-    // Narrower columns keep the rail as wide as the map. After a few tries the columns keep their width, and the rail grows.
     if (k < 8) colW = spread(left, right);
     placed = place(left, right, colW);
   }
   const { width, columns, bands } = placed;
   const head = (bands.length ? Math.max(...bands.map((b) => b.rect.y)) + RAIL.band : 0) + RAIL.cols;
 
-  // Rows: a phase header per step, then one row per message.
   const rows: RailRow[] = [];
   const groups: Rail['groups'] = [];
   let n = 0;
@@ -204,7 +185,6 @@ export function layoutRail(fig: FlowProps, mapWidth: number): Rail | null {
     }
   });
 
-  // Above maxOpen messages, only the playing step shows its rows; the others shrink to their phase header.
   const states = steps.map((_, open) => {
     let y = head;
     return rows.map((row) => {

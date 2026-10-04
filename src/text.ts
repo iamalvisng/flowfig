@@ -1,11 +1,9 @@
-// Text width without a browser: the SVG layout and `flowfig check` both run in plain node. Each character counts by its class in
-// the system sans-serif stack. Monospace is exact at 0.6em. The React player measures real text instead.
+// Estimated widths: no browser here. The React player measures real text.
 const FULL = /[ᄀ-ᅟ⺀-꓏가-힣豈-﫿︰-﹏＀-｠￠-￦]|\p{Extended_Pictographic}/u;
 const NARROW = /[ilj.,:;'|!()[\]ftrI ]/;
 const WIDE = /[WMmw@%]/;
 const TALL = /[A-Z0-9#&?]/;
 
-/** The width of `s` in px at `fontSize`. */
 export function textWidth(s: string, fontSize: number, mono = false): number {
   let em = 0;
   for (const ch of s) em += FULL.test(ch) ? 1 : mono ? 0.6 : WIDE.test(ch) ? 0.85 : NARROW.test(ch) ? 0.3 : TALL.test(ch) ? 0.64 : 0.53;

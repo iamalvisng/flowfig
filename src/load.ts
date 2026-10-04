@@ -1,4 +1,3 @@
-// What the CLI and the MCP server share: read a spec, write an SVG that carries its spec, and print the check lines.
 import { readFileSync } from 'node:fs';
 import { counts, type FlowProps } from './model.ts';
 import { toSvg, type Finding, type SvgOptions } from './svg.ts';
