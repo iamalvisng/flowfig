@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { cpus, tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { findBrowser, launch } from './browser.ts';
+import { captureFrames, findBrowser, launch, type Cdp } from './browser.ts';
 
 const posix = process.platform !== 'win32';
 
@@ -172,3 +172,34 @@ test('launch rejects when the browser exits at the start', { skip: !posix }, asy
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test(
+  'captureFrames returns the frames in time order when tabs capture in parallel',
+  { skip: cpus().length < 2 && 'one core gives one tab' },
+  async () => {
+    const seek = new Map<string | undefined, number>();
+    let targets = 0;
+    const cdp: Cdp = {
+      once: async () => ({}),
+      send: async (method, params: any = {}, sessionId) => {
+        await new Promise((done) => setTimeout(done, Math.random() * 5));
+        if (method === 'Target.createTarget') return { targetId: `t${targets++}` };
+        if (method === 'Target.attachToTarget') return { sessionId: `s${params.targetId}` };
+        if (method === 'Page.getFrameTree') return { frameTree: { frame: { id: 'f' } } };
+        if (method === 'Runtime.evaluate') {
+          const t = /currentTime = ([\d.]+)/.exec(params.expression);
+          if (!t) return { result: { value: { loop: 1000, x: 0, y: 0, width: 10, height: 10 } } };
+          seek.set(sessionId, Number(t[1]));
+          return { result: { value: undefined } };
+        }
+        if (method === 'Page.captureScreenshot') return { data: Buffer.from(String(seek.get(sessionId))).toString('base64') };
+        return {};
+      },
+    };
+    const { pngs } = await captureFrames(cdp, '', { width: 10, height: 10, scale: 1, fps: 40, dark: false });
+    assert.deepEqual(
+      pngs.map((p) => Number(p.toString())),
+      Array.from({ length: 40 }, (_, i) => i * 25),
+    );
+  },
+);

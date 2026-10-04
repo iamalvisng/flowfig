@@ -4,7 +4,8 @@ import { createInterface } from 'node:readline';
 import { diff, formatDiff } from './diff.ts';
 import { GUIDE } from './guide.ts';
 import { loadSpec, reportLines, sortFindings, svgWithSpec } from './load.ts';
-import { check } from './svg.ts';
+import { check, render } from './svg.ts';
+import { checkRendered } from './check.ts';
 import { verify } from './verify.ts';
 import { VERSION } from './version.ts';
 
@@ -92,12 +93,13 @@ function run(name: string, args: Record<string, unknown>): Result {
     types(args, name, { width: 'number', minText: 'number', out: 'string', strict: 'boolean' });
     const props = spec(args.spec, name);
     const opts = { width: args.width as number | undefined, minText: args.minText as number | undefined };
-    const findings = sortFindings(check(props, opts), args.strict === true);
+    const rendered = render(props, opts);
+    const findings = sortFindings(checkRendered(props, opts, rendered.scene), args.strict === true);
     const errors = findings.some((f) => f.severity === 'error');
     const lines = reportLines(props, findings);
     if (name === 'check' || errors) return ok(lines.join('\n'), errors);
     const out = String(args.out);
-    const svg = svgWithSpec(props, opts);
+    const svg = svgWithSpec(props, opts, rendered.svg);
     try {
       mkdirSync(dirname(out), { recursive: true });
       writeFileSync(out, svg);

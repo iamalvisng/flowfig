@@ -1,3 +1,4 @@
+import { endianness } from 'node:os';
 import type { Image } from './png.ts';
 
 /** One frame. `load` returns the pixels, `delay` is in cs, `same` skips `load`. */
@@ -9,7 +10,40 @@ export function delays(count: number, fps: number): number[] {
 }
 
 const binOf = (rgb: number) => ((rgb >> 9) & 0x7c00) | ((rgb >> 6) & 0x3e0) | ((rgb >> 3) & 0x1f);
+// Little-endian: a pixel word is A B G R, so this swaps R and B.
+const rgbOf = (v: number) => ((v & 255) << 16) | (v & 0xff00) | ((v >> 16) & 255);
+const CROP_LIMIT = 64 << 20;
+
+type Crop = { x0: number; y0: number; x1: number; y1: number; px: Uint32Array };
+
+function changedBox(a: Uint32Array, b: Uint32Array, width: number, height: number): [number, number, number, number] | null {
+  let x0 = width,
+    x1 = -1,
+    y0 = -1,
+    y1 = -1;
+  for (let y = 0; y < height; y++) {
+    const o = y * width;
+    let lo = 0;
+    while (lo < width && a[o + lo] === b[o + lo]) lo++;
+    if (lo === width) continue;
+    let hi = width - 1;
+    while (a[o + hi] === b[o + hi]) hi--;
+    if (lo < x0) x0 = lo;
+    if (hi > x1) x1 = hi;
+    if (y0 < 0) y0 = y;
+    y1 = y;
+  }
+  return y1 < 0 ? null : [x0, y0, x1, y1];
+}
+
 const channel = (bin: number, c: number) => (bin >> (10 - 5 * c)) & 31;
+
+function cropOf(px: Uint32Array, [x0, y0, x1, y1]: number[], width: number): Uint32Array {
+  const w = x1 - x0 + 1,
+    out = new Uint32Array(w * (y1 - y0 + 1));
+  for (let y = y0; y <= y1; y++) out.set(px.subarray(y * width + x0, y * width + x1 + 1), (y - y0) * w);
+  return out;
+}
 
 function medianCut(bins: number[], counts: Uint32Array): number[][] {
   const boxes = [bins];
@@ -142,11 +176,15 @@ function lzw(px: Uint8Array, width: number, rect: number[], byte: (v: number) =>
 // It yields between frames so a signal handler can run.
 export async function encodeGif(frames: GifFrame[]): Promise<Uint8Array> {
   if (!frames.length) throw new Error('a GIF needs at least one frame');
+  if (endianness() !== 'LE') throw new Error('flowfig gif needs a little-endian CPU');
   const counts = new Uint32Array(32768),
     sums = new Float64Array(32768 * 3);
   let exact: Map<number, number> | null = new Map(),
     width = 0,
     height = 0;
+  let before: Uint32Array | null = null,
+    kept = 0;
+  const crops: (Crop | null | undefined)[] = [];
   for (let f = 0; f < frames.length; f++) {
     if (frames[f].same && f > 0) continue;
     let weight = 1;
@@ -155,20 +193,39 @@ export async function encodeGif(frames: GifFrame[]): Promise<Uint8Array> {
     const { width: w, height: h, data } = frames[f].load();
     if (f === 0) [width, height] = [w, h];
     else if (w !== width || h !== height) throw new Error(`frame ${f + 1} is ${w} x ${h}; the first frame is ${width} x ${height}`);
-    let last = -1,
-      bin = 0;
-    for (let i = 0; i < data.length; i += 4) {
-      const rgb = (data[i] << 16) | (data[i + 1] << 8) | data[i + 2];
-      if (rgb !== last) {
-        last = rgb;
-        bin = binOf(rgb);
-        if (exact && !exact.has(rgb)) exact = exact.size < 256 ? exact.set(rgb, exact.size) : null;
+    const px = new Uint32Array(data.buffer, data.byteOffset, data.length >> 2);
+    let last = px[0] & 0xffffff,
+      run = 0;
+    const add = (v: number, n: number) => {
+      const rgb = rgbOf(v),
+        bin = binOf(rgb),
+        k = n * weight;
+      if (exact && !exact.has(rgb)) exact = exact.size < 256 ? exact.set(rgb, exact.size) : null;
+      counts[bin] += k;
+      sums[bin * 3] += (rgb >> 16) * k;
+      sums[bin * 3 + 1] += ((rgb >> 8) & 255) * k;
+      sums[bin * 3 + 2] += (rgb & 255) * k;
+    };
+    for (let i = 0; i < px.length; i++) {
+      const v = px[i] & 0xffffff;
+      if (v === last) run++;
+      else {
+        add(last, run);
+        [last, run] = [v, 1];
       }
-      counts[bin] += weight;
-      sums[bin * 3] += data[i] * weight;
-      sums[bin * 3 + 1] += data[i + 1] * weight;
-      sums[bin * 3 + 2] += data[i + 2] * weight;
     }
+    add(last, run);
+    const box = before ? changedBox(px, before, width, height) : [0, 0, width - 1, height - 1];
+    if (!box) crops[f] = null;
+    else {
+      const [x0, y0, x1, y1] = box;
+      const size = (x1 - x0 + 1) * (y1 - y0 + 1) * 4;
+      if (kept + size <= CROP_LIMIT) {
+        kept += size;
+        crops[f] = { x0, y0, x1, y1, px: before ? cropOf(px, box, width) : px };
+      }
+    }
+    before = px;
   }
   const { colors, index } = palette(exact, counts, sums);
 
@@ -200,32 +257,53 @@ export async function encodeGif(frames: GifFrame[]): Promise<Uint8Array> {
   bytes(3, 1, 0, 0, 0); // loop count 0: loop forever
 
   let prev: Uint8Array | null = null;
-  for (const frame of frames) {
+  for (let i = 0; i < frames.length; i++) {
+    const frame = frames[i],
+      crop = crops[i];
     await new Promise(setImmediate);
     let cur: Uint8Array = prev!;
-    if (!(frame.same && prev)) {
-      const { data } = frame.load();
+    if (crop === null && prev) cur = prev;
+    else if (!(frame.same && prev)) {
       cur = new Uint8Array(width * height);
       let last = -1,
         k = 0;
-      for (let p = 0, i = 0; p < cur.length; p++, i += 4) {
-        const rgb = (data[i] << 16) | (data[i + 1] << 8) | data[i + 2];
-        if (rgb !== last) [last, k] = [rgb, index(rgb)];
+      const put = (p: number, v: number) => {
+        v &= 0xffffff;
+        if (v !== last) [last, k] = [v, index(rgbOf(v))];
         cur[p] = k;
+      };
+      if (crop) {
+        if (prev) cur.set(prev);
+        for (let y = crop.y0, q = 0; y <= crop.y1; y++) for (let x = crop.x0; x <= crop.x1; x++) put(y * width + x, crop.px[q++]);
+      } else {
+        const { data } = frame.load();
+        const px = new Uint32Array(data.buffer, data.byteOffset, data.length >> 2);
+        for (let p = 0; p < cur.length; p++) put(p, px[p]);
       }
     }
     let rect = [0, 0, width - 1, height - 1];
     if (cur === prev) rect = [0, 0, -1, -1];
     else if (prev) {
       rect = [width, height, -1, -1];
-      for (let y = 0, p = 0; y < height; y++)
-        for (let x = 0; x < width; x++, p++)
-          if (cur[p] !== prev[p]) {
-            if (x < rect[0]) rect[0] = x;
-            if (x > rect[2]) rect[2] = x;
-            if (y < rect[1]) rect[1] = y;
-            rect[3] = y;
-          }
+      const wide = (width & 3) === 0;
+      const a32 = wide ? new Uint32Array(cur.buffer) : cur,
+        b32 = wide ? new Uint32Array(prev.buffer) : prev,
+        row = wide ? width >> 2 : width;
+      for (let y = crop?.y0 ?? 0; y <= (crop?.y1 ?? height - 1); y++) {
+        let x = y * row;
+        const end = x + row;
+        while (x < end && a32[x] === b32[x]) x++;
+        if (x === end) continue;
+        const o = y * width;
+        let x0 = 0,
+          x1 = width - 1;
+        while (cur[o + x0] === prev[o + x0]) x0++;
+        while (cur[o + x1] === prev[o + x1]) x1--;
+        if (x0 < rect[0]) rect[0] = x0;
+        if (x1 > rect[2]) rect[2] = x1;
+        if (y < rect[1]) rect[1] = y;
+        rect[3] = y;
+      }
     }
     // A 1 x 1 frame in the old color keeps the frame and its delay.
     if (rect[2] < 0) rect = [0, 0, 0, 0];

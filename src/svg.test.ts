@@ -1044,13 +1044,26 @@ test('lanes wrap: a cross-block edge is two stubs with pills that clear every bo
   assert.deepEqual(found, []);
 });
 
+test('lanes wrap: each stub pill of the returns process stays at the nearest clear place', async () => {
+  const { default: demo } = await import('../figures/returns-process.ts');
+  const pills = render(demo.props)
+    .scene.edges.filter((e) => e.id === 'arrive' || e.id === 'late')
+    .map(({ label: r }) => [r!.x, r!.y].map(Math.round));
+  assert.deepEqual(pills, [
+    [791, 66],
+    [140, 449],
+    [402, 205],
+    [381, 319],
+  ]);
+});
+
 test('lanes wrap: a figure that fits renders byte for byte as before the wrap', async () => {
   const { createHash } = await import('node:crypto');
   const { default: refund } = await import('../figures/refund-process.ts');
   // Change this hash only for a planned layout change.
   assert.equal(
     createHash('sha256').update(toSvg(refund.props)).digest('hex'),
-    'd2604a6aa8357826dceedbfc80e4728f2b2e0f30f5326586c0ee34cc082d56a3',
+    '93b552a730dcc739ccee7c15e73984aeb17801f1efaa05f78d4496491f27d402',
   );
 });
 

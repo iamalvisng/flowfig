@@ -32,9 +32,9 @@ export function loadSpec(input: string | object, name = typeof input === 'string
 }
 
 /** The SVG with its spec in `<metadata>`: an SVG is then its own source. `]]>` would close the CDATA early, so it is escaped. */
-export function svgWithSpec(props: FlowProps, opts: SvgOptions = {}): string {
+export function svgWithSpec(props: FlowProps, opts: SvgOptions = {}, svg = toSvg(props, opts)): string {
   const spec = JSON.stringify({ props }).replaceAll(']]>', ']]\\u003e');
-  return toSvg(props, opts).replace(/(<svg[^>]*>\n?)/, (tag) => `${tag}${SPEC_OPEN}${spec}${SPEC_CLOSE}\n`);
+  return svg.replace(/(<svg[^>]*>\n?)/, (tag) => `${tag}${SPEC_OPEN}${spec}${SPEC_CLOSE}\n`);
 }
 
 export function sortFindings(findings: Finding[], strict: boolean): Finding[] {

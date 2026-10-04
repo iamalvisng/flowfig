@@ -7,6 +7,7 @@ import {
   isGroup,
   dayOf,
   isLanesLayout,
+  lanePlan,
   validAt,
   laneColumns,
   nodes,
@@ -16,8 +17,11 @@ import {
   type FigNode,
   type FigTheme,
   type FlowProps,
+  type LanePlan,
 } from './model.ts';
 import type { Finding, Scene, SceneEdge } from './scene.ts';
+import { layoutRail } from './rail.ts';
+import type { SvgOptions } from './svg.ts';
 import { crosses, type Pt, type Rect } from './geometry.ts';
 import { textWidth } from './text.ts';
 import { owners, parseSource } from './source.ts';
@@ -298,4 +302,20 @@ export function checkTheme(theme: FigTheme = {}): Finding[] {
   }
   for (const c of unread) out.push(warn('color-not-checked', [], `cannot read the color "${c}", so its contrast is not checked`));
   return out;
+}
+
+export function planFor(fig: FlowProps, opts: SvgOptions): LanePlan | null {
+  if (fig.timeline || !fig.lanes || !isLanesLayout(fig.layout)) return null;
+  const floor = fig.rail ? (layoutRail(fig, 560)?.width ?? 0) : 0;
+  return lanePlan(fig, { width: opts.width, minText: opts.minText, padding: opts.padding ?? 24, floor });
+}
+
+export function checkRendered(fig: FlowProps, opts: SvgOptions & CheckOptions, scene: Scene): Finding[] {
+  const lost = (planFor(fig, opts)?.lost ?? []).map((id): Finding => ({
+    rule: 'lane-end-block',
+    severity: 'warning',
+    ids: [id],
+    message: `edge "${id}" ends at a lane that no block on its side shows; the edge uses the nearest block`,
+  }));
+  return [...checkSpec(fig), ...checkScene(scene, opts), ...lost, ...checkTheme({ ...fig.theme, ...opts.theme })];
 }
