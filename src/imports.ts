@@ -6,7 +6,7 @@ export type Import = { name: string; local: string; path: string | null };
 const TS_EXT = ['', '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '/index.ts', '/index.tsx', '/index.js'];
 const has = (root: string, path: string, read: Read) => read(resolve(root, path)) != null;
 
-function resolveTs(root: string, from: string, spec: string, read: Read): string | null {
+export function resolveTs(root: string, from: string, spec: string, read: Read): string | null {
   let base: string;
   if (spec.startsWith('.')) base = posix.join(posix.dirname(from), spec);
   else {
@@ -22,7 +22,7 @@ function resolveTs(root: string, from: string, spec: string, read: Read): string
   return TS_EXT.map((e) => base + e).find((p) => has(root, p, read)) ?? null;
 }
 
-function resolvePy(root: string, from: string, mod: string, read: Read): string | null {
+export function resolvePy(root: string, from: string, mod: string, read: Read): string | null {
   let base: string;
   if (mod.startsWith('.')) {
     const dots = /^\.+/.exec(mod)![0].length;

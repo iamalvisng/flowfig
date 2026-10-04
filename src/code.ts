@@ -1,8 +1,8 @@
-import { readFileSync, statSync } from 'node:fs';
-import { extname, resolve } from 'node:path';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { extname, relative, resolve, sep } from 'node:path';
 
 export type Lang = 'ts' | 'py' | 'go' | 'java' | 'cs' | 'rs';
-export type Read = (full: string) => string | null;
+export type Read = { (full: string): string | null; files?: (root: string) => string[] };
 export type CodeFile = {
   path: string;
   lang: Lang;
@@ -35,6 +35,24 @@ export const readFile: Read = (full) => {
   } catch {
     return null;
   }
+};
+
+readFile.files = (root) => {
+  const out: string[] = [];
+  const walk = (dir: string) => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      if (e.name.startsWith('.') || e.name === 'node_modules') continue;
+      const full = resolve(dir, e.name);
+      if (e.isDirectory()) walk(full);
+      else out.push(relative(root, full).split(sep).join('/'));
+    }
+  };
+  try {
+    walk(root);
+  } catch {
+    return out;
+  }
+  return out;
 };
 
 const blank = (s: string) => s.replace(/[^\n]/g, ' ');
@@ -253,7 +271,7 @@ function braceBody(code: string, from: number, start: number, lang: Lang): Exten
   return null;
 }
 
-function pyBody(code: string, start: number): Extent {
+export function pyBody(code: string, start: number): Extent {
   const ind = indentAt(code, start);
   let i = start;
   let pd = 0;
