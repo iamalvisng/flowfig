@@ -198,7 +198,7 @@ export function layoutRail(fig: FlowProps, mapWidth: number): Rail | null {
     s.reduce((m, st, i) => (st.shown ? Math.max(m, st.y + (rows[i].kind === 'phase' ? RAIL.phase : RAIL.row)) : m), 0);
   const height = Math.max(...states.map(bottom)) + 8;
 
-  for (const b of bands) b.rect.h = height - b.rect.y - (b.rect.y / RAIL.band) * 4; // the bottom edge keeps the 4 px nesting inset
+  for (const b of bands) b.rect.h = height - b.rect.y - (b.rect.y / RAIL.band) * 4;
 
   return { width, head, height, columns, bands, rows, groups, total: n, folds, states };
 }
@@ -211,6 +211,6 @@ export function groupBox(rail: Rail, g: Rail['groups'][number]): Rect {
     return [rail.columns[r.from].x, rail.columns[r.to].x, ...(r.pill ? [r.pill.x, r.pill.x + r.pill.w] : [])];
   });
   const x = Math.min(...xs) - RAIL.inset;
-  const top = (RAIL.row - 18) / 2 - RAIL.inset; // 18: the pill height
+  const top = (RAIL.row - 18) / 2 - RAIL.inset;
   return { x, y: top, w: Math.max(...xs) + RAIL.inset - x, h: g.rows.length * RAIL.row - top * 2 };
 }

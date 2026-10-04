@@ -207,7 +207,7 @@ if (args[0] === 'gif') {
   };
   process.on('SIGINT', onSignal);
   process.on('SIGTERM', onSignal);
-  // Encode and ffmpeg yield to the event loop, so a signal handler can run.
+  // A write comes right after this check, so a signal must run its handler first.
   const proceed = async () => {
     await yieldLoop();
     if (stopped) throw new Error('stopped');
@@ -282,6 +282,7 @@ if (args[0] === 'gif') {
   } finally {
     await cleanup();
   }
+  // A late signal runs its handler in this await, before the exit.
   await yieldLoop();
   if (stopped) written.forEach((f) => rmSync(f, { force: true }));
   process.exit(stopped || code);

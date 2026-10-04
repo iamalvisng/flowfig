@@ -141,7 +141,6 @@ const overlap = (a: Rect, b: Rect, pad: number) =>
   a.x + pad < b.x + b.w - pad && b.x + pad < a.x + a.w - pad && a.y + pad < b.y + b.h - pad && b.y + pad < a.y + a.h - pad;
 const px = (n: number) => Math.round(n * 10) / 10;
 
-/** Layout faults in what a renderer drew, and text that the target width shrinks below `minText`. */
 export function checkScene(scene: Scene, { width = 830, minText = 10 }: CheckOptions = {}): Finding[] {
   const out: Finding[] = [];
   for (const b of scene.boxes)
@@ -287,7 +286,6 @@ export function checkTheme(theme: FigTheme = {}): Finding[] {
         for (const c of [a, t[bg]]) if (!rgb(c)) unread.add(c);
       } else if (r < 4.5) out.push(err('low-contrast', [], `${name} theme: ${fg} on ${bg} has contrast ${r}:1 (minimum 4.5:1)`));
     }
-    // Tone tint: 8 % over bg (off, trail), 10 % over surface (active).
     for (const [tname, tone] of Object.entries(TONES)) {
       for (const bg of [tintOf(t, tone, t.bg, 8), tintOf(t, tone, t.surface, 10)]) {
         for (const fg of ['fg', 'muted'] as const) {

@@ -53,7 +53,6 @@ export type Cdp = {
 
 type Waiter = { resolve: (v: any) => void; reject: (e: Error) => void };
 
-/** Start the capture browser in headless mode with a CDP pipe. `close` stops it and never throws. */
 export function launch(path: string, profile: string, timeoutMs = 30_000): Promise<{ cdp: Cdp; close: () => Promise<void> }> {
   const args = [
     '--headless=new',
@@ -180,7 +179,6 @@ export function launch(path: string, profile: string, timeoutMs = 30_000): Promi
 
 export type Capture = { pngs: Buffer[]; width: number; height: number; loopMs: number };
 
-/** Set the page, pause the animations and take one PNG per frame time. */
 export async function captureFrames(
   cdp: Cdp,
   html: string,

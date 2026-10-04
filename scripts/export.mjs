@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 import { createServer } from 'vite';
-import { chromium } from 'playwright';
 import { execFile } from 'node:child_process';
 import { homedir } from 'node:os';
 import { mkdir, readdir, rm, writeFile } from 'node:fs/promises';
@@ -9,6 +8,23 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
 const run = promisify(execFile);
+const USAGE =
+  'usage: npm run export -- [figure...] [--gif] [--dark] [--2x] [--square] [--out <folder>]\n' +
+  'The default output folder is ~/Downloads/flowfig-clips.';
+const NEEDS = 'needs: npx playwright install chromium (once), and ffmpeg on PATH.';
+if (process.argv.includes('--help')) {
+  console.log(`${USAGE}\n${NEEDS}`);
+  process.exit(0);
+}
+const { chromium } = await import('playwright').catch(() => {
+  console.error(`playwright is missing. ${NEEDS}`);
+  process.exit(1);
+});
+await run('ffmpeg', ['-version']).catch(() => {
+  console.error(`ffmpeg is missing. ${NEEDS}`);
+  process.exit(1);
+});
+
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const args = process.argv.slice(2);
 const outAt = args.indexOf('--out');

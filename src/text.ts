@@ -10,7 +10,6 @@ export function textWidth(s: string, fontSize: number, mono = false): number {
   return em * fontSize;
 }
 
-/** Break a string into lines that fit `width`, keeping the newlines it already has. */
 export function wrap(s: string, width: number, fontSize: number, mono = false): string[] {
   const out: string[] = [];
   for (const para of s.split('\n')) {

@@ -186,7 +186,6 @@ export function Flow({
   );
   const [active, setActive] = useState<number | null>(steps.length ? 0 : null);
   const [playing, setPlaying] = useState(autoplay);
-  // The clock lives outside React: pausing freezes it, resizing keeps it.
   const playingRef = useRef(playing);
   playingRef.current = playing;
   const [rate, setRate] = useState<1 | 2>(1);
@@ -1136,7 +1135,7 @@ export function Flow({
               backgroundSize: '14px 14px',
             }}
           >
-            {/* ponytail: rows never wrap; wide figures shrink, down to half size. */}
+            {/* ponytail: no stacked mobile layout; add one if narrow screens break it. */}
             <div
               ref={outer}
               style={{

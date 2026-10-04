@@ -1,5 +1,5 @@
 const MAX_WORDS = 15;
-const CODE = /^(import|export|const|let|var|return|if|for|while|function|await)\b|[;{}]\s*$|^\w+(\.\w+)*\(.*\)\s*;?$/;
+const CODE = /^(import|export|const|let|var|return|if|for|while|function|await)\b.*([;({=]|=>)|[;{}]\s*$|^\w+(\.\w+)*\(.*\)\s*;?$/;
 const DIRECTIVE = /^\s*(eslint|oxlint|biome|@ts-|prettier-ignore|#region|#endregion)/;
 
 function commentGroups(src) {
@@ -7,10 +7,13 @@ function commentGroups(src) {
   for (const c of src.getAllComments()) {
     if (c.value.startsWith('!') || DIRECTIVE.test(c.value) || c.value.startsWith('/')) continue;
     const last = groups.at(-1)?.at(-1);
+    const aloneLast = last && last.type === 'Line' && !src.lines[last.loc.start.line - 1].slice(0, last.loc.start.column).trim();
+    const alone = c.type === 'Line' && !src.lines[c.loc.start.line - 1].slice(0, c.loc.start.column).trim();
     const joined =
       last &&
+      alone &&
+      aloneLast &&
       last.type === 'Line' &&
-      c.type === 'Line' &&
       c.loc.start.line === last.loc.end.line + 1 &&
       c.loc.start.column === last.loc.start.column;
     if (joined) groups.at(-1).push(c);
@@ -41,7 +44,8 @@ function exportKind(node) {
     if (n.type === 'ExportNamedDeclaration' || n.type === 'ExportDefaultDeclaration') {
       const t = n.declaration?.type ?? '';
       if (/TSInterfaceDeclaration|TSTypeAliasDeclaration/.test(t)) return 'type';
-      if (t === 'FunctionDeclaration') return 'function';
+      if (t === 'FunctionDeclaration' || t === 'TSDeclareFunction') return 'function';
+      if (t === 'VariableDeclaration' && /Function/.test(n.declaration.declarations[0]?.init?.type ?? '')) return 'function';
       return null;
     }
     if (/Function|Class|Program|BlockStatement/.test(n.type)) return null;
@@ -89,16 +93,26 @@ const testAsserts = {
     schema: [{ type: 'object', properties: { assertNames: { type: 'array' } } }],
   },
   create(context) {
+    const names = context.options[0]?.assertNames ?? ['assert'];
+    const isAssert = (callee) => {
+      let c = callee;
+      while (c.type === 'MemberExpression') c = c.object;
+      return c.type === 'Identifier' && names.includes(c.name);
+    };
+    const open = [];
     return {
       CallExpression(node) {
-        if (node.callee.type !== 'Identifier' || !/^(test|it)$/.test(node.callee.name)) return;
-        const fn = node.arguments.at(-1);
-        if (!fn || !/Function/.test(fn.type)) return;
-        const names = context.options[0]?.assertNames ?? ['assert'];
-        const re = new RegExp(`\\b(${names.join('|')})\\b`);
-        if (!re.test(context.sourceCode.getText(fn))) {
-          context.report({ node, message: 'A test asserts something.' });
-        }
+        if (
+          node.callee.type === 'Identifier' &&
+          /^(test|it)$/.test(node.callee.name) &&
+          /Function/.test(node.arguments.at(-1)?.type ?? '')
+        ) {
+          open.push({ node, count: 0 });
+        } else if (open.length && isAssert(node.callee)) open.at(-1).count++;
+      },
+      'CallExpression:exit'(node) {
+        if (open.at(-1)?.node !== node) return;
+        if (!open.pop().count) context.report({ node, message: 'A test asserts something.' });
       },
     };
   },

@@ -1,6 +1,5 @@
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-/** The page: the figure SVG inline, centered, scaled down to the window width. The title is escaped. */
 export function pageHtml(svg: string, title: string): string {
   // Use element selectors only: figure styles use class names.
   return `<!doctype html>

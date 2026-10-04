@@ -22,7 +22,7 @@ export type FigNode = {
   from?: string;
   /** In `timeline`: the last day, as YYYY-MM-DD. No `to` makes a milestone. */
   to?: string;
-  /** A permanent state color, such as a failing part. Hops arriving here use it too. */
+  /** A permanent state color. An arriving hop with no tone uses it too. */
   tone?: FigTone;
   /** `start` draws a filled dot before the box, `end` a ringed dot after it. */
   mark?: 'start' | 'end';
@@ -56,7 +56,7 @@ export type FigEdge = {
   label?: ReactNode;
   /** Routes the edge over or under the boxes in between (loops, skip-ahead edges). */
   around?: 'above' | 'below';
-  /** Routes the edge over or under the boxes between (loops, skip-ahead edges). */
+  /** Draws the edge only while a step uses it. */
   quiet?: boolean;
   /** Code this draws: `path` or `path#symbol` from the repo root. Checked by `flowfig verify`. */
   source?: string;
@@ -420,7 +420,7 @@ export function lanePlan(fig: FlowProps, { width = 830, minText = 10, padding = 
       const texts = stubTexts(e.label, (byId.get(e.from) ?? fl)!.label, (byId.get(e.to) ?? tl)!.label);
       stubs.set(id, texts);
     });
-    // A label on adjacent columns sits in the gap between them.
+    // A label wider than the gap would cover a box, so the gap grows.
     const label = Array.from({ length: n }, () => 0);
     for (const e of fig.edges) {
       const [a, b] = [cols.get(e.from), cols.get(e.to)];
@@ -457,7 +457,7 @@ export function lanePlan(fig: FlowProps, { width = 830, minText = 10, padding = 
       for (let c = c0; c < end; c++) {
         const need = (out.get(c) ?? 0) + (c < end - 1 ? (inn.get(c + 1) ?? 0) : 0);
         grow(need - gaps[c], () => (gaps[c] = need));
-        if (gaps[c] >= need) roomOut.add(c).add(-1 - (c + 1)); // -1 - c marks room before column c
+        if (gaps[c] >= need) roomOut.add(c).add(-1 - (c + 1));
       }
     }
     const laneIndex = (id: string) => lanes.findIndex((l) => l.id === id || l.children.some((b) => (b as FigNode).id === id));

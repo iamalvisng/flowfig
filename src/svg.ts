@@ -459,6 +459,7 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
     }
     return seen.get(key)!;
   };
+  // One class attribute only: two would be invalid XML.
   const cls = (...names: (string | false | undefined)[]) => {
     const list = names.filter(Boolean).join(' ');
     return list ? ` class="${list}"` : '';
@@ -476,6 +477,7 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
     return seen.get(key)!;
   };
 
+  // FADE and RAMP are wall seconds; the player matches them in ms.
   const FADE = 0.4;
   const RAMP = 0.4;
   const looks = (look: 'off' | 'trail' | 'active', boxTone?: string, hopTone?: string) => {
@@ -892,7 +894,6 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
             row.tone ? 'e' + col : 'e',
           );
           const tagW = ASYNC_TAG_W;
-          // The tag sits on the tail side so it never hides the arrowhead.
           const tagX = !row.pill ? (x1 + x2) / 2 - tagW / 2 : x2 > x1 ? row.pill.x - tagW - 4 : row.pill.x + row.pill.w + 4;
           const tag = row.async
             ? `<rect x="${n2(tagX)}" y="${n2(ly - 6)}" width="${n2(tagW)}" height="12" rx="4" fill="var(--bg)"/>` +
@@ -981,7 +982,6 @@ ${said.join('\n')}
       }),
       ...(rail?.rows ?? []).flatMap((row, i) => {
         if (row.kind !== 'message') return [];
-        // Scene coordinates are the page minus the map's translate(shift, arcs).
         const dx = only ? railX : railX - shift,
           dy = only ? top : top - (arcs ? 44 : 0);
         const y = dy + railState(rail!, row.step)[i].y + RAIL.row / 2;

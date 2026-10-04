@@ -59,7 +59,6 @@ export const TOOLS = [
   },
 ];
 
-// Bad is a JSON-RPC error. Fault is a tool result with isError.
 class Bad extends Error {}
 class Fault extends Error {}
 
