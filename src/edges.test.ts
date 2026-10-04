@@ -462,6 +462,26 @@ test('a Rust function brought in by a use outside the crate is unsure; a crate u
   assert.equal(run(at('use crate::fs::read;\n'), 'src/c.rs#f', 'src/fs.rs#read'), 'found');
 });
 
+test('via: a path token after a port is found when the callee file holds it outside the callee body', () => {
+  const files = {
+    'gateway/index.ts': 'export const callUsers = () => fetch("http://users:3000/internal/users");\n',
+    'users/index.ts': 'app.get("/internal/users", listUsers);\nexport function listUsers(req, res) { res.json([]); }\n',
+    'pricing/index.ts': '// pricing service\nexport function quote() {}\n',
+  };
+  assert.equal(run(files, 'gateway/index.ts#callUsers', 'users/index.ts#listUsers', '/internal'), 'found');
+  assert.equal(run(files, 'gateway/index.ts#callUsers', 'pricing/index.ts#quote', '/internal'), 'not-found');
+});
+
+test('via: the caller can hold the token in a top-level constant of its file', () => {
+  const files = {
+    'src/audit.ts':
+      'const QUEUE = "audit-events";\nconst OTHER = "billing";\nexport function write() { ch.sendToQueue(QUEUE, b); }\nexport function bill() { ch.sendToQueue(OTHER, b); }\n',
+    'worker/consume.py': 'QUEUE = "audit-events"\n\ndef consume():\n    ch.basic_consume(QUEUE, on_message)\n',
+  };
+  assert.equal(run(files, 'src/audit.ts#write', 'worker/consume.py#consume', 'audit-events'), 'found');
+  assert.equal(run(files, 'src/audit.ts#bill', 'worker/consume.py#consume', 'audit-events'), 'not-found');
+});
+
 test('a middleware passed as a route argument is found; another middleware is not found', () => {
   const files = {
     'src/limit.ts': 'export function loginRateLimit(req, res, next) { next(); }\nexport function otherLimit(req, res, next) { next(); }\n',
