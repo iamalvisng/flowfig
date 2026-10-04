@@ -9,6 +9,8 @@ export function delays(count: number, fps: number): number[] {
 }
 
 const binOf = (rgb: number) => ((rgb >> 9) & 0x7c00) | ((rgb >> 6) & 0x3e0) | ((rgb >> 3) & 0x1f);
+// Little-endian: a pixel word is A B G R, so this swaps R and B.
+const rgbOf = (v: number) => ((v & 255) << 16) | (v & 0xff00) | ((v >> 16) & 255);
 const channel = (bin: number, c: number) => (bin >> (10 - 5 * c)) & 31;
 
 function medianCut(bins: number[], counts: Uint32Array): number[][] {
@@ -155,20 +157,28 @@ export async function encodeGif(frames: GifFrame[]): Promise<Uint8Array> {
     const { width: w, height: h, data } = frames[f].load();
     if (f === 0) [width, height] = [w, h];
     else if (w !== width || h !== height) throw new Error(`frame ${f + 1} is ${w} x ${h}; the first frame is ${width} x ${height}`);
-    let last = -1,
-      bin = 0;
-    for (let i = 0; i < data.length; i += 4) {
-      const rgb = (data[i] << 16) | (data[i + 1] << 8) | data[i + 2];
-      if (rgb !== last) {
-        last = rgb;
-        bin = binOf(rgb);
-        if (exact && !exact.has(rgb)) exact = exact.size < 256 ? exact.set(rgb, exact.size) : null;
+    const px = new Uint32Array(data.buffer, data.byteOffset, data.length >> 2);
+    let last = px[0] & 0xffffff,
+      run = 0;
+    const add = (v: number, n: number) => {
+      const rgb = rgbOf(v),
+        bin = binOf(rgb),
+        k = n * weight;
+      if (exact && !exact.has(rgb)) exact = exact.size < 256 ? exact.set(rgb, exact.size) : null;
+      counts[bin] += k;
+      sums[bin * 3] += (rgb >> 16) * k;
+      sums[bin * 3 + 1] += ((rgb >> 8) & 255) * k;
+      sums[bin * 3 + 2] += (rgb & 255) * k;
+    };
+    for (let i = 0; i < px.length; i++) {
+      const v = px[i] & 0xffffff;
+      if (v === last) run++;
+      else {
+        add(last, run);
+        [last, run] = [v, 1];
       }
-      counts[bin] += weight;
-      sums[bin * 3] += data[i] * weight;
-      sums[bin * 3 + 1] += data[i + 1] * weight;
-      sums[bin * 3 + 2] += data[i + 2] * weight;
     }
+    add(last, run);
   }
   const { colors, index } = palette(exact, counts, sums);
 
@@ -206,11 +216,12 @@ export async function encodeGif(frames: GifFrame[]): Promise<Uint8Array> {
     if (!(frame.same && prev)) {
       const { data } = frame.load();
       cur = new Uint8Array(width * height);
+      const px = new Uint32Array(data.buffer, data.byteOffset, data.length >> 2);
       let last = -1,
         k = 0;
-      for (let p = 0, i = 0; p < cur.length; p++, i += 4) {
-        const rgb = (data[i] << 16) | (data[i + 1] << 8) | data[i + 2];
-        if (rgb !== last) [last, k] = [rgb, index(rgb)];
+      for (let p = 0; p < cur.length; p++) {
+        const v = px[p] & 0xffffff;
+        if (v !== last) [last, k] = [v, index(rgbOf(v))];
         cur[p] = k;
       }
     }
@@ -218,14 +229,25 @@ export async function encodeGif(frames: GifFrame[]): Promise<Uint8Array> {
     if (cur === prev) rect = [0, 0, -1, -1];
     else if (prev) {
       rect = [width, height, -1, -1];
-      for (let y = 0, p = 0; y < height; y++)
-        for (let x = 0; x < width; x++, p++)
-          if (cur[p] !== prev[p]) {
-            if (x < rect[0]) rect[0] = x;
-            if (x > rect[2]) rect[2] = x;
-            if (y < rect[1]) rect[1] = y;
-            rect[3] = y;
-          }
+      const wide = (width & 3) === 0;
+      const a32 = wide ? new Uint32Array(cur.buffer) : cur,
+        b32 = wide ? new Uint32Array(prev.buffer) : prev,
+        row = wide ? width >> 2 : width;
+      for (let y = 0; y < height; y++) {
+        let x = y * row;
+        const end = x + row;
+        while (x < end && a32[x] === b32[x]) x++;
+        if (x === end) continue;
+        const o = y * width;
+        let x0 = 0,
+          x1 = width - 1;
+        while (cur[o + x0] === prev[o + x0]) x0++;
+        while (cur[o + x1] === prev[o + x1]) x1--;
+        if (x0 < rect[0]) rect[0] = x0;
+        if (x1 > rect[2]) rect[2] = x1;
+        if (y < rect[1]) rect[1] = y;
+        rect[3] = y;
+      }
     }
     // A 1 x 1 frame in the old color keeps the frame and its delay.
     if (rect[2] < 0) rect = [0, 0, 0, 0];
