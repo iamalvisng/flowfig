@@ -199,3 +199,14 @@ test('via in a file of a language that verify does not read is not checked', () 
   };
   assert.equal(run(files, 'src/b.rb', 'src/c.ts#recv', 'order-paid'), 'not-checked');
 });
+
+test('one edge on a 200 KB body with a long number array takes under 1 s', () => {
+  const arr = Array.from({ length: 32000 }, (_, i) => i).join(',');
+  const files = {
+    'src/auth.ts': 'export function verify() {}\n',
+    'src/data.ts': `import { verify } from './auth.ts';\nexport function load() {\n  const T = [${arr}];\n  verify();\n}\n`,
+  };
+  const t = Date.now();
+  assert.equal(run(files, 'src/data.ts#load', 'src/auth.ts#verify'), 'found');
+  assert.ok(Date.now() - t < 1000, `${Date.now() - t} ms`);
+});

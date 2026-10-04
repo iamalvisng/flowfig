@@ -199,7 +199,12 @@ function mask(src: string, lang: Lang): { code: string; keep: string } {
     if (c === '{') depth++;
     else if (c === '}') depth--;
     push(c, 'code');
-    if (!/\s/.test(c)) prevSig = /\w/.test(c) ? (/^(return|typeof|case|in|of)$/.test(wordBefore(src, i + 1)) ? '(' : 'x') : c;
+    if (!/\s/.test(c))
+      prevSig = /\w/.test(c)
+        ? !/\w/.test(src[i + 1] ?? '') && /^(return|typeof|case|in|of)$/.test(wordBefore(src, i + 1))
+          ? '('
+          : 'x'
+        : c;
     i++;
   }
   return { code, keep };

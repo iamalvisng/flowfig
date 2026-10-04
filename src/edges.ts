@@ -44,6 +44,17 @@ const MODIFIERS = new Set([
   'this',
   'params',
 ]);
+const KEYWORD = /^(return|else|throw|new|await|yield|case|do|in|is|as)\b/;
+
+function typedName(body: string, n: string): boolean {
+  for (const m of body.matchAll(new RegExp(`\\s+${n}\\s*(?:=(?![=>])|;)`, 'g'))) {
+    let s = m.index;
+    while (s > 0 && /[\w<>[\],.?]/.test(body[s - 1])) s--;
+    for (let p = s; p < m.index; p++)
+      if ((p === s ? body[p - 1] !== '$' : '<>[],?'.includes(body[p - 1])) && !KEYWORD.test(body.slice(p, m.index))) return true;
+  }
+  return false;
+}
 
 function params(body: string, from: string | undefined): string[] {
   const open = body.indexOf('(', from ? Math.max(0, body.indexOf(from)) : 0);
@@ -70,12 +81,11 @@ function shadows(body: string, name: string, lang: Lang, fromName: string | unde
       const tokens = (p.split('=')[0].match(/[\w$]+/g) ?? []).filter((t) => !MODIFIERS.has(t));
       if ((lang === 'java' || lang === 'cs' ? tokens.at(-1) : tokens[0]) === name) return true;
     }
-  return [
-    `\\b(let|const|var|val|mut)\\s+${n}(?![\\w$])`,
-    `(?<![\\w$.])${n}\\s*:=`,
-    `(^|[\\n;{])[ \\t]*${n}\\s*(:[^=\\n]+)?=(?![=>])`,
-    `(?<![\\w$.])(?!(return|else|throw|new|await|yield|case|do|in|is|as)\\b)[\\w<>\\[\\],.?]+\\s+${n}\\s*(=(?![=>])|;)`,
-  ].some((p) => new RegExp(p).test(body));
+  return (
+    [`\\b(let|const|var|val|mut)\\s+${n}(?![\\w$])`, `(?<![\\w$.])${n}\\s*:=`, `(^|[\\n;{])[ \\t]*${n}\\s*(:[^=\\n]+)?=(?![=>])`].some(
+      (p) => new RegExp(p).test(body),
+    ) || typedName(body, n)
+  );
 }
 
 const defaultIs = (ti: CodeFile, symbol: string) =>
