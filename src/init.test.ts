@@ -281,6 +281,15 @@ test('init writes the MCP file for each agent that has one, and --no-mcp or --dr
   }
 });
 
+test('init skips an .mcp.json that is not a JSON object and keeps the file', () => {
+  const dir = tmp();
+  writeFileSync(join(dir, '.mcp.json'), '["keep me"]\n');
+  const r = run(['init', '--agents', 'claude', dir], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /skipped.*\.mcp\.json|\.mcp\.json.*skipped/);
+  assert.equal(readFileSync(join(dir, '.mcp.json'), 'utf8'), '["keep me"]\n');
+});
+
 test('--global registers the Claude server in ~/.claude.json and keeps the rest of that file', () => {
   const home = tmp();
   try {

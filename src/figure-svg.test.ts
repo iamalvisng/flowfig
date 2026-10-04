@@ -370,6 +370,60 @@ test('a render with --open opens the SVG; check --open and a failed render open 
     assert.equal(pages().length, 1);
     assert.equal(go(['-', join(dir, 'bad.svg'), '--open'], BAD).status, 1);
     assert.equal(pages().length, 1);
+    const failing = spawnSync(process.execPath, [cli, '-', join(dir, 'late.svg'), '--open'], {
+      input: JSON.stringify(SPEC),
+      encoding: 'utf8',
+      env: { ...env, FLOWFIG_OPENER: join(dir, 'no-such-opener') },
+    });
+    assert.equal(failing.status, 1);
+    assert.ok(existsSync(join(dir, 'late.svg')), 'the SVG is written before the opener fails');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a render with no output path writes figure.svg for stdin and <name>.svg for a file', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'figure-svg-'));
+  try {
+    const at = (args: string[], input?: string) => spawnSync('node', [cli, ...args], { cwd: dir, input, encoding: 'utf8' });
+    assert.equal(at(['-'], JSON.stringify(SPEC)).status, 0);
+    assert.ok(existsSync(join(dir, 'figure.svg')));
+    writeFileSync(join(dir, 'x.json'), JSON.stringify(SPEC));
+    assert.equal(at(['x.json']).status, 0);
+    assert.ok(existsSync(join(dir, 'x.svg')));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('check --strict exits 1 for a warning that check alone passes', () => {
+  const warn = JSON.stringify({ props: { ...SPEC.props, theme: { font: 'Georgia' } } });
+  const plain = run(['check', '-'], warn);
+  assert.equal(plain.status, 0, plain.stdout + plain.stderr);
+  assert.match(plain.stdout, /warning/);
+  assert.equal(run(['check', '-', '--strict'], warn).status, 1);
+});
+
+test('verify and diff exit 2 for bad use, and --spec exits 2 on an SVG with no spec', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'figure-svg-'));
+  try {
+    writeFileSync(join(dir, 'a.json'), JSON.stringify(SPEC));
+    writeFileSync(join(dir, 'plain.svg'), '<svg xmlns="http://www.w3.org/2000/svg"/>');
+    const a = join(dir, 'a.json');
+    const cases: [string[], RegExp][] = [
+      [['verify', a, '--nope'], /unknown flag --nope/],
+      [['verify'], /at least one figure/],
+      [['verify', a, '--root'], /--root needs a folder/],
+      [['diff', a, a, '--nope'], /unknown flag --nope/],
+      [['diff', a, join(dir, 'missing.json')], /missing\.json/],
+      [['--spec', join(dir, 'plain.svg')], /plain\.svg/],
+    ];
+    for (const [args, message] of cases) {
+      const r = run(args);
+      assert.equal(r.status, 2, args.join(' ') + r.stdout + r.stderr);
+      assert.match(r.stderr, message, args.join(' '));
+      assert.doesNotMatch(r.stderr, /\n\s+at /);
+    }
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
