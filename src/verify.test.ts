@@ -4,6 +4,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { coverageLine, links, parseSource, verify, verifyReport } from './verify.ts';
+import { checkSpec } from './check.ts';
 import type { FlowProps } from './model.ts';
 
 test('a source link must be path or path#symbol with no space', () => {
@@ -131,7 +132,7 @@ test('verifyReport reads the file again on each call, so a fixed file passes', (
   });
 });
 
-test('verifyReport gives each edge a result, warns on not found, and --strict makes it an error', () => {
+test('verifyReport gives each edge a result and warns on an edge that is not found', () => {
   withRepo(
     {
       'src/auth.ts': 'export function verify() {}\nexport function reset() {}\n',
@@ -164,4 +165,49 @@ test('verifyReport gives each edge a result, warns on not found, and --strict ma
       );
     },
   );
+});
+
+test('a back hop with no own source takes its caller from the box it leaves, not from the edge source', () => {
+  withRepo(
+    {
+      'src/client.ts': "export function callB() { bus.on('reply', handle); bus.send('ask'); }\nexport function handle() {}\n",
+      'src/server.ts': "export function serve() { bus.on('ask', go); }\n",
+    },
+    (root) => {
+      const fig: FlowProps = {
+        layout: {
+          children: [
+            { id: 'c', label: 'Client', source: 'src/client.ts#handle' },
+            { id: 's', label: 'Server', source: 'src/server.ts#serve' },
+          ],
+        },
+        edges: [{ id: 'e', from: 'c', to: 's', source: 'src/client.ts#callB', via: 'ask' }],
+        steps: [{ label: 'x', flow: [{ edges: [{ edge: 'e', back: true, via: 'reply' }] }] }],
+      };
+      const r = verifyReport(fig, { root });
+      assert.deepEqual(
+        r.findings.map((f) => f.message),
+        ['hop on "e": "reply" is not in serve'],
+      );
+    },
+  );
+});
+
+test('a via that is not a string is a bad source for check, and verify does not crash on it', () => {
+  const fig = {
+    layout: {
+      children: [
+        { id: 'a', label: 'A', source: 'src/a.ts#send' },
+        { id: 'c', label: 'C', source: 'src/c.ts#recv' },
+      ],
+    },
+    edges: [{ from: 'a', to: 'c', via: 42 as unknown as string }],
+  };
+  assert.deepEqual(
+    checkSpec(fig).map((f) => f.rule),
+    ['bad-source'],
+  );
+  withRepo({ 'src/a.ts': 'export function send() {}\n', 'src/c.ts': 'export function recv() {}\n' }, (root) => {
+    assert.equal(verifyReport(fig, { root }).coverage.notChecked, 1);
+  });
 });

@@ -1,5 +1,5 @@
-import { dirname, resolve } from 'node:path';
-import { codeFile, esc, langOf, locate, matchClose, readFile, type CodeFile, type Lang, type Read } from './code.ts';
+import { dirname } from 'node:path';
+import { codeFile, esc, langOf, locate, matchClose, outside, readFile, type CodeFile, type Lang, type Read } from './code.ts';
 import { importsOf, leadsTo } from './imports.ts';
 import {
   ancestors,
@@ -86,17 +86,17 @@ const label = (s: Src) => s.symbol ?? s.path;
 function viaResult(root: string, from: Src, to: Src | undefined, via: string, read: Read, cache: Map<string, CodeFile | null>) {
   const body = (s: Src) => {
     const file = codeFile(root, s.path, read, cache);
-    if (!file) return read(resolve(root, s.path));
+    if (!file) return null;
     const at = s.symbol ? locate(file, s.symbol) : { start: 0, end: file.keep.length };
     return at && file.keep.slice(at.start, at.end);
   };
   const token = word(via);
   const a = body(from);
-  if (a == null) return { result: 'not-checked' as const, reason: `${label(from)} is not in the code` };
+  if (a == null) return { result: 'not-checked' as const, reason: `${label(from)} is not in code that verify reads` };
   if (!token.test(a)) return { result: 'not-found' as const, reason: `"${via}" is not in ${label(from)}` };
   if (!to) return { result: 'found' as const, reason: `"${via}" is in ${label(from)}` };
   const b = body(to);
-  if (b == null) return { result: 'not-checked' as const, reason: `${label(to)} is not in the code` };
+  if (b == null) return { result: 'not-checked' as const, reason: `${label(to)} is not in code that verify reads` };
   if (!token.test(b)) return { result: 'not-found' as const, reason: `"${via}" is not in ${label(to)}` };
   return { result: 'found' as const, reason: `"${via}" is in ${label(from)} and in ${label(to)}` };
 }
@@ -138,6 +138,8 @@ export function edgeResult(
   const to = callee == null ? undefined : (parseSource(callee) ?? undefined);
   if (!from) return skip('the caller has no source');
   if (callee === caller) return skip('both boxes have the same source');
+  if (via != null && typeof via !== 'string') return skip('via is not a string');
+  if (outside(root, from.path) || (to && outside(root, to.path))) return skip('a file is outside the root');
   if (via) return viaResult(root, from, to, via, read, cache);
   if (!to) return skip('the callee has no source');
   const supported = (p: Src) => {

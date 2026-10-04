@@ -1,5 +1,5 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { extname, relative, resolve, sep } from 'node:path';
+import { extname, isAbsolute, relative, resolve, sep } from 'node:path';
 
 export type Lang = 'ts' | 'py' | 'go' | 'java' | 'cs' | 'rs';
 export type Read = { (full: string): string | null; files?: (root: string) => string[] };
@@ -40,18 +40,20 @@ export const readFile: Read = (full) => {
 readFile.files = (root) => {
   const out: string[] = [];
   const walk = (dir: string) => {
-    for (const e of readdirSync(dir, { withFileTypes: true })) {
+    let entries;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
       if (e.name.startsWith('.') || e.name === 'node_modules') continue;
       const full = resolve(dir, e.name);
       if (e.isDirectory()) walk(full);
       else out.push(relative(root, full).split(sep).join('/'));
     }
   };
-  try {
-    walk(root);
-  } catch {
-    return out;
-  }
+  walk(root);
   return out;
 };
 
@@ -463,10 +465,15 @@ function rustImpls(code: string, type: string): Extent[] {
   return out;
 }
 
+export function outside(root: string, path: string): boolean {
+  const rel = relative(root, resolve(root, path));
+  return isAbsolute(path) || rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel);
+}
+
 export function codeFile(root: string, path: string, read: Read = readFile, cache = new Map<string, CodeFile | null>()): CodeFile | null {
   const full = resolve(root, path);
   if (cache.has(full)) return cache.get(full)!;
-  const lang = langOf(path);
+  const lang = outside(root, path) ? null : langOf(path);
   const raw = lang ? read(full) : null;
   const text = raw?.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n');
   const file = lang && text != null ? { path, lang, text, ...mask(text, lang) } : null;

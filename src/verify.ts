@@ -1,8 +1,8 @@
-import { isAbsolute, relative, resolve, sep } from 'node:path';
+import { resolve } from 'node:path';
 import { edgeId, nodes, toBeat, type FlowProps } from './model.ts';
 import { headingSlug, links } from './source.ts';
 import type { Finding } from './scene.ts';
-import { codeFile, isDefined, readFile, type CodeFile, type Read } from './code.ts';
+import { codeFile, isDefined, outside, readFile, type CodeFile, type Read } from './code.ts';
 import { edgeResult } from './edges.ts';
 
 export { parseSource, headingSlug, owners, links, type Link } from './source.ts';
@@ -52,9 +52,7 @@ export function verifyReport(
   const parsed = new Map<string, CodeFile | null>();
   for (const l of all) {
     const full = resolve(root, l.path);
-    const rel = relative(root, full);
-    const outside = isAbsolute(l.path) || rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel);
-    if (!files.has(full)) files.set(full, outside ? null : read(full));
+    if (!files.has(full)) files.set(full, outside(root, l.path) ? null : read(full));
     const text = files.get(full);
     const before = findings.length;
     const fail = (rule: string, what: string) =>
@@ -95,7 +93,7 @@ export function verifyReport(
         const e = byId.get(h.edge);
         if (!e || (h.source == null && h.via == null)) continue;
         const [a, b] = h.back ? [e.to, e.from] : [e.from, e.to];
-        check(`hop on "${h.edge}"`, h.edge, h.source ?? e.source ?? source.get(a), source.get(b), h.via);
+        check(`hop on "${h.edge}"`, h.edge, h.source ?? (h.back ? undefined : e.source) ?? source.get(a), source.get(b), h.via);
       }
   return { findings, coverage };
 }

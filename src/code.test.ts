@@ -1,6 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { codeFile, isDefined, locate } from './code.ts';
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { codeFile, isDefined, locate, readFile } from './code.ts';
 
 const at = (path: string, text: string) => codeFile('/r', path, () => text)!;
 
@@ -116,4 +119,18 @@ test('Owner.name is defined in an impl for a reference to Owner', () => {
 
 test('a function after a case label is defined', () => {
   assert.equal(isDefined(at('c.ts', 'switch (x) {\n  case 1:\n    function logout() {}\n}\n'), 'logout'), true);
+});
+
+test('the file walk skips a folder it cannot read and lists the rest', { skip: process.getuid?.() === 0 }, () => {
+  const root = mkdtempSync(join(tmpdir(), 'walk-'));
+  try {
+    mkdirSync(join(root, 'a'));
+    mkdirSync(join(root, 'z'));
+    writeFileSync(join(root, 'z', 'x.ts'), '');
+    chmodSync(join(root, 'a'), 0);
+    assert.deepEqual(readFile.files!(root), ['z/x.ts']);
+  } finally {
+    chmodSync(join(root, 'a'), 0o755);
+    rmSync(root, { recursive: true, force: true });
+  }
 });

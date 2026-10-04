@@ -184,3 +184,18 @@ test('one name bound to two types in one function: a call on it is unsure, not "
   };
   assert.equal(run(files, 'src/run.ts#run', 'src/bold.ts#Bold.toText'), 'unsure');
 });
+
+test('an edge to a file outside the root is not checked, and its text is never read', () => {
+  const read: Read = (full) =>
+    full.endsWith('keys.ts') ? 'export const k = "hunter2";\n' : full.endsWith('a.ts') ? 'export function send() {}\n' : null;
+  assert.equal(edgeResult('/r', 'src/a.ts#send', '../secret/keys.ts', 'hunter2', read).result, 'not-checked');
+  assert.equal(edgeResult('/r', '../secret/keys.ts', 'src/a.ts#send', 'hunter2', read).result, 'not-checked');
+});
+
+test('via in a file of a language that verify does not read is not checked', () => {
+  const files = {
+    'src/b.rb': '# queue.publish("order-paid")\ndef work; end\n',
+    'src/c.ts': "export function recv() { bus.on('order-paid', run); }\n",
+  };
+  assert.equal(run(files, 'src/b.rb', 'src/c.ts#recv', 'order-paid'), 'not-checked');
+});
