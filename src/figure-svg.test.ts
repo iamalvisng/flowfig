@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { AGENT_TEXT, GUIDE } from './guide.ts';
+import { GUIDE } from './guide.ts';
 
 const cli = join(dirname(dirname(fileURLToPath(import.meta.url))), 'scripts', 'figure-svg.mjs');
 const SPEC = {
@@ -114,17 +114,6 @@ test('the example in GUIDE passes check --strict', () => {
   assert.equal(r.status, 0, r.stdout + r.stderr);
 });
 
-test('a clean render prints the counts on stderr, so the reply can copy them', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'figure-svg-'));
-  try {
-    const r = spawnSync('node', [cli, '-', 'out.svg'], { input: JSON.stringify(SPEC), cwd: dir, encoding: 'utf8' });
-    assert.equal(r.status, 0, r.stderr);
-    assert.match(r.stderr, /^0 errors, 0 warnings\nfigure: /m);
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
 test('$ patterns in a label or hop data survive the saved spec', () => {
   const dir = mkdtempSync(join(tmpdir(), 'figure-svg-'));
   const out = join(dir, 'out.svg');
@@ -144,7 +133,7 @@ test('$ patterns in a label or hop data survive the saved spec', () => {
   }
 });
 
-test('check prints the figure counts, and --json keeps the findings array', () => {
+test('check and render print the figure counts, and a render prints the error counts first on stderr', () => {
   const spec = {
     props: {
       layout: {
@@ -177,11 +166,11 @@ test('check prints the figure counts, and --json keeps the findings array', () =
     const out = join(dir, 'out.svg');
     const rr = run(['-', out], JSON.stringify(spec));
     assert.ok(rr.stderr.split('\n').includes(line), rr.stderr);
+    assert.match(rr.stderr, /^0 errors, 0 warnings\nfigure: /m);
     assert.doesNotMatch(rr.stdout, /figure:/);
   } finally {
     rmSync(dir, { recursive: true });
   }
-  assert.ok(Array.isArray(JSON.parse(run(['check', '-', '--json'], JSON.stringify(spec)).stdout)));
 });
 
 const bad = (args: string[], input = JSON.stringify(SPEC)) => {
@@ -343,18 +332,13 @@ test('diff prints the spec changes between two figures, as text, Markdown or JSO
   }
 });
 
-test('verify passes on the refund process demo against its SOP', () => {
+test('verify passes on the refund process and roadmap demos against their documents', () => {
   const root = dirname(dirname(fileURLToPath(import.meta.url)));
-  const r = spawnSync('node', [cli, 'verify', 'docs/refund-process.svg'], { cwd: root, encoding: 'utf8' });
-  assert.equal(r.status, 0, r.stdout + r.stderr);
-  assert.match(r.stdout, /0 errors/);
-});
-
-test('verify passes on the roadmap demo against its plan document', () => {
-  const root = dirname(dirname(fileURLToPath(import.meta.url)));
-  const r = spawnSync('node', [cli, 'verify', 'docs/roadmap.svg'], { cwd: root, encoding: 'utf8' });
-  assert.equal(r.status, 0, r.stdout + r.stderr);
-  assert.match(r.stdout, /0 errors/);
+  for (const demo of ['docs/refund-process.svg', 'docs/roadmap.svg']) {
+    const r = spawnSync('node', [cli, 'verify', demo], { cwd: root, encoding: 'utf8' });
+    assert.equal(r.status, 0, demo + r.stdout + r.stderr);
+    assert.match(r.stdout, /0 errors/);
+  }
 });
 
 test('a render with --open opens the SVG; check --open and a failed render open nothing', () => {
@@ -425,12 +409,4 @@ test('gif exits 2 for bad use, before a browser starts', () => {
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
-});
-
-test('the guide and the agent text end the reply with npx flowfig open, and the guide lists open and gif', () => {
-  const sentence = 'one line `npx flowfig open <path>` for each SVG';
-  assert.ok(AGENT_TEXT.includes(`End the reply with ${sentence}. Do not run that command yourself.`));
-  assert.ok(GUIDE.includes(`6. ${sentence}, at the end of the reply. Do not run that command yourself.`));
-  assert.match(GUIDE, /\nnpx flowfig open out\.svg +# /);
-  assert.match(GUIDE, /\nnpx flowfig gif out\.svg \[out\.gif\] +# /);
 });

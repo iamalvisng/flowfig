@@ -15,7 +15,12 @@ import {
   labelPillW,
   lanePlan,
   beatMs,
+  decisions,
+  edgeId,
   groupGap,
+  isRows,
+  nodes,
+  readMs,
   toBeat,
 } from './model.ts';
 import type { FigBeat, FigGroup, FigNode, FlowProps } from './model.ts';

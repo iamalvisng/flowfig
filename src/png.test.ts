@@ -61,13 +61,10 @@ test('decodePng gives alpha 255 to an RGB PNG', () => {
   assert.deepEqual([...decodePng(png(3, 5, 2, pixels, FILTERS)).data], rgba);
 });
 
-test('decodePng throws on a bad signature and on a PNG it does not support', () => {
+test('the PNG decoder rejects a PNG it cannot read', () => {
   assert.throws(() => decodePng(Buffer.from('not a png at all')), /not a PNG: bad signature/);
   assert.throws(() => decodePng(png(1, 1, 6, [0, 0, 0, 0], [0], 16)), /unsupported PNG: bit depth 16/);
   assert.throws(() => decodePng(png(1, 1, 3, [0, 0, 0], [0])), /unsupported PNG: color type 3/);
-});
-
-test('decodePng throws on an interlaced PNG, on no IHDR and on image data that is too short', () => {
   const ok = png(1, 1, 6, [1, 2, 3, 4], [0]);
   const interlaced = Buffer.from(ok);
   interlaced[28] = 1;

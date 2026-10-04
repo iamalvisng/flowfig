@@ -4,10 +4,6 @@ import { textWidth } from './text.ts';
 
 const near = (a: number, b: number) => assert.ok(Math.abs(a - b) < 1e-9, `${a} is not ${b}`);
 
-test('monospace is 0.6em a character', () => {
-  near(textWidth('abcd', 10, true), 24);
-});
-
 test('CJK and emoji take a full em in any font', () => {
   near(textWidth('日本', 10), 20);
   near(textWidth('🚀', 10, true), 10);

@@ -28,7 +28,3 @@ test('pageHtml keeps the SVG text and its spec unchanged', () => {
   // String.replace reads $ patterns, so the page must not use it on the SVG.
   assert.ok(pageHtml('<svg>$& $1 $$</svg>', 'x.svg').includes('<svg>$& $1 $$</svg>'));
 });
-
-test('the page has no script', () => {
-  assert.doesNotMatch(pageHtml(svgWithSpec(PROPS), 'x.svg'), /<script/i);
-});

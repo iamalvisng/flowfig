@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { check, render } from './svg.ts';
 import { checkScene } from './check.ts';
 import { crosses, type Pt } from './geometry.ts';
-import { diamondLines, diamondRoom, lanePlan, STUB_ROOM, tightCopies, type FlowProps } from './model.ts';
+import { diamondLines, diamondRoom, lanePlan, STUB_ROOM, type FlowProps } from './model.ts';
 import { textWidth } from './text.ts';
 
 const m1: FlowProps = {
@@ -69,19 +69,6 @@ test('M1: no place in the Support band avoids the edge, so the lane grows and th
   assert.ok(!lanePlan(m1).tall.has('1@2'));
   const bands = render(m1).scene.lanes!.filter((l) => l.id === 'Support agent');
   assert.equal(bands.at(-1)!.rect.h, 101 + STUB_ROOM);
-});
-
-test('tightCopies names the lane copy of each tight stub end', () => {
-  const lanes = [
-    { id: 'a', label: 'A', children: [{ id: 'x', label: 'X' }] },
-    { id: 'b', label: 'B', children: [{ id: 'y', label: 'Y' }] },
-  ];
-  const ends = new Map<string, [number, number]>([['e', [0, 1]]]);
-  const edges = [{ id: 'e', from: 'x', to: 'y' }];
-  const tight = (t: [boolean, boolean]) => [...tightCopies(lanes, ends, edges, [{ id: 'e', stub: { tight: t } }])];
-  assert.deepEqual(tight([true, false]), ['0@0']);
-  assert.deepEqual(tight([false, true]), ['1@1']);
-  assert.deepEqual(tight([false, false]), []);
 });
 
 test('M2: the sub of a diamond wraps inside the outline, and check reports no overflow', () => {

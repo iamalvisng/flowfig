@@ -300,7 +300,15 @@ test('a correct timeline has no findings', () => {
 });
 
 test('bad-date: not a date, a date that does not exist, to before from, a bad today', () => {
-  for (const n of [{ from: 'soon' }, { from: '2026-02-30' }, { from: '2026-2-3' }, { to: 'x' }, { to: '2026-10-01' }])
+  for (const n of [
+    { from: 'soon' },
+    { from: '2026-02-30' },
+    { from: '2026-02-29' },
+    { from: '2026-13-01' },
+    { from: '2026-2-3' },
+    { to: 'x' },
+    { to: '2026-10-01' },
+  ])
     assert.deepEqual(rules(checkSpec(tlFig(n))), ['bad-date'], JSON.stringify(n));
   assert.deepEqual(rules(checkSpec(tlFig({}, { today: '10/07' }))), ['bad-date']);
 });
@@ -388,6 +396,17 @@ test('checkScene: a stub pill across a lane border is label-overlap; a pill insi
   assert.deepEqual(
     checkScene(scene(98)).map((f) => [f.rule, f.message]),
     [['label-overlap', 'the pill of edge "s" crosses the border of lane "Support"']],
+  );
+  const labeled: Scene = {
+    width: 400,
+    minFont: 12,
+    boxes: [],
+    edges: [{ id: 'e', from: 'a', to: 'b', curve: [p(0, 0), p(0, 0), p(0, 0), p(0, 0)], label: { x: 100, y: 91, w: 50, h: 18 } }],
+    lanes: [lane, { id: 'Billing', rect: { x: 0, y: 100, w: 400, h: 100 } }],
+  };
+  assert.deepEqual(
+    checkScene(labeled).map((f) => f.message),
+    ['the label of edge "e" crosses the border of lane "Support"', 'the label of edge "e" crosses the border of lane "Billing"'],
   );
 });
 

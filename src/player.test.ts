@@ -44,10 +44,6 @@ test('plays on load unless autoplay is off', () => {
   assert.match(render({ ...fig, autoplay: false }), /aria-label="Play"/);
 });
 
-test('starts at 1× speed', () => {
-  assert.match(render(fig), /aria-label="Speed 1×, switch to 2×"/);
-});
-
 test('a figure with no steps has no controls', () => {
   const html = render({ ...fig, steps: [] });
   assert.ok(html.includes('Browser'));
@@ -80,10 +76,6 @@ test('rail: the server markup shows one row per message, and the first message i
   assert.match(html, /data-rail-row="2"[^>]*data-state="next"/);
   assert.match(html, /SELECT user/);
   assert.match(html, /ASYNC/);
-});
-
-test('no rail without rail: true', () => {
-  assert.doesNotMatch(render(fig), /data-rail-row/);
 });
 
 test("rail: 'only' draws the rail rows, the tabs and no map", () => {

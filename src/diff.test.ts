@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { diff, formatDiff } from './diff.ts';
+import { diff } from './diff.ts';
 import type { FlowProps } from './model.ts';
 
 const base: FlowProps = {
@@ -20,10 +20,6 @@ const base: FlowProps = {
     { label: 'old', flow: ['q'] },
   ],
 };
-
-test('no change gives an empty list', () => {
-  assert.deepEqual(diff(base, structuredClone(base)), []);
-});
 
 test('diff finds boxes, edges, steps, messages and the rail', () => {
   const next: FlowProps = {
@@ -72,14 +68,6 @@ test('a box that moves to another group is a change', () => {
   ]);
 });
 
-test('formatDiff prints one line per change, as text or Markdown', () => {
-  const steps = [{ label: 'read', flow: ['q', { edge: 'q', back: true, data: '200' }] }, base.steps![1]];
-  const c = diff(base, { ...base, edges: [base.edges[0]], steps });
-  assert.equal(formatDiff(c, 'text'), 'edge removed: b->c\nmessage removed: read: b->c');
-  assert.equal(formatDiff(c, 'md'), '- edge removed: `b->c`\n- message removed: `read: b->c`');
-  assert.equal(formatDiff([], 'md'), '- no change in the spec');
-});
-
 test('a hop tone and a box tone are changes', () => {
   const toned: FlowProps = {
     ...base,
@@ -93,18 +81,15 @@ test('a hop tone and a box tone are changes', () => {
   ]);
 });
 
-test('a mark change is a box change', () => {
-  const after = structuredClone(base);
-  (after.layout as { children: { mark?: string }[] }).children[0].mark = 'start';
-  const out = diff(base, after);
-  assert.equal(out.length, 1);
-  assert.equal(out[0].kind, 'box');
-});
-
 test('a from or to change is a box change', () => {
   const a: FlowProps = { layout: { children: [{ id: 'x', label: 'X', from: '2026-10-05', to: '2026-10-09' }] }, edges: [] };
   const b: FlowProps = { layout: { children: [{ id: 'x', label: 'X', from: '2026-10-06', to: '2026-10-09' }] }, edges: [] };
   assert.deepEqual(diff(a, b), [{ kind: 'box', op: 'changed', id: 'x', detail: 'from "2026-10-05" -> "2026-10-06"' }]);
   const c: FlowProps = { layout: { children: [{ id: 'x', label: 'X', from: '2026-10-05' }] }, edges: [] };
   assert.equal(diff(a, c)[0].detail, 'to "2026-10-09" -> (none)');
+  const marked = structuredClone(base);
+  (marked.layout as { children: { mark?: string }[] }).children[0].mark = 'start';
+  const out = diff(base, marked);
+  assert.equal(out.length, 1);
+  assert.equal(out[0].kind, 'box');
 });

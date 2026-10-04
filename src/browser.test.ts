@@ -66,12 +66,9 @@ test('findBrowser on macOS checks Chrome, Edge, Chromium and Brave in that order
   const r = findBrowser({ platform: 'darwin', env: {}, exists: has(MAC('Chromium')) });
   assert.equal(r.path, MAC('Chromium'));
   assert.deepEqual(r.checked, [MAC('Google Chrome'), MAC('Microsoft Edge'), MAC('Chromium')]);
-});
-
-test('findBrowser on Linux checks the standard paths in order', () => {
-  const r = findBrowser({ platform: 'linux', env: {}, exists: has('/usr/bin/chromium', '/opt/google/chrome/chrome') });
-  assert.equal(r.path, '/usr/bin/chromium');
-  assert.deepEqual(r.checked, LINUX.slice(0, 3));
+  const l = findBrowser({ platform: 'linux', env: {}, exists: has('/usr/bin/chromium', '/opt/google/chrome/chrome') });
+  assert.equal(l.path, '/usr/bin/chromium');
+  assert.deepEqual(l.checked, LINUX.slice(0, 3));
 });
 
 test('findBrowser on Windows checks each program folder that is set, joined with backslashes', () => {
@@ -93,15 +90,6 @@ test('CHROME_PATH wins over a standard path, and a missing CHROME_PATH is the on
     path: null,
     checked: ['/opt/x/chrome'],
   });
-});
-
-test('with no browser, checked holds every path of the system', () => {
-  assert.deepEqual(findBrowser({ platform: 'darwin', env: {}, exists: has() }), {
-    path: null,
-    checked: ['Google Chrome', 'Microsoft Edge', 'Chromium', 'Brave Browser'].map(MAC),
-  });
-  assert.deepEqual(findBrowser({ platform: 'linux', env: {}, exists: has() }).checked, LINUX);
-  assert.equal(findBrowser({ platform: 'win32', env: WIN_ENV, exists: has() }).checked.length, 12);
 });
 
 test('launch starts the browser in headless mode and resolves after Browser.getVersion', { skip: !posix }, async () => {

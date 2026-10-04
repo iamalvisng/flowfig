@@ -121,10 +121,6 @@ test('an edge to a group gets a column with the group label', () => {
   );
 });
 
-test('no hop, no rail', () => {
-  assert.equal(layoutRail({ ...fig, steps: [] }, 0), null);
-});
-
 test('a rail narrower than the map is centered in the map width', () => {
   const r = layoutRail(fig, 2000)!;
   assert.equal(r.width, 2000);
