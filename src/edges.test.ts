@@ -328,3 +328,24 @@ test('one edge on a 200 KB body with a long number array takes under 1 s', () =>
   assert.equal(run(files, 'src/data.ts#load', 'src/auth.ts#verify'), 'found');
   assert.ok(Date.now() - t < 1000, `${Date.now() - t} ms`);
 });
+
+test('a type name unique in the repo but not imported is outside the repo: java.lang and a C# using', () => {
+  const files = {
+    'src/a/Process.java': 'package a;\npublic class Process {\n  public void destroy() {}\n}\n',
+    'src/b/Run.java': 'package b;\npublic class Run {\n  void f(Process p) { p.destroy(); }\n}\n',
+    'src/Log/ILogger.cs': 'namespace App.Log;\npublic interface ILogger {\n  void Log(string m);\n}\n',
+    'src/Log/ConsoleLogger.cs': 'namespace App.Log;\npublic class ConsoleLogger : ILogger {\n  public void Log(string m) {}\n}\n',
+    'src/Web/A.cs': 'using Microsoft.Extensions.Logging;\nnamespace App.Web;\npublic class A {\n  void F(ILogger l) { l.Log("x"); }\n}\n',
+  };
+  assert.equal(run(files, 'src/b/Run.java#Run.f', 'src/a/Process.java#Process.destroy'), 'unsure');
+  assert.equal(run(files, 'src/Web/A.cs#A.F', 'src/Log/ConsoleLogger.cs#ConsoleLogger.Log'), 'unsure');
+});
+
+test('a Rust receiver type that the repo does not declare is unsure, not found by the name', () => {
+  const files = {
+    'src/ext.rs':
+      'pub trait Ext {\n    fn map(self) -> u8;\n}\nimpl<T> Ext for Option<T> {\n    fn map(self) -> u8 {\n        0\n    }\n}\n',
+    'src/c.rs': 'fn f(x: Option<u8>) {\n    x.map(|v| v + 1);\n}\n',
+  };
+  assert.equal(run(files, 'src/c.rs#f', 'src/ext.rs#Option.map'), 'unsure');
+});

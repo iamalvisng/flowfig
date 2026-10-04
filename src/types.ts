@@ -609,7 +609,7 @@ export function reaches(cx: Ctx, rt: Rt, ownerDecl: Decl | null, owner: string, 
   };
   const rd = findType(cx, rt.ctx!, rt.name, rt.qual);
   if (rt.name === owner) {
-    if (!rd) return lang === 'rs' && !global(cx, 'rs').types.has(owner) ? 'yes' : 'unsure';
+    if (!rd) return 'unsure';
     const own =
       lang === 'go' ? dirname(rd.info.path) === dirname(ownerPath) : rd.info.path === ownerPath || (lang === 'rs' && !ambiguous(owner));
     if (own) return 'yes';

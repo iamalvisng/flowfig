@@ -155,12 +155,12 @@ function findType0(cx: Ctx, ctx: CodeFile, name: string, qual?: string | null): 
     const g = global(cx, 'java').types.get(name) ?? [];
     const pick = imp
       ? g.find((p) => p.replace(/\.java$/, '').endsWith(`${imp[1].replace(/\./g, '/')}/${name}`))
-      : (g.find((p) => dirname(p) === dirname(ctx.path)) ?? (g.length === 1 ? g[0] : null));
+      : (g.find((p) => dirname(p) === dirname(ctx.path)) ?? wild(g, ctx));
     return pick ? declIn(file(cx, pick), name) : null;
   }
   const all = (global(cx, lang).types.get(name) ?? []).map((p) => declIn(file(cx, p), name)).filter((d) => d != null);
-  if (all.length <= 1) return all[0] ?? null;
   if (lang === 'rs') {
+    if (all.length <= 1) return all[0] ?? null;
     const hits = all.filter((d) => rustUses(ctx, name, d.info.path));
     return hits.length === 1 ? hits[0] : null;
   }
@@ -177,6 +177,12 @@ function findType0(cx: Ctx, ctx: CodeFile, name: string, qual?: string | null): 
     if (hits.length) return hits.length === 1 ? hits[0] : null;
   }
   return null;
+}
+
+function wild(g: string[], ctx: CodeFile): string | null {
+  const pkgs = [...ctx.keep.matchAll(/^\s*import\s+([\w.]+)\.\*\s*;/gm)].map((m) => `/${m[1].replace(/\./g, '/')}`);
+  const hits = g.filter((p) => pkgs.some((k) => `/${dirname(p)}`.endsWith(k)));
+  return hits.length === 1 ? hits[0] : null;
 }
 
 function followExport(cx: Ctx, mod: string, name: string, lang: Lang, depth: number): Decl | null {
