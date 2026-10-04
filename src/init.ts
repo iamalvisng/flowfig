@@ -248,8 +248,7 @@ export async function runInit(argv: string[]): Promise<number> {
       if (dry) mcpStatus = `would ${mcpStatus === 'created' ? 'create' : 'update'}`;
       else {
         mkdirSync(dirname(mcpPath), { recursive: true });
-        // Write a temp file, then rename: a crash cannot leave half of ~/.claude.json.
-        // Resolve a symlink first, so the rename replaces the target, not the link.
+        // Rename a temp file over the symlink target, so a crash leaves no half file.
         const real = existsSync(mcpPath) ? realpathSync(mcpPath) : mcpPath;
         const tmp = `${real}.${process.pid}.tmp`;
         try {
