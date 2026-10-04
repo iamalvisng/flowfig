@@ -33,6 +33,7 @@ export function decodePng(png: Uint8Array): Image {
   const stride = width * bpp;
   if (raw.length < height * (stride + 1)) throw new Error('not a PNG: the image data is too short');
   const data = new Uint8Array(width * height * 4);
+  const data32 = new Uint32Array(data.buffer);
   let prev = new Uint8Array(stride);
   for (let y = 0; y < height; y++) {
     const filter = raw[y * (stride + 1)];
@@ -46,18 +47,15 @@ export function decodePng(png: Uint8Array): Image {
         const a = x >= bpp ? row[x - bpp] : 0,
           b = prev[x],
           c = x >= bpp ? prev[x - bpp] : 0;
-        const pa = Math.abs(b - c),
-          pb = Math.abs(a - c),
-          pc = Math.abs(a + b - 2 * c);
+        const p = a + b - c,
+          pa = p > a ? p - a : a - p,
+          pb = p > b ? p - b : b - p,
+          pc = p > c ? p - c : c - p;
         row[x] += pa <= pb && pa <= pc ? a : pb <= pc ? b : c;
       }
     else if (filter !== 0) throw new Error(`unsupported PNG: filter ${filter}`);
-    for (let x = 0, o = y * width * 4; x < stride; x += bpp, o += 4) {
-      data[o] = row[x];
-      data[o + 1] = row[x + 1];
-      data[o + 2] = row[x + 2];
-      data[o + 3] = bpp === 4 ? row[x + 3] : 255;
-    }
+    if (bpp === 4) data.set(row, y * stride);
+    else for (let x = 0, o = y * width; x < stride; x += 3) data32[o++] = (row[x + 2] << 16) | (row[x + 1] << 8) | row[x] | 0xff000000;
     prev = row;
   }
   return { width, height, data };
