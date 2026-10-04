@@ -7,7 +7,7 @@
   "rules": {
     "no-console": "error",
     "no-warning-comments": "error",
-    "flowfig/comments": "warn"
+    "flowfig/comments": "error"
   },
   "overrides": [
     {
