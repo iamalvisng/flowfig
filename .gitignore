@@ -1,8 +1,6 @@
 node_modules
 dist
 
-# graft's local graph cache — regenerable, not committed (run `graft build`).
-/graft/
 .superpowers/
 
 # Local Claude Code setup: not part of the public repo
@@ -11,3 +9,6 @@ CLAUDE.md
 .mcp.json
 docs/superpowers/
 .ignore
+
+# sieve's local graph cache — regenerable, not committed (run `sieve build`).
+/sieve/
