@@ -343,7 +343,7 @@ function inTypeBody(code: string, pos: number): boolean {
   for (let i = pos, d = 0; i >= 0; i--) {
     if (code[i] === '}') d++;
     else if (code[i] === '{' && d-- === 0)
-      return /\b(class|interface|enum|record|struct)\b[^;{}]*$/.test(code.slice(Math.max(0, i - 300), i));
+      return /(?<![:,]\s*)\b(class|interface|enum|record|struct)\s+\w[^;{}]*$/.test(code.slice(Math.max(0, i - 300), i));
   }
   return false;
 }
@@ -379,7 +379,10 @@ function findIn(code: string, lang: Lang, name: string, lo: number, hi: number, 
         if (!new RegExp(`^\\*?\\s*${esc(receiver)}(\\[[^\\]]*\\])?$`).test(recv)) continue;
       }
       if (code[nameAt - 1] === '.' && !/\bexports\.$/.test(code.slice(nameAt - 8, nameAt))) continue;
-      if (lang === 'ts' && /[?:=&|]\s*$/.test(code.slice(0, start))) continue;
+      if (lang === 'ts') {
+        const before = code.slice(0, start);
+        if (/[?:=&|]\s*$/.test(before) && !/\b(case\b[^:\n]*|default)\s*:\s*$/.test(before)) continue;
+      }
       if (lang === 'go' && !inContainer && m[0].includes('=') && depthAt(code, start, 0) > 0) continue;
       if ((lang === 'java' || lang === 'cs') && re === pats.at(-1) && !inTypeBody(code, start)) continue;
       const ext = lang === 'py' ? pyBody(code, start) : braceBody(code, nameAt + name.length, start, lang);
@@ -420,7 +423,7 @@ function findIn(code: string, lang: Lang, name: string, lo: number, hi: number, 
 
 function rustImpls(code: string, type: string): Extent[] {
   const out: Extent[] = [];
-  const self = new RegExp(`^(\\w+::)*${esc(type)}\\s*(<.*>)?$`, 's');
+  const self = new RegExp(`^(&\\s*('\\w+\\s+)?(mut\\s+)?)?(\\w+::)*${esc(type)}\\s*(<.*>)?$`, 's');
   const re = /\bimpl\b([^{;]*)\{/g;
   let m;
   while ((m = re.exec(code))) {

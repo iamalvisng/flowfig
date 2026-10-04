@@ -101,3 +101,19 @@ test('a name the file defines is found: a field, an export, a default export, a 
   ];
   for (const [path, text, symbol] of yes) assert.equal(isDefined(at(path, text), symbol), true, `${path} ${symbol}`);
 });
+
+test('a local after a method header with where, struct or a parameter named record is not a field', () => {
+  const cs = (head: string) => at('A.cs', `class A {\n  ${head} { int logout = 1; }\n}\n`);
+  assert.equal(isDefined(cs('void F<T>(T x) where T : class'), 'logout'), false);
+  assert.equal(isDefined(cs('void F<T>(T x) where T : struct'), 'logout'), false);
+  assert.equal(isDefined(at('A.java', 'class A {\n  void f(Record record) { int logout = 1; }\n}\n'), 'logout'), false);
+});
+
+test('Owner.name is defined in an impl for a reference to Owner', () => {
+  const rs = at('r.rs', "impl<'a> Iterator for &'a Cache {\n    fn next(&mut self) {}\n}\n");
+  assert.equal(isDefined(rs, 'Cache.next'), true);
+});
+
+test('a function after a case label is defined', () => {
+  assert.equal(isDefined(at('c.ts', 'switch (x) {\n  case 1:\n    function logout() {}\n}\n'), 'logout'), true);
+});
