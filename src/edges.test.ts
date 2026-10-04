@@ -145,3 +145,22 @@ test('a receiver in a broken file is unsure, not a crash', () => {
   const files = { 'src/c.ts': 'export class C {\n  run() {}\n}\n', 'src/b.ts': 'export function b(x) { x.run(' };
   assert.equal(run(files, 'src/b.ts#b', 'src/c.ts#C.run'), 'unsure');
 });
+
+test('a receiver typed by a call result is found when the return type is declared', () => {
+  const files = {
+    'src/buyer.ts': 'export class Buyer {\n  pay() {}\n}\n',
+    'src/repo.ts': "import { Buyer } from './buyer.ts';\nexport class Repo {\n  find(id: string): Promise<Buyer> { return null!; }\n}\n",
+    'src/order.ts':
+      "import { Repo } from './repo.ts';\nexport class Orders {\n  constructor(private repo: Repo) {}\n" +
+      '  async place() {\n    const buyer = await this.repo.find("1");\n    buyer.pay();\n  }\n}\n',
+    'go.mod': 'module example.com/app\n',
+    'user/user.go': 'package user\ntype User struct{}\nfunc (u *User) Save() {}\nfunc Load() (*User, error) { return nil, nil }\n',
+    'api/api.go': 'package api\nimport "example.com/app/user"\nfunc Create() {\n\tu, _ := user.Load()\n\tu.Save()\n}\n',
+    'app/__init__.py': '',
+    'app/models.py': 'class Alert:\n    def notify(self):\n        pass\n\ndef load() -> Alert:\n    return Alert()\n',
+    'app/job.py': 'from app.models import load\n\ndef run():\n    a = load()\n    a.notify()\n',
+  };
+  assert.equal(run(files, 'src/order.ts#Orders.place', 'src/buyer.ts#Buyer.pay'), 'found');
+  assert.equal(run(files, 'api/api.go#Create', 'user/user.go#User.Save'), 'found');
+  assert.equal(run(files, 'app/job.py#run', 'app/models.py#Alert.notify'), 'found');
+});

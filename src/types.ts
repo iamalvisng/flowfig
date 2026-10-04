@@ -1,5 +1,5 @@
 import { basename, dirname } from 'node:path';
-import { esc, matchClose, type CodeFile, type Lang } from './code.ts';
+import { esc, locate, matchClose, type CodeFile, type Lang } from './code.ts';
 import { resolvePy } from './imports.ts';
 import {
   ancestors,
@@ -67,13 +67,14 @@ export function receiverChain(body: string, idx: number, lang: Lang): { chain: s
   for (;;) {
     pre = pre.slice(0, m.index).replace(/\s+$/, '');
     if (/[)\]>]$/.test(pre)) {
-      if (!chain.length && pre.endsWith(')')) {
-        const before = pre.slice(0, openBack(pre, pre.length - 1)).replace(/\s+$/, '');
-        const nw = /\bnew\s+([\w$.]+)\s*(?:<[^<>]*>)?$/.exec(before);
-        if (nw && lang !== 'py' && lang !== 'go' && lang !== 'rs') return { chain: ['#new', nw[1]], complex: false };
-        if (/\bsuper$/.test(before) && lang === 'py') return { chain: ['super'], complex: false };
-      }
-      return { chain, complex: true };
+      if (!pre.endsWith(')')) return { chain, complex: true };
+      const before = pre.slice(0, openBack(pre, pre.length - 1)).replace(/\s+$/, '');
+      const nw = /\bnew\s+([\w$.]+)\s*(?:<[^<>]*>)?$/.exec(before);
+      if (nw && lang !== 'py' && lang !== 'go' && lang !== 'rs') return { chain: ['#new', nw[1], ...chain], complex: false };
+      if (!chain.length && /\bsuper$/.test(before) && lang === 'py') return { chain: ['super'], complex: false };
+      if (!/[\w$]$/.test(before)) return { chain, complex: true };
+      chain.unshift('()');
+      pre = before;
     }
     const id = /([A-Za-z_$][\w$]*)$/.exec(pre);
     if (!id) return { chain, complex: true };
@@ -151,7 +152,32 @@ function headOf(text: string, lang: Lang): string {
   return i < 0 ? text : text.slice(0, i);
 }
 
+const CALL: Record<Lang, (N: string) => RegExp> = {
+  ts: (N) => new RegExp(`\\b(?:const|let|var)\\s+${N}\\s*=\\s*(?:await\\s+)?((?:this|[\\w$]+)(?:\\??\\.[\\w$]+)*)\\s*\\(`),
+  py: (N) => new RegExp(`(?:^|\\n)[ \\t]*${N}\\s*=\\s*(?:await\\s+)?((?:self|\\w+)(?:\\.\\w+)*)\\s*\\(`),
+  go: (N) => new RegExp(`(?:^|\\n)[ \\t]*${N}(?:\\s*,\\s*\\w+)*\\s*:?=\\s*(\\w+(?:\\.\\w+)*)\\s*\\(`),
+  java: (N) => new RegExp(`\\bvar\\s+${N}\\s*=\\s*((?:this|\\w+)(?:\\.\\w+)*)\\s*\\(`),
+  cs: (N) => new RegExp(`\\bvar\\s+${N}\\s*=\\s*(?:await\\s+)?((?:this|\\w+)(?:\\??\\.\\w+)*)\\s*\\(`),
+  rs: (N) => new RegExp(`\\blet\\s+(?:mut\\s+)?${N}\\s*=\\s*((?:self|\\w+)(?:(?:\\.|::)\\w+)*)\\s*\\(`),
+};
+
+function callLocal(text: string, n: string, lang: Lang): Local | null {
+  const N = esc(n);
+  if ((text.match(new RegExp(`(?<![\\w$.])${N}\\s*(?:,\\s*\\w+\\s*)*:?=(?!=)`, 'g')) ?? []).length !== 1) return null;
+  const m = CALL[lang](N).exec(text);
+  if (!m) return null;
+  const open = m.index + m[0].length - 1;
+  const after = text.slice(matchClose(text, open) + 1);
+  if (!(lang === 'rs' ? /^\s*(\?|\.await)*\s*;/ : /^\s*!?\s*(;|\n|$)/).test(after)) return null;
+  return { chain: [...m[1].split(/\??\.|::/), '()'] };
+}
+
 export function localType(cx: Ctx, info: CodeFile, text: string, n: string, lang: Lang): Local | null {
+  const r = localType0(cx, info, text, n, lang);
+  return r?.declared ? (callLocal(text, n, lang) ?? r) : r;
+}
+
+function localType0(cx: Ctx, info: CodeFile, text: string, n: string, lang: Lang): Local | null {
   const head = headOf(text, lang);
   const N = esc(n);
   const NB = `(?<![\\w$.])${N}`;
@@ -372,6 +398,68 @@ function typeFrom(cx: Ctx, raw: string, lang: Lang, ctx: CodeFile): Rt {
   return n ? { kind: 'type', name: n.name, qual: n.qual, ctx } : { kind: 'unknown' };
 }
 
+const NO_RT: Rt = { kind: 'unknown' };
+const MODIFIER = /^(public|private|protected|static|internal|async|override|virtual|abstract|new|final|sealed|extern)$/;
+
+function returnOf(cx: Ctx, f: CodeFile, at: { start: number; end: number }, method: boolean): Rt {
+  const { code, lang } = f;
+  let s = at.start;
+  for (let nl = code.indexOf('\n', s); /^[ \t]*(@|\[|#\[)/.test(code.slice(s, s + 3)) && nl > 0 && nl < at.end; nl = code.indexOf('\n', s))
+    s = nl + 1;
+  if (lang === 'go' && !method && !/^func\s+\w/.test(code.slice(s, s + 40))) return NO_RT;
+  let i = code.indexOf('(', s);
+  if (lang === 'go' && /^func\s*\(/.test(code.slice(s, s + 20))) i = code.indexOf('(', matchClose(code, i) + 1);
+  if (i < 0 || i >= at.end || /[{;]|\b(class|interface|struct|enum|trait)\b/.test(code.slice(s, i))) return NO_RT;
+  const tail = code.slice(matchClose(code, i) + 1, at.end);
+  let raw: string | undefined;
+  if (lang === 'ts') raw = /^\s*:\s*([^{=;]+?)\s*(?:\{|=>|;|$)/.exec(tail)?.[1];
+  else if (lang === 'py') raw = /^\s*->\s*([^:\n]+?)\s*:/.exec(tail)?.[1];
+  else if (lang === 'rs') raw = /^\s*->\s*([^{;]+?)\s*(?:where\b[^{;]*)?(?:\{|;|$)/.exec(tail)?.[1];
+  else if (lang === 'go') {
+    const open = /^[ \t]*\(/.exec(tail);
+    if (open) {
+      const parts = tail.slice(open[0].length, matchClose(tail, open[0].length - 1)).split(',');
+      const word = '(?!(?:chan|func|map|interface|struct)\\b)\\w+';
+      const named = parts.some((p) => new RegExp(`^\\s*${word}\\s+\\S`).test(p));
+      raw = named ? new RegExp(`^\\s*${word}\\s+(\\*?[\\w.]+)\\s*$`).exec(parts[0])?.[1] : parts[0].trim();
+    } else raw = /^[ \t]*(\*?[\w.]+)[ \t]*(?:\{|\n|$)/.exec(tail)?.[1];
+  } else {
+    raw = /([A-Za-z_][\w.]*(?:<[^()]*>)?(?:\[\])?\??)\s+[\w$]+\s*(?:<[^()]*>)?\s*$/.exec(code.slice(s, i))?.[1];
+    if (raw && MODIFIER.test(raw)) raw = undefined;
+  }
+  if (!raw || /\b(any|unknown|object|Object)\b|interface\s*\{/.test(raw)) return NO_RT;
+  const wrap = {
+    ts: /^(?:Promise|PromiseLike|Awaited)<([\s\S]*)>$/,
+    java: /^(?:Optional|CompletableFuture)<([\s\S]*)>$/,
+    cs: /^(?:Task|ValueTask)<([\s\S]*)>$/,
+  }[lang as 'ts' | 'java' | 'cs'];
+  const rt = typeFrom(cx, wrap?.exec(raw)?.[1] ?? raw, lang, f);
+  return rt.kind === 'type' && (rt.name === '#external' || findType(cx, f, rt.name, rt.qual)) ? rt : NO_RT;
+}
+
+function fnReturn(cx: Ctx, files: CodeFile[], name: string): Rt {
+  for (const f of files) {
+    const at = locate(f, name);
+    if (at) return returnOf(cx, f, at, false);
+  }
+  return NO_RT;
+}
+
+function methodReturn(cx: Ctx, d: Decl, name: string): Rt {
+  const N = esc(name);
+  const dup = new RegExp(`(?:^|[\\n;{}>\\]?])[ \\t]*(?:[\\w.<>\\[\\]?,]+[ \\t]+)*${N}[ \\t]*[<(]`, 'g');
+  for (const x of [d, ...ancestors(cx, d).map((a) => a.d)]) {
+    if (!x || !defines(cx, x, name)) continue;
+    if ((x.info.code.slice(x.start, x.end).match(dup) ?? []).length > 1) return NO_RT;
+    for (const f of x.info.lang === 'go' ? goDirFiles(cx, dirname(x.info.path)) : [x.info]) {
+      const at = locate(f, `${x.name}.${name}`);
+      if (at) return returnOf(cx, f, at, true);
+    }
+    return NO_RT;
+  }
+  return NO_RT;
+}
+
 function importedValueType(cx: Ctx, b: Bind): Rt | null {
   const mi = file(cx, b.mod!);
   if (!mi) return null;
@@ -407,6 +495,12 @@ export function receiver(
       return fromDecl ? { kind: 'super' } : unknown;
     }
     cur = { kind: 'type', name: fromContainer, ctx: fi, decl: fromDecl };
+  } else if (chain[1] === '()') {
+    const b = imps.get(head);
+    const mi = b?.mod && !b.dir && b.imported !== '*' && b.imported !== 'default' ? file(cx, b.mod) : null;
+    if (lang === 'py' && isUpper(b?.imported ?? head)) cur = { kind: 'type', name: b?.imported ?? head, ctx: fi };
+    else if (b) cur = mi ? fnReturn(cx, [mi], b.imported) : unknown;
+    else cur = fnReturn(cx, lang === 'go' ? goDirFiles(cx, dirname(fi.path)) : [fi], head);
   } else {
     const lt = localType(cx, fi, body, head, lang);
     if (lt?.chain && depth < 3 && lt.chain[0] !== head) cur = receiver(cx, fi, body, lt.chain, fromContainer, fromDecl, depth + 1);
@@ -418,7 +512,7 @@ export function receiver(
     } else if (lt?.declared && !imps.has(head)) return unknown;
     else {
       const b = imps.get(head);
-      if (lang === 'rs' && (/^[a-z_]/.test(head) || head === 'crate')) return { kind: 'rsmod' };
+      if (lang === 'rs' && (/^[a-z_]/.test(head) || head === 'crate')) return chain.includes('()') ? unknown : { kind: 'rsmod' };
       const iv = b?.mod && !b.dir && b.imported !== '*' ? importedValueType(cx, b) : null;
       if (iv) cur = iv;
       else if (b) {
@@ -438,11 +532,17 @@ export function receiver(
       }
     }
   }
-  for (const seg of chain.slice(1)) {
+  for (let i = 1; i < chain.length; i++) {
+    const seg = chain[i];
+    if (seg === '()') continue;
+    const isCall = chain[i + 1] === '()';
     if (!cur || cur.kind === 'unknown') return unknown;
     if (cur.kind === 'module') {
       if (isUpper(seg) && lang !== 'go') cur = { kind: 'type', name: seg, ctx: (cur.mod && file(cx, cur.mod)) || fi };
-      else if (lang === 'go' && cur.dir) return unknown;
+      else if (isCall && cur.mod) {
+        const mf = lang === 'go' ? goDirFiles(cx, cur.mod) : [file(cx, cur.mod)].filter((f) => f != null);
+        cur = fnReturn(cx, mf, seg);
+      } else if (lang === 'go' && cur.dir) return unknown;
       else if (cur.mod && lang === 'py' && resolvePy(cx.root, cur.mod, `.${seg}`, cx.read))
         cur = { kind: 'module', mod: resolvePy(cx.root, cur.mod, `.${seg}`, cx.read) };
       else return unknown;
@@ -450,11 +550,16 @@ export function receiver(
     }
     if (cur.kind !== 'type') return unknown;
     const d: Decl | null = cur.decl ?? findType(cx, cur.ctx!, cur.name, cur.qual);
-    if (!d) return cur.name === '#external' ? cur : unknown;
+    if (!d) return cur.name === '#external' && !isCall ? cur : unknown;
+    if (isCall) {
+      cur = methodReturn(cx, d, seg);
+      continue;
+    }
     const ft = fieldType(cx, d, seg);
     if (!ft) return unknown;
     cur = typeFrom(cx, ft.type, lang, ft.ctx ?? d.info);
   }
+  if (cur && cur.kind !== 'type' && chain.includes('()')) return unknown;
   return cur ?? unknown;
 }
 
