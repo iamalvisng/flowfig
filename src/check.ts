@@ -33,7 +33,8 @@ const groupIds = (g: FigGroup): string[] => [...(g.id ? [g.id] : []), ...g.child
 
 const FILLER =
   /\b(seamless(ly)?|robust|powerful|leverag(e|es|ed|ing)|effortless(ly)?|cutting-edge|state-of-the-art|holistic|synergy|empower(s|ed|ing)?|elegant(ly)?)\b/i;
-const codeToken = (t: string) => /^[^A-Za-z]*[a-z][A-Za-z0-9]*[A-Z]|[A-Za-z]_[A-Za-z]|\(\)|::|\w\.\w+\(/.test(t);
+const codeShape = (t: string) => /^[^A-Za-z]*[a-z][A-Za-z0-9]*[A-Z]|[A-Za-z]_[A-Za-z]|\(\)|::|\w\.\w+\(/.test(t);
+const codeToken = (t: string) => codeShape(t) || t.split(/[./]/).some(codeShape);
 
 function plainText(fig: FlowProps): Finding[] {
   const out: Finding[] = [];

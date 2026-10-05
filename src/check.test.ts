@@ -497,6 +497,9 @@ test('plain-text warns on code-shaped labels, long lines, filler words and code 
         { id: 'f', label: 'DynamoDB', source: 'src/db.ts#saveOrder' },
         { id: 'g', label: 'ReportsController', source: 'src/reports.ts#ReportsController' },
         { id: 'h', label: 'sweep', source: 'src/jobs.ts#sweep' },
+        { id: 'i', label: 'user.findById' },
+        { id: 'j', label: 'req.userId' },
+        { id: 'k', label: 'src/loginHandler.ts' },
       ],
     },
     edges: [
@@ -509,6 +512,8 @@ test('plain-text warns on code-shaped labels, long lines, filler words and code 
         flow: [
           { edges: 'e1', say: 'validate_rows returns the good rows' },
           { edges: 'e2', say: 'The gateway calls auth' },
+          { edges: 'e2', say: 'user.findById reads the row' },
+          { edges: 'e2', say: 'send magic link' },
           { edges: 'e2', say: 'word '.repeat(21).trim() },
         ],
       },
@@ -521,9 +526,13 @@ test('plain-text warns on code-shaped labels, long lines, filler words and code 
   assert.match(msgs, /label "findUserByEmail" looks like code; use plain words, the code name goes in source/);
   assert.match(msgs, /label "seamless sync" has the filler word "seamless"/);
   assert.match(msgs, /say 1 has the code name "validate_rows"; use plain words/);
-  assert.match(msgs, /say 3 has 21 words; keep it to 20/);
+  assert.match(msgs, /say 5 has 21 words; keep it to 20/);
   assert.match(msgs, /label "ReportsController" looks like code/);
-  assert.doesNotMatch(msgs, /Redis|Check input|Find user|session id|The gateway calls auth|GitHub|DynamoDB|sweep/);
+  assert.match(msgs, /say 3 has the code name "user.findById"/);
+  assert.match(msgs, /label "user.findById" looks like code/);
+  assert.match(msgs, /label "req.userId" looks like code/);
+  assert.match(msgs, /label "src\/loginHandler.ts" looks like code/);
+  assert.doesNotMatch(msgs, /Redis|Check input|Find user|session id|The gateway calls auth|GitHub|DynamoDB|sweep|send magic link/);
 });
 
 test('each good plain-text example in the guide passes, and each checked bad example warns', () => {
