@@ -263,6 +263,7 @@ export function laneColumns(fig: FlowProps): Map<string, number> {
   return cols;
 }
 
+export const LABEL_LINE = 18;
 export const FRAME_SIDE = 18,
   NODE_MIN_W = 100,
   NODE_MAX_W = 190;

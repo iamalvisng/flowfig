@@ -46,6 +46,7 @@ import {
   nodeWidth,
   labelLines,
   fitCap,
+  LABEL_LINE,
   beatMs,
   STEP_HOLD_MS,
   playheadItem,
@@ -1034,12 +1035,12 @@ export function Flow({
         )}
         {lines ? (
           lines.map((l, i) => (
-            <div key={i} style={{ whiteSpace: 'nowrap' }}>
+            <div key={i} style={{ whiteSpace: 'nowrap', lineHeight: `${LABEL_LINE}px` }}>
               {l}
             </div>
           ))
         ) : (
-          <div>{item.label}</div>
+          <div style={{ lineHeight: `${LABEL_LINE}px` }}>{item.label}</div>
         )}
         {dl
           ? dl.subs.map((l, i) => (

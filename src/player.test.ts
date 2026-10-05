@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { nodeWidth, type FlowProps } from './model.ts';
+import { render as toSvgScene } from './svg.ts';
 
 // Server markup shows the first frame only; clicks and the clock need a DOM.
 const { Flow } = await import(new URL('../dist/index.js', import.meta.url).href);
@@ -256,10 +257,14 @@ test('lanes wrap: every block has the gutter of the plan, and an empty block is 
   assert.deepEqual(blocks, lanePlan(far).blocks);
 });
 
-test('a long box label draws two lines in the player, and the box has the SVG width', () => {
+test('a long box label draws two lines in the player, and the box has the SVG width and height', () => {
   const node = { id: 'a', label: 'Check the session and the rate limit' };
-  const html = render({ layout: { children: [node] }, edges: [] });
+  const fig2: FlowProps = { layout: { children: [node] }, edges: [] };
+  const html = render(fig2);
   const box = html.match(/data-fig="a"[^>]*style="([^"]*)"[^>]*>([\s\S]*?)<\/div><\/div>/)!;
   assert.match(box[1], new RegExp(`(^|;)width:${nodeWidth(node, false)}px`));
-  assert.equal([...box[2].matchAll(/white-space:nowrap/g)].length, 2);
+  const lines = [...box[2].matchAll(/white-space:nowrap;line-height:(\d+)px/g)].map((m) => Number(m[1]));
+  assert.deepEqual(lines, [18, 18]);
+  const pads = [...box[1].match(/padding:([^;]*)/)![1].matchAll(/calc\((\d+)px/g)].map((m) => Number(m[1]));
+  assert.equal(pads[0] + lines[0] + lines[1] + pads[2], toSvgScene(fig2).scene.boxes[0].rect.h);
 });

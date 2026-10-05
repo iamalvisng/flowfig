@@ -39,6 +39,7 @@ import {
   laneEnd,
   tightCopies,
   type LanePlan,
+  LABEL_LINE,
   itemWidth,
   labelLines,
   fitCap,
@@ -74,8 +75,7 @@ export { LIGHT, DARK } from './model.ts';
 const LINE = CARD_LINE,
   CARD_SIDE = 8,
   ROW_GAP = 4;
-const LABEL_LINE = 18,
-  SUB_LINE = 15;
+const SUB_LINE = 15;
 const FRAME_TOP = 37,
   FRAME_BOTTOM = 18;
 
