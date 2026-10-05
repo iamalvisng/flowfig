@@ -329,7 +329,7 @@ export function Flow({
             stub: stubs.get(ids[i])!.map(labelPillW),
             bands: [bandOf(ids[i], e.from, 0), bandOf(ids[i], e.to, 1)] as [Rect | undefined, Rect | undefined],
           }),
-          ...((stubs.size || lanePlan) && e.label != null && { labelW: labelPillW(str(e.label)) }),
+          ...(!tl && e.label != null && { labelW: labelPillW(str(e.label)) }),
         })),
         rects,
         tips,

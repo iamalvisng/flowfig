@@ -4,6 +4,7 @@ import { checkSpec, checkScene, checkTheme, contrast } from './check.ts';
 import { TONES, toneFill, type FlowProps } from './model.ts';
 import type { Scene, SceneBox } from './scene.ts';
 import type { Pt } from './geometry.ts';
+import { render } from './svg.ts';
 
 const fig: FlowProps = {
   layout: {
@@ -421,4 +422,31 @@ test('a timeline elbow through a box it does not connect is edge-crosses-box', (
   assert.deepEqual(found({ ...edge, elbow: [...curve] }), [['edge-crosses-box', ['e', 'c']]]);
   assert.deepEqual(found(edge), [], 'a behind edge with no corners is skipped');
   assert.deepEqual(found({ ...edge, elbow: [p(100, 20), p(120, 20), p(120, 220), p(300, 220)] }), []);
+});
+
+test('an edge label that would cover a box moves along its edge to a free spot', () => {
+  const fig: FlowProps = {
+    layout: {
+      direction: 'column',
+      children: [
+        { direction: 'row', children: [{ id: 'a', label: 'A' }] },
+        {
+          direction: 'row',
+          children: [
+            { id: 'b', label: 'B' },
+            { id: 'c', label: 'C' },
+          ],
+        },
+      ],
+    },
+    edges: [
+      { from: 'a', to: 'b', label: 'check password hash' },
+      { from: 'a', to: 'c', label: 'session id' },
+    ],
+  };
+  const { scene } = render(fig);
+  assert.deepEqual(
+    checkScene(scene).filter((f) => f.rule === 'label-overlap'),
+    [],
+  );
 });

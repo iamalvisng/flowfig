@@ -328,7 +328,7 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
         around: e.around ?? (plan?.around.has(ids[i]) ? ('below' as const) : undefined),
         ...(tl && { sides: ['r', 'l'] as [Side, Side], elbow: true }),
         ...(stubs.has(ids[i]) && { stub: stubs.get(ids[i])!.map(labelPillW), bands: [bandOf(ids[i], e.from, 0), bandOf(ids[i], e.to, 1)] }),
-        ...((stubs.size || lanes) && e.label != null && { labelW: labelPillW(str(e.label)) }),
+        ...(!tl && e.label != null && { labelW: labelPillW(str(e.label)) }),
       })),
       rects,
       tips,

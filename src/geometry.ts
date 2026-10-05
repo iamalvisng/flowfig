@@ -395,7 +395,15 @@ export function route(
     if (p.stub) continue;
     const r = one(p);
     done.set(p, r);
-    if (p.labelW && lanes) r.mid = labelInBand(r, p.labelW, lanes, pills);
+    if (p.labelW)
+      r.mid = lanes
+        ? labelInBand(r, p.labelW, lanes, pills)
+        : labelAlong(
+            r,
+            p.labelW,
+            avoid.filter((b) => b.box),
+            pills,
+          );
     if (p.labelW) pills.push({ x: r.mid.x - p.labelW / 2, y: r.mid.y - 9, w: p.labelW, h: 18 });
     track(Array.from({ length: 33 }, (_, i) => bezier(r.curve, i / 32)));
   }
@@ -403,11 +411,29 @@ export function route(
   return picks.map((p) => done.get(p)!);
 }
 
+const overlaps = (a: Rect, b: Rect, m: number) => a.x < b.x + b.w + m && b.x < a.x + a.w + m && a.y < b.y + b.h + m && b.y < a.y + a.h + m;
+
+export function labelAlong(r: Routed, w: number, boxes: Rect[], placed: Rect[]): Pt {
+  const [p0, p1, p2, p3] = r.curve;
+  for (const t of [0.5, 0.45, 0.55, 0.4, 0.6, 0.35, 0.65, 0.3, 0.7, 0.25, 0.75, 0.2, 0.8]) {
+    const u = 1 - t;
+    const dx = 3 * (u * u * (p1.x - p0.x) + 2 * u * t * (p2.x - p1.x) + t * t * (p3.x - p2.x));
+    const dy = 3 * (u * u * (p1.y - p0.y) + 2 * u * t * (p2.y - p1.y) + t * t * (p3.y - p2.y));
+    const len = Math.hypot(dx, dy) || 1;
+    const q = t === 0.5 ? r.mid : bezier(r.curve, t);
+    for (const k of [0, 11, -11]) {
+      const at = { x: q.x - (dy / len) * k, y: q.y + (dx / len) * k };
+      const pill = { x: at.x - w / 2, y: at.y - 9, w, h: 18 };
+      if (!boxes.some((b) => overlaps(pill, b, 1)) && !placed.some((b) => overlaps(pill, b, 1))) return at;
+    }
+  }
+  return r.mid;
+}
+
 function labelInBand(r: Routed, w: number, { bands, boxes }: { bands: Rect[]; boxes: Rect[] }, pills: Rect[]): Pt {
-  const hit = (a: Rect, b: Rect, m: number) => a.x < b.x + b.w + m && b.x < a.x + a.w + m && a.y < b.y + b.h + m && b.y < a.y + a.h + m;
   const ts = Array.from({ length: 65 }, (_, i) => i / 64).sort((a, b) => Math.abs(a - 0.5) - Math.abs(b - 0.5));
   const path = ts.map((t) => bezier(r.curve, t));
-  const clear = (pill: Rect) => !boxes.some((b) => hit(pill, b, 1)) && !pills.some((b) => hit(pill, b, 1));
+  const clear = (pill: Rect) => !boxes.some((b) => overlaps(pill, b, 1)) && !pills.some((b) => overlaps(pill, b, 1));
   const room = (x: number, b: Rect) => x - w / 2 >= b.x + LABEL_CLEAR && x + w / 2 <= b.x + b.w - LABEL_CLEAR;
   for (const q of path) {
     const pill = { x: q.x - w / 2, y: q.y - 9, w, h: 18 };

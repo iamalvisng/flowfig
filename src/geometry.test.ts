@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { route, type Pt } from './geometry.ts';
+import { labelAlong, route, type Pt, type Routed } from './geometry.ts';
 
 const bezier = ([p0, p1, p2, p3]: [Pt, Pt, Pt, Pt], t: number): Pt => {
   const u = 1 - t;
@@ -230,4 +230,18 @@ test('an edge with both detours blocked keeps the straight curve and does not ha
   const [r] = route([{ id: 'a->c', from: 'a', to: 'c' }], rects, new Set(), avoid);
   assert.equal(r.around, undefined);
   assert.ok(performance.now() - t0 < 50);
+});
+
+test('an edge label moves off a box on the curve middle, and stays at the middle with no free spot', () => {
+  const curve: [Pt, Pt, Pt, Pt] = [
+    { x: 0, y: 0 },
+    { x: 100, y: 0 },
+    { x: 200, y: 0 },
+    { x: 300, y: 0 },
+  ];
+  const r: Routed = { id: 'e', d: '', mid: { x: 150, y: 0 }, curve };
+  const box = { x: 130, y: -10, w: 40, h: 20 };
+  const q = labelAlong(r, 40, [box], []);
+  assert.ok(q.x + 20 < box.x - 1 || q.x - 20 > box.x + box.w + 1 || q.y + 9 < box.y - 1 || q.y - 9 > box.y + box.h + 1);
+  assert.deepEqual(labelAlong(r, 40, [{ x: -50, y: -50, w: 400, h: 100 }], []), r.mid);
 });
