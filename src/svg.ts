@@ -39,7 +39,9 @@ import {
   laneEnd,
   tightCopies,
   type LanePlan,
-  nodeWidth,
+  itemWidth,
+  labelLines,
+  fitCap,
   diamondLines,
   diamondRoom,
   isLanesLayout,
@@ -121,24 +123,24 @@ type Sizes = {
   fig: FlowProps;
   plan: LanePlan | null;
   tall: Set<string>;
+  cap: number;
 };
 
 function size(item: FigNode | FigGroup, s: Sizes): { w: number; h: number } {
   if (!isGroup(item)) {
     const contents = s.cards.get(item.id);
-    const w = nodeWidth(item, contents != null) + (item.shape === 'decision' ? 70 : 0);
+    const w = itemWidth(item, s.cards, s.fig.edges, s.cap);
     const top = item.shape === 'store' ? 24 : 10;
     const card = contents ? 8 + s.cardH.get(item.id)! : 0;
-    const h = Math.max(top + LABEL_LINE + (item.sub ? SUB_LINE : 0) + card + 10, s.minH(item.id));
+    const label = labelLines(item, w).length * LABEL_LINE;
+    const h = Math.max(top + label + (item.sub ? SUB_LINE : 0) + card + 10, s.minH(item.id));
     if (item.shape !== 'decision') return { w, h };
     return { w, h: contents ? h + 24 : Math.max(diamondLines(item, w).h, s.minH(item.id) + 24) };
   }
   const kids = item.children.map((c) => size(c, s));
-  const gap = s.gap(item);
-  const along = kids.reduce((n, k) => n + (item.direction === 'column' ? k.h : k.w), 0) + gap * (kids.length - 1);
-  const across = Math.max(...kids.map((k) => (item.direction === 'column' ? k.w : k.h)));
-  const inner = item.direction === 'column' ? { w: across, h: along } : { w: along, h: across };
-  return item.label != null ? { w: inner.w + FRAME_SIDE * 2, h: inner.h + FRAME_TOP + FRAME_BOTTOM } : inner;
+  const h =
+    item.direction === 'column' ? kids.reduce((n, k) => n + k.h, 0) + s.gap(item) * (kids.length - 1) : Math.max(...kids.map((k) => k.h));
+  return { w: itemWidth(item, s.cards, s.fig.edges, s.cap), h: h + (item.label != null ? FRAME_TOP + FRAME_BOTTOM : 0) };
 }
 
 function placeLanes(fig: FlowProps, x: number, y: number, s: Sizes, out: Placed[]): void {
@@ -288,7 +290,16 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
   const cardH = new Map<string, number>();
   const lanes = !tl && fig.lanes && isLanesLayout(fig.layout);
   const plan = lanes ? planFor(fig, opts) : null;
-  const sizes: Sizes = { cards, cardH, minH, gap: (g) => groupGap(g, fig.edges), fig, plan, tall: new Set(plan?.tall) };
+  const sizes: Sizes = {
+    cards,
+    cardH,
+    minH,
+    gap: (g) => groupGap(g, fig.edges),
+    fig,
+    plan,
+    tall: new Set(plan?.tall),
+    cap: fitCap(fig, opts.width ?? 830, pad),
+  };
   for (const [id, contents] of cards) {
     const width = CARD_WIDTH;
     const widths = [width];
@@ -368,7 +379,11 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
     const dl = dia ? diamondLines(p.item as FigNode, p.w) : null;
     const room = (far: number) => diamondRoom(p.w, p.h, far);
     const flat = (p.item.shape === 'decision' ? p.w - 70 : p.w) - 16;
-    const texts: SceneBox['texts'] = [{ text: str(p.item.label), fontSize: 14, room: dl ? room(dl.label.far) : flat }];
+    const texts: SceneBox['texts'] = labelLines(p.item as FigNode, p.w).map((text) => ({
+      text,
+      fontSize: 14,
+      room: dl ? room(dl.label.far) : flat,
+    }));
     if (dl) for (const l of dl.subs) texts.push({ text: l.text, fontSize: 12, room: room(l.far) });
     else if (p.item.sub) texts.push({ text: str(p.item.sub), fontSize: 12, room: flat });
     if (p.item.sub) fonts.push(12);
@@ -583,11 +598,14 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
           ? `<path d="M${n2(p.x)} ${n2(p.y + 12)} a ${n2(p.w / 2)} 12 0 0 1 ${n2(p.w)} 0 v ${n2(p.h - 24)} a ${n2(p.w / 2)} 12 0 0 1 ${n2(-p.w)} 0 z" fill="${fill0}" stroke="${stroke0}"${stroke}/>` +
             `<path d="M${n2(p.x)} ${n2(p.y + 12)} a ${n2(p.w / 2)} 12 0 0 0 ${n2(p.w)} 0" fill="none" stroke="${stroke0}"${rim}/>`
           : `<rect x="${n2(p.x)}" y="${n2(p.y)}" width="${n2(p.w)}" height="${n2(p.h)}" rx="10" fill="${fill0}" stroke="${stroke0}"${stroke}/>`;
-    const label = `<text x="${n2(cx)}" y="${n2(labelY)}" class="label">${esc(str(item.label))}</text>`;
+    const lines = labelLines(item, p.w);
+    const extra = (lines.length - 1) * LABEL_LINE;
+    const firstY = item.shape === 'store' || contents ? labelY : labelY - extra / 2;
+    const label = lines.map((l, i) => `<text x="${n2(cx)}" y="${n2(firstY + i * LABEL_LINE)}" class="label">${esc(l)}</text>`).join('');
     const sub = dl
       ? dl.subs.map((l) => `<text x="${n2(cx)}" y="${n2(p.y + p.h / 2 + l.dy)}" class="sub">${esc(l.text)}</text>`).join('')
       : item.sub
-        ? `<text x="${n2(cx)}" y="${n2(labelY + SUB_LINE)}" class="sub">${esc(str(item.sub))}</text>`
+        ? `<text x="${n2(cx)}" y="${n2(firstY + extra + SUB_LINE)}" class="sub">${esc(str(item.sub))}</text>`
         : '';
     const dot = bt ?? 'var(--accent)';
     const my = n2(p.y + p.h / 2);

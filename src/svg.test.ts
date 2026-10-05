@@ -1205,3 +1205,31 @@ test('a map figure with an edge across a middle box renders with no edge-crosses
   );
   assert.ok(scene.width > 0 && !/NaN/.test(svg));
 });
+
+test('a long box label wraps to two lines and keeps the 14 px font', () => {
+  const { scene } = render({ layout: { children: [{ id: 'a', label: 'Check the session and the rate limit' }] }, edges: [] });
+  assert.equal(scene.boxes[0].texts.filter((t) => t.fontSize === 14).length, 2);
+  assert.deepEqual(
+    checkScene(scene).filter((f) => f.rule === 'text-overflow' || f.rule === 'small-text'),
+    [],
+  );
+});
+
+test('a wide row narrows its boxes before it scales, so the text stays at least 10 px', () => {
+  const kids = Array.from({ length: 6 }, (_, i) => ({ id: `n${i}`, label: `Step ${i} reads the order data` }));
+  const { scene } = render({ layout: { direction: 'row', children: kids }, edges: [] }, { width: 830 });
+  assert.deepEqual(
+    checkScene(scene, { width: 830 }).filter((f) => f.rule === 'small-text' || f.rule === 'text-overflow'),
+    [],
+  );
+});
+
+test('one long word or a CJK label does not wrap inside a word and still reports text-overflow', () => {
+  for (const label of ['Supercalifragilisticexpialidociousness', '注文データを読み込んで検証して保存する処理']) {
+    const { scene } = render({ layout: { children: [{ id: 'a', label, width: 100 }] }, edges: [] });
+    assert.ok(
+      checkScene(scene).some((f) => f.rule === 'text-overflow'),
+      label,
+    );
+  }
+});

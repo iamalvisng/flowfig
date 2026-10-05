@@ -10,7 +10,6 @@ import {
   BASE_RATE,
   CARD_LINE,
   CARD_PAD,
-  CARD_WIDTH,
   EDGE_OFF,
   EDGE_ON,
   LIGHT,
@@ -45,6 +44,8 @@ import {
   diamondRoom,
   tightCopies,
   nodeWidth,
+  labelLines,
+  fitCap,
   beatMs,
   STEP_HOLD_MS,
   playheadItem,
@@ -209,6 +210,7 @@ export function Flow({
   );
   const step = active == null ? null : steps[active];
   const beats = useMemo(() => (step?.flow ?? []).map(toBeat), [step]);
+  const cap = useMemo(() => fitCap({ layout, edges, steps, lanes, timeline }, 830), [layout, edges, steps, lanes, timeline]);
   const carded = useMemo(() => {
     const all = new Map<string, FigContent[]>();
     for (const b of steps.flatMap((s) => s.flow.map(toBeat)))
@@ -932,6 +934,8 @@ export function Flow({
     const store = item.shape === 'store';
     const card = carded.has(item.id);
     const dl = diamond && !card ? diamondLines(item, nodeWidth(item, false) + 70) : null;
+    const w = diamond || card || item.width != null || str(item.label) ? nodeWidth(item, card, cap) + (diamond ? 70 : 0) : undefined;
+    const lines = w != null && !diamond && str(item.label) ? labelLines(item, w) : null;
     const bt = item.tone && TONES[item.tone];
     return (
       <div
@@ -944,8 +948,8 @@ export function Flow({
           position: 'relative',
           isolation: 'isolate',
           minWidth: 100,
-          maxWidth: card || diamond ? undefined : 190,
-          width: diamond ? nodeWidth(item, card) + 70 : (item.width ?? (card ? CARD_WIDTH : undefined)),
+          maxWidth: w == null ? cap : undefined,
+          width: w,
           minHeight: dl ? Math.max(dl.h, (minHeight(item.id) ?? 0) + 24) : minHeight(item.id),
           boxSizing: 'border-box',
           display: 'flex',
@@ -1028,7 +1032,15 @@ export function Flow({
             }}
           />
         )}
-        <div>{item.label}</div>
+        {lines ? (
+          lines.map((l, i) => (
+            <div key={i} style={{ whiteSpace: 'nowrap' }}>
+              {l}
+            </div>
+          ))
+        ) : (
+          <div>{item.label}</div>
+        )}
         {dl
           ? dl.subs.map((l, i) => (
               <div key={i} style={{ fontSize: 12, fontWeight: 400, color: v('muted'), lineHeight: '15px', whiteSpace: 'nowrap' }}>

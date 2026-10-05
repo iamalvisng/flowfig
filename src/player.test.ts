@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
-import type { FlowProps } from './model.ts';
+import { nodeWidth, type FlowProps } from './model.ts';
 
 // Server markup shows the first frame only; clicks and the clock need a DOM.
 const { Flow } = await import(new URL('../dist/index.js', import.meta.url).href);
@@ -254,4 +254,12 @@ test('lanes wrap: every block has the gutter of the plan, and an empty block is 
   (far.layout.children[1] as { children: { id: string; at?: number }[] }).children.find((b) => b.id === 'rejected')!.at = 20;
   const blocks = [...render(far).matchAll(/data-fig-block="(\d+)"/g)].map((m) => +m[1]);
   assert.deepEqual(blocks, lanePlan(far).blocks);
+});
+
+test('a long box label draws two lines in the player, and the box has the SVG width', () => {
+  const node = { id: 'a', label: 'Check the session and the rate limit' };
+  const html = render({ layout: { children: [node] }, edges: [] });
+  const box = html.match(/data-fig="a"[^>]*style="([^"]*)"[^>]*>([\s\S]*?)<\/div><\/div>/)!;
+  assert.match(box[1], new RegExp(`(^|;)width:${nodeWidth(node, false)}px`));
+  assert.equal([...box[2].matchAll(/white-space:nowrap/g)].length, 2);
 });
