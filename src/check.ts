@@ -31,6 +31,57 @@ const warn = (rule: string, ids: string[], message: string): Finding => ({ rule,
 
 const groupIds = (g: FigGroup): string[] => [...(g.id ? [g.id] : []), ...g.children.flatMap((c) => (isGroup(c) ? groupIds(c) : []))];
 
+const FILLER =
+  /\b(seamless(ly)?|robust|powerful|leverag(e|es|ed|ing)|effortless(ly)?|cutting-edge|state-of-the-art|holistic|synergy|empower(s|ed|ing)?|unlock(s|ed|ing)?|magic(al)?|elegant(ly)?)\b/i;
+const codeToken = (t: string) => /[a-z][A-Z]|[A-Za-z]_[A-Za-z]|\(\)|::|\w\.\w+\(/.test(t);
+
+function plainText(fig: FlowProps): Finding[] {
+  const out: Finding[] = [];
+  const check = (where: string, text: unknown, o: { code?: boolean; words?: boolean; source?: string } = {}) => {
+    const t = str(text).trim();
+    if (!t) return;
+    const symbol = o.source
+      ? parseSource(o.source)
+          ?.symbol?.split(/[.#:]+/)
+          .pop()
+      : undefined;
+    const why = [
+      o.code !== false && t.split(/\s+/).some(codeToken) && 'has a code name',
+      symbol && t === symbol && 'repeats its source symbol',
+      FILLER.test(t) && 'has a filler word',
+      o.words && t.split(/\s+/).length > 20 && `has ${t.split(/\s+/).length} words, over 20`,
+    ].filter(Boolean);
+    if (why.length)
+      out.push(
+        warn(
+          'plain-text',
+          [],
+          `${where} "${t}" ${why.join(' and ')}: use plain words, and keep a line to 20 words; the code name goes in source`,
+        ),
+      );
+  };
+  for (const n of nodes(fig.layout)) {
+    check(`box "${n.id}" label`, n.label, { source: n.source });
+    check(`box "${n.id}" sub`, n.sub);
+  }
+  const groupLabels = (g: FigGroup): void => {
+    if (g.label != null) check(`group "${g.id ?? str(g.label)}" label`, g.label);
+    for (const c of g.children) if (isGroup(c)) groupLabels(c);
+  };
+  groupLabels(fig.layout);
+  fig.edges.forEach((e) => check(`edge "${edgeId(e)}" label`, e.label, { source: e.source }));
+  for (const s of fig.steps ?? []) {
+    const name = str(s.label);
+    check(`step "${name}" label`, s.label);
+    check(`step "${name}" caption`, s.caption, { words: true });
+    s.flow.map(toBeat).forEach((b, i) => {
+      check(`step "${name}" say ${i + 1}`, b.say, { words: true });
+      b.hops.forEach((h) => check(`step "${name}" data ${i + 1}`, h.data, { code: false }));
+    });
+  }
+  return out;
+}
+
 /** Faults in the spec: dangling ids, duplicate ids, empty steps. The renderers skip them silently. */
 export function checkSpec(fig: FlowProps): Finding[] {
   const out: Finding[] = [];
@@ -131,6 +182,7 @@ export function checkSpec(fig: FlowProps): Finding[] {
   }
   for (const n of nodes(fig.layout))
     if (n.at != null && !validAt(n.at)) out.push(err('bad-at', [n.id], `box "${n.id}": at ${n.at} is not an integer of 0 or more`));
+  out.push(...plainText(fig));
   return out;
 }
 

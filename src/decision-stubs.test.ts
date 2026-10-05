@@ -123,7 +123,7 @@ const o1: FlowProps = {
         { edges: 'e5', say: 'The warehouse inspects within 2 working days of arrival. The item passes.' },
         {
           edges: 'e6',
-          say: 'Finance refunds the original payment method within 3 working days of the passed inspection. Support closes the ticket. The customer gets a confirmation email.',
+          say: 'Finance refunds the original payment method within 3 working days. Support closes the ticket. The customer gets a confirmation email.',
         },
       ],
     },
@@ -219,7 +219,7 @@ const o2: FlowProps = {
         { edges: 'e3', say: 'Support emails a prepaid shipping label to the customer.' },
         {
           edges: 'e4',
-          say: 'The customer ships the item with the label within 14 days. The warehouse inspects it within 2 working days of arrival.',
+          say: 'The customer ships the item with the label within 14 days. The warehouse inspects it within 2 days.',
         },
         { edges: 'e5', say: 'Finance refunds the original payment method within 3 working days of a passed inspection.' },
         { edges: 'e6', say: 'Support closes the ticket and the customer gets a confirmation email.' },
@@ -240,7 +240,7 @@ const o2: FlowProps = {
         { edges: 'e3', say: 'Support emails a prepaid shipping label to the customer.' },
         {
           edges: 'e4',
-          say: 'The customer ships the item with the label within 14 days. The warehouse inspects it within 2 working days of arrival.',
+          say: 'The customer ships the item with the label within 14 days. The warehouse inspects it within 2 days.',
         },
         { edges: 'r2', say: 'The warehouse finds a damaged item. Support emails the reason. The customer can reply within 7 days.' },
         { edges: 'r3', say: 'The warehouse ships the damaged item back.' },

@@ -483,3 +483,39 @@ test('two labeled edges down to the next row get a row gap that holds both label
     [],
   );
 });
+
+test('plain-text warns on code-shaped labels, long lines, filler words and code names in sentences', () => {
+  const spec: FlowProps = {
+    layout: {
+      children: [
+        { id: 'a', label: 'findUserByEmail', source: 'src/u.ts#findUserByEmail' },
+        { id: 'b', label: 'Redis' },
+        { id: 'c', label: 'Check input' },
+        { id: 'd', label: 'Find user', source: 'src/u.ts#findUser' },
+      ],
+    },
+    edges: [
+      { id: 'e1', from: 'a', to: 'b', label: 'seamless sync' },
+      { id: 'e2', from: 'c', to: 'd', label: 'session id' },
+    ],
+    steps: [
+      {
+        label: 'login',
+        flow: [
+          { edges: 'e1', say: 'validate_rows returns the good rows' },
+          { edges: 'e2', say: 'The gateway calls auth' },
+          { edges: 'e2', say: 'word '.repeat(21).trim() },
+        ],
+      },
+    ],
+  };
+  const msgs = checkSpec(spec)
+    .filter((f) => f.rule === 'plain-text')
+    .map((f) => f.message)
+    .join('\n');
+  assert.match(msgs, /findUserByEmail/);
+  assert.match(msgs, /seamless/);
+  assert.match(msgs, /validate_rows/);
+  assert.match(msgs, /21 words/);
+  assert.doesNotMatch(msgs, /Redis|Check input|Find user|session id|The gateway calls auth/);
+});
