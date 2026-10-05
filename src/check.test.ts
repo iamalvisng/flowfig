@@ -95,6 +95,13 @@ test('an edge through a box it does not connect is an error; its own ends are no
   assert.deepEqual(checkScene(scene({ boxes, edges: [{ id: 'ab', from: 'a', to: 'b', curve: over }] })), []);
 });
 
+test('an edge label outside the drawn figure area is an error', () => {
+  const edge = (x: number) => ({ id: 'e', from: 'a', to: 'b', curve: line(0, 300, 10, 300), label: { x, y: 200, w: 50, h: 18 } });
+  const area = { x: 0, y: 0, w: 600, h: 400 };
+  assert.deepEqual(rules(checkScene(scene({ area, edges: [edge(-20)] }))), ['label-overlap']);
+  assert.deepEqual(checkScene(scene({ area, edges: [edge(0)] })), []);
+});
+
 test('labels that overlap each other or a box are errors; labels that only touch are not', () => {
   const edge = (id: string, x: number) => ({ id, from: 'a', to: 'b', curve: line(0, 300, 10, 300), label: { x, y: 200, w: 50, h: 18 } });
   assert.deepEqual(rules(checkScene(scene({ edges: [edge('e1', 0), edge('e2', 40)] }))), ['label-overlap']);
@@ -424,7 +431,7 @@ test('a timeline elbow through a box it does not connect is edge-crosses-box', (
   assert.deepEqual(found({ ...edge, elbow: [p(100, 20), p(120, 20), p(120, 220), p(300, 220)] }), []);
 });
 
-test('an edge label that would cover a box moves along its edge to a free spot', () => {
+test('two edge labels from one box that would overlap each other move apart', () => {
   const fig: FlowProps = {
     layout: {
       direction: 'column',

@@ -216,6 +216,9 @@ export function checkScene(scene: Scene, { width = 830, minText = 10 }: CheckOpt
         out.push(err('label-overlap', [e.id, f.id], `the labels of edges "${e.id}" and "${f.id}" overlap`));
     for (const b of scene.boxes)
       if (overlap(e.label!, b.rect, 1)) out.push(err('label-overlap', [e.id, b.id], `the label of edge "${e.id}" covers box "${b.id}"`));
+    const [p, a] = [e.label!, scene.area];
+    if (a && e.step == null && (p.x < a.x - 0.5 || p.y < a.y - 0.5 || p.x + p.w > a.x + a.w + 0.5 || p.y + p.h > a.y + a.h + 0.5))
+      out.push(err('label-overlap', [e.id], `the label of edge "${e.id}" is outside the figure`));
   });
   const shown = scene.minFont * Math.min(1, width / scene.width);
   if (shown < minText) out.push(warn('small-text', [], `at ${width} px the smallest text is ${px(shown)} px (minimum ${minText} px)`));

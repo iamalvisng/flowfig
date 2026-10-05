@@ -1227,6 +1227,50 @@ test('a label that fits at its own box width stays on one line', () => {
       }
 });
 
+test('a left detour label sits inside the figure and off every other edge', () => {
+  const fig: FlowProps = {
+    layout: {
+      direction: 'column',
+      align: 'start',
+      children: [
+        {
+          direction: 'row',
+          children: [
+            { id: 'a', label: 'Browser' },
+            { id: 'x', label: 'CDN' },
+            { id: 'y', label: 'Edge cache' },
+            { id: 'z', label: 'Origin' },
+          ],
+        },
+        { id: 'b', label: 'Load balancer' },
+        { id: 'c', label: 'App server' },
+      ],
+    },
+    edges: [
+      { from: 'a', to: 'x' },
+      { from: 'x', to: 'y' },
+      { from: 'y', to: 'z' },
+      { from: 'a', to: 'b' },
+      { from: 'b', to: 'c' },
+      { from: 'a', to: 'c', label: 'open the websocket connection' },
+    ],
+  };
+  const { scene } = render(fig);
+  const [p, a] = [scene.edges.find((e) => e.id === 'a->c')!.label!, scene.area!];
+  assert.ok(p.x >= a.x && p.x + p.w <= a.x + a.w && p.y >= a.y && p.y + p.h <= a.y + a.h);
+  for (const e of scene.edges.filter((e) => e.id !== 'a->c'))
+    for (let t = 0; t <= 1; t += 1 / 32) {
+      const [p0, p1, p2, p3] = e.curve;
+      const k = [(1 - t) ** 3, 3 * (1 - t) ** 2 * t, 3 * (1 - t) * t * t, t ** 3];
+      const [x, y] = [k[0] * p0.x + k[1] * p1.x + k[2] * p2.x + k[3] * p3.x, k[0] * p0.y + k[1] * p1.y + k[2] * p2.y + k[3] * p3.y];
+      assert.ok(!(x > p.x && x < p.x + p.w && y > p.y && y < p.y + p.h), `edge ${e.id} passes under the label`);
+    }
+  assert.deepEqual(
+    checkScene(scene).filter((f) => f.rule === 'label-overlap'),
+    [],
+  );
+});
+
 test('a wide row narrows its boxes before it scales, so the text stays at least 10 px', () => {
   const kids = Array.from({ length: 6 }, (_, i) => ({ id: `n${i}`, label: `Step ${i} reads the order data` }));
   const { scene } = render({ layout: { direction: 'row', children: kids }, edges: [] }, { width: 830 });

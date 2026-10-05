@@ -5,10 +5,19 @@ export type Pt = { x: number; y: number };
 /** A cross-lane edge as two stubs, their pills and their points. */
 export type Stub = { parts: [string, string]; pills: [Rect, Rect]; pts: [Pt[], Pt[]]; short?: true; tight: [boolean, boolean] };
 /** `elbow` holds the corners of an elbow path for `check`. */
-export type Routed = { id: string; d: string; mid: Pt; curve: [Pt, Pt, Pt, Pt]; stub?: Stub; elbow?: Pt[]; around?: Around };
+export type Routed = {
+  id: string;
+  d: string;
+  mid: Pt;
+  curve: [Pt, Pt, Pt, Pt];
+  stub?: Stub;
+  elbow?: Pt[];
+  around?: Around;
+  /** The px a detour and its label need outside the boxes on the `around` side. */
+  room?: number;
+};
 /** A rect that a route keeps clear of. `box` marks a box. */
 export type Avoid = Rect & { box?: boolean };
-/** The rects that both renderers give `route` to keep clear of. */
 export const avoidOf = (boxes: Rect[], extra: Rect[], lanes: boolean): Avoid[] => [
   ...extra,
   ...boxes.map((r) => (lanes ? r : { ...r, box: true })),
@@ -59,12 +68,20 @@ const bend = (s: Pt, e: Pt, sa: Side): [Pt, Pt, Pt, Pt] => {
 const arcLine = (s: Pt, e: Pt, around: Around, at: number): [Pt, Pt, Pt, Pt] =>
   around === 'above' || around === 'below' ? [s, { x: s.x, y: at }, { x: e.x, y: at }, e] : [s, { x: at, y: s.y }, { x: at, y: e.y }, e];
 const ARC = 50;
-const arcAt = (a: Rect, b: Rect, around: Around, past: Rect[]) => {
+const ARC_STEP = 16;
+const upright = (around: Around) => around === 'left' || around === 'right';
+const arcAt = (a: Rect, b: Rect, around: Around, past: Rect[], labelW = 0) => {
   const rs = [a, b, ...past];
-  if (around === 'above') return Math.min(...rs.map((r) => r.y)) - ARC;
-  if (around === 'below') return Math.max(...rs.map((r) => r.y + r.h)) + ARC;
-  if (around === 'left') return Math.min(...rs.map((r) => r.x)) - ARC;
-  return Math.max(...rs.map((r) => r.x + r.w)) + ARC;
+  // A cubic arc reaches 0.75 of its control offset at t = 0.5.
+  const gap = upright(around) ? Math.max(ARC, (labelW / 2 + 12) / 0.75) : ARC;
+  if (around === 'above') return Math.min(...rs.map((r) => r.y)) - gap;
+  if (around === 'below') return Math.max(...rs.map((r) => r.y + r.h)) + gap;
+  if (around === 'left') return Math.min(...rs.map((r) => r.x)) - gap;
+  return Math.max(...rs.map((r) => r.x + r.w)) + gap;
+};
+const spanOf = (a: Rect, b: Rect, around: Around) => {
+  const [p, q] = upright(around) ? [cy(a), cy(b)] : [cx(a), cx(b)];
+  return [Math.min(p, q), Math.max(p, q)];
 };
 const SIDES: Record<Around, [Side, Side]> = { above: ['t', 't'], below: ['b', 'b'], left: ['l', 'l'], right: ['r', 'r'] };
 const hit = (curve: [Pt, Pt, Pt, Pt], boxes: Rect[], m: number) => {
@@ -92,6 +109,7 @@ export function route(
   lanes?: { bands: Rect[]; boxes: Rect[] },
 ): Routed[] {
   const picks: Pick[] = [];
+  const arcs: { way: Around; lo: number; hi: number; at: number }[] = [];
   for (const e of edges) {
     const a = rects[e.from],
       b = rects[e.to];
@@ -101,14 +119,25 @@ export function route(
     const plain: [Side, Side] = stacked ? (a.y < b.y ? ['b', 't'] : ['t', 'b']) : a.x < b.x ? ['r', 'l'] : ['l', 'r'];
     const past = hit(bend(sideMid(a, plain[0]), sideMid(b, plain[1]), plain[0]), others, -2);
     let around = e.around;
-    let arc = around && arcAt(a, b, around, past);
+    let arc = around && arcAt(a, b, around, past, e.labelW);
     if (!around && !e.sides && !e.stub && !e.elbow && past.length)
-      for (const way of stacked ? (['left', 'right'] as const) : (['above', 'below'] as const)) {
-        const at = arcAt(a, b, way, past);
-        if (hit(arcLine(sideMid(a, SIDES[way][0]), sideMid(b, SIDES[way][1]), way, at), others, 2).length) continue;
-        [around, arc] = [way, at];
-        break;
+      for (const share of [false, true]) {
+        for (const way of stacked ? (['left', 'right'] as const) : (['above', 'below'] as const)) {
+          const [lo, hi] = spanOf(a, b, way);
+          const near = arcs.filter((q) => q.way === way && q.lo < hi && lo < q.hi).map((q) => q.at);
+          if (near.length && !share) continue;
+          const out = way === 'above' || way === 'left' ? -1 : 1;
+          const at = out * Math.max(out * arcAt(a, b, way, past, e.labelW), ...near.map((n) => out * n + ARC_STEP));
+          if (hit(arcLine(sideMid(a, SIDES[way][0]), sideMid(b, SIDES[way][1]), way, at), others, 2).length) continue;
+          [around, arc] = [way, at];
+          break;
+        }
+        if (around) break;
       }
+    if (around) {
+      const [lo, hi] = spanOf(a, b, around);
+      arcs.push({ way: around, lo, hi, at: arc! });
+    }
     const [sa, sb] = e.sides ?? (e.stub ? ['r', 'l'] : around ? SIDES[around] : plain);
     picks.push({ ...e, a, b, sa, sb, around, arc });
   }
@@ -164,6 +193,15 @@ export function route(
     (!area || (r.x >= area.x && r.x + r.w <= area.x + area.w && r.y >= area.y && r.y + r.h <= area.y + area.h)) &&
     ![...avoid, ...pills].some((q) => r.x < q.x + q.w + 2 && q.x < r.x + r.w + 2 && r.y < q.y + q.h + 2 && q.y < r.y + r.h + 2) &&
     !paths.some((q) => q.x > r.x - 2 && q.x < r.x + r.w + 2 && q.y > r.y - 2 && q.y < r.y + r.h + 2);
+  const all = Object.values(rects);
+  const [x0, y0] = [Math.min(...all.map((r) => r.x)), Math.min(...all.map((r) => r.y))];
+  const [x1, y1] = [Math.max(...all.map((r) => r.x + r.w)), Math.max(...all.map((r) => r.y + r.h))];
+  const outside = (way: Around, { x, y }: Pt) => (way === 'above' ? y0 - y : way === 'below' ? y - y1 : way === 'left' ? x0 - x : x - x1);
+  const roomOf = (way: Around, at: number, curve: [Pt, Pt, Pt, Pt], labelW?: number) =>
+    Math.max(
+      ARC - 6,
+      lanes || !labelW ? outside(way, { x: at, y: at }) - 6 : outside(way, bezier(curve, 0.5)) + (upright(way) ? labelW / 2 : 9),
+    );
   const one = (p: Pick): Routed => {
     const s = anchor.get(p.id + ':s')!,
       e = anchor.get(p.id + ':e')!;
@@ -386,15 +424,21 @@ export function route(
     }
     if (p.around) {
       const curve = arcLine(s, e, p.around, p.arc!);
-      return { ...drawn(p.id, curve, bezier(curve, 0.5)), around: p.around };
+      return { ...drawn(p.id, curve, bezier(curve, 0.5)), around: p.around, room: roomOf(p.around, p.arc!, curve, p.labelW) };
     }
     return drawn(p.id, bend(s, e, p.sa), { x: (s.x + e.x) / 2, y: (s.y + e.y) / 2 });
   };
   const done = new Map<Pick, Routed>();
-  for (const p of picks) {
-    if (p.stub) continue;
-    const r = one(p);
-    done.set(p, r);
+  for (const p of picks) if (!p.stub) done.set(p, one(p));
+  const routed = [...done.values()];
+  const side = (way: Around) => Math.max(EDGE_ROOM, ...routed.filter((r) => r.around === way).map((r) => r.room!));
+  const [l, t] = [side('left'), side('above')];
+  const fig = { x: x0 - l, y: y0 - t, w: x1 - x0 + l + side('right'), h: y1 - y0 + t + side('below') };
+  const lineOf = (r: Routed) =>
+    r.elbow
+      ? r.elbow.slice(1).flatMap((q, k) => Array.from({ length: 17 }, (_, i) => lerp(r.elbow![k], q, i / 16)))
+      : Array.from({ length: 33 }, (_, i) => bezier(r.curve, i / 32));
+  for (const [p, r] of done) {
     if (p.labelW)
       r.mid = lanes
         ? labelInBand(r, p.labelW, lanes, pills)
@@ -403,6 +447,8 @@ export function route(
             p.labelW,
             avoid.filter((b) => b.box),
             pills,
+            fig,
+            routed.filter((o) => o !== r).flatMap(lineOf),
           );
     if (p.labelW) pills.push({ x: r.mid.x - p.labelW / 2, y: r.mid.y - 9, w: p.labelW, h: 18 });
     track(Array.from({ length: 33 }, (_, i) => bezier(r.curve, i / 32)));
@@ -411,23 +457,47 @@ export function route(
   return picks.map((p) => done.get(p)!);
 }
 
+export const arcRoom = (routed: Routed[], way: Around) => Math.max(0, ...routed.filter((r) => r.around === way).map((r) => r.room!));
+
 const overlaps = (a: Rect, b: Rect, m: number) => a.x < b.x + b.w + m && b.x < a.x + a.w + m && a.y < b.y + b.h + m && b.y < a.y + a.h + m;
 
-export function labelAlong(r: Routed, w: number, boxes: Rect[], placed: Rect[]): Pt {
+const lerp = (a: Pt, b: Pt, t: number): Pt => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+// The SVG default padding around the boxes.
+const EDGE_ROOM = 24;
+
+export function labelAlong(r: Routed, w: number, boxes: Rect[], placed: Rect[], fig?: Rect, lines: Pt[] = []): Pt {
   const [p0, p1, p2, p3] = r.curve;
+  const spots: Pt[] = [];
   for (const t of [0.5, 0.45, 0.55, 0.4, 0.6, 0.35, 0.65, 0.3, 0.7, 0.25, 0.75, 0.2, 0.8]) {
     const u = 1 - t;
     const dx = 3 * (u * u * (p1.x - p0.x) + 2 * u * t * (p2.x - p1.x) + t * t * (p3.x - p2.x));
     const dy = 3 * (u * u * (p1.y - p0.y) + 2 * u * t * (p2.y - p1.y) + t * t * (p3.y - p2.y));
     const len = Math.hypot(dx, dy) || 1;
     const q = t === 0.5 ? r.mid : bezier(r.curve, t);
-    for (const k of [0, 11, -11]) {
-      const at = { x: q.x - (dy / len) * k, y: q.y + (dx / len) * k };
-      const pill = { x: at.x - w / 2, y: at.y - 9, w, h: 18 };
-      if (!boxes.some((b) => overlaps(pill, b, 1)) && !placed.some((b) => overlaps(pill, b, 1))) return at;
-    }
+    for (const k of [0, 11, -11]) spots.push({ x: q.x - (dy / len) * k, y: q.y + (dx / len) * k });
   }
-  return r.mid;
+  const inFig = (at: Pt) =>
+    !fig ||
+    (at.x - w / 2 >= fig.x - 0.5 && at.x + w / 2 <= fig.x + fig.w + 0.5 && at.y - 9 >= fig.y - 0.5 && at.y + 9 <= fig.y + fig.h + 0.5);
+  const clamp = (at: Pt) =>
+    fig
+      ? {
+          x: Math.max(fig.x + w / 2, Math.min(at.x, fig.x + fig.w - w / 2)),
+          y: Math.max(fig.y + 9, Math.min(at.y, fig.y + fig.h - 9)),
+        }
+      : at;
+  const free = (at: Pt, strict: boolean) => {
+    const pill = { x: at.x - w / 2, y: at.y - 9, w, h: 18 };
+    return (
+      inFig(at) &&
+      !boxes.some((b) => overlaps(pill, b, 1)) &&
+      !placed.some((b) => overlaps(pill, b, 1)) &&
+      (!strict || !lines.some((q) => q.x > pill.x - 2 && q.x < pill.x + w + 2 && q.y > pill.y - 2 && q.y < pill.y + 20))
+    );
+  };
+  for (const strict of [true, false]) for (const at of spots) if (free(at, strict)) return at;
+  for (const at of spots.map(clamp)) if (free(at, false)) return at;
+  return clamp(r.mid);
 }
 
 function labelInBand(r: Routed, w: number, { bands, boxes }: { bands: Rect[]; boxes: Rect[] }, pills: Rect[]): Pt {

@@ -24,6 +24,8 @@ export type Scene = {
   edges: SceneEdge[];
   /** The smallest reading text in px, before any scale. */
   minFont: number;
+  /** The drawn map area. An edge label stays inside it. */
+  area?: Rect;
   /** The lane bands of a swimlanes figure. A stub pill stays inside one. */
   lanes?: { id: string; rect: Rect }[];
 };

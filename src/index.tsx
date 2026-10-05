@@ -1,6 +1,6 @@
 'use client';
 import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { avoidOf, route, type Pt, type Rect, type Routed, type Side } from './geometry.ts';
+import { arcRoom, avoidOf, route, type Pt, type Rect, type Routed, type Side } from './geometry.ts';
 import { foldedLabel, groupBox, layoutRail, railState, RAIL } from './rail.ts';
 import { textWidth } from './text.ts';
 import { checkScene, checkSpec, checkTheme } from './check.ts';
@@ -1166,10 +1166,10 @@ export function Flow({
                   margin: '0 auto',
                   transform: fit.scale < 1 ? `scale(${fit.scale})` : undefined,
                   transformOrigin: 'top left',
-                  paddingTop: routed.some((r) => r.around === 'above') ? 44 : 4,
-                  paddingBottom: routed.some((r) => r.around === 'below') ? 44 : 4,
-                  paddingLeft: routed.some((r) => r.around === 'left') ? 44 : 4,
-                  paddingRight: routed.some((r) => r.around === 'right') ? 44 : 4,
+                  paddingTop: arcRoom(routed, 'above') || 4,
+                  paddingBottom: arcRoom(routed, 'below') || 4,
+                  paddingLeft: arcRoom(routed, 'left') || 4,
+                  paddingRight: arcRoom(routed, 'right') || 4,
                 }}
               >
                 {renderItem(layout, 0)}

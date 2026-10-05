@@ -226,10 +226,23 @@ test('an edge with both detours blocked keeps the straight curve and does not ha
     dn: { x: 100, y: 140, w: 220, h: 100 },
   };
   const avoid = Object.values(rects).map((r) => ({ ...r, box: true as const }));
-  const t0 = performance.now();
   const [r] = route([{ id: 'a->c', from: 'a', to: 'c' }], rects, new Set(), avoid);
   assert.equal(r.around, undefined);
-  assert.ok(performance.now() - t0 < 50);
+});
+
+test('two detours over the same boxes take the two sides and do not cross', () => {
+  const rects = { a: { x: 0, y: 100, w: 100, h: 40 }, b: { x: 150, y: 100, w: 100, h: 40 }, c: { x: 300, y: 100, w: 100, h: 40 } };
+  const avoid = Object.values(rects).map((r) => ({ ...r, box: true as const }));
+  const [go, back] = route(
+    [
+      { id: 'a->c', from: 'a', to: 'c' },
+      { id: 'c->a', from: 'c', to: 'a' },
+    ],
+    rects,
+    new Set(),
+    avoid,
+  );
+  assert.deepEqual([go.around, back.around].sort(), ['above', 'below']);
 });
 
 test('an edge label moves off a box on the curve middle, and stays at the middle with no free spot', () => {

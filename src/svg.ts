@@ -1,5 +1,5 @@
 // Wrapping is approximate: text is measured by character class, not by a browser.
-import { avoidOf, route, type Pt, type Rect, type Side } from './geometry.ts';
+import { arcRoom, avoidOf, route, type Pt, type Rect, type Side } from './geometry.ts';
 import { foldedLabel, groupBox, layoutRail, railState, RAIL, type Rail } from './rail.ts';
 import { textWidth, wrap } from './text.ts';
 import { checkRendered, planFor, type CheckOptions } from './check.ts';
@@ -837,7 +837,7 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
   }
 
   const bounds = placed[0];
-  const [arcT, arcB, arcL, arcR] = (['above', 'below', 'left', 'right'] as const).map((w) => (routed.some((r) => r.around === w) ? 44 : 0));
+  const [arcT, arcB, arcL, arcR] = (['above', 'below', 'left', 'right'] as const).map((w) => arcRoom(routed, w));
   const capLines = [...new Set(captions)].flatMap((c) => wrap(c, Math.max(560, bounds.w), 13.5).length);
   const mapW = Math.max(bounds.w + pad * 2 + arcL + arcR, 560);
   const rail: Rail | null = fig.rail ? layoutRail(fig, fig.rail === 'only' ? 560 : mapW) : null;
@@ -1003,6 +1003,7 @@ ${said.join('\n')}
   if (rail) fonts.push(12, 13);
   const scene: Scene = {
     width: n2(W),
+    ...(!only && { area: { x: -shift, y: -arcT, w: W, h: mapH } }),
     boxes: only ? [] : sceneBoxes,
     edges: [
       ...(only ? [] : routed).flatMap((r): SceneEdge[] => {
