@@ -492,6 +492,10 @@ test('plain-text warns on code-shaped labels, long lines, filler words and code 
         { id: 'b', label: 'Redis' },
         { id: 'c', label: 'Check input' },
         { id: 'd', label: 'Find user', source: 'src/u.ts#findUser' },
+        { id: 'e', label: 'GitHub' },
+        { id: 'f', label: 'DynamoDB', source: 'src/db.ts#saveOrder' },
+        { id: 'g', label: 'ReportsController', source: 'src/reports.ts#ReportsController' },
+        { id: 'h', label: 'sweep', source: 'src/jobs.ts#sweep' },
       ],
     },
     edges: [
@@ -517,11 +521,6 @@ test('plain-text warns on code-shaped labels, long lines, filler words and code 
   assert.match(msgs, /label "seamless sync" has the filler word "seamless"/);
   assert.match(msgs, /say 1 has the code name "validate_rows"; use plain words/);
   assert.match(msgs, /say 3 has 21 words; keep it to 20/);
-  assert.match(
-    checkSpec({ ...spec, layout: { children: [{ id: 'a', label: 'verify', source: 'src/u.ts#verify' }] }, edges: [], steps: [] })
-      .map((f) => f.message)
-      .join('\n'),
-    /label "verify" repeats its source; use plain words/,
-  );
-  assert.doesNotMatch(msgs, /Redis|Check input|Find user|session id|The gateway calls auth/);
+  assert.match(msgs, /label "ReportsController" looks like code/);
+  assert.doesNotMatch(msgs, /Redis|Check input|Find user|session id|The gateway calls auth|GitHub|DynamoDB|sweep/);
 });

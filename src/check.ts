@@ -32,8 +32,8 @@ const warn = (rule: string, ids: string[], message: string): Finding => ({ rule,
 const groupIds = (g: FigGroup): string[] => [...(g.id ? [g.id] : []), ...g.children.flatMap((c) => (isGroup(c) ? groupIds(c) : []))];
 
 const FILLER =
-  /\b(seamless(ly)?|robust|powerful|leverag(e|es|ed|ing)|effortless(ly)?|cutting-edge|state-of-the-art|holistic|synergy|empower(s|ed|ing)?|unlock(s|ed|ing)?|magic(al)?|elegant(ly)?)\b/i;
-const codeToken = (t: string) => /[a-z][A-Z]|[A-Za-z]_[A-Za-z]|\(\)|::|\w\.\w+\(/.test(t);
+  /\b(seamless(ly)?|robust|powerful|leverag(e|es|ed|ing)|effortless(ly)?|cutting-edge|state-of-the-art|holistic|synergy|empower(s|ed|ing)?|elegant(ly)?)\b/i;
+const codeToken = (t: string) => /^[^A-Za-z]*[a-z][A-Za-z0-9]*[A-Z]|[A-Za-z]_[A-Za-z]|\(\)|::|\w\.\w+\(/.test(t);
 
 function plainText(fig: FlowProps): Finding[] {
   const out: Finding[] = [];
@@ -46,14 +46,14 @@ function plainText(fig: FlowProps): Finding[] {
           ?.symbol?.split(/[.#:]+/)
           .pop()
       : undefined;
-    const code = o.code === false ? undefined : tokens.find(codeToken);
+    const code = o.code === false ? undefined : tokens.find((w) => codeToken(w) || (w === symbol && /[a-z][A-Z]/.test(w)));
     const filler = FILLER.exec(t)?.[0];
     const why = [
       code &&
         (tokens.length === 1 && field === 'label'
-          ? `${field} "${t}" looks like code; use plain words, the code name goes in source`
-          : `${field} has the code name "${code}"; use plain words`),
-      symbol && t === symbol && !code && `${field} "${t}" repeats its source; use plain words`,
+          ? `${field} "${t}" looks like code; use plain words, the code name goes in source; if this is a product name, keep it`
+          : `${field} has the code name "${code}"; use plain words; if this is a product name, keep it`),
+      symbol && t === symbol && !code && !/^[A-Za-z]+$/.test(t) && `${field} "${t}" repeats its source; use plain words`,
       filler && `${field} "${t}" has the filler word "${filler}"`,
       o.words && tokens.length > 20 && `${field} has ${tokens.length} words; keep it to 20`,
     ].filter(Boolean);
