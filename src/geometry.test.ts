@@ -1,6 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { route } from './geometry.ts';
+import { route, type Pt } from './geometry.ts';
+
+const bezier = ([p0, p1, p2, p3]: [Pt, Pt, Pt, Pt], t: number): Pt => {
+  const u = 1 - t;
+  const [a, b, c, d] = [u * u * u, 3 * u * u * t, 3 * u * t * t, t * t * t];
+  return { x: a * p0.x + b * p1.x + c * p2.x + d * p3.x, y: a * p0.y + b * p1.y + c * p2.y + d * p3.y };
+};
 
 test('side by side boxes connect right -> left, parallel edges spread out', () => {
   const rects = { a: { x: 0, y: 0, w: 100, h: 90 }, b: { x: 200, y: 0, w: 100, h: 90 } };
@@ -191,4 +197,37 @@ test('an elbow keeps clear of a box it does not connect: a clear x in the gap, e
   }
   assert.ok(r.elbow![1].x >= wide.x + wide.w + 8, 'the detour passes right of the box');
   assert.match(route(elbow, rects, new Set(), [{ x: 104, y: 80, w: 250, h: 28 }])[0].d, /^M 100 14 H 200 V 214 H 300$/);
+});
+
+test('an edge whose straight path crosses a box in a row goes around it', () => {
+  const rects = { a: { x: 0, y: 100, w: 100, h: 40 }, b: { x: 150, y: 100, w: 100, h: 40 }, c: { x: 300, y: 100, w: 100, h: 40 } };
+  const avoid = Object.values(rects).map((r) => ({ ...r, box: true as const }));
+  const [r] = route([{ id: 'a->c', from: 'a', to: 'c' }], rects, new Set(), avoid);
+  assert.ok(r.around === 'above' || r.around === 'below');
+  for (let t = 0; t <= 1; t += 0.03) {
+    const p = bezier(r.curve, t);
+    assert.ok(!(p.x > 150 && p.x < 250 && p.y > 100 && p.y < 140), `point ${t} is inside b`);
+  }
+});
+
+test('an edge between stacked boxes with a box between them goes around at the side', () => {
+  const rects = { a: { x: 0, y: 0, w: 100, h: 40 }, b: { x: 0, y: 80, w: 100, h: 40 }, c: { x: 0, y: 160, w: 100, h: 40 } };
+  const avoid = Object.values(rects).map((r) => ({ ...r, box: true as const }));
+  const [r] = route([{ id: 'a->c', from: 'a', to: 'c' }], rects, new Set(), avoid);
+  assert.ok(r.around === 'left' || r.around === 'right');
+});
+
+test('an edge with both detours blocked keeps the straight curve and does not hang', () => {
+  const rects = {
+    a: { x: 0, y: 100, w: 100, h: 40 },
+    b: { x: 150, y: 100, w: 100, h: 40 },
+    c: { x: 300, y: 100, w: 100, h: 40 },
+    up: { x: 100, y: 0, w: 220, h: 100 },
+    dn: { x: 100, y: 140, w: 220, h: 100 },
+  };
+  const avoid = Object.values(rects).map((r) => ({ ...r, box: true as const }));
+  const t0 = performance.now();
+  const [r] = route([{ id: 'a->c', from: 'a', to: 'c' }], rects, new Set(), avoid);
+  assert.equal(r.around, undefined);
+  assert.ok(performance.now() - t0 < 50);
 });

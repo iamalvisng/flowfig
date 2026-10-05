@@ -5,11 +5,16 @@ export type Pt = { x: number; y: number };
 /** A cross-lane edge as two stubs, their pills and their points. */
 export type Stub = { parts: [string, string]; pills: [Rect, Rect]; pts: [Pt[], Pt[]]; short?: true; tight: [boolean, boolean] };
 /** `elbow` holds the corners of an elbow path for `check`. */
-export type Routed = { id: string; d: string; mid: Pt; curve: [Pt, Pt, Pt, Pt]; stub?: Stub; elbow?: Pt[] };
+export type Routed = { id: string; d: string; mid: Pt; curve: [Pt, Pt, Pt, Pt]; stub?: Stub; elbow?: Pt[]; around?: Around };
 /** A rect that a route keeps clear of. `box` marks a box. */
 export type Avoid = Rect & { box?: boolean };
+/** The rects that both renderers give `route` to keep clear of. */
+export const avoidOf = (boxes: Rect[], extra: Rect[], lanes: boolean): Avoid[] => [
+  ...extra,
+  ...boxes.map((r) => (lanes ? r : { ...r, box: true })),
+];
 
-type Around = 'above' | 'below';
+type Around = 'above' | 'below' | 'left' | 'right';
 type Pick = {
   id: string;
   a: Rect;
@@ -19,6 +24,7 @@ type Pick = {
   from: string;
   to: string;
   around?: Around;
+  arc?: number;
   elbow?: boolean;
   stub?: number[];
   bands?: [Rect | undefined, Rect | undefined];
@@ -32,6 +38,38 @@ const bezier = ([p0, p1, p2, p3]: [Pt, Pt, Pt, Pt], t: number): Pt => {
   const u = 1 - t;
   const [a, b, c, d] = [u * u * u, 3 * u * u * t, 3 * u * t * t, t * t * t];
   return { x: a * p0.x + b * p1.x + c * p2.x + d * p3.x, y: a * p0.y + b * p1.y + c * p2.y + d * p3.y };
+};
+const same = (r: Rect, q: Rect) => r.x === q.x && r.y === q.y && r.w === q.w && r.h === q.h;
+const sideMid = (r: Rect, side: Side): Pt =>
+  side === 'l'
+    ? { x: r.x, y: cy(r) }
+    : side === 'r'
+      ? { x: r.x + r.w, y: cy(r) }
+      : side === 't'
+        ? { x: cx(r), y: r.y }
+        : { x: cx(r), y: r.y + r.h };
+const bend = (s: Pt, e: Pt, sa: Side): [Pt, Pt, Pt, Pt] => {
+  const horiz = sa === 'l' || sa === 'r';
+  const k = (horiz ? Math.abs(e.x - s.x) : Math.abs(e.y - s.y)) / 2;
+  const sign = sa === 'r' || sa === 'b' ? 1 : -1;
+  const c1 = horiz ? { x: s.x + sign * k, y: s.y } : { x: s.x, y: s.y + sign * k };
+  const c2 = horiz ? { x: e.x - sign * k, y: e.y } : { x: e.x, y: e.y - sign * k };
+  return [s, c1, c2, e];
+};
+const arcLine = (s: Pt, e: Pt, around: Around, at: number): [Pt, Pt, Pt, Pt] =>
+  around === 'above' || around === 'below' ? [s, { x: s.x, y: at }, { x: e.x, y: at }, e] : [s, { x: at, y: s.y }, { x: at, y: e.y }, e];
+const ARC = 50;
+const arcAt = (a: Rect, b: Rect, around: Around, past: Rect[]) => {
+  const rs = [a, b, ...past];
+  if (around === 'above') return Math.min(...rs.map((r) => r.y)) - ARC;
+  if (around === 'below') return Math.max(...rs.map((r) => r.y + r.h)) + ARC;
+  if (around === 'left') return Math.min(...rs.map((r) => r.x)) - ARC;
+  return Math.max(...rs.map((r) => r.x + r.w)) + ARC;
+};
+const SIDES: Record<Around, [Side, Side]> = { above: ['t', 't'], below: ['b', 'b'], left: ['l', 'l'], right: ['r', 'r'] };
+const hit = (curve: [Pt, Pt, Pt, Pt], boxes: Rect[], m: number) => {
+  const pts = Array.from({ length: 65 }, (_, i) => bezier(curve, i / 64));
+  return boxes.filter((r) => pts.some((q) => q.x > r.x - m && q.x < r.x + r.w + m && q.y > r.y - m && q.y < r.y + r.h + m));
 };
 
 /** Routes edges between measured boxes as curved SVG paths. `elbow` draws right-angle paths; `stub` splits a cross-lane edge in two. */
@@ -59,22 +97,20 @@ export function route(
       b = rects[e.to];
     if (!a || !b) continue;
     const stacked = a.x < b.x + b.w && b.x < a.x + a.w;
-    const [sa, sb]: Side[] = e.sides
-      ? e.sides
-      : e.stub
-        ? ['r', 'l']
-        : e.around
-          ? e.around === 'above'
-            ? ['t', 't']
-            : ['b', 'b']
-          : stacked
-            ? a.y < b.y
-              ? ['b', 't']
-              : ['t', 'b']
-            : a.x < b.x
-              ? ['r', 'l']
-              : ['l', 'r'];
-    picks.push({ ...e, a, b, sa, sb });
+    const others = avoid.filter((r) => r.box && !same(r, a) && !same(r, b));
+    const plain: [Side, Side] = stacked ? (a.y < b.y ? ['b', 't'] : ['t', 'b']) : a.x < b.x ? ['r', 'l'] : ['l', 'r'];
+    const past = hit(bend(sideMid(a, plain[0]), sideMid(b, plain[1]), plain[0]), others, -2);
+    let around = e.around;
+    let arc = around && arcAt(a, b, around, past);
+    if (!around && !e.sides && !e.stub && !e.elbow && past.length)
+      for (const way of stacked ? (['left', 'right'] as const) : (['above', 'below'] as const)) {
+        const at = arcAt(a, b, way, past);
+        if (hit(arcLine(sideMid(a, SIDES[way][0]), sideMid(b, SIDES[way][1]), way, at), others, 2).length) continue;
+        [around, arc] = [way, at];
+        break;
+      }
+    const [sa, sb] = e.sides ?? (e.stub ? ['r', 'l'] : around ? SIDES[around] : plain);
+    picks.push({ ...e, a, b, sa, sb, around, arc });
   }
 
   const ends = new Map<string, { pick: Pick; start: boolean }[]>();
@@ -296,7 +332,7 @@ export function route(
           elbow: [s, { x: mx, y: s.y }, { x: mx, y: my }, { x: ex, y: my }, { x: ex, y: e.y }, e],
         };
       }
-      const own = (r: Rect) => [p.a, p.b].some((q) => q.x === r.x && q.y === r.y && q.w === r.w && q.h === r.h);
+      const own = (r: Rect) => [p.a, p.b].some((q) => same(q, r));
       const all = avoid.filter((r) => !own(r));
       const boxes = all.filter((r) => r.box);
       const vClear = (x: number, ya: number, yb: number, m = 2) =>
@@ -349,16 +385,10 @@ export function route(
       };
     }
     if (p.around) {
-      // ponytail: arcs 50 px past the box ends; a taller box between can be crossed.
-      const y = p.around === 'above' ? Math.min(p.a.y, p.b.y) - 50 : Math.max(p.a.y + p.a.h, p.b.y + p.b.h) + 50;
-      return drawn(p.id, [s, { x: s.x, y }, { x: e.x, y }, e], { x: (s.x + e.x) / 2, y: (s.y + 6 * y + e.y) / 8 });
+      const curve = arcLine(s, e, p.around, p.arc!);
+      return { ...drawn(p.id, curve, bezier(curve, 0.5)), around: p.around };
     }
-    const horiz = p.sa === 'l' || p.sa === 'r';
-    const k = (horiz ? Math.abs(e.x - s.x) : Math.abs(e.y - s.y)) / 2;
-    const sign = p.sa === 'r' || p.sa === 'b' ? 1 : -1;
-    const c1 = horiz ? { x: s.x + sign * k, y: s.y } : { x: s.x, y: s.y + sign * k };
-    const c2 = horiz ? { x: e.x - sign * k, y: e.y } : { x: e.x, y: e.y - sign * k };
-    return drawn(p.id, [s, c1, c2, e], { x: (s.x + e.x) / 2, y: (s.y + e.y) / 2 });
+    return drawn(p.id, bend(s, e, p.sa), { x: (s.x + e.x) / 2, y: (s.y + e.y) / 2 });
   };
   const done = new Map<Pick, Routed>();
   for (const p of picks) {

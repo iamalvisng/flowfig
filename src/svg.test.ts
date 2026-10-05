@@ -18,6 +18,7 @@ import {
 } from './model.ts';
 import type { Pt } from './geometry.ts';
 import { layoutRail, railState, RAIL } from './rail.ts';
+import { checkScene } from './check.ts';
 
 const fig: FlowProps = {
   speed: 1000,
@@ -1179,4 +1180,28 @@ test('timeline: the roadmap elbows clear every box they do not connect, and chec
       }
   }
   assert.ok(!check(demo.props).some((f) => f.rule === 'edge-crosses-box'));
+});
+
+test('a map figure with an edge across a middle box renders with no edge-crosses-box finding', () => {
+  const fig: FlowProps = {
+    layout: {
+      direction: 'row',
+      children: [
+        { id: 'a', label: 'A' },
+        { id: 'b', label: 'B' },
+        { id: 'c', label: 'C' },
+      ],
+    },
+    edges: [
+      { from: 'a', to: 'b' },
+      { from: 'b', to: 'c' },
+      { from: 'a', to: 'c' },
+    ],
+  };
+  const { svg, scene } = render(fig);
+  assert.deepEqual(
+    checkScene(scene).filter((f) => f.rule === 'edge-crosses-box'),
+    [],
+  );
+  assert.ok(scene.width > 0 && !/NaN/.test(svg));
 });

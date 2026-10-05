@@ -1,5 +1,5 @@
 // Wrapping is approximate: text is measured by character class, not by a browser.
-import { route, type Pt, type Rect, type Side } from './geometry.ts';
+import { avoidOf, route, type Pt, type Rect, type Side } from './geometry.ts';
 import { foldedLabel, groupBox, layoutRail, railState, RAIL, type Rail } from './rail.ts';
 import { textWidth, wrap } from './text.ts';
 import { checkRendered, planFor, type CheckOptions } from './check.ts';
@@ -332,12 +332,13 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
       })),
       rects,
       tips,
-      stubs.size
-        ? placed.flatMap((p) => (!isGroup(p.item) ? [p] : p.lane ? [{ x: p.x, y: p.y, w: gutter, h: p.h }] : []))
-        : [
-            ...placed.filter((p) => p.tl && !p.tl.labelInside).map((p) => outsideLabelRect(p, str(p.item.label))),
-            ...placed.filter((p) => p.tl).map((p) => ({ x: p.x, y: p.y, w: p.w, h: p.h, box: true })),
-          ],
+      avoidOf(
+        placed.filter((p) => !isGroup(p.item)),
+        stubs.size
+          ? placed.filter((p) => p.lane).map((p) => ({ x: p.x, y: p.y, w: gutter, h: p.h }))
+          : placed.filter((p) => p.tl && !p.tl.labelInside).map((p) => outsideLabelRect(p, str(p.item.label))),
+        stubs.size > 0,
+      ),
       stubs.size ? { x: placed[0].x + gutter, y: placed[0].y, w: placed[0].w - gutter, h: placed[0].h } : undefined,
       lanes ? { bands: placed.filter((p) => p.lane), boxes: placed.filter((p) => !isGroup(p.item)) } : undefined,
     );
@@ -818,18 +819,18 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
   }
 
   const bounds = placed[0];
-  const arcs = fig.edges.some((e, i) => (e.around || plan?.around.has(ids[i])) && !stubs.has(ids[i]));
+  const [arcT, arcB, arcL, arcR] = (['above', 'below', 'left', 'right'] as const).map((w) => (routed.some((r) => r.around === w) ? 44 : 0));
   const capLines = [...new Set(captions)].flatMap((c) => wrap(c, Math.max(560, bounds.w), 13.5).length);
-  const mapW = Math.max(bounds.w + pad * 2, 560);
+  const mapW = Math.max(bounds.w + pad * 2 + arcL + arcR, 560);
   const rail: Rail | null = fig.rail ? layoutRail(fig, fig.rail === 'only' ? 560 : mapW) : null;
   const only = fig.rail === 'only' && rail != null;
   const capTop = rail ? 20 : 26;
   const capH = steps.length ? capTop + 4 + Math.max(0, ...capLines) * 20 : 0;
   const W = only ? Math.max(560, rail.width) : Math.max(mapW, rail?.width ?? 0);
-  const mapH = only ? 0 : bounds.h + pad * 2 + (arcs ? 44 : 0);
+  const mapH = only ? 0 : bounds.h + pad * 2 + arcT + arcB;
   const top = only ? pad : mapH + RAIL.gap;
   const H = only ? pad + rail.height + capH : mapH + (rail ? RAIL.gap + rail.height : 0) + capH;
-  const shift = (W - (bounds.w + pad * 2)) / 2;
+  const shift = (W - (bounds.w + pad * 2 + arcL + arcR)) / 2 + arcL;
   const railX = rail ? (W - rail.width) / 2 : 0;
 
   const labels =
@@ -966,7 +967,7 @@ ${css.join('\n')}
 ${
   only
     ? ''
-    : `<g transform="translate(${n2(shift)} ${arcs ? 44 : 0})">
+    : `<g transform="translate(${n2(shift)} ${arcT})">
 ${axisSvg}
 ${tl ? boxes.filter((b, i) => b && isGroup(placed[i].item)).join('\n') : ''}${lineSvg && `\n${lineSvg}`}
 ${tl ? edgeSvg.join('\n') : ''}
@@ -1003,7 +1004,7 @@ ${said.join('\n')}
       ...(rail?.rows ?? []).flatMap((row, i) => {
         if (row.kind !== 'message') return [];
         const dx = only ? railX : railX - shift,
-          dy = only ? top : top - (arcs ? 44 : 0);
+          dy = only ? top : top - arcT;
         const y = dy + railState(rail!, row.step)[i].y + RAIL.row / 2;
         const [x1, x2] = [dx + rail!.columns[row.from].x, dx + rail!.columns[row.to].x];
         const p = { x: x1, y },

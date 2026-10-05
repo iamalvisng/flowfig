@@ -1,6 +1,6 @@
 'use client';
 import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { route, type Avoid, type Pt, type Rect, type Routed, type Side } from './geometry.ts';
+import { avoidOf, route, type Pt, type Rect, type Routed, type Side } from './geometry.ts';
 import { foldedLabel, groupBox, layoutRail, railState, RAIL } from './rail.ts';
 import { textWidth } from './text.ts';
 import { checkScene, checkSpec, checkTheme } from './check.ts';
@@ -276,20 +276,22 @@ export function Flow({
           h: r.height / k,
         };
       });
-      const avoid: Avoid[] = [];
+      const extra: Rect[] = [];
       el.querySelectorAll<HTMLElement>('[data-fig-outside]').forEach((n) => {
         const r = n.getBoundingClientRect();
-        avoid.push({ x: (r.left - base.left) / k, y: (r.top - base.top) / k, w: r.width / k, h: r.height / k });
+        extra.push({ x: (r.left - base.left) / k, y: (r.top - base.top) / k, w: r.width / k, h: r.height / k });
       });
-      if (tl) for (const n of nodes(layout)) if (rects[n.id]) avoid.push({ ...rects[n.id], box: true });
       const stubs = lanePlan?.stubs ?? new Map<string, string[]>();
-      if (stubs.size) {
-        for (const n of nodes(layout)) if (rects[n.id]) avoid.push(rects[n.id]);
+      if (stubs.size)
         el.querySelectorAll<HTMLElement>('[data-fig-gutter]').forEach((n) => {
           const r = n.getBoundingClientRect();
-          avoid.push({ x: (r.left - base.left) / k, y: (r.top - base.top) / k, w: r.width / k, h: r.height / k });
+          extra.push({ x: (r.left - base.left) / k, y: (r.top - base.top) / k, w: r.width / k, h: r.height / k });
         });
-      }
+      const avoid = avoidOf(
+        nodes(layout).flatMap((n) => (rects[n.id] ? [rects[n.id]] : [])),
+        extra,
+        stubs.size > 0,
+      );
       const bands: Record<string, Rect> = {};
       el.querySelectorAll<HTMLElement>('[data-fig-copy]').forEach((n) => {
         const r = n.getBoundingClientRect();
@@ -1151,13 +1153,10 @@ export function Flow({
                   margin: '0 auto',
                   transform: fit.scale < 1 ? `scale(${fit.scale})` : undefined,
                   transformOrigin: 'top left',
-                  padding: 4,
-                  paddingTop: edges.some((e, i) => e.around === 'above' && !lanePlan?.stubs.has(ids[i])) ? 44 : 4,
-                  paddingBottom: edges.some(
-                    (e, i) => (e.around === 'below' || (!e.around && lanePlan?.around.has(ids[i]))) && !lanePlan?.stubs.has(ids[i]),
-                  )
-                    ? 44
-                    : 4,
+                  paddingTop: routed.some((r) => r.around === 'above') ? 44 : 4,
+                  paddingBottom: routed.some((r) => r.around === 'below') ? 44 : 4,
+                  paddingLeft: routed.some((r) => r.around === 'left') ? 44 : 4,
+                  paddingRight: routed.some((r) => r.around === 'right') ? 44 : 4,
                 }}
               >
                 {renderItem(layout, 0)}
