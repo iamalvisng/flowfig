@@ -1,91 +1,73 @@
 export const GUIDE = `# flowfig guide
 
-flowfig draws animated flow figures. A figure has boxes, the edges between the boxes, and steps. In each step, a packet moves along
-the edges. The output is one animated SVG with no script. The SVG plays in a GitHub README, in PR and issue comments, and in blog
-posts. A figure is about 5 to 50 kB.
+flowfig draws animated flow figures. A figure has boxes, the edges between the boxes, and steps. In each step, a packet moves
+along the edges. The output is one animated SVG of 5 to 50 kB, with no script. The SVG plays in a GitHub README, in PR and issue
+comments, and in blog posts.
 
-You write a JSON spec. You never write SVG by hand. The command \`npx flowfig\` checks the spec and renders it.
+You write a JSON spec. You never write SVG by hand. \`npx flowfig\` checks the spec, renders it and prints the figure back.
 
-## What flowfig draws
-
-A spec has three forms.
-
-- The map (the default). The map shows the boxes and the edges. A packet moves along an edge in each beat.
-- The map with a rail (\`"rail": true\`). The rail is a lifeline diagram under the map. It has one row for each message.
-- The rail alone (\`"rail": "only"\`). Use it when the reader needs only the order of the messages, for example when the map is already in the same document.
-
-Use the rail for a sequence of messages: a request lifecycle, an API call chain, or a Mermaid \`sequenceDiagram\`. Put each message on
-an edge. Put each phase in a step. Put messages that run at the same time in one beat. Mark a message that does not wait for an
-answer with \`"async": true\`: every send to a queue or a topic, every emitted event, and every call the caller does not await.
-
-## Scope: what flowfig draws and what it does not
+## Scope
 
 flowfig draws how something works: parts, the messages between them, and the order of the messages.
 
-| The user asks for                          | Draw                                                                                       |
-| ------------------------------------------ | ------------------------------------------------------------------------------------------ |
-| An architecture, a data flow, a pipeline   | The map. Group parts by service, network or trust boundary. \`store\` for data at rest.       |
-| A request lifecycle, a call chain          | The map with \`"rail": true\`. One message per hop, with its real payload in \`data\`.          |
-| A sequence diagram only                    | \`"rail": "only"\`.                                                                           |
-| A state lifecycle, a state machine         | One box per state, one edge per transition, labeled with its event. One step per path. Mark the first state with \`mark: "start"\` and each final state with \`mark: "end"\`. |
-| A flowchart with branches                  | \`shape: "decision"\` for each branch. One step per path.                                     |
-| A roadmap or a timeline | \`timeline: true\`. One labeled group per track, in a \`column\` group. Items with \`from\` and \`to\` (dates), a milestone with \`from\` only, an edge for a dependency, \`today\` for the line. A dependent item starts after its source ends. |
-| A process across roles (a ticket, an order, a refund) | \`lanes: true\`. One labeled group per role, in a \`column\` group. Put each step in the lane of the role that does it. Link each step with \`source\` to the SOP heading. If the steps do not fit the width, flowfig wraps the time columns into blocks and links the blocks with labeled stubs, so keep the whole process in one figure. Give the outcomes of one decision the same \`at\`. |
+- An architecture, a data flow or a pipeline: the map of boxes and edges. Group parts by service, network or trust boundary.
+- A flowchart with branches: \`shape: "decision"\` for each branch, one step per path.
 
-flowfig draws a roadmap or a timeline with dates (\`timeline: true\`), and converts a Mermaid \`gantt\` to it. flowfig does not
-draw class or ER diagrams (fields, types, cardinality), charts of numbers or mind maps. If the user asks for one of these, say that
-flowfig does not draw it, suggest Mermaid (\`classDiagram\`, \`erDiagram\`), and draw nothing with flowfig.
+flowfig does not draw class or ER diagrams (fields, types, cardinality), charts of numbers or mind maps. If the user asks for one
+of these, say that flowfig does not draw it, suggest Mermaid (\`classDiagram\`, \`erDiagram\`), and draw nothing with flowfig.
+
+## Topics
+
+A topic gives the detail for one kind of figure. Before you write that kind of spec, print its topic with
+\`npx flowfig docs <topic>\`.
+
+- \`rail\`: a request lifecycle, a call chain or a Mermaid \`sequenceDiagram\`.
+- \`marks\`: a state lifecycle, a state machine or a Mermaid \`stateDiagram\`.
+- \`timeline\`: a roadmap, a plan with dates or a Mermaid \`gantt\`.
+- \`lanes\`: a process that several roles do (a ticket, an order, a refund), or an SOP.
+- \`verify\`: a verify finding in the render output, or a check in CI.
 
 ## Workflow
 
 ### 1. Pick the scope
 
-If the code has more than one flow, name each flow in the reply. Then draw one flow, or draw one structure view and call it a
-structure view. If the user asks for the whole system, draw one top view with groups, or a set of figures that together cover
-every part. Keep each figure to 12 boxes or fewer.
+If the code has more than one flow, name each flow in the reply, and draw one flow or one structure view. If the user asks
+for the whole system, draw one top view with groups, or a set of figures that covers every part. Keep each figure to 12 boxes
+or fewer.
 
 ### 2. Write the fact list
 
-Before the spec, write a list of the facts that the figure must show. Take each fact from the code and from its wiring: config
-files, compose files, route tables and queue bindings (or from the pasted Mermaid). Give each fact its \`file:line\`:
+Before the spec, list the facts that the figure must show, from the code and its wiring (config, compose, route and queue
+files) or the pasted Mermaid. Give each fact its \`file:line\`:
 
 - every part (service, function, store, queue, external system);
-- every call, in order, written as \`caller → callee: payload (file:line of the call)\`. The edge in the spec goes from that caller
-  to that callee;
-- every call that does not wait for an answer (fire and forget, a queue, a webhook, a callback), and every consumer of each queue
-  or topic;
-- every branch and every error path (a rejected input, a retry, a dead-letter path);
-- every end state;
-- for a process document (an SOP): every deadline, every message to a person (an email, a notice), every choice that a person
-  makes, and every wait for a reply. Put each one in a box \`sub\`, a step \`say\` or a \`data\` card. A small fact still counts.
-  Draw each path to its end: after a rejection, also draw the next step that the document gives. Give each path its own step.
+- every call, in order, as \`caller → callee: payload (file:line of the call)\`;
+- every call that does not wait for an answer, and every consumer of each queue or topic;
+- every branch, every error path and every end state;
+- for an SOP, the facts in the \`lanes\` topic.
 
-If the code does not show a fact, leave the fact out. Do not guess a part, a name or an order.
+If the code does not show a fact, leave it out. Do not guess a part, a name or an order.
 
 ### 3. Write the spec
 
-Each fact becomes a box, an edge, a beat, a \`data\` card or a \`show\` row. Use the real names from the code as labels, and
-real example data from the code or its tests. Keep each fact that you leave out, with the reason, for the reply.
-Give each box and edge that draws code a \`source\`, from the fact list: \`"src/auth/login.ts#verifyPassword"\`. A method uses \`Owner.name\`: \`"src/auth/session.ts#Session.refresh"\`. An edge \`source\` names the function that makes the call. An edge needs no \`source\` when the code of its \`from\` box makes the call. An edge across a process (HTTP, a queue, a topic, a table) gets \`via\`: the route, queue, topic or table name that both sides use in the code, for example \`"via": "order-paid"\`. A store box may have no \`source\`, but an edge to it still needs \`via\`.
-For an HTTP edge, \`via\` is the path that both sides use: \`"via": "/internal/users"\`. An edge to a store box (a table, a file, a folder, a cache key) uses \`via\` with the name that the caller code uses: \`"via": "sales_facts"\`. A route handler with no name keeps a file \`source\`, and an edge into it uses \`via\` with the route path. An edge out of it in the same process uses no \`via\`.
-A box that draws a step from a document links to that document: \`"docs/sop/refunds.md#step-3-approve-the-refund"\`, the heading as a GitHub anchor. \`verify\` checks it the same way.
+Each fact becomes a box, an edge, a beat, a \`data\` card or a \`show\` row. Write each text in plain words (see "Plain text").
+Use real example data from the code or its tests.
 
-Mermaid mapping:
+Give each box and edge that draws code a \`source\` from the fact list: \`"src/auth/login.ts#verifyPassword"\`. The code name goes
+in \`source\`, and the reader sees it on hover. A method uses \`Owner.name\`: \`"src/auth/session.ts#Session.refresh"\`. An edge
+\`source\` names the function that makes the call. An edge needs no \`source\` when the code of its \`from\` box makes the call.
 
-| Mermaid                                  | flowfig                                                            |
-| ---------------------------------------- | ------------------------------------------------------------------ |
-| \`participant\`                            | a box                                                              |
-| \`A->>B: text\`                            | an edge from A to B, and a hop with \`data: "text"\`                 |
-| \`B-->>A: text\` (a reply)                 | a hop on the same edge with \`back: true\`                           |
-| \`A-)B: text\` (async)                     | a hop with \`async: true\`                                           |
-| \`par ... and ... end\`                    | the hops of all branches in one beat                               |
-| \`alt\` / \`opt\`                            | one step per path                                                  |
-| \`stateDiagram\` states and transitions    | boxes, and edges labeled with the event                            |
+An edge across a process gets \`via\`, the name that both sides use in the code: the queue or topic (\`"order-paid"\`), the
+HTTP path (\`"/internal/users"\`), or the store name that the caller uses (\`"sales_facts"\`). A store box (a table, a file, a
+cache key) may have no \`source\`, but an edge to it still needs \`via\`. A route handler with no name keeps a file \`source\`. An
+edge into it uses \`via\` with the route path. An edge out of it in the same process uses no \`via\`.
 
-A pasted design wins over the async rule: keep each arrow as the Mermaid draws it. \`A->>B\` stays a plain hop, also for a
-send to a queue. Mark a hop async only for \`-)\`. If you think the design is wrong, say so in the reply.
+Mark a hop that does not wait for an answer with \`"async": true\`: every send to a queue or a topic, every emitted event, and
+every call the caller does not await. A pasted Mermaid design wins over this rule: keep each arrow as the Mermaid draws it.
 
 ### 4. Render, then fix
+
+Run the render from the repo root.
 
 \`\`\`bash
 npx flowfig - out.svg <<'SPEC'
@@ -93,153 +75,89 @@ npx flowfig - out.svg <<'SPEC'
 SPEC
 \`\`\`
 
-The quoted \`<<'SPEC'\` heredoc passes the JSON with no change. The command checks the spec first. If the check finds an error, the
-command writes no SVG and lists the faults. Fix each fault and render again.
+If the check finds an error, the render writes no SVG. The render prints the check lines, one line per edge
+(\`from -> to: label\`), one line per step (\`step "<label>": N hops\`), and the verify findings and counts. This output is the
+read-back: you need no other command.
 
-- Fix a layout fault by changing the layout first: put parts in rows or columns, route an edge \`around\`, or change a gap.
-  Never remove a fact from the fact list to pass the check. If you must remove one, name it in the reply.
-- If \`small-text\` appears, the figure is too wide. Put the parts in two rows, move a detail from \`label\` to \`sub\`, or split
-  the figure. Use more steps in one figure before you make a second figure. Keep the real name from the code in the label:
-  \`ReportsController\` stays \`ReportsController\`, not \`Controller\`. Do not change \`--width\` to pass the check: the
-  reader sees the figure at the real page width.
-- If \`text-overflow\` appears, a text is wider than its box. Give the box a larger \`width\`, move a detail from \`label\` to
-  \`sub\`, or put the detail in the step \`say\`. Never cut a fact, a number or a unit to make a text fit: "within 30 days of
-  delivery" does not become "within 30 days". If you must shorten a text, keep every fact and name the change in the reply.
-- Fix every other warning, or tell the user why it stays.
-- Do not use \`--no-check\` to hide a fault.
+Fix the figure and render again:
 
-### 5. Read the figure back
+- Compare the edge lines with the fact list. Each edge goes from the caller to the callee that its fact names.
+- Fix each verify finding. The \`verify\` topic explains each one.
+- Fix a layout fault in the layout first: rows, columns, \`around\` or a gap. Never remove a fact to pass the check.
+- \`small-text\`: the figure is too wide. Use two rows, more steps, or two figures. Do not change \`--width\`.
+- \`text-overflow\`: give the box a larger \`width\`, or move a detail to \`sub\` or \`say\`. Never cut a fact, a number or a
+  unit: "within 30 days of delivery" does not become "within 30 days".
+- \`plain-text\`: write the text again in plain words. The message names the reason.
+- Fix every other warning, or tell the user why it stays. Never use \`--no-check\` to hide a fault.
 
-Run \`npx flowfig --spec out.svg\`. Compare the spec with the fact list. Check that each edge goes from the caller to the callee
-that its fact names. Add each fact that is missing, fix each wrong edge, and render again.
+### 5. Look at the SVG
 
-Run \`npx flowfig verify out.svg\` from the repo root. Fix each \`missing-file\` and \`missing-symbol\`. For each \`edge-not-found\`, the code does not make that call: remove the edge, or point its \`source\` at the function that makes the call. An \`unsure\` edge is allowed, but if a function with a typed receiver makes the call, point the edge \`source\` at it. A \`not checked\` edge has no code to check: give it a \`source\` or a \`via\` if one exists. Do not invent an edge to make verify pass.
+If you can open a browser, take two screenshots of the SVG a few seconds apart. If the browser blocks \`file://\` URLs, run
+\`python3 -m http.server\`. If you cannot open a browser, write "not looked at" in the reply. Never report a look that you did
+not do.
 
-### 6. Look at the SVG
-
-The check estimates the text width, so it cannot see everything. If you can open a browser, open the SVG and take a
-screenshot. Wait a few seconds and take a second screenshot to see a later beat. If you cannot open a browser, write "not
-looked at" in the reply. Never report a look that you did not do. A browser tool can block \`file://\` URLs. If it does, serve the folder
-with \`python3 -m http.server\`.
-
-### 7. Write the reply
+### 6. Write the reply
 
 The reply has these parts, in this order:
 
 1. the path of each SVG;
-2. what each figure shows: the parts and the steps. Copy the counts from the \`figure:\` line of the check output. Copy every name
-   from the read-back spec. Never count from memory;
-3. the scope: the flow you drew, why, and the other flows that exist;
-4. what the figure leaves out, and why;
-5. the two check lines that the render printed, \`0 errors, 0 warnings\` and \`figure: ...\`, copied as printed, and whether
-   you looked at the SVG;
-6. the \`verify\` edge counts from its count line, for example "edges: 5 found, 0 not found, 1 unsure, 0 not checked";
-7. one line \`npx flowfig open <path>\` for each SVG, at the end of the reply. Do not run that command yourself.
+2. what each figure shows, with the counts and names copied from the \`figure:\`, edge and step lines;
+3. the flow you drew, why, and the other flows that exist;
+4. each fact that the figure leaves out, and why;
+5. the lines \`0 errors, 0 warnings\` and \`figure: ...\`, copied as printed, and whether you looked at the SVG;
+6. the verify count line, copied as printed;
+7. at the end, one line \`npx flowfig open <path>\` for each SVG. Do not run it yourself.
 
-To change an SVG later, print its spec with \`--spec\`, change the spec, and render again.
+To change an SVG later, print its spec with \`npx flowfig --spec out.svg\`.
 
 ## Spec reference
 
-\`props\` has these fields.
+\`props\` has \`layout\` (required), \`edges\` (required), \`steps\`, \`speed\` (the ms for a packet to cross one edge, default 900)
+and \`theme\` (the colors \`accent\`, \`fg\`, \`muted\`, \`bg\`, \`surface\`, \`border\` and \`font\`). The topics give \`rail\`,
+\`lanes\`, \`timeline\` and \`today\`.
 
-| Field      | Type                    | Meaning                                                                                        |
-| ---------- | ----------------------- | ---------------------------------------------------------------------------------------------- |
-| \`layout\`   | group                   | The boxes and how they line up. Required.                                                      |
-| \`edges\`    | edge[]                  | The arrows between the boxes. Required.                                                        |
-| \`steps\`    | step[]                  | The stories the figure tells. With no steps, the figure is a still map.                        |
-| \`lanes\`    | \`true\`                | Draw the layout as swimlanes: a \`column\` group of labeled groups, one per role. The boxes run left to right in step order. |
-| \`timeline\` | \`true\`               | Draw the layout as a timeline: one labeled group per track, with the boxes placed by their \`from\` and \`to\` dates. |
-| \`today\`    | \`YYYY-MM-DD\`          | In a \`timeline\` figure: the date where the today line stops. Default: the last date of the items. |
-| \`rail\`     | \`true\` or \`"only"\`      | Draw the steps as a lifeline rail under the map. \`"only"\` draws the rail without the map.      |
-| \`speed\`    | number                  | Milliseconds a packet takes to cross one edge. Default: 900.                                   |
-| \`theme\`    | object                  | Colors: \`accent\`, \`fg\`, \`muted\`, \`bg\`, \`surface\`, \`border\`, \`font\`. Each color you omit keeps its built-in value. |
+A layout group has \`children\`, and optional \`id\` (an edge target), \`label\` (a framed title), \`direction\` (\`"row"\` or
+\`"column"\`), \`gap\` (px) and \`align\` (\`"start"\`, \`"center"\` or \`"end"\`). Every other layout item is a box.
 
-### layout
+A box has a unique \`id\` and a \`label\` (both required), and optional \`sub\` (a smaller line), \`shape\` (\`"box"\`,
+\`"decision"\` or \`"store"\`), \`width\` (px), \`source\` (\`path#Owner.name\`, from the repo root), \`lines\` (the least lines of a
+content card) and \`tone\` (\`blue\`, \`purple\`, \`green\`, \`orange\`, \`red\` or \`gray\`). The topics give \`at\`, \`from\`, \`to\`
+and \`mark\`.
 
-The layout is a tree. A group has \`children\` and these optional fields.
+An edge has \`from\` and \`to\` (a box or group \`id\`), and optional \`id\` (default \`from->to\`), \`label\`, \`source\` and \`via\`.
+\`around: "above"\` or \`"below"\` routes it over or under the boxes between. \`quiet: true\` draws it only while a step uses it.
 
-- \`id\`: a name that an edge can use to reach the group as a whole.
-- \`label\`: the title on the frame. Only a group with a \`label\` gets a frame.
-- \`direction\`: \`"row"\` (the default) or \`"column"\`.
-- \`gap\`: the space between children in px. Default: 28 for a column. For a row, the gap fits the widest edge label between two children (at least 56).
-- \`align\`: \`"start"\`, \`"center"\` or \`"end"\`. This sets where the children line up across the direction.
+A step has \`label\` and \`flow\`, and optional \`caption\` and \`nodes\` (boxes to highlight). \`flow\` is a list of beats. A
+beat is an edge id, an array of edge ids that run at the same time, or \`{ edges?, say?, show?, light?, ms? }\`.
 
-Every other item is a box.
-
-| Box field | Meaning                                                                                                   |
-| --------- | --------------------------------------------------------------------------------------------------------- |
-| \`id\`      | Required. The name that edges and steps use. It must be unique in the figure.                             |
-| \`label\`   | Required. The title in the box.                                                                           |
-| \`sub\`     | A smaller line under the label.                                                                           |
-| \`shape\`   | \`"box"\` (default), \`"decision"\` (a diamond) or \`"store"\` (a database cylinder for data at rest).          |
-| \`at\`      | In a \`lanes\` figure: the time column of the box, 0 first. Default: the order in which the steps first reach the box. |
-| \`from\`    | In a \`timeline\` figure: the start of the item, or the date of a milestone, as YYYY-MM-DD. |
-| \`to\`      | In a \`timeline\` figure: the last day of the item, as YYYY-MM-DD. Without it the box is a milestone. |
-| \`width\`   | Width in px. This overrides the width that the layout picks.                                              |
-| \`source\`  | The code this draws: \`path\` or \`path#Owner.name\`, relative to the repo root. \`flowfig verify\` checks it.  |
-| \`lines\`   | The least number of text lines that a content card keeps. The card still grows to fit its content.        |
-| \`tone\`    | The state color of the box: a 1 px border and a light tint. Use \`blue\`, \`purple\`, \`green\`, \`orange\`, \`red\` or \`gray\`.                  |
-| \`mark\`    | \`"start"\` or \`"end"\` | A lifecycle mark: a filled dot before a start state, a ringed dot after an end state. |
-
-### edges
-
-An edge has these fields.
-
-- \`id\`: the name that steps use. Default: \`from->to\`.
-- \`from\` and \`to\`: the \`id\` of a box or a group.
-- \`label\`: text on the edge, drawn as a small pill.
-- \`around\`: \`"above"\` or \`"below"\`. This routes the edge over or under the boxes in between (loops, skip-ahead edges).
-- \`quiet\`: if \`true\`, the SVG draws the edge only while a step uses it.
-- \`source\`: the code this edge draws, as \`path\` or \`path#Owner.name\`. \`flowfig verify\` checks it.
-- \`via\`: the route, queue, topic or table name that both sides of a cross-process edge use in the code.
-
-### steps
-
-A step has \`label\` and \`flow\`. It can also have \`caption\` (the line under the figure while no beat has a \`say\`) and \`nodes\` (ids of
-boxes to highlight for the whole step).
-
-\`flow\` is a list of beats. A beat is one of these:
-
-- an edge id (a string);
-- an array of edge ids, which run at the same time;
-- an object \`{ edges?, say?, show?, light?, ms? }\`. A beat with no \`edges\` is a pause.
-
-The beat fields:
-
-- \`edges\`: an edge id, a hop object, or an array of these. A hop object is \`{ edge, back?, data?, tone?, async?, source?, via? }\`.
-  - \`back: true\` runs the packet from the \`to\` box to the \`from\` box.
-  - \`data\` is a small card that moves with the packet.
-  - \`async: true\` marks a message that does not wait for an answer. The rail draws it dashed, with an \`async\` tag.
-  - \`tone\`: the color of this hop for its beat. The packet, the data card, the edge, the label pill and the arrival box take the color. The trail after the beat stays the accent.
-    - \`green\`: a success or a cache hit. \`orange\`: a warning, a miss or a retry. \`red\`: an error or a rejected input.
-    - \`gray\`: idle or skipped. \`purple\`: async or background. \`blue\`: the default row color.
-    - If the hop has no \`tone\`, the arrival box uses its box \`tone\`, then the accent. A hop \`tone\` wins over a box \`tone\`.
-- \`say\`: the caption for the beat.
-- \`show\`: \`{ boxId: [row, ...] }\`. This fills the content card of each named box. The card keeps the rows until the step ends.
-- \`light\`: ids of boxes to highlight for this beat.
-- \`ms\`: how long the beat lasts. Default: the time one packet needs to cross an edge.
-
-A row of a content card is \`{ tag?, tone?, text, meta?, mark?, mono? }\`.
-
-- \`tag\`: a short colored label at the start of the line.
-- \`tone\`: the color of the tag: \`blue\` (default), \`purple\`, \`green\`, \`orange\`, \`red\` or \`gray\`.
-- \`text\`: the main text.
-- \`meta\`: muted text after the main text.
-- \`mark\`: a mark at the right end of the line, such as a check or "new".
-- \`mono\`: if \`true\`, the text uses a monospace font.
+- \`edges\`: an edge id, a hop, or an array of these. A hop is \`{ edge, back?, data?, tone?, async?, source?, via? }\`.
+  \`back: true\` runs the packet from \`to\` to \`from\`. \`data\` is a card that moves with the packet. \`tone\` is \`green\`
+  (success), \`orange\` (a retry), \`red\` (an error), \`gray\` (idle) or \`purple\` (async).
+- \`say\`: the caption for the beat. \`light\`: boxes to highlight. \`ms\`: the beat length.
+- \`show\`: \`{ boxId: [{ tag?, tone?, text, meta?, mark?, mono? }] }\` fills the content card of each box until the step ends.
 
 ## Content rules
 
-- Give every box a stable \`id\`.
-- Use \`shape: "store"\` for data at rest (a database, a cache, a file, a queue). Use a plain box for a part that does work. Use \`shape: "decision"\` for a branch.
-- Keep one clear main path, left to right. Put side parts in a \`column\` group.
-- Use \`quiet: true\` on a long edge that crosses the picture. A quiet edge needs a beat that uses it, or the check reports
-  \`hidden-edge\`.
-- In a rail, draw an error reply as a hop back on the same edge, with the error in \`data\` (\`{ "edge": "login", "back": true,
-  "data": "401 CREDENTIALS_INVALID" }\`). A call that stays inside one part (a hash check, a guard) is not a message: put it in
-  \`say\` or in a \`show\` row of that part.
-- Keep an SVG to one or two steps. The SVG plays every step in a loop, with no controls.
-- Use the React player, \`<Flow {...props} />\` from \`flowfig\`, for a page that needs tabs, pause or hover.
+- Use \`shape: "store"\` for data at rest and \`shape: "decision"\` for a branch.
+- Keep one main path, left to right. Put side parts in a \`column\` group.
+- A \`quiet: true\` edge needs a beat that uses it.
+- Keep an SVG to one or two steps: it loops with no controls. For tabs or pause, use the React player \`<Flow {...props} />\`.
+
+### Plain text
+
+The reader does not know the code.
+
+- A box label names the role in 1 to 4 plain words. Bad: \`"AuthRateLimiter"\`. Good: \`"Rate limiter"\`.
+- A \`sub\` line holds a short plain detail. Bad: \`"redis.incr()"\`. Good: \`"5 tries a minute"\`.
+- An edge label names the action or the data. Bad: \`"validateCredentials()"\`. Good: \`"check password"\`.
+- No code names in labels or sentences. The code name goes in \`source\` and shows on hover. Bad:
+  \`"loginHandler calls findUserByEmail."\` Good: \`"The API finds the user by email."\`
+- A \`say\` line or a caption has 15 words or fewer, with the actor first. Bad: "After the password is checked against the
+  stored hash, a new session is made." Good: "The API makes a session."
+- A step label has 1 to 4 words. Bad: "What happens when a user logs in". Good: "Log in".
+- No filler words: seamless, robust, powerful, leverage, effortless, magic. Bad: "seamless lookups". Good: "The cache
+  returns the user."
+- Data shows real values from the code. Bad: \`"data": "an error response"\`. Good: \`"data": "401 bad_credentials"\`.
 
 ## Example
 
@@ -255,11 +173,11 @@ A row of a content card is \`{ tag?, tone?, text, meta?, mark?, mono? }\`.
     },
     "edges": [
       { "id": "req", "from": "client", "to": "api", "label": "GET /users/42" },
-      { "id": "q", "from": "api", "to": "db", "label": "SELECT" }
+      { "id": "q", "from": "api", "to": "db", "label": "read user" }
     ],
     "steps": [
       {
-        "label": "read",
+        "label": "Read a user",
         "flow": [
           { "edges": { "edge": "req", "data": "GET /users/42" }, "say": "The browser asks for user 42." },
           { "edges": "q", "show": { "db": [{ "tag": "row", "tone": "gray", "text": "Ada Lovelace" }] }, "say": "The API server reads the row." },
@@ -274,22 +192,114 @@ A row of a content card is \`{ tag?, tone?, text, meta?, mark?, mono? }\`.
 ## Commands
 
 \`\`\`bash
-npx flowfig - out.svg < spec.json      # render a spec from stdin
-npx flowfig spec.json out.svg          # render a spec file
-npx flowfig figure.ts out.svg          # render a module whose default export is a spec
-npx flowfig check <input> [--json]     # list the faults. The input can also be an SVG that flowfig wrote.
-npx flowfig verify <input>...          # check each source and each edge against the code
-npx flowfig diff <old> <new>           # list what changed in the spec between two figures
-npx flowfig --spec out.svg             # print the spec that an SVG carries
-npx flowfig open out.svg               # show the figure in the default browser
-npx flowfig gif out.svg [out.gif]      # write an animated GIF (needs Chrome, Edge, Chromium or Brave)
-npx flowfig docs                       # print this guide
-npx flowfig init                       # write these instructions for the coding agents of a repo
+npx flowfig spec.json out.svg      # render a spec file, or a .ts module whose default export is a spec
+npx flowfig check <input> [--json] # list the faults of a spec or an SVG
+npx flowfig --spec out.svg         # print the spec that an SVG carries
+npx flowfig gif out.svg [out.gif]  # write an animated GIF (needs Chrome, Edge, Chromium or Brave)
+npx flowfig docs [topic]           # print this guide, or one topic
 \`\`\`
 
-A render checks first and writes nothing on an error. \`--strict\` makes warnings errors. \`--width\` sets the page width.
-\`--min-text\` sets the smallest text that the reader should get. \`--no-check\` skips the check.
+\`--strict\` makes warnings errors. \`--width\` sets the page width. \`--no-check\` skips the check. \`--no-verify\` skips the verify.
 `;
+
+export const TOPICS = {
+  rail: `# flowfig topic: rail
+
+Read this topic for a request lifecycle, an API call chain or a Mermaid \`sequenceDiagram\`.
+
+A spec has three forms.
+
+- The map (the default). The map shows the boxes and the edges. A packet moves along an edge in each beat.
+- The map with a rail (\`"rail": true\` in \`props\`). The rail is a lifeline diagram under the map. It has one row for each message.
+- The rail alone (\`"rail": "only"\`). Use it when the reader needs only the order of the messages, for example when the map is
+  already in the same document.
+
+Rules for a rail:
+
+- Put each message on an edge. Put each phase in a step. Put messages that run at the same time in one beat.
+- Give each hop its real payload in \`data\`: \`"POST /login"\`, \`"sid cookie"\`.
+- Mark a message that does not wait for an answer with \`"async": true\` on the hop: every send to a queue or a topic, every
+  emitted event, and every call the caller does not await. The rail draws it dashed, with an \`async\` tag.
+- Draw a reply as a hop back on the same edge, with \`"back": true\`.
+- Draw an error reply the same way, with the error in \`data\`: \`{ "edge": "login", "back": true, "data": "401 bad_credentials" }\`.
+- A call that stays inside one part (a hash check, a guard) is not a message. Put it in \`say\` or in a \`show\` row of that part.
+
+A Mermaid \`sequenceDiagram\` maps this way:
+
+- \`participant\`: a box.
+- \`A->>B: text\`: an edge from A to B, and a hop with \`"data": "text"\`.
+- \`B-->>A: text\` (a reply): a hop on the same edge with \`"back": true\`.
+- \`A-)B: text\`: a hop with \`"async": true\`.
+- \`par ... and ... end\`: the hops of all branches in one beat.
+- \`alt\` and \`opt\`: one step per path.
+
+A pasted design wins over the async rule: keep each arrow as the Mermaid draws it. \`A->>B\` stays a plain hop, also for a send
+to a queue. If you think the design is wrong, say so in the reply.
+`,
+  timeline: `# flowfig topic: timeline
+
+Read this topic for a roadmap, a plan with dates or a Mermaid \`gantt\`. Read the dates from the document.
+
+- Set \`"timeline": true\` in \`props\`.
+- Put one labeled group per track in a \`column\` group.
+- Give each item box \`from\` and \`to\`, as YYYY-MM-DD. \`from\` is the first day of the item. \`to\` is the last day.
+- A milestone is a box with \`from\` only.
+- Draw a dependency as an edge from the first item to the dependent item. A dependent item starts after its source ends.
+- Set \`today\` in \`props\`, as YYYY-MM-DD, to stop the today line at that date. Default: the last date of the items.
+- A Mermaid \`gantt\` section becomes a track. Each task becomes an item, and each \`after\` becomes an edge.
+`,
+  lanes: `# flowfig topic: lanes
+
+Read this topic for a process that several roles do: a ticket, an order, a refund or an SOP.
+
+- Set \`"lanes": true\` in \`props\`.
+- Put one labeled group per role in a \`column\` group.
+- Put each step box in the lane of the role that does it.
+- The boxes run left to right in step order. The box field \`at\` sets the time column of a box, 0 first. Default: the order in
+  which the steps first reach the box.
+- Give the outcomes of one decision the same \`at\`.
+- Link each step box with \`source\` to the SOP heading: \`"docs/sop/refunds.md#step-3-approve-the-refund"\`. The part after
+  \`#\` is the heading as a GitHub anchor.
+- If the steps do not fit the width, flowfig wraps the time columns into blocks and links the blocks with labeled stubs. Keep the
+  whole process in one figure.
+- An SOP gives more facts: every deadline, every message to a person, every choice that a person makes, and every wait for a reply.
+  Put each one in a box \`sub\`, a step \`say\` or a \`data\` card. Draw each path to its end, and give each path its own step.
+`,
+  marks: `# flowfig topic: marks
+
+Read this topic for a state lifecycle or a state machine.
+
+- Draw one box per state. Draw one edge per transition, and label the edge with its event in plain words.
+- Give each path through the states its own step.
+- Mark the first state with \`"mark": "start"\` on the box. The figure draws a filled dot before the box.
+- Mark each final state with \`"mark": "end"\` on the box. The figure draws a ringed dot after the box.
+- In a Mermaid \`stateDiagram\`, \`[*] --> A\` makes A the start state, and \`B --> [*]\` makes B an end state.
+- Use the box \`tone\` for the state color: \`green\` for a success state, \`red\` for a failed state, \`gray\` for an idle state.
+`,
+  verify: `# flowfig topic: verify
+
+Read this topic when the render prints a verify finding, or to check figures in CI.
+
+If a box or an edge has a \`source\` or a \`via\`, the render checks each one against the code. The render reads the code from the
+folder where it runs, so run it from the repo root. \`--no-verify\` skips this part. A verify finding does not stop the render.
+
+Fix each finding:
+
+- \`missing-file\`: the \`source\` file does not exist. Fix the path. The path is relative to the repo root.
+- \`missing-symbol\`: the file has no such symbol or heading. Fix the name. A method uses \`Owner.name\`.
+- \`edge-not-found\`: the code does not make that call. Remove the edge, or point its \`source\` at the function that makes the call.
+- An \`unsure\` edge is allowed. If a function with a typed receiver makes the call, point the edge \`source\` at that function.
+- A \`not checked\` edge has no code to check. Give it a \`source\` or a \`via\` if one exists.
+
+Do not invent an edge to make the verify pass.
+
+The count line has this form: \`out.svg: 4 of 4 boxes defined; edges: 5 found, 0 not found, 1 unsure, 0 not checked\`. Copy it
+into the reply as printed.
+
+For CI, \`npx flowfig verify <svg>...\` runs the same check on SVG files. \`--root <folder>\` sets the repo root. \`--json\` prints
+JSON. \`--strict\` makes warnings errors.
+`,
+};
 
 export const AGENT_TEXT = `# Diagrams with flowfig
 
@@ -310,16 +320,18 @@ and draw nothing with flowfig.
 3. Write a fact list from the code and from its wiring (config, compose, route and queue files). Write each call as
    \`caller → callee: payload (file:line of the call)\`, in order. Include each async call and every consumer of a queue, each
    branch and error path, and each end state. Leave out what the code does not show.
-4. Write the spec from the fact list, with the real names and data. Render it with \`npx flowfig - out.svg <<'SPEC'\` and the
-   JSON in the heredoc. Fix every fault by changing the layout first (rows, \`around\`, the gap). Never remove a fact to pass
-   the check; if you must remove one, name it in the reply. If \`small-text\` appears, use two rows or split the figure; keep
-   the real names; do not change \`--width\`. Give each box and edge that draws code a \`source\` (\`file#symbol\`) from the fact list.
+4. Write the spec from the fact list, with plain words in the labels and real data. Give each box and edge that draws code a
+   \`source\` (\`file#symbol\`) from the fact list: the code name goes there, not in the label.
    Mark every send to a queue or a topic, every emitted event, and every call the caller does not await with \`async: true\`.
-5. Run \`npx flowfig --spec out.svg\` and compare it with the fact list: each edge must go from the caller to the callee that the
-   fact names. Fix each gap. Then run \`npx flowfig verify out.svg\` from the repo root and fix each fault.
+5. Render it from the repo root with \`npx flowfig - out.svg <<'SPEC'\` and the JSON in the heredoc. The render prints the
+   check lines, one line per edge, one line per step and the verify findings. Compare the edge lines with the fact list:
+   each edge must go from the caller to the callee that the fact names. Fix each fault and each verify finding, and render again.
+   Fix a layout fault by changing the layout first (rows, \`around\`, the gap). Never remove a fact to pass the check; if you
+   must remove one, name it in the reply. If \`small-text\` appears, use two rows or split the figure; do not change \`--width\`.
 6. If you can open a browser, look at the SVG at two moments of the loop. If you cannot, write "not looked at" in the reply.
    Never report a look that you did not do.
-7. Reply with: the SVG path; what it shows, with the counts copied from the \`figure:\` line and the names copied from the read-back spec; what it leaves out and why;
+7. Reply with: the SVG path; what it shows, with the counts copied from the \`figure:\` line and the names copied from the edge
+   lines that the render printed; what it leaves out and why;
    the two lines the render printed, \`0 errors, 0 warnings\` and \`figure: ...\`, copied as printed.
    End the reply with one line \`npx flowfig open <path>\` for each SVG. Do not run that command yourself.
 `;

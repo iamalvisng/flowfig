@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { GUIDE } from './guide.ts';
+import { GUIDE, TOPICS } from './guide.ts';
 
 const cli = join(dirname(dirname(fileURLToPath(import.meta.url))), 'scripts', 'figure-svg.mjs');
 const SPEC = {
@@ -100,11 +100,21 @@ test('the repo wrapper keeps a flag after a figure name as a flag', () => {
   }
 });
 
-test('docs prints the guide', () => {
+test('docs prints the core guide, which names each topic and stays at most 1,900 words', () => {
   const r = run(['docs']);
   assert.equal(r.status, 0);
-  for (const w of ['rail', 'layout', 'edges', 'steps', 'npx flowfig check']) assert.ok(r.stdout.includes(w), w);
-  assert.equal(r.stdout, GUIDE.endsWith('\n') ? GUIDE : GUIDE + '\n');
+  assert.equal(r.stdout, GUIDE);
+  for (const t of Object.keys(TOPICS)) assert.ok(GUIDE.includes(`- \`${t}\`: `), t);
+  assert.ok(GUIDE.split(/\s+/).length <= 1900);
+});
+
+test('docs <topic> prints that topic only, and an unknown topic exits 2 with the topic list', () => {
+  const r = run(['docs', 'lanes']);
+  assert.equal(r.status, 0);
+  assert.equal(r.stdout, TOPICS.lanes);
+  const bad = run(['docs', 'nope']);
+  assert.equal(bad.status, 2);
+  assert.match(bad.stderr, /rail, timeline, lanes, marks, verify/);
 });
 
 test('the example in GUIDE passes check --strict', () => {

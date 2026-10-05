@@ -32,7 +32,6 @@ test('draw gives the agent read tools and flowfig commands only, and no edit too
   assert.ok(sys.startsWith(AGENT_TEXT.split('\n')[0]));
   assert.match(sys, /Write the spec to docs\/x\.json with the Write tool/);
   assert.match(sys, /run exactly `npx flowfig docs\/x\.json docs\/x\.svg`/);
-  assert.match(sys, /`npx flowfig verify docs\/x\.svg`/);
   assert.match(sys, /\/repo/);
   assert.equal(a.includes('--model'), false);
   assert.equal(agentArgs({ question: 'q', out: 'o.svg', cwd: '/r', maxTurns: 5, model: 'sonnet' }).at(-1), 'sonnet');

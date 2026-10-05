@@ -6,7 +6,7 @@ import { basename, dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { captureFrames, findBrowser, launch } from './browser.ts';
 import { delays, encodeGif } from './gif.ts';
-import { GUIDE } from './guide.ts';
+import { GUIDE, TOPICS } from './guide.ts';
 import { runDraw } from './draw.ts';
 import { runInit } from './init.ts';
 import { serve } from './mcp.ts';
@@ -25,7 +25,7 @@ const USAGE = `usage: flowfig <-|spec.json|figure.ts> [out.svg] [--open]   rende
        flowfig --spec figure.svg                          print the spec the SVG carries
        flowfig verify <input>... [--root <dir>] [--json] [--strict]   check the code links of one or more figures
        flowfig diff <old> <new> [--json|--md]   list the spec changes between two figures
-       flowfig docs                                       print the guide (Markdown)
+       flowfig docs [topic]                               print the guide, or one topic (Markdown)
        flowfig mcp                                        serve check, render, verify, diff and docs over MCP (stdio)
        flowfig init [dir] [--agents <ids>] [-y] [--global] [--dry-run] [--no-mcp]   write flowfig instructions for the coding agents of a repo
        flowfig draw "<question>" [--out <path>] [--model <alias>] [--max-turns <n>] [--json] [--open]   ask Claude Code for a figure, then check it
@@ -55,7 +55,9 @@ if (!args[0] || ['help', '--help', '-h'].includes(args[0])) {
 }
 
 if (args[0] === 'docs') {
-  process.stdout.write(GUIDE);
+  const topic = args[1];
+  if (topic && !Object.hasOwn(TOPICS, topic)) usage(`unknown topic ${topic}; topics: ${Object.keys(TOPICS).join(', ')}`);
+  process.stdout.write(topic ? TOPICS[topic as keyof typeof TOPICS] : GUIDE);
   process.exit(0);
 }
 

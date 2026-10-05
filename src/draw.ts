@@ -26,7 +26,7 @@ const specPath = (out: string) => out.replace(/\.svg$/, '.json');
 
 export function agentArgs(o: { question: string; out: string; cwd: string; maxTurns: number; model?: string }): string[] {
   const spec = specPath(o.out);
-  const system = `${AGENT_TEXT.trimEnd()}\n\nWrite the spec to ${spec} with the Write tool. Then run exactly \`npx flowfig ${spec} ${o.out}\` as one command, alone on its line: no heredoc, no \`;\`, no \`&&\`, no pipe (the permission rule matches one plain command only). Then run \`npx flowfig verify ${o.out}\` the same way. Run every command from this folder, ${o.cwd}.`;
+  const system = `${AGENT_TEXT.trimEnd()}\n\nWrite the spec to ${spec} with the Write tool. Then run exactly \`npx flowfig ${spec} ${o.out}\` as one command, alone on its line: no heredoc, no \`;\`, no \`&&\`, no pipe (the permission rule matches one plain command only). Run every command from this folder, ${o.cwd}.`;
   const args = [
     '-p',
     o.question,

@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { handle, TOOLS } from './mcp.ts';
-import { GUIDE } from './guide.ts';
+import { GUIDE, TOPICS } from './guide.ts';
 import { VERSION } from './version.ts';
 
 const cli = join(dirname(dirname(fileURLToPath(import.meta.url))), 'dist', 'cli.js');
@@ -57,6 +57,7 @@ test('tools/list names the five tools; an unknown method or tool is a JSON-RPC e
 
 test('docs returns the guide; check reports a good and a bad spec', () => {
   assert.equal(text(call('docs', {})), GUIDE);
+  assert.equal(text(call('docs', { topic: 'timeline' })), TOPICS.timeline);
   const good = call('check', { spec: props });
   assert.equal(good.result.isError, undefined);
   assert.match(text(good), /0 errors, 0 warnings\nfigure: 2 boxes/);

@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { createInterface } from 'node:readline';
 import { diff, formatDiff } from './diff.ts';
-import { GUIDE } from './guide.ts';
+import { GUIDE, TOPICS } from './guide.ts';
 import { loadSpec, reportLines, sortFindings, summaryLines, svgWithSpec, verifyLines } from './load.ts';
 import { check, render } from './svg.ts';
 import { checkRendered } from './check.ts';
@@ -23,7 +23,11 @@ const checkProps = {
   minText: { type: 'number', description: 'The smallest text in px at that width. Default 10.' },
 };
 export const TOOLS = [
-  { name: 'docs', description: 'The flowfig guide. Read it before the first render.', inputSchema: { type: 'object', properties: {} } },
+  {
+    name: 'docs',
+    description: 'The flowfig guide. Read it before the first render. A topic gives the detail for one kind of figure.',
+    inputSchema: { type: 'object', properties: { topic: { type: 'string', enum: Object.keys(TOPICS) } } },
+  },
   {
     name: 'check',
     description:
@@ -87,7 +91,13 @@ const types = (args: Record<string, unknown>, tool: string, want: Record<string,
 };
 
 function run(name: string, args: Record<string, unknown>): Result {
-  if (name === 'docs') return ok(GUIDE);
+  if (name === 'docs') {
+    const topic = args.topic;
+    if (topic == null) return ok(GUIDE);
+    if (typeof topic !== 'string' || !Object.hasOwn(TOPICS, topic))
+      throw new Bad(`docs: topic must be one of ${Object.keys(TOPICS).join(', ')}`);
+    return ok(TOPICS[topic as keyof typeof TOPICS]);
+  }
   if (name === 'check' || name === 'render') {
     need(args, name, name === 'render' ? ['spec', 'out'] : ['spec']);
     types(args, name, { width: 'number', minText: 'number', out: 'string', strict: 'boolean' });
