@@ -37,46 +37,45 @@ const codeToken = (t: string) => /[a-z][A-Z]|[A-Za-z]_[A-Za-z]|\(\)|::|\w\.\w+\(
 
 function plainText(fig: FlowProps): Finding[] {
   const out: Finding[] = [];
-  const check = (where: string, text: unknown, o: { code?: boolean; words?: boolean; source?: string } = {}) => {
+  const check = (owner: string, field: string, text: unknown, o: { code?: boolean; words?: boolean; source?: string } = {}) => {
     const t = str(text).trim();
     if (!t) return;
+    const tokens = t.split(/\s+/);
     const symbol = o.source
       ? parseSource(o.source)
           ?.symbol?.split(/[.#:]+/)
           .pop()
       : undefined;
+    const code = o.code === false ? undefined : tokens.find(codeToken);
+    const filler = FILLER.exec(t)?.[0];
     const why = [
-      o.code !== false && t.split(/\s+/).some(codeToken) && 'has a code name',
-      symbol && t === symbol && 'repeats its source symbol',
-      FILLER.test(t) && 'has a filler word',
-      o.words && t.split(/\s+/).length > 20 && `has ${t.split(/\s+/).length} words, over 20`,
+      code &&
+        (tokens.length === 1 && field === 'label'
+          ? `${field} "${t}" looks like code; use plain words, the code name goes in source`
+          : `${field} has the code name "${code}"; use plain words`),
+      symbol && t === symbol && !code && `${field} "${t}" repeats its source; use plain words`,
+      filler && `${field} "${t}" has the filler word "${filler}"`,
+      o.words && tokens.length > 20 && `${field} has ${tokens.length} words; keep it to 20`,
     ].filter(Boolean);
-    if (why.length)
-      out.push(
-        warn(
-          'plain-text',
-          [],
-          `${where} "${t}" ${why.join(' and ')}: use plain words, and keep a line to 20 words; the code name goes in source`,
-        ),
-      );
+    if (why.length) out.push(warn('plain-text', [], `${owner}: ${why.join('; ')}`));
   };
   for (const n of nodes(fig.layout)) {
-    check(`box "${n.id}" label`, n.label, { source: n.source });
-    check(`box "${n.id}" sub`, n.sub);
+    check(`box "${n.id}"`, 'label', n.label, { source: n.source });
+    check(`box "${n.id}"`, 'sub', n.sub);
   }
   const groupLabels = (g: FigGroup): void => {
-    if (g.label != null) check(`group "${g.id ?? str(g.label)}" label`, g.label);
+    if (g.label != null) check(`group "${g.id ?? str(g.label)}"`, 'label', g.label);
     for (const c of g.children) if (isGroup(c)) groupLabels(c);
   };
   groupLabels(fig.layout);
-  fig.edges.forEach((e) => check(`edge "${edgeId(e)}" label`, e.label, { source: e.source }));
+  fig.edges.forEach((e) => check(`edge "${edgeId(e)}"`, 'label', e.label, { source: e.source }));
   for (const s of fig.steps ?? []) {
     const name = str(s.label);
-    check(`step "${name}" label`, s.label);
-    check(`step "${name}" caption`, s.caption, { words: true });
+    check(`step "${name}"`, 'label', s.label);
+    check(`step "${name}"`, 'caption', s.caption, { words: true });
     s.flow.map(toBeat).forEach((b, i) => {
-      check(`step "${name}" say ${i + 1}`, b.say, { words: true });
-      b.hops.forEach((h) => check(`step "${name}" data ${i + 1}`, h.data, { code: false }));
+      check(`step "${name}"`, `say ${i + 1}`, b.say, { words: true });
+      b.hops.forEach((h) => check(`step "${name}"`, `data ${i + 1}`, h.data, { code: false }));
     });
   }
   return out;

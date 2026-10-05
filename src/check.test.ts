@@ -513,9 +513,15 @@ test('plain-text warns on code-shaped labels, long lines, filler words and code 
     .filter((f) => f.rule === 'plain-text')
     .map((f) => f.message)
     .join('\n');
-  assert.match(msgs, /findUserByEmail/);
-  assert.match(msgs, /seamless/);
-  assert.match(msgs, /validate_rows/);
-  assert.match(msgs, /21 words/);
+  assert.match(msgs, /label "findUserByEmail" looks like code; use plain words, the code name goes in source/);
+  assert.match(msgs, /label "seamless sync" has the filler word "seamless"/);
+  assert.match(msgs, /say 1 has the code name "validate_rows"; use plain words/);
+  assert.match(msgs, /say 3 has 21 words; keep it to 20/);
+  assert.match(
+    checkSpec({ ...spec, layout: { children: [{ id: 'a', label: 'verify', source: 'src/u.ts#verify' }] }, edges: [], steps: [] })
+      .map((f) => f.message)
+      .join('\n'),
+    /label "verify" repeats its source; use plain words/,
+  );
   assert.doesNotMatch(msgs, /Redis|Check input|Find user|session id|The gateway calls auth/);
 });
