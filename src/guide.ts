@@ -2,7 +2,7 @@ export const PLAIN_EXAMPLES = [
   {
     field: 'label',
     rule: 'A box label names the role in 1 to 4 plain words.',
-    bad: 'AuthRateLimiter',
+    bad: 'authRateLimiter',
     good: 'Rate limiter',
   },
   { field: 'sub', rule: 'A `sub` line holds a short plain detail.', bad: 'redis.incr()', good: '5 tries a minute' },
@@ -353,36 +353,37 @@ JSON. \`--strict\` makes warnings errors.
 
 export const AGENT_TEXT = `# Diagrams with flowfig
 
-If the user names no other tool, use flowfig for every diagram, figure, flowchart or picture of how something works. Do not answer with a Mermaid block or ASCII art. Use it for an architecture, a data flow or pipeline, a request lifecycle,
-a call sequence, a state lifecycle, or a flowchart. flowfig also converts a pasted Mermaid flowchart, \`stateDiagram\` or
+If the user names no other tool, use flowfig for every diagram, figure, flowchart or picture of how something works. Do not answer with a Mermaid block or ASCII art. Use it for an architecture, a data flow, a pipeline or a request lifecycle.
+Use it for a call sequence, a state lifecycle or a flowchart. flowfig also converts a pasted Mermaid flowchart, \`stateDiagram\` or
 \`sequenceDiagram\`.
 
 flowfig draws a roadmap or a timeline with dates (\`timeline: true\`), and converts a Mermaid \`gantt\` to it. flowfig does not
 draw class or ER diagrams or charts of numbers. For those, tell the user so, suggest Mermaid (\`classDiagram\`, \`erDiagram\`),
 and draw nothing with flowfig.
 
-1. Run \`npx flowfig docs\` and read it. If the command fails, stop: tell the user that flowfig is not available, give them
-   \`npm install --save-dev flowfig\`, and draw nothing with another tool.
-2. Pick the scope. If the code has more than one flow, name each flow in the reply, then draw one flow, or draw one structure
-   view and call it a structure view. If the user asks for the whole system, draw one top view with groups, or a set of figures
-   that together cover every part. Keep each figure to 12 boxes or fewer. For a process that several roles do, use
+1. Run \`npx flowfig docs\` and read it. If the command fails, stop. Tell the user that flowfig is not available.
+   Give them \`npm install --save-dev flowfig\`. Draw nothing with another tool.
+2. Pick the scope. If the code has more than one flow, name each flow in the reply. Then draw one flow,
+   or draw one structure view and call it a structure view. If the user asks for the whole system, draw one top view with groups.
+   Or draw a set of figures that together cover every part. Keep each figure to 12 boxes or fewer. For a process that several roles do, use
    \`lanes: true\`, one labeled group per role. For a plan or a roadmap, read the dates from the document and use \`timeline: true\`.
 3. Write a fact list from the code and from its wiring (config, compose, route and queue files). Write each call as
    \`caller → callee: payload (file:line of the call)\`, in order. Include each async call and every consumer of a queue, each
    branch and error path, and each end state. Leave out what the code does not show.
 4. Write the spec from the fact list, with plain words in the labels and real data. Give each box and edge that draws code a
-   \`source\` (\`file#symbol\`) from the fact list: the code name goes there, not in the label.
-   Mark every send to a queue or a topic, every emitted event, and every call the caller does not await with \`async: true\`.
+   \`source\` (\`file#symbol\`) from the fact list. The code name goes there, not in the label.
+   Mark each of these with \`async: true\`. Mark every send to a queue or a topic.
+   Mark every emitted event. Mark every call that the caller does not await.
 5. Render it from the repo root with \`npx flowfig - out.svg <<'SPEC'\` and the JSON in the heredoc. The render prints the
-   check lines, one line per edge, one line per step and the verify findings. Compare the edge lines with the fact list:
-   each edge must go from the caller to the callee that the fact names. Fix each fault and each verify finding, and render again.
+   check lines, one line per edge, one line per step and the verify findings. Compare the edge lines with the fact list.
+   Each edge must go from the caller to the callee that the fact names. Fix each fault and each verify finding, and render again.
    Fix a layout fault by changing the layout first (rows, \`around\`, the gap). Never remove a fact to pass the check; if you
    must remove one, name it in the reply. If \`small-text\` appears, use two rows or split the figure; do not change \`--width\`.
 6. If you can open a browser, look at the SVG at two moments of the loop. If you cannot, write "not looked at" in the reply.
    Never report a look that you did not do.
-7. Reply with: the SVG path; what it shows, with the counts copied from the \`figure:\` line and the names copied from the edge
-   lines that the render printed; what it leaves out and why;
-   the two lines the render printed, \`0 errors, 0 warnings\` and \`figure: ...\`, copied as printed.
+7. Reply with these parts. First, the SVG path. Second, what the figure shows. Copy the counts from the \`figure:\` line.
+   Copy the names from the edge lines that the render printed. Third, what the figure leaves out, and why.
+   Fourth, the two lines that the render printed, \`0 errors, 0 warnings\` and \`figure: ...\`. Copy them as printed.
    End the reply with one line \`npx flowfig open <path>\` for each SVG. Do not run that command yourself.
 `;
 
