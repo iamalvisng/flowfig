@@ -675,3 +675,14 @@ test('a Rust re-export chain with a private item, a private use, a test module o
   };
   assert.equal(run(inline, 'src/api.rs#f', 'src/db.rs#Error.kind'), 'unsure');
 });
+
+test('an edge is unsure, not "not found", when the caller passes control to a parameter such as next()', () => {
+  const files = {
+    'src/limit.ts': 'export function limit(req: Req, res: Res, next: Next) {\n  if (req.ip) next();\n}\n',
+    'src/routes.ts': 'export const router = makeRouter();\n',
+    'app/hooks.py': 'def run(event, done):\n    done(event)\n',
+    'app/save.py': 'def save(event):\n    pass\n',
+  };
+  assert.equal(run(files, 'src/limit.ts#limit', 'src/routes.ts#router'), 'unsure');
+  assert.equal(run(files, 'app/hooks.py#run', 'app/save.py#save'), 'unsure');
+});
