@@ -24,19 +24,20 @@ function compare<T>(kind: Change['kind'], before: Map<string, T>, after: Map<str
   return out;
 }
 
-const messages = (fig: FlowProps) =>
-  new Map(
-    (fig.steps ?? [])
-      .flatMap((s) =>
-        s.flow.flatMap((b) =>
-          toBeat(b).hops.map(
-            (h) =>
-              `${str(s.label)}: ${h.edge}${h.back ? ' back' : ''}${h.data != null ? ` "${str(h.data)}"` : ''}${h.tone ? ` [${h.tone}]` : ''}`,
-          ),
-        ),
-      )
-      .map((id) => [id, id]),
+const messages = (fig: FlowProps) => {
+  const seen = new Map<string, number>();
+  const ids = (fig.steps ?? []).flatMap((s) =>
+    s.flow.flatMap((b) =>
+      toBeat(b).hops.map((h) => {
+        const key = `${str(s.label)}: ${h.edge}${h.back ? ' back' : ''}${h.data != null ? ` "${str(h.data)}"` : ''}${h.tone ? ` [${h.tone}]` : ''}${h.source ? ` <${h.source}>` : ''}${h.via ? ` via ${h.via}` : ''}`;
+        const n = (seen.get(key) ?? 0) + 1;
+        seen.set(key, n);
+        return n > 1 ? `${key} #${n}` : key;
+      }),
+    ),
   );
+  return new Map(ids.map((id) => [id, id]));
+};
 
 export function diff(before: FlowProps, after: FlowProps): Change[] {
   const boxes = (f: FlowProps) => {
@@ -52,8 +53,8 @@ export function diff(before: FlowProps, after: FlowProps): Change[] {
     ...compare('box', boxes(before), boxes(after), (a, b) =>
       fields(a, b, ['label', 'sub', 'shape', 'tone', 'mark', 'from', 'to', 'source', 'group']),
     ),
-    ...compare<FigEdge>('edge', edges(before), edges(after), (a, b) => fields(a, b, ['from', 'to', 'label', 'source'])),
-    ...compare('step', steps(before), steps(after), () => []),
+    ...compare<FigEdge>('edge', edges(before), edges(after), (a, b) => fields(a, b, ['from', 'to', 'label', 'source', 'via'])),
+    ...compare('step', steps(before), steps(after), (a, b) => fields(a, b, ['caption'])),
     ...compare('message', messages(before), messages(after), () => []),
   ];
   // The rail is a boolean or 'only', so str() would hide it.

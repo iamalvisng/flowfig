@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { diff } from './diff.ts';
+import { diff, formatDiff } from './diff.ts';
 import type { FlowProps } from './model.ts';
 
 const base: FlowProps = {
@@ -92,4 +92,26 @@ test('a from or to change is a box change', () => {
   const out = diff(base, marked);
   assert.equal(out.length, 1);
   assert.equal(out[0].kind, 'box');
+});
+
+test('diff reports a via change, a removed repeated hop and a caption change', () => {
+  const base: FlowProps = {
+    layout: {
+      children: [
+        { id: 'a', label: 'A' },
+        { id: 'b', label: 'B' },
+      ],
+    },
+    edges: [{ id: 'q', from: 'a', to: 'b', via: 'order-paid' }],
+    steps: [{ label: 'pay', caption: 'The order is paid.', flow: ['q', 'q'] }],
+  };
+  const next: FlowProps = {
+    ...base,
+    edges: [{ id: 'q', from: 'a', to: 'b', via: 'order-shipped' }],
+    steps: [{ label: 'pay', caption: 'The order ships.', flow: ['q'] }],
+  };
+  const lines = formatDiff(diff(base, next), 'text');
+  assert.match(lines, /edge changed: q \(via "order-paid" -> "order-shipped"\)/);
+  assert.match(lines, /message removed/);
+  assert.match(lines, /step changed: pay \(caption/);
 });
