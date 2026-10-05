@@ -36,15 +36,22 @@ function viaHits(via: string, keep: string, code: string | null): { at: number; 
     near: tail && (code == null || code[m.index] !== keep[m.index]) && /^[./-]/.test(keep.slice(m.index + m[0].length)),
   }));
 }
-const NOT_VIA =
-  /^\s*(?:import|from|use|using|package)\b|\b(?:require|import)\s*\(|\bfrom\s*['"]|\b(?:log|info|warn|error|debug|trace|print|println|printf)!?\s*\(/i;
+const IMPORT_LINE: Record<Lang, RegExp> = {
+  ts: /^\s*(?:(?:import|export)\b[^'"]*\bfrom\s*|import\s*|\}\s*from\s*|(?:const|let|var)\s+[^=]+=\s*require\(\s*)['"][^'"]*['"]\s*\)?\s*;?\s*$/,
+  py: /^\s*(?:import\s+[\w.]+(?:\s+as\s+\w+)?(?:\s*,\s*[\w.]+(?:\s+as\s+\w+)?)*|from\s+[\w.]+\s+import\s+[^=()]+)\s*$/,
+  go: /^\s*(?:import\s*(?:\w+\s+)?"[^"]*"|(?:[\w.]+\s+)?"[^"]*")\s*$/,
+  java: /^\s*import\s+(?:static\s+)?[\w.*]+\s*;\s*$/,
+  cs: /^\s*(?:global\s+)?using\s+(?:static\s+)?[\w.]+\s*;\s*$/,
+  rs: /^\s*(?:pub(?:\([^)]*\))?\s+)?use\s+[^;]*;\s*$/,
+};
+const LOG_CALL = /\b(?:log|logger|console|logging)\s*\.\s*\w+\s*\(|(?<![\w.])(?:print|println|printf)!?\s*\(/;
 const FUNCS: Record<Lang, RegExp> = {
   ts: /\bfunction\b|=>|^[ \t]*(?:(?:public|private|protected|static|async|get|set|override)\s+)*(?!(?:if|for|while|switch|catch)\b)[\w$]+\s*\([^()]*\)\s*(?::[^{;]*)?\{/gm,
   py: /\bdef\s|\blambda\b/g,
   go: /\bfunc\b/g,
   rs: /\bfn\s/g,
-  java: /->|^[ \t]*(?:[\w<>[\],.?]+\s+)+(?!(?:if|for|while|switch|catch|new|return)\b)\w+\s*\([^;{]*\)\s*(?:throws[^{;]*)?\{/gm,
-  cs: /=>|^[ \t]*(?:[\w<>[\],.?]+\s+)+(?!(?:if|for|while|switch|catch|new|return|using|lock)\b)\w+\s*\([^;{]*\)\s*\{/gm,
+  java: /->|^[ \t]*(?:[\w<>[\],.?]+[ \t]+)+(?!(?:if|for|while|switch|catch|new|return)\b)\w+\s*\([^;{]*\)\s*(?:throws[^{;]*)?\{/gm,
+  cs: /=>|^[ \t]*(?:[\w<>[\],.?]+[ \t]+)+(?!(?:if|for|while|switch|catch|new|return|using|lock)\b)\w+\s*\([^;{]*\)\s*\{/gm,
 };
 const CONSTS: Record<Lang, RegExp> = {
   ts: /^(?:export\s+)?const\s+([\w$]+)\s*(?::\s*string\s*)?=\s*(['"`])([^'"`\n]*)\2/gm,
@@ -121,7 +128,7 @@ const defaultIs = (ti: CodeFile, symbol: string) =>
 
 const label = (s: Src) => s.symbol ?? s.path;
 
-function pyBindings(code: string, n: string): number {
+function pyBindings(code: string, n: string, limit: number): number {
   let count = 0;
   for (const m of code.matchAll(
     new RegExp(`^([ \\t]*)(?:(?:(?:async\\s+)?def|class)\\s+${esc(n)}\\b|${esc(n)}\\s*(?::[^=\\n]*)?=(?!=))`, 'gm'),
@@ -135,13 +142,13 @@ function pyBindings(code: string, n: string): number {
       if (/^(?:async\s+)?(?:def|class)\b/.test(head[2])) break;
       ind = head[1].length;
     }
-    if (ind === 0) count++;
+    if (ind === 0 && ++count >= limit) break;
   }
   return count;
 }
 
 const twice = (fi: CodeFile, imps: Import[], n: string) =>
-  imps.filter((i) => i.local === n).length + (fi.lang === 'py' ? pyBindings(fi.code, n) : 0) > 1;
+  imps.filter((i) => i.local === n).length + (fi.lang === 'py' ? pyBindings(fi.code, n, 2) : 0) > 1;
 
 function javaScopes(code: string, pos: number): (string | null)[] {
   const out: (string | null)[] = [];
@@ -152,7 +159,10 @@ function javaScopes(code: string, pos: number): (string | null)[] {
       const head = code.slice(Math.max(0, i - 300), i).trimEnd();
       const named = /\b(?:class|interface|enum|record)\s+(\w+)[^;{}]*$/.exec(head);
       if (named) out.push(named[1]);
-      else if (head.endsWith(')')) {
+      else if (i > 300 && !/[;{}]/.test(head)) {
+        out.push(null);
+        break;
+      } else if (head.endsWith(')')) {
         let k = head.length - 1;
         for (let p = 0; k >= 0; k--)
           if (head[k] === ')') p++;
@@ -192,9 +202,12 @@ function viaResult(root: string, from: Src, to: Src | undefined, via: string, re
   if (!ti || !tb) return { result: 'not-checked' as const, reason: `${label(to)} is not in code that verify reads` };
   const lineAt = (k: number) =>
     ti.keep.slice(ti.keep.lastIndexOf('\n', k) + 1, ti.keep.indexOf('\n', k) < 0 ? undefined : ti.keep.indexOf('\n', k));
-  const all = viaHits(via, ti.keep, ti.code).filter((h) => !NOT_VIA.test(lineAt(h.at)));
+  const raw = viaHits(via, ti.keep, ti.code);
+  const all = raw.filter((h) => !IMPORT_LINE[ti.lang].test(lineAt(h.at)) && !LOG_CALL.test(lineAt(h.at)));
   const hits = all.filter((h) => !h.near).map((h) => h.at);
-  if (!hits.length) return all.length ? longer(to.path) : { result: 'not-found' as const, reason: `"${via}" is not in ${to.path}` };
+  if (!hits.length && all.length) return longer(to.path);
+  if (!hits.length && raw.length) return { result: 'unsure' as const, reason: `"${via}" is in ${to.path} only on an import or log line` };
+  if (!hits.length) return { result: 'not-found' as const, reason: `"${via}" is not in ${to.path}` };
   const yes = { result: 'found' as const, reason: `"${via}" is in ${label(from)} and in ${label(to)}` };
   if (hits.some((k) => k >= tb.start && k < tb.end)) return yes;
   if (hits.some((k) => ti.code[k] !== ti.keep[k]) && [...ti.code.matchAll(FUNCS[ti.lang])].length <= 1) return yes;
@@ -466,8 +479,8 @@ export function edgeResult(
     const shadowed = shadows(body, n, lang, fromName, whole);
     const re = new RegExp(word(n).source, 'g');
     let m;
-    while ((m = re.exec(body))) {
-      const before = body.slice(0, m.index);
+    while ((m = re.exec(body)) && verdicts.at(-1)?.res !== 'found') {
+      const before = m.index < 200 ? body.slice(0, m.index) : '';
       if (!skippedDef && fromName === n && m.index < 200 && before.trim().length < 60 && !/(\.|::)\s*$/.test(before)) {
         skippedDef = true;
         continue;

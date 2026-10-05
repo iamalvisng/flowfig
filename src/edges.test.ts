@@ -402,6 +402,8 @@ test('a Rust type through a crate path is the repo type only when that module de
   assert.equal(run(at('pub use std::io::Error;\n', 'use crate::a::Error;'), 'src/c.rs#f', 'src/error.rs#Error.kind'), 'unsure');
   assert.equal(run(at('pub use std::io::*;\n', 'use crate::a::*;'), 'src/c.rs#f', 'src/error.rs#Error.kind'), 'unsure');
   assert.equal(run(at('\n', 'use crate::error::Error;'), 'src/c.rs#f', 'src/error.rs#Error.kind'), 'found');
+  const full = { ...at('\n', ''), 'src/c.rs': 'fn f(e: crate::error::Error) {\n    e.kind();\n}\n' };
+  assert.equal(run(full, 'src/c.rs#f', 'src/error.rs#Error.kind'), 'found');
 });
 
 test('a Rust type re-exported twice inside the crate is found; a std re-export is unsure', () => {
@@ -562,14 +564,14 @@ test('via: a module constant is unsure when the caller has a local, a parameter 
   );
 });
 
-test('via: the callee token does not count on an import or log line, or in another function of the callee file', () => {
+test('via: a callee token only on an import or log line, or in another function of the callee file, is unsure', () => {
   const caller = { 'gw.ts': 'export const f = () => fetch("http://p:3000/internal/quote");\n' };
   const at = (src: string) => ({ ...caller, 'p.ts': src });
   const callee = (src: string, to: string) => run(at(src), 'gw.ts#f', to, '/internal/quote');
-  assert.equal(callee('import { db } from "../lib/internal/quote";\nexport function quote() {}\n', 'p.ts#quote'), 'not-found');
+  assert.equal(callee('import { db } from "../lib/internal/quote";\nexport function quote() {}\n', 'p.ts#quote'), 'unsure');
   assert.equal(
     callee('export function quote() { log.info("not served: /internal/quote"); }\nexport function other() {}\n', 'p.ts#other'),
-    'not-found',
+    'unsure',
   );
   assert.equal(callee('app.get("/internal/quote", pay);\nexport function pay() {}\nexport function ship() {}\n', 'p.ts#ship'), 'unsure');
   assert.equal(callee('app.get("/internal/quote", pay);\nexport function pay() {}\nexport function ship() {}\n', 'p.ts'), 'found');
@@ -620,4 +622,56 @@ test('a call through a default export that wraps the callee is unsure, not "not 
     'src/api.ts': "import documentMover from './mover.ts';\nexport function move() { documentMover(); }\n",
   };
   assert.equal(run(files, 'src/api.ts#move', 'src/mover.ts#documentMover'), 'unsure');
+});
+
+test('via: a callee line that only looks like an import or a log call still counts', () => {
+  const w = { 'w.ts': 'export function save() { db.query("INSERT INTO orders VALUES (1)"); }\n' };
+  const cs =
+    'namespace App;\npublic class R {\n  public void Load(Conn c) {\n    using var cmd = new SqlCommand("SELECT * FROM orders", c);\n  }\n}\n';
+  assert.equal(run({ ...w, 'R.cs': cs }, 'w.ts#save', 'R.cs#R.Load', 'orders'), 'found');
+  assert.equal(
+    run({ ...w, 'r.py': 'def load(cur):\n    cur.execute(\'SELECT * FROM "orders"\')\n' }, 'w.ts#save', 'r.py#load', 'orders'),
+    'found',
+  );
+  const go = 'package u\n\nfunc List(w W, r *R) {\n\tif r.URL.Path != "/internal/users" { http.Error(w, "no", 404) }\n}\n';
+  const gw = { 'gw.ts': 'export const f = () => fetch("http://u/internal/users");\n' };
+  assert.equal(run({ ...gw, 'u.go': go }, 'gw.ts#f', 'u.go#List', '/internal/users'), 'found');
+});
+
+test('a Java class header longer than the scan window gives unsure', () => {
+  const bases = Array.from({ length: 20 }, (_, i) => `HandlerContract${i}<RequestEnvelope, ResponseEnvelope>`).join(',\n        ');
+  const outer = `package b;\npublic class Outer {\n  static class Inner extends Base\n      implements ${bases} {\n    void verify() {}\n    void login() { verify(); }\n  }\n}\n`;
+  assert.equal(run({ 'src/b/Outer.java': outer }, 'src/b/Outer.java#Outer.Inner.login', 'src/b/Outer.java#Outer.Inner.verify'), 'unsure');
+});
+
+test('a 20,000-line Java file with a long enum gives one edge result in under 1 s', () => {
+  const values = Array.from({ length: 20000 }, (_, i) => `    V${i},`).join('\n');
+  const java = `package u;\npublic class Codes {\n  static String P = "/internal/users";\n  public void a() {}\n  public void b() {}\n  enum E {\n${values}\n  }\n}\n`;
+  const files = { 'gw.ts': 'export const f = () => fetch("http://u/internal/users");\n', 'u/Codes.java': java };
+  const start = performance.now();
+  run(files, 'gw.ts#f', 'u/Codes.java#Codes.b', '/internal/users');
+  assert.ok(performance.now() - start < 1000);
+});
+
+test('a Rust re-export chain with a private item, a private use, a test module or an inline module is unsure', () => {
+  const err = 'pub struct Error {\n    code: u8,\n}\nimpl Error {\n    pub fn kind(&self) -> u8 {\n        self.code\n    }\n}\n';
+  const api = (use: string) => `${use}\nfn f(e: Error) {\n    e.kind();\n}\n`;
+  const crate = (models: string, error = err) => ({
+    'src/main.rs': 'mod db;\nmod util;\nmod api;\n',
+    'src/db/mod.rs': 'pub mod models;\npub use self::models::*;\n',
+    'src/db/models/mod.rs': models,
+    'src/db/models/error.rs': error,
+    'src/util.rs': 'pub use std::io::Error;\n',
+    'src/api.rs': api('use crate::db::*;\nuse crate::util::*;'),
+  });
+  const edge = (files: Record<string, string>) => run(files, 'src/api.rs#f', 'src/db/models/error.rs#Error.kind');
+  assert.equal(edge(crate('mod error;\npub use self::error::*;\n', err.replace('pub struct', 'struct'))), 'unsure');
+  assert.equal(edge(crate('mod error;\nuse self::error::Error;\n')), 'unsure');
+  assert.equal(edge(crate('#[cfg(test)]\nmod tests {\n    use crate::db::models::error::Error;\n}\nmod error;\n')), 'unsure');
+  const inline = {
+    'src/main.rs': 'mod db;\nmod api;\n',
+    'src/db.rs': `pub mod inner {\n${err}}\npub use std::io::Error;\n`,
+    'src/api.rs': api('use crate::db::Error;'),
+  };
+  assert.equal(run(inline, 'src/api.rs#f', 'src/db.rs#Error.kind'), 'unsure');
 });

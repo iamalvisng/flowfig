@@ -158,7 +158,10 @@ function findType0(cx: Ctx, ctx: CodeFile, name: string, qual?: string | null): 
       : (g.find((p) => dirname(p) === dirname(ctx.path)) ?? wild(g, ctx));
     return pick ? declIn(file(cx, pick), name) : null;
   }
-  if (lang === 'rs') return rustFollow(cx, ctx, qual ? [qual] : rustUsePaths(ctx, name), name, 0);
+  if (lang === 'rs') {
+    const d = rustFollow(cx, ctx, qual ? [qual.replace(/\./g, '::')] : rustUsePaths(ctx, name), name, 0);
+    return d === 'absent' ? null : d;
+  }
   const all = (global(cx, lang).types.get(name) ?? []).map((p) => declIn(file(cx, p), name)).filter((d) => d != null);
   const ns = (f: CodeFile) => /\bnamespace\s+([\w.]+)/.exec(f.code)?.[1] ?? '';
   const usings = new Set([...ctx.code.matchAll(/^\s*using\s+([\w.]+)\s*;/gm)].map((m) => m[1]));
@@ -193,16 +196,38 @@ function rustModFile(cx: Ctx, from: CodeFile, path: string): CodeFile | null {
   return file(cx, `${dir}.rs`) ?? file(cx, posix.join(dir, 'mod.rs'));
 }
 
-function rustFollow(cx: Ctx, from: CodeFile, mods: string[], name: string, depth: number): Decl | null {
+function rustOuter(code: string): string {
+  let out = code;
+  for (const m of code.matchAll(/\bmod\s+\w+\s*\{/g)) {
+    const open = m.index + m[0].length - 1;
+    const close = matchClose(code, open);
+    out = out.slice(0, open + 1) + out.slice(open + 1, close).replace(/[^\n]/g, ' ') + out.slice(close);
+  }
+  return out;
+}
+
+function rustFollow(cx: Ctx, from: CodeFile, mods: string[], name: string, depth: number): Decl | 'absent' | null {
   if (!mods.length || depth > 3 || mods.some((m) => !/^(crate|self|super)\b/.test(m))) return null;
   const hits: Decl[] = [];
   for (const m of mods) {
     const f = rustModFile(cx, from, m);
     if (!f) return null;
-    const d = declIn(f, name) ?? rustFollow(cx, f, rustUsePaths(f, name), name, depth + 1);
-    if (d) hits.push(d);
+    const top = rustOuter(f.code);
+    const N = esc(name);
+    let r: Decl | 'absent' | null;
+    if (new RegExp(`\\b(?:struct|enum|trait)\\s+${N}\\b`).test(top)) {
+      const d = declIn({ ...f, code: top }, name);
+      r = d && { ...d, info: f };
+    } else if (new RegExp(`\\b(?:struct|enum|trait|type|mod|fn|const|static|union)\\s+${N}\\b`).test(top)) r = null;
+    else {
+      const next = rustUsePaths(f, name, true);
+      if (next.length) r = rustFollow(cx, f, next, name, depth + 1);
+      else r = new RegExp(`\\buse\\b[^;]*\\b${N}\\b`).test(top) ? null : 'absent';
+    }
+    if (r === null) return null;
+    if (r !== 'absent') hits.push(r);
   }
-  return hits.length === 1 ? hits[0] : null;
+  return hits.length === 1 ? hits[0] : hits.length ? null : 'absent';
 }
 
 function wild(g: string[], ctx: CodeFile): string | null {
@@ -332,8 +357,9 @@ function expandUse(item: string): string[] {
   return parts.filter((p) => p.trim()).flatMap((p) => expandUse(item.slice(0, open) + p.trim()));
 }
 
-function rustUsePaths(fi: CodeFile, n: string): string[] {
-  const paths = [...fi.keep.matchAll(/\buse\s+([^;]+);/g)].flatMap((m) => expandUse(m[1].replace(/\s+/g, ' ')));
+function rustUsePaths(fi: CodeFile, n: string, pubOnly = false): string[] {
+  const items = pubOnly ? /\bpub(?:\([^)]*\))?\s+use\s+([^;]+);/g : /\buse\s+([^;]+);/g;
+  const paths = [...rustOuter(fi.code).matchAll(items)].flatMap((m) => expandUse(m[1].replace(/\s+/g, ' ')));
   const named = paths.filter((p) => (/\sas\s+(\w+)$/.exec(p)?.[1] ?? lastSeg(p)) === n);
   if (named.length) return named.map((p) => (/\sas\s/.test(p) ? '#alias' : p.split('::').slice(0, -1).join('::')));
   return paths.filter((p) => p.endsWith('::*')).map((p) => p.slice(0, -3));

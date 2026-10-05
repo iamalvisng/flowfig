@@ -345,8 +345,8 @@ function defPatterns(lang: Lang, name: string, inContainer: boolean): RegExp[] {
     case 'cs':
       return [
         re(`\\b(class|interface|enum|record|struct)\\s+${N}${E}`),
-        re(`(^|[\\n;{}])[ \\t]*([\\w<>\\[\\],.?]+\\s+)+${N}\\s*(<[^>]*>)?\\s*\\(`),
-        re(`(^|[\\n;{}\\]])[ \\t]*([\\w<>\\[\\],.?]+\\s+)+${N}\\s*(=(?![=>])|;|\\{\\s*(get|set|init)\\b|=>)`),
+        re(`(^|[\\n;{}])[ \\t]*([\\w<>\\[\\],.?]+\\s+){1,12}${N}\\s*(<[^>]*>)?\\s*\\(`),
+        re(`(^|[\\n;{}\\]])[ \\t]*([\\w<>\\[\\],.?]+\\s+){1,12}${N}\\s*(=(?![=>])|;|\\{\\s*(get|set|init)\\b|=>)`),
       ];
     case 'rs':
       return [re(`\\bfn\\s+${N}${E}`), re(`\\b(struct|enum|trait|type|mod|const|static|union)\\s+${N}${E}`)];
