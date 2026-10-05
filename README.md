@@ -65,7 +65,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - uses: iamalvisng/flowfig@v0.8.0
+      - uses: iamalvisng/flowfig@v0.8.1
         with:
           figures: 'docs/**/*.svg' # default **/*.svg
 ```
@@ -235,9 +235,17 @@ Render the spec:
 
 ```console
 $ npx flowfig first.json
+0 errors, 0 warnings
 figure: 3 boxes, 0 groups, 2 edges, 1 step, 4 messages
-first.svg — 8.8 kB
+browser -> api: GET /user
+api -> db: SELECT
+step "Load a user": 4 hops
+first.svg — 9.7 kB
 ```
+
+The render prints the check result, the counts, one line per edge and one line per step. Read these lines to check the figure
+without a second command. If a box or an edge has a `source` or a `via`, the render also prints the `verify` counts.
+`--no-verify` skips them.
 
 The command writes `first.svg`:
 
@@ -470,7 +478,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - uses: iamalvisng/flowfig@v0.8.0
+      - uses: iamalvisng/flowfig@v0.8.1
         with:
           figures: 'docs/**/*.svg' # default **/*.svg
 ```
@@ -478,7 +486,8 @@ jobs:
 ## MCP server
 
 `npx flowfig mcp` serves the tools `docs`, `check`, `render`, `verify` and `diff` over stdio, for an agent with no shell.
-`render` writes the SVG file and returns the check lines and the path, so no SVG text goes through the model.
+`render` writes the SVG file and returns the check lines and the path, so no SVG text goes through the model. `docs` takes an
+optional `topic`.
 
 `npx flowfig init` registers the server for Claude Code (`.mcp.json`), Cursor (`.cursor/mcp.json`), GitHub Copilot
 (`.vscode/mcp.json`), Gemini CLI (`.gemini/settings.json`) and Kiro (`.kiro/settings/mcp.json`). It merges one entry into
@@ -504,6 +513,7 @@ The player has these controls:
 - A pause button, and a speed button that changes between 1× and 2×.
 - A full screen button. Esc closes full screen.
 - A hover on a box highlights its edges. With the rail, a click on a row starts that message, and a hover highlights its edge.
+- A hover on a box, an edge or a rail row with a `source` shows the `source`. The SVG shows it as a tooltip too.
 
 The player props are the spec fields. `theme` sets the colors, `speed` sets the packet time, and `autoplay={false}` stops the
 auto start. `check` runs the check rules. If a figure is wider than its container, the player shrinks the figure to half size at
@@ -587,7 +597,8 @@ A section sits between `<!-- flowfig:start -->` and `<!-- flowfig:end -->`. A se
 of the file. A second run also replaces a whole file that `init` wrote. If a whole file exists and did not come from `init`,
 `init` skips the file. `init` also skips a section file that has a start marker and no end marker.
 
-`npx flowfig docs` prints the full guide as Markdown.
+`npx flowfig docs` prints the core guide as Markdown. `npx flowfig docs <topic>` prints one topic: `lanes`, `timeline`, `rail`,
+`marks` or `verify`.
 
 ## What flowfig does not draw
 
