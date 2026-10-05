@@ -698,14 +698,15 @@ export const counts = (p: FlowProps) => {
 const idsIn = (c: FigNode | FigGroup): string[] => (isGroup(c) ? [...(c.id ? [c.id] : []), ...c.children.flatMap(idsIn)] : [c.id]);
 
 export function groupGap(g: FigGroup, edges: FigEdge[]): number {
-  if (g.gap != null) return g.gap;
   const side = new Map<string, number>();
   g.children.forEach((c, i) => idsIn(c).forEach((id) => side.set(id, i)));
   const spans = edges.filter((e) => e.label != null && side.has(e.from) && side.has(e.to) && side.get(e.from) !== side.get(e.to));
+  if (g.gap != null && !spans.length) return g.gap;
+  let auto: number;
   if (g.direction === 'column') {
     const ends = spans.map((e) => [side.get(e.from)!, side.get(e.to)!].sort((p, q) => p - q));
     const most = Math.max(0, ...g.children.map((_, k) => ends.filter(([lo, hi]) => lo <= k && k < hi).length));
-    return most > 1 ? Math.min(most, 3) * 22 + 16 : 28;
-  }
-  return Math.max(56, ...spans.map((e) => labelPillW(str(e.label)) + 16));
+    auto = most > 1 ? Math.min(most, 3) * 22 + 16 : 28;
+  } else auto = Math.max(56, ...spans.map((e) => labelPillW(str(e.label)) + 16));
+  return Math.max(g.gap ?? 0, auto);
 }

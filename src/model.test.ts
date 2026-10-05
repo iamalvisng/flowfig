@@ -51,7 +51,11 @@ test('a row gap grows to hold the widest edge label between two of its children'
   assert.equal(groupGap(row, [{ from: 'a', to: 'b', label: 'x' }]), 56);
   const long = 'a-long-monospace-label';
   assert.ok(groupGap(row, [{ from: 'a', to: 'b', label: long }]) >= long.length * 11 * 0.6 + 14 + 16 - 0.1);
-  assert.equal(groupGap({ ...row, gap: 40 }, [{ from: 'a', to: 'b', label: long }]), 40, 'a set gap stays as set');
+  assert.equal(groupGap({ ...row, gap: 40 }, []), 40, 'a set gap stays when no labeled edge crosses');
+  assert.ok(
+    groupGap({ ...row, gap: 40 }, [{ from: 'a', to: 'b', label: long }]) >= long.length * 11 * 0.6 + 14 + 16 - 0.1,
+    'a set gap is a minimum',
+  );
   assert.equal(groupGap({ ...row, direction: 'column' }, [{ from: 'a', to: 'b', label: long }]), 28);
 });
 
