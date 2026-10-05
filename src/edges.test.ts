@@ -518,14 +518,18 @@ test('via: a path token after a port is found when the callee file holds it outs
   assert.equal(run(files, 'gateway/index.ts#callUsers', 'pricing/index.ts#quote', '/internal/users'), 'not-found');
 });
 
-test('via: a token does not match a longer path or name', () => {
+test('via: a token in a string with a longer path or name is unsure; in code a member access is found', () => {
   const files = {
     'gw.ts':
-      'export const f = () => fetch("http://admin:3000/internal-admin/stats");\nexport const g = () => fetch("http://x/internal.json");\nexport const h = () => fetch("http://x/internal/users");\n',
+      'export const f = () => fetch("http://admin:3000/internal-admin/stats");\nexport const g = () => fetch("http://x/internal.json");\nexport const h = () => fetch("http://x/internal/users");\nexport const k = () => fetch("http://x/internals");\n',
     'a.ts': 'export function f() { bus.publish("order-paid-v2", x); }\n',
+    'jobs.py': 'def check_alerts():\n    pass\n',
+    'run.py': 'from jobs import check_alerts\n\ndef run():\n    check_alerts.delay(1)\n',
   };
-  for (const caller of ['gw.ts#f', 'gw.ts#g', 'gw.ts#h']) assert.equal(run(files, caller, undefined, '/internal'), 'not-found', caller);
-  assert.equal(run(files, 'a.ts#f', undefined, 'order-paid'), 'not-found');
+  for (const caller of ['gw.ts#f', 'gw.ts#g', 'gw.ts#h']) assert.equal(run(files, caller, undefined, '/internal'), 'unsure', caller);
+  assert.equal(run(files, 'gw.ts#k', undefined, '/internal'), 'not-found');
+  assert.equal(run(files, 'a.ts#f', undefined, 'order-paid'), 'unsure');
+  assert.equal(run(files, 'run.py#run', 'jobs.py#check_alerts', 'check_alerts'), 'found');
 });
 
 test('via: a module constant is unsure when the caller has a local, a parameter or a member of the same name', () => {

@@ -28,8 +28,14 @@ type Src = { path: string; symbol?: string };
 
 type Verdict = { res: 'found' | 'not' | 'unsure' | 'skip'; why: string };
 const word = (name: string) => new RegExp(`(?<![\\w$])${esc(name)}(?![\\w$])`);
-const viaToken = (t: string) =>
-  new RegExp(`${/^[\w$]/.test(t) ? '(?<![\\w$])' : ''}${esc(t)}${/[\w$]$/.test(t) ? '(?![\\w$./-])' : ''}`, 'g');
+const viaToken = (t: string) => new RegExp(`${/^[\w$]/.test(t) ? '(?<![\\w$])' : ''}${esc(t)}${/[\w$]$/.test(t) ? '(?![\\w$])' : ''}`, 'g');
+function viaHits(via: string, keep: string, code: string | null): { at: number; near: boolean }[] {
+  const tail = /[\w$]$/.test(via);
+  return [...keep.matchAll(viaToken(via))].map((m) => ({
+    at: m.index,
+    near: tail && (code == null || code[m.index] !== keep[m.index]) && /^[./-]/.test(keep.slice(m.index + m[0].length)),
+  }));
+}
 const NOT_VIA =
   /^\s*(?:import|from|use|using|package)\b|\b(?:require|import)\s*\(|\bfrom\s*['"]|\b(?:log|info|warn|error|debug|trace|print|println|printf)!?\s*\(/i;
 const FUNCS: Record<Lang, RegExp> = {
@@ -159,16 +165,22 @@ function javaScopes(code: string, pos: number): (string | null)[] {
 }
 
 function viaResult(root: string, from: Src, to: Src | undefined, via: string, read: Read, cache: Map<string, CodeFile | null>) {
-  const token = viaToken(via);
-  const has = (text: string) => text.search(token) >= 0;
+  const longer = (where: string) => ({ result: 'unsure' as const, reason: `"${via}" is in ${where} only as part of a longer name` });
   const fi = codeFile(root, from.path, read, cache);
   const at = fi && (from.symbol ? locate(fi, from.symbol) : { start: 0, end: fi.keep.length });
   if (!fi || !at) return { result: 'not-checked' as const, reason: `${label(from)} is not in code that verify reads` };
-  if (!has(fi.keep.slice(at.start, at.end))) {
+  const own = viaHits(via, fi.keep, fi.code).filter((h) => h.at >= at.start && h.at < at.end);
+  if (!own.some((h) => !h.near)) {
     const code = fi.code.slice(at.start, at.end);
     const fromName = from.symbol?.split('.').at(-1);
-    const names = [...fi.keep.matchAll(CONSTS[fi.lang])].filter((m) => has(m[3]) && word(m[1]).test(code)).map((m) => m[1]);
-    if (!names.length) return { result: 'not-found' as const, reason: `"${via}" is not in ${label(from)}` };
+    let near = own.length > 0;
+    const names: string[] = [];
+    for (const m of fi.keep.matchAll(CONSTS[fi.lang])) {
+      const hs = word(m[1]).test(code) ? viaHits(via, m[3], null) : [];
+      if (hs.some((h) => !h.near)) names.push(m[1]);
+      else if (hs.length) near = true;
+    }
+    if (!names.length) return near ? longer(label(from)) : { result: 'not-found' as const, reason: `"${via}" is not in ${label(from)}` };
     const local = names.find(
       (n) => shadows(code, n, fi.lang, fromName, !from.symbol) || new RegExp(`\\.\\s*${esc(n)}(?![\\w$])`).test(code),
     );
@@ -180,8 +192,9 @@ function viaResult(root: string, from: Src, to: Src | undefined, via: string, re
   if (!ti || !tb) return { result: 'not-checked' as const, reason: `${label(to)} is not in code that verify reads` };
   const lineAt = (k: number) =>
     ti.keep.slice(ti.keep.lastIndexOf('\n', k) + 1, ti.keep.indexOf('\n', k) < 0 ? undefined : ti.keep.indexOf('\n', k));
-  const hits = [...ti.keep.matchAll(token)].map((m) => m.index).filter((k) => !NOT_VIA.test(lineAt(k)));
-  if (!hits.length) return { result: 'not-found' as const, reason: `"${via}" is not in ${to.path}` };
+  const all = viaHits(via, ti.keep, ti.code).filter((h) => !NOT_VIA.test(lineAt(h.at)));
+  const hits = all.filter((h) => !h.near).map((h) => h.at);
+  if (!hits.length) return all.length ? longer(to.path) : { result: 'not-found' as const, reason: `"${via}" is not in ${to.path}` };
   const yes = { result: 'found' as const, reason: `"${via}" is in ${label(from)} and in ${label(to)}` };
   if (hits.some((k) => k >= tb.start && k < tb.end)) return yes;
   if (hits.some((k) => ti.code[k] !== ti.keep[k]) && [...ti.code.matchAll(FUNCS[ti.lang])].length <= 1) return yes;
