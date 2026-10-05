@@ -1215,6 +1215,18 @@ test('a long box label wraps to two lines and keeps the 14 px font', () => {
   );
 });
 
+test('a label that fits at its own box width stays on one line', () => {
+  const words = ['Review', 'the', 'claim', 'Check', 'input', 'Find', 'user', 'Rate', 'limiter', 'Send', 'email', 'Read', 'cache'];
+  for (const a of words)
+    for (const b of words)
+      for (const c of words) {
+        const label = `${a} ${b} ${c}`;
+        if (textWidth(label, 14) + 32 >= 190) continue;
+        const { scene } = render({ layout: { children: [{ id: 'a', label }] }, edges: [] });
+        assert.equal(scene.boxes[0].texts.filter((t) => t.fontSize === 14).length, 1, label);
+      }
+});
+
 test('a wide row narrows its boxes before it scales, so the text stays at least 10 px', () => {
   const kids = Array.from({ length: 6 }, (_, i) => ({ id: `n${i}`, label: `Step ${i} reads the order data` }));
   const { scene } = render({ layout: { direction: 'row', children: kids }, edges: [] }, { width: 830 });

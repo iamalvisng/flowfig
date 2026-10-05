@@ -283,7 +283,8 @@ export function nodeWidth(item: FigNode, carded: boolean, cap = NODE_MAX_W): num
 
 export function labelLines(item: FigNode, w: number): string[] {
   const label = str(item.label);
-  const lines = item.shape === 'decision' ? [] : wrap(label, w - 32, 14);
+  if (item.shape === 'decision' || textWidth(label, 14) <= w - 32 + 0.5) return [label];
+  const lines = wrap(label, w - 32, 14);
   return lines.length === 2 && lines.every((l) => textWidth(l, 14) <= w - 32) ? lines : [label];
 }
 
@@ -299,7 +300,7 @@ export function fitCap(fig: FlowProps, width: number, padding = 24): number {
   const carded = new Set((fig.steps ?? []).flatMap((s) => s.flow.flatMap((b) => Object.keys(toBeat(b).show ?? {}))));
   const fits = (n: FigNode, cap: number) => {
     const w = nodeWidth(n, carded.has(n.id), cap);
-    return Math.max(textWidth(str(n.sub), 12), ...labelLines(n, w).map((l) => textWidth(l, 14))) + 32 <= w;
+    return Math.max(textWidth(str(n.sub), 12), ...labelLines(n, w).map((l) => textWidth(l, 14))) + 32 <= w + 0.5;
   };
   const keep = nodes(fig.layout).filter((n) => fits(n, NODE_MAX_W));
   let cap = NODE_MAX_W;
@@ -691,7 +692,6 @@ export const counts = (p: FlowProps) => {
 
 const idsIn = (c: FigNode | FigGroup): string[] => (isGroup(c) ? [...(c.id ? [c.id] : []), ...c.children.flatMap(idsIn)] : [c.id]);
 
-/** A row gap grows to hold its widest edge label; a column gap grows to stack crossing labels. */
 export function groupGap(g: FigGroup, edges: FigEdge[]): number {
   if (g.gap != null) return g.gap;
   const side = new Map<string, number>();

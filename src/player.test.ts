@@ -257,6 +257,12 @@ test('lanes wrap: every block has the gutter of the plan, and an empty block is 
   assert.deepEqual(blocks, lanePlan(far).blocks);
 });
 
+test('a label that fits at its own box width draws one line in the player', () => {
+  const html = render({ layout: { children: [{ id: 'a', label: 'Review the claim' }] }, edges: [] });
+  const box = html.match(/data-fig="a"[^>]*>([\s\S]*?)<\/div><\/div>/)!;
+  assert.equal([...box[1].matchAll(/white-space:nowrap/g)].length, 1);
+});
+
 test('a long box label draws two lines in the player, and the box has the SVG width and height', () => {
   const node = { id: 'a', label: 'Check the session and the rate limit' };
   const fig2: FlowProps = { layout: { children: [node] }, edges: [] };
