@@ -26,8 +26,8 @@ const props: Figure['props'] = {
     ],
   },
   edges: [
-    { id: 'submit', from: 'browser', to: 'gateway', label: 'POST /checkout' },
-    { id: 'create', from: 'gateway', to: 'orders', label: 'create order', source: 'examples/shop/gateway.ts#checkout' },
+    { id: 'submit', from: 'browser', to: 'gateway', label: 'checkout' },
+    { id: 'create', from: 'gateway', to: 'orders', label: 'create', source: 'examples/shop/gateway.ts#checkout' },
     { id: 'charge', from: 'orders', to: 'payments', label: 'charge', source: 'examples/shop/orders.ts#createOrder' },
     { id: 'insert', from: 'orders', to: 'db', label: 'INSERT', source: 'examples/shop/orders.ts#createOrder' },
   ],

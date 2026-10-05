@@ -217,7 +217,7 @@ test('an edge between stacked boxes with a box between them goes around at the s
   assert.ok(r.around === 'left' || r.around === 'right');
 });
 
-test('an edge with both detours blocked keeps the straight curve and does not hang', () => {
+test('an edge with both detour heights blocked steps the arc out past the blocking boxes', () => {
   const rects = {
     a: { x: 0, y: 100, w: 100, h: 40 },
     b: { x: 150, y: 100, w: 100, h: 40 },
@@ -227,7 +227,29 @@ test('an edge with both detours blocked keeps the straight curve and does not ha
   };
   const avoid = Object.values(rects).map((r) => ({ ...r, box: true as const }));
   const [r] = route([{ id: 'a->c', from: 'a', to: 'c' }], rects, new Set(), avoid);
-  assert.equal(r.around, undefined);
+  assert.ok(r.around === 'above' || r.around === 'below');
+  for (let t = 0; t <= 1; t += 0.03) {
+    const p = bezier(r.curve, t);
+    assert.ok(!avoid.some((q) => p.x > q.x && p.x < q.x + q.w && p.y > q.y && p.y < q.y + q.h), `point ${t} is inside a box`);
+  }
+});
+
+test('an edge from the middle of a column, with no free arc, is routed around the boxes in a grid', () => {
+  const col = (x: number, ys: number[]) => ys.map((y) => ({ x, y, w: 100, h: 40 }));
+  const [cli, server, cleanup] = col(0, [0, 80, 130]);
+  const [convert, preview] = col(200, [0, 80]);
+  const [out] = col(400, [0]);
+  const rects = { cli, server, cleanup, convert, preview, out };
+  const avoid = Object.values(rects).map((r) => ({ ...r, box: true as const }));
+  const [r] = route([{ id: 's', from: 'server', to: 'out', around: 'below' }], rects, new Set(), avoid);
+  const pts = r.elbow ?? Array.from({ length: 65 }, (_, i) => bezier(r.curve, i / 64));
+  const steps = pts
+    .slice(1)
+    .flatMap((q, k) =>
+      Array.from({ length: 17 }, (_, i) => ({ x: pts[k].x + ((q.x - pts[k].x) * i) / 16, y: pts[k].y + ((q.y - pts[k].y) * i) / 16 })),
+    );
+  for (const [id, q] of Object.entries(rects).filter(([id]) => id !== 'server' && id !== 'out'))
+    assert.ok(!steps.some((p) => p.x > q.x && p.x < q.x + q.w && p.y > q.y && p.y < q.y + q.h), `the path crosses ${id}`);
 });
 
 test('two detours over the same boxes take the two sides and do not cross', () => {

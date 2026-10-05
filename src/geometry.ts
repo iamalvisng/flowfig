@@ -69,6 +69,7 @@ const arcLine = (s: Pt, e: Pt, around: Around, at: number): [Pt, Pt, Pt, Pt] =>
   around === 'above' || around === 'below' ? [s, { x: s.x, y: at }, { x: e.x, y: at }, e] : [s, { x: at, y: s.y }, { x: at, y: e.y }, e];
 const ARC = 50;
 const ARC_STEP = 16;
+const ARC_STEPS = 24;
 const upright = (around: Around) => around === 'left' || around === 'right';
 const arcAt = (a: Rect, b: Rect, around: Around, past: Rect[], labelW = 0) => {
   const rs = [a, b, ...past];
@@ -122,8 +123,17 @@ export function route(
     const blocked = (way: Around, at: number) =>
       hit(arcLine(sideMid(a, SIDES[way][0]), sideMid(b, SIDES[way][1]), way, at), others, 2).length > 0;
     let around = e.around;
+    let elbow = e.elbow;
     let arc = around && arcAt(a, b, around, past, e.labelW);
-    if (around && blocked(around, arc!)) arc = arcAt(a, b, around, past);
+    const outward = (way: Around, k: number) => arcAt(a, b, way, past) + (way === 'above' || way === 'left' ? -1 : 1) * k * ARC_STEP;
+    if (around && blocked(around, arc!)) {
+      const opposite = { above: 'below', below: 'above', left: 'right', right: 'left' }[around] as Around;
+      const fits = [around, opposite].flatMap((way) =>
+        Array.from({ length: ARC_STEPS + 1 }, (_, k): [Around, number] => [way, outward(way, k)]),
+      );
+      [around, arc] = fits.find(([way, at]) => !blocked(way, at)) ?? [];
+      elbow = !around;
+    }
     if (!around && !e.sides && !e.stub && !e.elbow && past.length) {
       const ways = stacked ? (['left', 'right'] as const) : (['above', 'below'] as const);
       const tries: [Around, number][] = [];
@@ -135,15 +145,16 @@ export function route(
           const out = way === 'above' || way === 'left' ? -1 : 1;
           tries.push([way, out * Math.max(out * arcAt(a, b, way, past, e.labelW), ...near.map((n) => out * n + ARC_STEP))]);
         }
-      for (const way of ways) tries.push([way, arcAt(a, b, way, past)]);
+      for (let k = 0; k <= ARC_STEPS; k++) for (const way of ways) tries.push([way, outward(way, k)]);
       [around, arc] = tries.find(([way, at]) => !blocked(way, at)) ?? [];
+      elbow = !around;
     }
     if (around) {
       const [lo, hi] = spanOf(a, b, around);
       arcs.push({ way: around, lo, hi, at: arc! });
     }
     const [sa, sb] = e.sides ?? (e.stub ? ['r', 'l'] : around ? SIDES[around] : plain);
-    picks.push({ ...e, a, b, sa, sb, around, arc });
+    picks.push({ ...e, a, b, sa, sb, around, arc, elbow });
   }
 
   const ends = new Map<string, { pick: Pick; start: boolean }[]>();
