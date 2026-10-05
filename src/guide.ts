@@ -66,8 +66,8 @@ If the code does not show a fact, leave the fact out. Do not guess a part, a nam
 
 Each fact becomes a box, an edge, a beat, a \`data\` card or a \`show\` row. Use the real names from the code as labels, and
 real example data from the code or its tests. Keep each fact that you leave out, with the reason, for the reply.
-Give each box and edge that draws code a \`source\`, from the fact list: \`"src/auth/login.ts#verifyPassword"\`. A method uses \`Owner.name\`: \`"src/auth/session.ts#Session.refresh"\`. An edge \`source\` names the function that makes the call. An edge needs no \`source\` when the code of its \`from\` box makes the call. An edge across a process (HTTP, a queue, a topic, a table) gets \`via\`: the route, queue, topic or table name that both sides use in the code, for example \`"via": "order-paid"\`. A store or an outside part may have none.
-For an HTTP edge, \`via\` is the path that both sides use: \`"via": "/internal/users"\`. An edge to a store box (a table, a file, a folder, a cache key) uses \`via\` with the name that the caller code uses: \`"via": "sales_facts"\`. A route handler with no name uses the route key as its symbol: \`"src/routes/auth.ts#/login"\`.
+Give each box and edge that draws code a \`source\`, from the fact list: \`"src/auth/login.ts#verifyPassword"\`. A method uses \`Owner.name\`: \`"src/auth/session.ts#Session.refresh"\`. An edge \`source\` names the function that makes the call. An edge needs no \`source\` when the code of its \`from\` box makes the call. An edge across a process (HTTP, a queue, a topic, a table) gets \`via\`: the route, queue, topic or table name that both sides use in the code, for example \`"via": "order-paid"\`. A store box may have no \`source\`, but an edge to it still needs \`via\`.
+For an HTTP edge, \`via\` is the path that both sides use: \`"via": "/internal/users"\`. An edge to a store box (a table, a file, a folder, a cache key) uses \`via\` with the name that the caller code uses: \`"via": "sales_facts"\`. A route handler with no name keeps a file \`source\`, and its edges use \`via\` with the route path.
 A box that draws a step from a document links to that document: \`"docs/sop/refunds.md#step-3-approve-the-refund"\`, the heading as a GitHub anchor. \`verify\` checks it the same way.
 
 Mermaid mapping:
@@ -133,7 +133,7 @@ The reply has these parts, in this order:
 4. what the figure leaves out, and why;
 5. the two check lines that the render printed, \`0 errors, 0 warnings\` and \`figure: ...\`, copied as printed, and whether
    you looked at the SVG;
-6. the \`verify\` edge counts from its count line, for example "verify: 5 of 6 edges found, 1 unsure";
+6. the \`verify\` edge counts from its count line, for example "edges: 5 found, 0 not found, 1 unsure, 0 not checked";
 7. one line \`npx flowfig open <path>\` for each SVG, at the end of the reply. Do not run that command yourself.
 
 To change an SVG later, print its spec with \`--spec\`, change the spec, and render again.
