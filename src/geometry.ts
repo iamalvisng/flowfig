@@ -59,6 +59,10 @@ const sideMid = (r: Rect, side: Side): Pt =>
       : side === 't'
         ? { x: cx(r), y: r.y }
         : { x: cx(r), y: r.y + r.h };
+const sideAt = (r: Rect, side: Side, f: number): Pt =>
+  side === 'l' || side === 'r'
+    ? { x: r.x + (side === 'r' ? r.w : 0), y: r.y + r.h * f }
+    : { x: r.x + r.w * f, y: r.y + (side === 'b' ? r.h : 0) };
 const bend = (s: Pt, e: Pt, sa: Side): [Pt, Pt, Pt, Pt] => {
   const horiz = sa === 'l' || sa === 'r';
   const k = (horiz ? Math.abs(e.x - s.x) : Math.abs(e.y - s.y)) / 2;
@@ -122,18 +126,17 @@ export function route(
     const others = avoid.filter((r) => r.box && !same(r, a) && !same(r, b));
     const plain: [Side, Side] = stacked ? (a.y < b.y ? ['b', 't'] : ['t', 'b']) : a.x < b.x ? ['r', 'l'] : ['l', 'r'];
     const past = hit(bend(sideMid(a, plain[0]), sideMid(b, plain[1]), plain[0]), others, -2);
-    const blocked = (way: Around, at: number) =>
-      hit(arcLine(sideMid(a, SIDES[way][0]), sideMid(b, SIDES[way][1]), way, at), others, 2).length > 0;
+    const blocked = (way: Around, at: number, m = 2) =>
+      (m > 0 ? [0.5] : [0.5, 0.75]).every(
+        (f) => hit(arcLine(sideAt(a, SIDES[way][0], f), sideAt(b, SIDES[way][1], f), way, at), others, m).length > 0,
+      );
     let around = e.around;
     let elbow = e.elbow;
     let arc = around && arcAt(a, b, around, past, e.labelW);
     const outward = (way: Around, k: number) => arcAt(a, b, way, past) + (way === 'above' || way === 'left' ? -1 : 1) * k * ARC_STEP;
-    if (around && blocked(around, arc!)) {
-      const opposite = { above: 'below', below: 'above', left: 'right', right: 'left' }[around] as Around;
-      const fits = [around, opposite].flatMap((way) =>
-        Array.from({ length: ARC_STEPS + 1 }, (_, k): [Around, number] => [way, outward(way, k)]),
-      );
-      [around, arc] = fits.find(([way, at]) => !blocked(way, at)) ?? [];
+    if (around && blocked(around, arc!, -2)) {
+      const fits = Array.from({ length: ARC_STEPS + 1 }, (_, k): [Around, number] => [around!, outward(around!, k)]);
+      [around, arc] = fits.find(([way, at]) => !blocked(way, at, -2)) ?? [];
       elbow = e.elbow || !around;
     }
     if (!around && !e.sides && !e.stub && !e.elbow && past.length) {

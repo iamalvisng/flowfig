@@ -1389,7 +1389,7 @@ test('a rail-only figure shows the edge source as a title on its rail row', () =
 });
 
 test('an automatic elbow edge gives its drawn corners to the check', () => {
-  const col = (ids: string[]) => ({ direction: 'column' as const, gap: 40, children: ids.map((id) => ({ id, label: id })) });
+  const col = (ids: string[]) => ({ direction: 'column' as const, gap: 20, children: ids.map((id) => ({ id, label: id })) });
   const fig = {
     layout: {
       direction: 'row' as const,

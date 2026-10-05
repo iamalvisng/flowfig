@@ -700,10 +700,12 @@ const idsIn = (c: FigNode | FigGroup): string[] => (isGroup(c) ? [...(c.id ? [c.
 export function groupGap(g: FigGroup, edges: FigEdge[]): number {
   const side = new Map<string, number>();
   g.children.forEach((c, i) => idsIn(c).forEach((id) => side.set(id, i)));
-  const spans = edges.filter((e) => e.label != null && side.has(e.from) && side.has(e.to) && side.get(e.from) !== side.get(e.to));
+  const spans = edges.filter(
+    (e) => e.label != null && side.has(e.from) && side.has(e.to) && side.get(e.from) !== side.get(e.to) && !(g.gap != null && e.around),
+  );
   if (g.gap != null && !spans.length) return g.gap;
   const need = Math.max(0, ...spans.map((e) => labelPillW(str(e.label)) + 16));
-  if (g.gap != null && g.direction !== 'column') return Math.max(g.gap, need);
+  if (g.gap != null && g.direction !== 'column') return Math.max(g.gap, need - 16);
   let auto: number;
   if (g.direction === 'column') {
     const ends = spans.map((e) => [side.get(e.from)!, side.get(e.to)!].sort((p, q) => p - q));
