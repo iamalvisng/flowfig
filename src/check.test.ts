@@ -500,9 +500,12 @@ test('plain-text warns on code-shaped labels, long lines, filler words and code 
         { id: 'i', label: 'user.findById' },
         { id: 'j', label: 'req.userId' },
         { id: 'k', label: 'src/loginHandler.ts' },
+        { id: 'l', label: 'SELECT' },
       ],
     },
     edges: [
+      { id: 'e3', from: 'a', to: 'l', label: 'SET sess: EX 3600' },
+      { id: 'e4', from: 'l', to: 'a', label: 'GET /user' },
       { id: 'e1', from: 'a', to: 'b', label: 'seamless sync' },
       { id: 'e2', from: 'c', to: 'd', label: 'session id' },
     ],
@@ -532,6 +535,9 @@ test('plain-text warns on code-shaped labels, long lines, filler words and code 
   assert.match(msgs, /label "user.findById" looks like code/);
   assert.match(msgs, /label "req.userId" looks like code/);
   assert.match(msgs, /label "src\/loginHandler.ts" looks like code/);
+  assert.match(msgs, /label "SELECT" looks like code/);
+  assert.match(msgs, /label "SET sess: EX 3600" looks like code/);
+  assert.doesNotMatch(msgs, /GET \/user/);
   assert.doesNotMatch(msgs, /Redis|Check input|Find user|session id|The gateway calls auth|GitHub|DynamoDB|sweep|send magic link/);
 });
 

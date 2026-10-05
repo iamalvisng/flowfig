@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="560" height="150" viewBox="0 0 560 150" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
-<metadata id="figure-spec"><![CDATA[{"props":{"layout":{"children":[{"id":"browser","label":"Browser"},{"id":"api","label":"API"},{"id":"db","label":"Database","shape":"store"}]},"edges":[{"from":"browser","to":"api","label":"GET /user"},{"from":"api","to":"db","label":"SELECT"}],"steps":[{"label":"Load a user","flow":[{"edges":"browser->api","say":"The browser asks the API for the user."},{"edges":"api->db","say":"The API reads the row."},{"edges":{"edge":"api->db","back":true},"say":"The row comes back."},{"edges":{"edge":"browser->api","back":true},"say":"The API sends the user as JSON."}]}]}}]]></metadata>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="579.6" height="150" viewBox="0 0 579.6 150" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+<metadata id="figure-spec"><![CDATA[{"props":{"layout":{"children":[{"id":"browser","label":"Browser"},{"id":"api","label":"API"},{"id":"db","label":"Database","shape":"store"}]},"edges":[{"from":"browser","to":"api","label":"GET /user"},{"from":"api","to":"db","label":"read the user"}],"steps":[{"label":"Load a user","flow":[{"edges":"browser->api","say":"The browser asks the API for the user."},{"edges":"api->db","say":"The API reads the row."},{"edges":{"edge":"api->db","back":true},"say":"The row comes back."},{"edges":{"edge":"browser->api","back":true},"say":"The API sends the user as JSON."}]}]}}]]></metadata>
 <style>
 svg { --accent:#0074d9; --fg:#1c1e21; --muted:#606770; --bg:#ffffff; --surface:#f5f7fa; --border:#d0d7de; --card-on:#eef5fd; --tint:color-mix(in srgb, var(--accent) 10%, var(--surface)); }
 @media (prefers-color-scheme: dark) { svg { --accent:#1f78c8; --fg:#e3e3e3; --muted:#9aa0a6; --bg:#1b1b1d; --surface:#242526; --border:#3a3b3c; --card-on:#1d2733; --tint:color-mix(in srgb, var(--accent) 10%, var(--surface)); } }
@@ -63,15 +63,15 @@ svg { --accent:#0074d9; --fg:#1c1e21; --muted:#606770; --bg:#ffffff; --surface:#
 </style>
 <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 1 L 9 5 L 0 9 z" fill="context-stroke"/></marker></defs>
 <rect width="100%" height="100%" fill="var(--bg)"/>
-<g transform="translate(16.6 0)">
+<g transform="translate(0 0)">
 
 
 
 <rect x="24" y="31" width="100" height="38" rx="10" fill="var(--bg)" stroke="var(--border)" class="a0"/><text x="74" y="55" class="label">Browser</text>
-<rect x="213.4" y="31" width="100" height="38" rx="10" fill="var(--bg)" stroke="var(--border)" class="a1"/><text x="263.4" y="55" class="label">API</text>
-<path d="M402.8 36 a 50 12 0 0 1 100 0 v 28 a 50 12 0 0 1 -100 0 z" fill="var(--bg)" stroke="var(--border)" class="a2"/><path d="M402.8 36 a 50 12 0 0 0 100 0" fill="none" stroke="var(--border)" class="a3"/><text x="452.8" y="61" class="label">Database</text>
-<path id="p-browser-&gt;api" d="M 124 50 C 168.7 50, 168.7 50, 213.39999999999998 50" fill="none" stroke="var(--muted)" stroke-width="1.25" marker-end="url(#arrow)" class="a4"/><rect x="132" y="41" width="73.4" height="18" rx="9" fill="var(--bg)" stroke="var(--border)" class="a5"/><text x="168.7" y="54" class="edgelabel a6">GET /user</text>
-<path id="p-api-&gt;db" d="M 313.4 50 C 358.09999999999997 50, 358.09999999999997 50, 402.79999999999995 50" fill="none" stroke="var(--muted)" stroke-width="1.25" marker-end="url(#arrow)" class="a7"/><rect x="331.3" y="41" width="53.6" height="18" rx="9" fill="var(--bg)" stroke="var(--border)" class="a8"/><text x="358.1" y="54" class="edgelabel a9">SELECT</text>
+<rect x="239.8" y="31" width="100" height="38" rx="10" fill="var(--bg)" stroke="var(--border)" class="a1"/><text x="289.8" y="55" class="label">API</text>
+<path d="M455.6 36 a 50 12 0 0 1 100 0 v 28 a 50 12 0 0 1 -100 0 z" fill="var(--bg)" stroke="var(--border)" class="a2"/><path d="M455.6 36 a 50 12 0 0 0 100 0" fill="none" stroke="var(--border)" class="a3"/><text x="505.6" y="61" class="label">Database</text>
+<path id="p-browser-&gt;api" d="M 124 50 C 181.89999999999998 50, 181.89999999999998 50, 239.79999999999998 50" fill="none" stroke="var(--muted)" stroke-width="1.25" marker-end="url(#arrow)" class="a4"/><rect x="145.2" y="41" width="73.4" height="18" rx="9" fill="var(--bg)" stroke="var(--border)" class="a5"/><text x="181.9" y="54" class="edgelabel a6">GET /user</text>
+<path id="p-api-&gt;db" d="M 339.79999999999995 50 C 397.69999999999993 50, 397.69999999999993 50, 455.59999999999997 50" fill="none" stroke="var(--muted)" stroke-width="1.25" marker-end="url(#arrow)" class="a7"/><rect x="347.8" y="41" width="99.8" height="18" rx="9" fill="var(--bg)" stroke="var(--border)" class="a8"/><text x="397.7" y="54" class="edgelabel a9">read the user</text>
 <g class="p0" opacity="0"><circle r="10" fill="var(--accent)" opacity="0.2"/><circle r="4.5" fill="var(--accent)"/><animateMotion dur="10.4s" repeatCount="indefinite" keyTimes="0;0;0.0694;1" keyPoints="0;0;1;1" calcMode="linear"><mpath href="#p-browser-&gt;api" xlink:href="#p-browser-&gt;api"/></animateMotion></g>
 <g class="p1" opacity="0"><circle r="10" fill="var(--accent)" opacity="0.2"/><circle r="4.5" fill="var(--accent)"/><animateMotion dur="10.4s" repeatCount="indefinite" keyTimes="0;0.2485;0.3179;1" keyPoints="0;0;1;1" calcMode="linear"><mpath href="#p-api-&gt;db" xlink:href="#p-api-&gt;db"/></animateMotion></g>
 <g class="p2" opacity="0"><circle r="10" fill="var(--accent)" opacity="0.2"/><circle r="4.5" fill="var(--accent)"/><animateMotion dur="10.4s" repeatCount="indefinite" keyTimes="0;0.4414;0.5108;1" keyPoints="1;1;0;0" calcMode="linear"><mpath href="#p-api-&gt;db" xlink:href="#p-api-&gt;db"/></animateMotion></g>
@@ -79,9 +79,9 @@ svg { --accent:#0074d9; --fg:#1c1e21; --muted:#606770; --bg:#ffffff; --surface:#
 
 </g>
 
-<text x="280" y="116" opacity="0" class="steplabel a10">Load a user</text>
-<g opacity="0" class="a11"><text x="280" y="142" class="caption">The browser asks the API for the user.</text></g>
-<g opacity="0" class="a12"><text x="280" y="142" class="caption">The API reads the row.</text></g>
-<g opacity="0" class="a13"><text x="280" y="142" class="caption">The row comes back.</text></g>
-<g opacity="0" class="a14"><text x="280" y="142" class="caption">The API sends the user as JSON.</text></g>
+<text x="289.8" y="116" opacity="0" class="steplabel a10">Load a user</text>
+<g opacity="0" class="a11"><text x="289.8" y="142" class="caption">The browser asks the API for the user.</text></g>
+<g opacity="0" class="a12"><text x="289.8" y="142" class="caption">The API reads the row.</text></g>
+<g opacity="0" class="a13"><text x="289.8" y="142" class="caption">The row comes back.</text></g>
+<g opacity="0" class="a14"><text x="289.8" y="142" class="caption">The API sends the user as JSON.</text></g>
 </svg>

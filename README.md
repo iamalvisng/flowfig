@@ -215,7 +215,7 @@ Save this spec as `first.json`. The spec has 3 boxes, 2 edges and 1 step.
   },
   "edges": [
     { "from": "browser", "to": "api", "label": "GET /user" },
-    { "from": "api", "to": "db", "label": "SELECT" }
+    { "from": "api", "to": "db", "label": "read the user" }
   ],
   "steps": [
     {
@@ -238,7 +238,7 @@ $ npx flowfig first.json
 0 errors, 0 warnings
 figure: 3 boxes, 0 groups, 2 edges, 1 step, 4 messages
 browser -> api: GET /user
-api -> db: SELECT
+api -> db: read the user
 step "Load a user": 4 hops
 first.svg — 9.7 kB
 ```

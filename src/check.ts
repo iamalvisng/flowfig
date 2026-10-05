@@ -34,11 +34,19 @@ const groupIds = (g: FigGroup): string[] => [...(g.id ? [g.id] : []), ...g.child
 const FILLER =
   /\b(seamless(ly)?|robust|powerful|leverag(e|es|ed|ing)|effortless(ly)?|cutting-edge|state-of-the-art|holistic|synergy|empower(s|ed|ing)?|elegant(ly)?)\b/i;
 const codeShape = (t: string) => /^[^A-Za-z]*[a-z][A-Za-z0-9]*[A-Z]|[A-Za-z]_[A-Za-z]|\(\)|::|\w\.\w+\(/.test(t);
+const DB_COMMAND =
+  /^(SELECT|INSERT|UPDATE|DELETE|UPSERT|MERGE|SET|GET|DEL|HSET|HGET|HDEL|EXPIRE|INCR|DECR|LPUSH|RPUSH|LPOP|RPOP|SADD|ZADD|PUBLISH|XADD)\b/;
+const HTTP_LINE = /^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS) \//;
 const codeToken = (t: string) => codeShape(t) || t.split(/[./]/).some(codeShape);
 
 function plainText(fig: FlowProps): Finding[] {
   const out: Finding[] = [];
-  const check = (owner: string, field: string, text: unknown, o: { code?: boolean; words?: boolean; source?: string } = {}) => {
+  const check = (
+    owner: string,
+    field: string,
+    text: unknown,
+    o: { code?: boolean; words?: boolean; source?: string; command?: boolean } = {},
+  ) => {
     const t = str(text).trim();
     if (!t) return;
     const tokens = t.split(/\s+/);
@@ -49,7 +57,9 @@ function plainText(fig: FlowProps): Finding[] {
       : undefined;
     const code = o.code === false ? undefined : tokens.find((w) => codeToken(w) || (w === symbol && /[a-z][A-Z]/.test(w)));
     const filler = FILLER.exec(t)?.[0];
+    const command = o.command && DB_COMMAND.test(t) && !HTTP_LINE.test(t);
     const why = [
+      command && `${field} "${t}" looks like code; use plain words`,
       code &&
         (tokens.length === 1 && field === 'label'
           ? `${field} "${t}" looks like code; use plain words, the code name goes in source; if this is a product name, keep it`
@@ -61,7 +71,7 @@ function plainText(fig: FlowProps): Finding[] {
     if (why.length) out.push(warn('plain-text', [], `${owner}: ${why.join('; ')}`));
   };
   for (const n of nodes(fig.layout)) {
-    check(`box "${n.id}"`, 'label', n.label, { source: n.source });
+    check(`box "${n.id}"`, 'label', n.label, { source: n.source, command: true });
     check(`box "${n.id}"`, 'sub', n.sub);
   }
   const groupLabels = (g: FigGroup): void => {
@@ -69,7 +79,7 @@ function plainText(fig: FlowProps): Finding[] {
     for (const c of g.children) if (isGroup(c)) groupLabels(c);
   };
   groupLabels(fig.layout);
-  fig.edges.forEach((e) => check(`edge "${edgeId(e)}"`, 'label', e.label, { source: e.source }));
+  fig.edges.forEach((e) => check(`edge "${edgeId(e)}"`, 'label', e.label, { source: e.source, command: true }));
   for (const s of fig.steps ?? []) {
     const name = str(s.label);
     check(`step "${name}"`, 'label', s.label);
