@@ -68,6 +68,7 @@ import {
   type FigTheme,
   type FigTone,
   type FlowProps,
+  edgeTip,
 } from './model.ts';
 
 export { LIGHT, DARK } from './model.ts';
@@ -568,6 +569,7 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
         `/><text x="${n2(p.x + FRAME_SIDE)}" y="${n2(p.lane ? p.y + p.h / 2 + 4 : p.y + 20)}" class="frame">${esc(str(item.label).toUpperCase())}</text>`
       );
     }
+    const tip = (inner: string) => (item.source ? `<g><title>${esc(item.source)}</title>${inner}</g>` : inner);
     const bt = item.tone && TONES[item.tone];
     const stroke = cls(boxAnim(item.id, true, bt));
     if (p.tl) {
@@ -581,7 +583,7 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
         ? `<polygon points="${n2(cx)},${n2(p.y)} ${n2(p.x + p.w)},${n2(cy)} ${n2(cx)},${n2(p.y + p.h)} ${n2(p.x)},${n2(cy)}" fill="${fill0}" stroke="${stroke0}"${stroke}/>`
         : `<rect x="${n2(p.x)}" y="${n2(p.y)}" width="${n2(p.w)}" height="${n2(p.h)}" rx="6" fill="${fill0}" stroke="${stroke0}"${stroke}/>`;
       const tx = inside ? p.x + 8 : p.x + p.w + 6;
-      return shape + `<text x="${n2(tx)}" y="${n2(cy + 4.5)}" class="bar">${esc(label)}</text>`;
+      return tip(shape + `<text x="${n2(tx)}" y="${n2(cy + 4.5)}" class="bar">${esc(label)}</text>`);
     }
     const rim = item.shape === 'store' ? cls(boxAnim(item.id, false, bt)) : '';
     const fill0 = bt ? toneTint(bt, 'var(--bg)') : 'var(--bg)';
@@ -616,7 +618,7 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
         : item.mark === 'end'
           ? `<circle cx="${n2(p.x + p.w + 12)}" cy="${my}" r="6.25" fill="none" stroke="${dot}" stroke-width="1.5"/><circle cx="${n2(p.x + p.w + 12)}" cy="${my}" r="4" fill="${dot}"/>`
           : '';
-    return shape + label + sub + mark + (contents ? card(p as Rect & { item: FigNode }, cardTop, contents) : '');
+    return tip(shape + label + sub + mark + (contents ? card(p as Rect & { item: FigNode }, cardTop, contents) : ''));
   });
 
   function card(p: Rect & { item: FigNode }, top: number, contents: FigContent[]): string {
@@ -697,11 +699,13 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
           )
         : anim(on, `stroke: var(--accent); stroke-width: ${EDGE_ON}`, off, 'e'),
     );
-    const path = r.stub
+    const tip = edgeTip(r.id, e.source, beats.flat());
+    const path0 = r.stub
       ? r.stub.parts
           .map((d) => `<path d="${d}" fill="none" stroke="var(--muted)" stroke-width="${EDGE_OFF}" marker-end="url(#arrow)"${lit}/>`)
           .join('') + `<path id="p-${esc(r.id)}" d="${r.d}" fill="none" stroke="none"/>`
       : `<path id="p-${esc(r.id)}" d="${r.d}" fill="none" stroke="var(--muted)" stroke-width="${EDGE_OFF}" marker-end="url(#arrow)"${lit}/>`;
+    const path = tip ? `<g><title>${esc(tip)}</title>${path0}</g>` : path0;
     const pill = (x: number, y: number, lw: number, text: string) =>
       `<rect x="${n2(x - lw / 2)}" y="${n2(y - 9)}" width="${n2(lw)}" height="18" rx="9" fill="var(--bg)" stroke="var(--border)"` +
       cls(

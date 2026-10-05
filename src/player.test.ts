@@ -274,3 +274,17 @@ test('a long box label draws two lines in the player, and the box has the SVG wi
   const pads = [...box[1].match(/padding:([^;]*)/)![1].matchAll(/calc\((\d+)px/g)].map((m) => Number(m[1]));
   assert.equal(pads[0] + lines[0] + lines[1] + pads[2], toSvgScene(fig2).scene.boxes[0].rect.h);
 });
+
+test('a box with a source shows it as a title', () => {
+  const html = render({
+    layout: {
+      children: [
+        { id: 'a', label: 'A', source: 'src/a.ts#login' },
+        { id: 'b', label: 'B' },
+      ],
+    },
+    edges: [],
+  });
+  assert.match(html, /title="src\/a\.ts#login"/);
+  assert.equal(html.match(/ title="src/g)?.length, 1);
+});

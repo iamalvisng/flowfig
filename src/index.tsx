@@ -57,6 +57,7 @@ import {
   type FigNode,
   type FigTheme,
   type FlowProps,
+  edgeTip,
 } from './model.ts';
 
 export type * from './model.ts';
@@ -210,6 +211,7 @@ export function Flow({
     [layout, tl, edges, timeline, today],
   );
   const step = active == null ? null : steps[active];
+  const allBeats = useMemo(() => steps.flatMap((s) => s.flow.map(toBeat)), [steps]);
   const beats = useMemo(() => (step?.flow ?? []).map(toBeat), [step]);
   const cap = useMemo(() => fitCap({ layout, edges, steps, lanes, timeline }, 830), [layout, edges, steps, lanes, timeline]);
   const carded = useMemo(() => {
@@ -600,6 +602,7 @@ export function Flow({
       <div
         key={n.id}
         data-fig={n.id}
+        title={n.source}
         data-diamond={it.milestone || undefined}
         onMouseEnter={() => setHover(n.id)}
         onMouseLeave={() => setHover(null)}
@@ -942,6 +945,7 @@ export function Flow({
       <div
         key={item.id}
         data-fig={item.id}
+        title={item.source}
         data-diamond={diamond || undefined}
         onMouseEnter={() => setHover(item.id)}
         onMouseLeave={() => setHover(null)}
@@ -1204,6 +1208,7 @@ export function Flow({
                     const on = litEdges.has(r.id);
                     const tone = hopTone(r.id);
                     const hidden = !on && edges[ids.indexOf(r.id)].quiet;
+                    const tip = edgeTip(r.id, edges[ids.indexOf(r.id)].source, allBeats);
                     const look = (d: string, key: string, guides = false) => (
                       <path
                         key={key}
@@ -1220,8 +1225,10 @@ export function Flow({
                         strokeWidth={on ? EDGE_ON : EDGE_OFF}
                         strokeOpacity={hidden ? 0 : focus && !on ? 0.35 : 1}
                         markerEnd={hidden ? undefined : `url(#fig-arrow-${on ? 'on' : 'off'})`}
-                        style={{ transition: 'stroke .25s, stroke-opacity .25s' }}
-                      />
+                        style={{ transition: 'stroke .25s, stroke-opacity .25s', pointerEvents: tip ? 'stroke' : undefined }}
+                      >
+                        {tip && <title>{tip}</title>}
+                      </path>
                     );
                     const guide = (
                       <path

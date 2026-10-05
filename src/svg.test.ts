@@ -1355,3 +1355,20 @@ test('one long word or a CJK label does not wrap inside a word and still reports
     );
   }
 });
+
+test('a box and an edge with a source show it as a title, and others show none', () => {
+  const props: FlowProps = {
+    layout: {
+      children: [
+        { id: 'a', label: 'A', source: 'src/a.ts#login' },
+        { id: 'b', label: 'B' },
+      ],
+    },
+    edges: [{ id: 'q', from: 'a', to: 'b', source: 'src/q.ts' }],
+    steps: [{ label: 's', flow: [{ edges: { edge: 'q', source: 'src/h.ts' } }] }],
+  };
+  const svg = toSvg(props);
+  assert.match(svg, /<g><title>src\/a\.ts#login<\/title>/);
+  assert.match(svg, /<title>src\/q\.ts\nsrc\/h\.ts<\/title>/);
+  assert.equal(svg.match(/<title>/g)?.length, 2);
+});
