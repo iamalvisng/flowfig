@@ -1387,3 +1387,19 @@ test('a rail-only figure shows the edge source as a title on its rail row', () =
   });
   assert.match(svg, /class="railrow[^>]*><title>src\/q\.ts#send<\/title>/);
 });
+
+test('an automatic elbow edge gives its drawn corners to the check', () => {
+  const col = (ids: string[]) => ({ direction: 'column' as const, gap: 40, children: ids.map((id) => ({ id, label: id })) });
+  const fig = {
+    layout: {
+      direction: 'row' as const,
+      gap: 130,
+      children: [col(['cli', 'server', 'cleanup']), col(['convert', 'preview', 'config']), col(['out', 'tmp'])],
+    },
+    edges: [{ id: 's2', from: 'server', to: 'out', around: 'below' as const }],
+  };
+  const { scene } = render(fig);
+  const e = scene.edges.find((q) => q.id === 's2')!;
+  assert.ok(e.elbow, 'the scene edge has the elbow corners');
+  assert.ok(!checkScene(scene).some((f) => f.rule === 'edge-crosses-box'));
+});

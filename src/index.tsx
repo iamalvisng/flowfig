@@ -421,7 +421,17 @@ export function Flow({
           const e = edges[ids.indexOf(r.id)];
           if (r.stub)
             return r.stub.pts.map((pts, j) => ({ id: r.id, from: e.from, to: e.to, curve: r.curve, pts, label: labels[`${r.id}:${j}`] }));
-          return [{ id: r.id, from: e.from, to: e.to, curve: r.curve, label: labels[r.id], ...(tl && { behind: true as const }) }];
+          return [
+            {
+              id: r.id,
+              from: e.from,
+              to: e.to,
+              curve: r.curve,
+              label: labels[r.id],
+              ...(tl && { behind: true as const }),
+              ...(r.elbow && { elbow: r.elbow }),
+            },
+          ];
         }),
         ...(rail?.rows ?? []).flatMap((row) => {
           const r = row.kind === 'message' ? labels[`rail:${row.n}`] : undefined;

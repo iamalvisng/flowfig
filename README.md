@@ -283,14 +283,14 @@ full reference, run `npx flowfig docs`.
 
 `layout` is a group. A group holds boxes and other groups.
 
-| Field       | Meaning                                                         | Default                                             |
-| ----------- | --------------------------------------------------------------- | --------------------------------------------------- |
-| `children`  | The boxes and groups in the group, in order.                    | required                                            |
-| `id`        | The name that an edge can use to reach the whole group.         | none                                                |
-| `label`     | The title of the frame. Only a group with a label has a frame.  | none                                                |
-| `direction` | `"row"` puts the children side by side. `"column"` stacks them. | `"row"`                                             |
-| `gap`       | The space between the children in px.                           | column: 28; row: fits the widest label, at least 56 |
-| `align`     | `"start"`, `"center"` or `"end"`, across the direction.         | `"center"` (a column stretches)                     |
+| Field       | Meaning                                                                                                  | Default                                             |
+| ----------- | -------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| `children`  | The boxes and groups in the group, in order.                                                             | required                                            |
+| `id`        | The name that an edge can use to reach the whole group.                                                  | none                                                |
+| `label`     | The title of the frame. Only a group with a label has a frame.                                           | none                                                |
+| `direction` | `"row"` puts the children side by side. `"column"` stacks them.                                          | `"row"`                                             |
+| `gap`       | The smallest space between the children in px. It grows to fit the labels of edges that cross the group. | column: 28; row: fits the widest label, at least 56 |
+| `align`     | `"start"`, `"center"` or `"end"`, across the direction.                                                  | `"center"` (a column stretches)                     |
 
 ### Edges
 

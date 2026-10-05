@@ -1022,7 +1022,8 @@ ${said.join('\n')}
             to: e.to,
             curve: r.curve,
             label: labelRects[r.id],
-            ...(tl && { behind: true as const, elbow: r.elbow }),
+            ...(tl && { behind: true as const }),
+            ...(r.elbow && { elbow: r.elbow }),
           },
         ];
       }),

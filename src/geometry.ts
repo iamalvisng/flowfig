@@ -15,6 +15,8 @@ export type Routed = {
   around?: Around;
   /** The px a detour and its label need outside the boxes on the `around` side. */
   room?: number;
+  /** The px an elbow detour goes outside the boxes, for each side. */
+  bleed?: Partial<Record<Around, number>>;
 };
 /** A rect that a route keeps clear of. `box` marks a box. */
 export type Avoid = Rect & { box?: boolean };
@@ -132,7 +134,7 @@ export function route(
         Array.from({ length: ARC_STEPS + 1 }, (_, k): [Around, number] => [way, outward(way, k)]),
       );
       [around, arc] = fits.find(([way, at]) => !blocked(way, at)) ?? [];
-      elbow = !around;
+      elbow = e.elbow || !around;
     }
     if (!around && !e.sides && !e.stub && !e.elbow && past.length) {
       const ways = stacked ? (['left', 'right'] as const) : (['above', 'below'] as const);
@@ -147,7 +149,7 @@ export function route(
         }
       for (let k = 0; k <= ARC_STEPS; k++) for (const way of ways) tries.push([way, outward(way, k)]);
       [around, arc] = tries.find(([way, at]) => !blocked(way, at)) ?? [];
-      elbow = !around;
+      elbow = e.elbow || !around;
     }
     if (around) {
       const [lo, hi] = spanOf(a, b, around);
@@ -423,6 +425,12 @@ export function route(
             mid: { x: (x + ex) / 2, y },
             curve: [s, { x, y }, { x: ex, y }, e],
             elbow: [s, { x, y: s.y }, { x, y }, { x: ex, y }, { x: ex, y: e.y }, e],
+            bleed: {
+              left: Math.max(0, x0 - Math.min(x, ex)),
+              right: Math.max(0, Math.max(x, ex) - x1),
+              above: Math.max(0, y0 - y),
+              below: Math.max(0, y - y1),
+            },
           };
         }
       }
@@ -447,7 +455,7 @@ export function route(
   for (const p of picks) if (!p.stub) done.set(p, one(p));
   const routed = [...done.values()];
   const areaOf = (m: number) => {
-    const side = (way: Around) => Math.max(m, ...routed.filter((r) => r.around === way).map((r) => r.room!));
+    const side = (way: Around) => Math.max(m, arcRoom(routed, way));
     const [l, t] = [side('left'), side('above')];
     return { x: x0 - l, y: y0 - t, w: x1 - x0 + l + side('right'), h: y1 - y0 + t + side('below') };
   };
@@ -489,7 +497,8 @@ export function route(
   return picks.map((p) => done.get(p)!);
 }
 
-export const arcRoom = (routed: Routed[], way: Around) => Math.max(0, ...routed.filter((r) => r.around === way).map((r) => r.room!));
+export const arcRoom = (routed: Routed[], way: Around) =>
+  Math.max(0, ...routed.map((r) => (r.around === way ? r.room! : (r.bleed?.[way] ?? 0))));
 
 // The player pads its root by 4 px on a side with no detour.
 const PLAYER_PAD = 4;
@@ -501,12 +510,25 @@ const lerp = (a: Pt, b: Pt, t: number): Pt => ({ x: a.x + (b.x - a.x) * t, y: a.
 export function labelAlong(r: Routed, w: number, boxes: Rect[], placed: Rect[], fig?: Rect, lines: Pt[] = []): Pt {
   const [p0, p1, p2, p3] = r.curve;
   const spots: Pt[] = [];
+  const line = r.elbow;
+  const lens = line?.slice(1).map((q, k) => Math.hypot(q.x - line[k].x, q.y - line[k].y));
+  const total = lens?.reduce((m, l) => m + l, 0) ?? 0;
   for (const t of [0.5, 0.45, 0.55, 0.4, 0.6, 0.35, 0.65, 0.3, 0.7, 0.25, 0.75, 0.2, 0.8]) {
-    const u = 1 - t;
-    const dx = 3 * (u * u * (p1.x - p0.x) + 2 * u * t * (p2.x - p1.x) + t * t * (p3.x - p2.x));
-    const dy = 3 * (u * u * (p1.y - p0.y) + 2 * u * t * (p2.y - p1.y) + t * t * (p3.y - p2.y));
+    let q: Pt, dx: number, dy: number;
+    if (line && lens && total > 0) {
+      let k = 0;
+      let rest = t * total;
+      while (k < lens.length - 1 && rest > lens[k]) rest -= lens[k++];
+      const f = lens[k] ? rest / lens[k] : 0;
+      q = lerp(line[k], line[k + 1], f);
+      [dx, dy] = [line[k + 1].x - line[k].x, line[k + 1].y - line[k].y];
+    } else {
+      const u = 1 - t;
+      dx = 3 * (u * u * (p1.x - p0.x) + 2 * u * t * (p2.x - p1.x) + t * t * (p3.x - p2.x));
+      dy = 3 * (u * u * (p1.y - p0.y) + 2 * u * t * (p2.y - p1.y) + t * t * (p3.y - p2.y));
+      q = t === 0.5 ? r.mid : bezier(r.curve, t);
+    }
     const len = Math.hypot(dx, dy) || 1;
-    const q = t === 0.5 ? r.mid : bezier(r.curve, t);
     for (const k of [0, 11, -11]) spots.push({ x: q.x - (dy / len) * k, y: q.y + (dx / len) * k });
   }
   const inFig = (at: Pt) => !fig || inside({ x: at.x - w / 2, y: at.y - 9, w, h: 18 }, fig);
