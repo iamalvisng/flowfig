@@ -12,3 +12,6 @@ docs/superpowers/
 
 # sieve's local graph cache — regenerable, not committed (run `sieve build`).
 /sieve/
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/
