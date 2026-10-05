@@ -1271,6 +1271,72 @@ test('a left detour label sits inside the figure and off every other edge', () =
   );
 });
 
+test('a label wider than its column stays on its edge and inside the SVG', () => {
+  const fig: FlowProps = {
+    layout: {
+      direction: 'column',
+      children: [
+        { id: 'a', label: 'A' },
+        { id: 'b', label: 'B' },
+      ],
+    },
+    edges: [{ from: 'a', to: 'b', label: 'open the websocket connection to the origin server now' }],
+  };
+  assert.deepEqual(checkScene(render(fig).scene), []);
+});
+
+test('a labeled side detour with no room for its label keeps a 50 px arc clear of the boxes', () => {
+  const fig: FlowProps = {
+    layout: {
+      direction: 'column',
+      children: [
+        { id: 'n0', label: 'Cache' },
+        {
+          direction: 'row',
+          children: [
+            { id: 'n1', label: 'Order service' },
+            { id: 'n2', label: 'DB' },
+            { id: 'n3', label: 'Order service' },
+          ],
+        },
+        { id: 'n4', label: 'Cache' },
+      ],
+    },
+    edges: [
+      { from: 'n2', to: 'n4', label: 'open the websocket connection' },
+      { from: 'n1', to: 'n0', label: 'read the cache' },
+      { from: 'n3', to: 'n0', label: 'send the order' },
+      { from: 'n4', to: 'n0', label: 'open the websocket connection' },
+    ],
+  };
+  assert.deepEqual(checkScene(render(fig).scene), []);
+});
+
+test('an edge label stays inside the SVG at a small padding', () => {
+  const fig: FlowProps = {
+    layout: {
+      direction: 'column',
+      children: [
+        { id: 'n0', label: 'Cache' },
+        {
+          direction: 'row',
+          children: [
+            { id: 'n1', label: 'DB' },
+            { id: 'n2', label: 'DB' },
+            { id: 'n3', label: 'Cache' },
+          ],
+        },
+      ],
+    },
+    edges: [
+      { from: 'n1', to: 'n0', label: 'write the row' },
+      { from: 'n1', to: 'n2' },
+      { from: 'n2', to: 'n1', label: 'read the cache' },
+    ],
+  };
+  assert.deepEqual(checkScene(render(fig, { padding: 8 }).scene), []);
+});
+
 test('a wide row narrows its boxes before it scales, so the text stays at least 10 px', () => {
   const kids = Array.from({ length: 6 }, (_, i) => ({ id: `n${i}`, label: `Step ${i} reads the order data` }));
   const { scene } = render({ layout: { direction: 'row', children: kids }, edges: [] }, { width: 830 });

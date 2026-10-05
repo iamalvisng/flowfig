@@ -352,6 +352,7 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
       ),
       stubs.size ? { x: placed[0].x + gutter, y: placed[0].y, w: placed[0].w - gutter, h: placed[0].h } : undefined,
       lanes ? { bands: placed.filter((p) => p.lane), boxes: placed.filter((p) => !isGroup(p.item)) } : undefined,
+      pad,
     );
   };
   let routed = go();

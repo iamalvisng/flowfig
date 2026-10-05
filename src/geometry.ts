@@ -107,6 +107,7 @@ export function route(
   avoid: Avoid[] = [],
   area?: Rect,
   lanes?: { bands: Rect[]; boxes: Rect[] },
+  pad = 24,
 ): Routed[] {
   const picks: Pick[] = [];
   const arcs: { way: Around; lo: number; hi: number; at: number }[] = [];
@@ -118,22 +119,25 @@ export function route(
     const others = avoid.filter((r) => r.box && !same(r, a) && !same(r, b));
     const plain: [Side, Side] = stacked ? (a.y < b.y ? ['b', 't'] : ['t', 'b']) : a.x < b.x ? ['r', 'l'] : ['l', 'r'];
     const past = hit(bend(sideMid(a, plain[0]), sideMid(b, plain[1]), plain[0]), others, -2);
+    const blocked = (way: Around, at: number) =>
+      hit(arcLine(sideMid(a, SIDES[way][0]), sideMid(b, SIDES[way][1]), way, at), others, 2).length > 0;
     let around = e.around;
     let arc = around && arcAt(a, b, around, past, e.labelW);
-    if (!around && !e.sides && !e.stub && !e.elbow && past.length)
-      for (const share of [false, true]) {
-        for (const way of stacked ? (['left', 'right'] as const) : (['above', 'below'] as const)) {
+    if (around && blocked(around, arc!)) arc = arcAt(a, b, around, past);
+    if (!around && !e.sides && !e.stub && !e.elbow && past.length) {
+      const ways = stacked ? (['left', 'right'] as const) : (['above', 'below'] as const);
+      const tries: [Around, number][] = [];
+      for (const share of [false, true])
+        for (const way of ways) {
           const [lo, hi] = spanOf(a, b, way);
           const near = arcs.filter((q) => q.way === way && q.lo < hi && lo < q.hi).map((q) => q.at);
           if (near.length && !share) continue;
           const out = way === 'above' || way === 'left' ? -1 : 1;
-          const at = out * Math.max(out * arcAt(a, b, way, past, e.labelW), ...near.map((n) => out * n + ARC_STEP));
-          if (hit(arcLine(sideMid(a, SIDES[way][0]), sideMid(b, SIDES[way][1]), way, at), others, 2).length) continue;
-          [around, arc] = [way, at];
-          break;
+          tries.push([way, out * Math.max(out * arcAt(a, b, way, past, e.labelW), ...near.map((n) => out * n + ARC_STEP))]);
         }
-        if (around) break;
-      }
+      for (const way of ways) tries.push([way, arcAt(a, b, way, past)]);
+      [around, arc] = tries.find(([way, at]) => !blocked(way, at)) ?? [];
+    }
     if (around) {
       const [lo, hi] = spanOf(a, b, around);
       arcs.push({ way: around, lo, hi, at: arc! });
@@ -431,26 +435,43 @@ export function route(
   const done = new Map<Pick, Routed>();
   for (const p of picks) if (!p.stub) done.set(p, one(p));
   const routed = [...done.values()];
-  const side = (way: Around) => Math.max(EDGE_ROOM, ...routed.filter((r) => r.around === way).map((r) => r.room!));
-  const [l, t] = [side('left'), side('above')];
-  const fig = { x: x0 - l, y: y0 - t, w: x1 - x0 + l + side('right'), h: y1 - y0 + t + side('below') };
+  const areaOf = (m: number) => {
+    const side = (way: Around) => Math.max(m, ...routed.filter((r) => r.around === way).map((r) => r.room!));
+    const [l, t] = [side('left'), side('above')];
+    return { x: x0 - l, y: y0 - t, w: x1 - x0 + l + side('right'), h: y1 - y0 + t + side('below') };
+  };
+  const [fig, drawnArea] = [areaOf(Math.min(pad, PLAYER_PAD)), areaOf(pad)];
   const lineOf = (r: Routed) =>
     r.elbow
       ? r.elbow.slice(1).flatMap((q, k) => Array.from({ length: 17 }, (_, i) => lerp(r.elbow![k], q, i / 16)))
       : Array.from({ length: 33 }, (_, i) => bezier(r.curve, i / 32));
+  const boxes = avoid.filter((q) => q.box);
+  const pillAt = (at: Pt, w: number) => ({ x: at.x - w / 2, y: at.y - 9, w, h: 18 });
+  const placeAll = (fresh: boolean) => {
+    const out: Rect[] = [];
+    const mids: Pt[] = [];
+    let bad = 0;
+    for (const [p, r] of done) {
+      if (!p.labelW) continue;
+      const at = lanes
+        ? labelInBand(r, p.labelW, lanes, out)
+        : fresh
+          ? labelAlong(r, p.labelW, boxes, out, fig, routed.filter((o) => o !== r).flatMap(lineOf))
+          : labelAlong(r, p.labelW, boxes, out);
+      const pill = pillAt(at, p.labelW);
+      if (!inside(pill, drawnArea) || [...boxes, ...out].some((q) => overlaps(pill, q, 1))) bad++;
+      out.push(pill);
+      mids.push(at);
+    }
+    return { out, mids, bad };
+  };
+  const fresh = placeAll(true);
+  const old = fresh.bad && !lanes ? placeAll(false) : fresh;
+  const use = old.bad < fresh.bad ? old : fresh;
+  pills.push(...use.out);
+  let k = 0;
   for (const [p, r] of done) {
-    if (p.labelW)
-      r.mid = lanes
-        ? labelInBand(r, p.labelW, lanes, pills)
-        : labelAlong(
-            r,
-            p.labelW,
-            avoid.filter((b) => b.box),
-            pills,
-            fig,
-            routed.filter((o) => o !== r).flatMap(lineOf),
-          );
-    if (p.labelW) pills.push({ x: r.mid.x - p.labelW / 2, y: r.mid.y - 9, w: p.labelW, h: 18 });
+    if (p.labelW) r.mid = use.mids[k++];
     track(Array.from({ length: 33 }, (_, i) => bezier(r.curve, i / 32)));
   }
   for (const p of picks) if (p.stub) done.set(p, one(p));
@@ -459,11 +480,12 @@ export function route(
 
 export const arcRoom = (routed: Routed[], way: Around) => Math.max(0, ...routed.filter((r) => r.around === way).map((r) => r.room!));
 
+// The player pads its root by 4 px on a side with no detour.
+const PLAYER_PAD = 4;
+const inside = (r: Rect, q: Rect) => r.x >= q.x - 0.5 && r.x + r.w <= q.x + q.w + 0.5 && r.y >= q.y - 0.5 && r.y + r.h <= q.y + q.h + 0.5;
 const overlaps = (a: Rect, b: Rect, m: number) => a.x < b.x + b.w + m && b.x < a.x + a.w + m && a.y < b.y + b.h + m && b.y < a.y + a.h + m;
 
 const lerp = (a: Pt, b: Pt, t: number): Pt => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
-// The SVG default padding around the boxes.
-const EDGE_ROOM = 24;
 
 export function labelAlong(r: Routed, w: number, boxes: Rect[], placed: Rect[], fig?: Rect, lines: Pt[] = []): Pt {
   const [p0, p1, p2, p3] = r.curve;
@@ -476,9 +498,7 @@ export function labelAlong(r: Routed, w: number, boxes: Rect[], placed: Rect[], 
     const q = t === 0.5 ? r.mid : bezier(r.curve, t);
     for (const k of [0, 11, -11]) spots.push({ x: q.x - (dy / len) * k, y: q.y + (dx / len) * k });
   }
-  const inFig = (at: Pt) =>
-    !fig ||
-    (at.x - w / 2 >= fig.x - 0.5 && at.x + w / 2 <= fig.x + fig.w + 0.5 && at.y - 9 >= fig.y - 0.5 && at.y + 9 <= fig.y + fig.h + 0.5);
+  const inFig = (at: Pt) => !fig || inside({ x: at.x - w / 2, y: at.y - 9, w, h: 18 }, fig);
   const clamp = (at: Pt) =>
     fig
       ? {
@@ -497,7 +517,7 @@ export function labelAlong(r: Routed, w: number, boxes: Rect[], placed: Rect[], 
   };
   for (const strict of [true, false]) for (const at of spots) if (free(at, strict)) return at;
   for (const at of spots.map(clamp)) if (free(at, false)) return at;
-  return clamp(r.mid);
+  return fig ? labelAlong(r, w, boxes, placed) : r.mid;
 }
 
 function labelInBand(r: Routed, w: number, { bands, boxes }: { bands: Rect[]; boxes: Rect[] }, pills: Rect[]): Pt {
