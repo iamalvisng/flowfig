@@ -354,8 +354,70 @@ test('a Java static import gives found only when it names the callee class and n
   };
   assert.equal(run(files, 'src/b/Login.java#Login.login', 'src/a/Auth.java#Auth.verify'), 'found');
   assert.equal(run(files, 'src/b/Login.java#Login.login', 'src/a/Auth.java#Helper.verify'), 'unsure');
-  assert.equal(run(files, 'src/b/Outer.java#Outer.Inner.login', 'src/a/Auth.java#Auth.verify'), 'unsure');
+  assert.equal(run(files, 'src/b/Outer.java#Outer.Inner.login', 'src/a/Auth.java#Auth.verify'), 'not-found');
   assert.equal(run(files, 'src/b/Act.java#Act.login', 'src/a/Auth.java#Auth.verify'), 'unsure');
+});
+
+test('a Java call reads the classes around the call: inner, local and anonymous classes', () => {
+  const auth = 'package a;\npublic class Auth {\n  public static void verify() {}\n}\n';
+  const outer = 'package b;\npublic class Outer {\n  void verify() {}\n  static class Inner {\n    void login() { verify(); }\n  }\n}\n';
+  const files = {
+    'src/a/Auth.java': auth,
+    'src/b/Outer.java': outer,
+    'src/b/Nested.java': outer.replace('package b;\n', 'package b;\nimport static a.Auth.verify;\n').replace(/Outer/g, 'Nested'),
+    'src/b/Anon.java':
+      'package b;\nimport static a.Auth.verify;\npublic class Anon {\n  void login() {\n    new Runnable() {\n      void verify() {}\n      public void run() { verify(); }\n    };\n  }\n}\n',
+    'src/b/Local.java':
+      'package b;\nimport static a.Auth.verify;\npublic class Local {\n  void login() {\n    class L { void verify() {} void go() { verify(); } }\n  }\n}\n',
+  };
+  assert.equal(run(files, 'src/b/Outer.java#Outer.Inner.login', 'src/b/Outer.java#Outer.verify'), 'found');
+  assert.equal(run(files, 'src/b/Nested.java#Inner.login', 'src/a/Auth.java#Auth.verify'), 'not-found');
+  assert.equal(run(files, 'src/b/Anon.java#Anon.login', 'src/a/Auth.java#Auth.verify'), 'unsure');
+  assert.equal(run(files, 'src/b/Local.java#Local.login', 'src/a/Auth.java#Auth.verify'), 'not-found');
+});
+
+test('a Python name bound twice in module scope or through an __init__ star import is unsure', () => {
+  const py = { 'app/__init__.py': '', 'app/db.py': 'def save():\n    pass\n', 'app/other.py': 'def save():\n    pass\n' };
+  const main = 'from app import save\n\ndef create():\n    save()\n';
+  const init = (src: string) => ({ ...py, 'app/__init__.py': src, 'main.py': main });
+  assert.equal(run(init('from app.other import save\nfrom app.db import *\n'), 'main.py#create', 'app/other.py#save'), 'unsure');
+  assert.equal(run(init('from app.db import *\nfrom app.other import save\n'), 'main.py#create', 'app/other.py'), 'unsure');
+  const api = (src: string) => run({ ...py, 'app/api.py': `${src}\ndef create():\n    save()\n` }, 'app/api.py#create', 'app/db.py#save');
+  assert.equal(api('from app.db import save\nif X:\n    def save():\n        pass\n'), 'unsure');
+  assert.equal(api('try:\n    from app.db import save\nexcept ImportError:\n    def save():\n        pass\n'), 'unsure');
+  assert.equal(api('from app.db import save\n\ndef other():\n    save = 1\n'), 'found');
+  const member = (src: string) =>
+    run({ ...py, 'app/api.py': `${src}\ndef create():\n    db.save()\n` }, 'app/api.py#create', 'app/db.py#save');
+  assert.equal(member('from app import db\ndb = None\n'), 'unsure');
+});
+
+test('a Rust type through a crate path is the repo type only when that module declares it', () => {
+  const err = 'pub struct Error {\n    code: u8,\n}\nimpl Error {\n    pub fn kind(&self) -> u8 {\n        self.code\n    }\n}\n';
+  const at = (mod: string, use: string) => ({
+    'src/lib.rs': 'mod error;\nmod a;\nmod c;\n',
+    'src/error.rs': err,
+    'src/a.rs': mod,
+    'src/c.rs': `${use}\nfn f(e: Error) {\n    e.kind();\n}\n`,
+  });
+  assert.equal(run(at('pub use std::io::Error;\n', 'use crate::a::Error;'), 'src/c.rs#f', 'src/error.rs#Error.kind'), 'unsure');
+  assert.equal(run(at('pub use std::io::*;\n', 'use crate::a::*;'), 'src/c.rs#f', 'src/error.rs#Error.kind'), 'unsure');
+  assert.equal(run(at('\n', 'use crate::error::Error;'), 'src/c.rs#f', 'src/error.rs#Error.kind'), 'found');
+  const full = { ...at('\n', ''), 'src/c.rs': 'fn f(e: crate::error::Error) {\n    e.kind();\n}\n' };
+  assert.equal(run(full, 'src/c.rs#f', 'src/error.rs#Error.kind'), 'found');
+});
+
+test('a Rust type re-exported twice inside the crate is found; a std re-export is unsure', () => {
+  const err = 'pub struct Error {\n    code: u8,\n}\nimpl Error {\n    pub fn kind(&self) -> u8 {\n        self.code\n    }\n}\n';
+  const files = (models: string) => ({
+    'src/main.rs': 'mod db;\nmod api;\n',
+    'src/db/mod.rs': 'pub mod models;\npub use self::models::*;\n',
+    'src/db/models/mod.rs': models,
+    'src/db/models/error.rs': err,
+    'src/api.rs': 'use crate::db::*;\nfn f(e: Error) {\n    e.kind();\n}\n',
+  });
+  const edge = (models: string) => run(files(models), 'src/api.rs#f', 'src/db/models/error.rs#Error.kind');
+  assert.equal(edge('mod error;\npub use self::error::Error;\n'), 'found');
+  assert.equal(edge('mod error;\npub use std::io::Error;\n'), 'unsure');
 });
 
 test('a type name unique in the repo but not imported is outside the repo: java.lang and a C# using', () => {
@@ -460,4 +522,156 @@ test('a Rust function brought in by a use outside the crate is unsure; a crate u
   });
   assert.equal(run(at('use std::fs::read;\n'), 'src/c.rs#f', 'src/fs.rs#read'), 'unsure');
   assert.equal(run(at('use crate::fs::read;\n'), 'src/c.rs#f', 'src/fs.rs#read'), 'found');
+});
+
+test('via: a path token after a port is found when the callee file holds it outside the callee body', () => {
+  const files = {
+    'gateway/index.ts': 'export const callUsers = () => fetch("http://users:3000/internal/users");\n',
+    'users/index.ts': 'app.get("/internal/users", listUsers);\nexport function listUsers(req, res) { res.json([]); }\n',
+    'pricing/index.ts': '// pricing service\nexport function quote() {}\n',
+  };
+  assert.equal(run(files, 'gateway/index.ts#callUsers', 'users/index.ts#listUsers', '/internal/users'), 'found');
+  assert.equal(run(files, 'gateway/index.ts#callUsers', 'pricing/index.ts#quote', '/internal/users'), 'not-found');
+});
+
+test('via: a token in a string with a longer path or name is unsure; in code a member access is found', () => {
+  const files = {
+    'gw.ts':
+      'export const f = () => fetch("http://admin:3000/internal-admin/stats");\nexport const g = () => fetch("http://x/internal.json");\nexport const h = () => fetch("http://x/internal/users");\nexport const k = () => fetch("http://x/internals");\n',
+    'a.ts': 'export function f() { bus.publish("order-paid-v2", x); }\n',
+    'jobs.py': 'def check_alerts():\n    pass\n',
+    'run.py': 'from jobs import check_alerts\n\ndef run():\n    check_alerts.delay(1)\n',
+  };
+  for (const caller of ['gw.ts#f', 'gw.ts#g', 'gw.ts#h']) assert.equal(run(files, caller, undefined, '/internal'), 'unsure', caller);
+  assert.equal(run(files, 'gw.ts#k', undefined, '/internal'), 'not-found');
+  assert.equal(run(files, 'a.ts#f', undefined, 'order-paid'), 'unsure');
+  assert.equal(run(files, 'run.py#run', 'jobs.py#check_alerts', 'check_alerts'), 'found');
+});
+
+test('via: a module constant is unsure when the caller has a local, a parameter or a member of the same name', () => {
+  const consumer = { 'w.py': 'def consume():\n    ch.basic_consume("audit-events", m)\n' };
+  const at = (src: string, path = 'a.ts') => ({ ...consumer, [path]: src });
+  const ts = 'const QUEUE = "audit-events";\nexport function f';
+  assert.equal(run(at(`${ts}() { ch.sendToQueue(cfg.QUEUE, b); }\n`), 'a.ts#f', 'w.py#consume', 'audit-events'), 'unsure');
+  assert.equal(
+    run(at(`${ts}() { const QUEUE = "billing"; ch.sendToQueue(QUEUE, b); }\n`), 'a.ts#f', 'w.py#consume', 'audit-events'),
+    'unsure',
+  );
+  assert.equal(run(at(`${ts}(QUEUE) { ch.sendToQueue(QUEUE, b); }\n`), 'a.ts#f', 'w.py#consume', 'audit-events'), 'unsure');
+  assert.equal(
+    run(at('QUEUE = "audit-events"\n\ndef f(QUEUE):\n    ch.send(QUEUE)\n', 'a.py'), 'a.py#f', 'w.py#consume', 'audit-events'),
+    'unsure',
+  );
+});
+
+test('via: a callee token only on an import or log line, or in another function of the callee file, is unsure', () => {
+  const caller = { 'gw.ts': 'export const f = () => fetch("http://p:3000/internal/quote");\n' };
+  const at = (src: string) => ({ ...caller, 'p.ts': src });
+  const callee = (src: string, to: string) => run(at(src), 'gw.ts#f', to, '/internal/quote');
+  assert.equal(callee('import { db } from "../lib/internal/quote";\nexport function quote() {}\n', 'p.ts#quote'), 'unsure');
+  assert.equal(
+    callee('export function quote() { log.info("not served: /internal/quote"); }\nexport function other() {}\n', 'p.ts#other'),
+    'unsure',
+  );
+  assert.equal(callee('app.get("/internal/quote", pay);\nexport function pay() {}\nexport function ship() {}\n', 'p.ts#ship'), 'unsure');
+  assert.equal(callee('app.get("/internal/quote", pay);\nexport function pay() {}\nexport function ship() {}\n', 'p.ts'), 'found');
+});
+
+test('via: the caller can hold the token in a top-level constant of its file', () => {
+  const files = {
+    'src/audit.ts':
+      'const QUEUE = "audit-events";\nconst OTHER = "billing";\nexport function write() { ch.sendToQueue(QUEUE, b); }\nexport function bill() { ch.sendToQueue(OTHER, b); }\n',
+    'worker/consume.py': 'QUEUE = "audit-events"\n\ndef consume():\n    ch.basic_consume(QUEUE, on_message)\n',
+  };
+  assert.equal(run(files, 'src/audit.ts#write', 'worker/consume.py#consume', 'audit-events'), 'found');
+  assert.equal(run(files, 'src/audit.ts#bill', 'worker/consume.py#consume', 'audit-events'), 'not-found');
+});
+
+test('a middleware passed as a route argument is found; another middleware is not found', () => {
+  const files = {
+    'src/limit.ts': 'export function loginRateLimit(req, res, next) { next(); }\nexport function otherLimit(req, res, next) { next(); }\n',
+    'src/auth.ts':
+      "import { Router } from 'express';\nimport { loginRateLimit } from './limit.ts';\nexport const authRouter = Router();\n" +
+      'authRouter.post("/login", loginRateLimit, async (req, res) => { res.json({}); });\n',
+    'src/admin.ts': "import { otherLimit } from './limit.ts';\napp.post('/admin', otherLimit, async (req, res) => { res.json({}); });\n",
+  };
+  assert.equal(run(files, 'src/auth.ts', 'src/limit.ts#loginRateLimit'), 'found');
+  assert.equal(run(files, 'src/admin.ts', 'src/limit.ts#loginRateLimit'), 'not-found');
+});
+
+test('a not-found edge asks for via only from a TS or Python caller with no import path to the callee file', () => {
+  const files = {
+    'src/a.ts': 'export function a() {}\n',
+    'src/b.ts': "import { a } from './a.ts';\nexport function b() {}\n",
+    'src/c.ts': 'export function c() {}\n',
+  };
+  const reason = (caller: string) => edgeResult(ROOT, caller, 'src/a.ts#a', undefined, repo(files)).reason;
+  assert.match(reason('src/c.ts#c'), /if this edge crosses a process, add via$/);
+  assert.doesNotMatch(reason('src/b.ts#b'), /add via/);
+  const rs = {
+    'src/lib.rs': 'mod fs;\nmod c;\n',
+    'src/fs.rs': 'pub fn read() {}\npub fn write() {}\n',
+    'src/c.rs': 'use crate::fs::write;\nfn f() {\n    write();\n}\n',
+  };
+  assert.doesNotMatch(edgeResult(ROOT, 'src/c.rs#f', 'src/fs.rs#read', undefined, repo(rs)).reason, /add via/);
+});
+
+test('a call through a default export that wraps the callee is unsure, not "not found"', () => {
+  const files = {
+    'src/mover.ts': 'async function documentMover() {}\nexport default traceFunction({ spanName: "x" })(documentMover);\n',
+    'src/api.ts': "import documentMover from './mover.ts';\nexport function move() { documentMover(); }\n",
+  };
+  assert.equal(run(files, 'src/api.ts#move', 'src/mover.ts#documentMover'), 'unsure');
+});
+
+test('via: a callee line that only looks like an import or a log call still counts', () => {
+  const w = { 'w.ts': 'export function save() { db.query("INSERT INTO orders VALUES (1)"); }\n' };
+  const cs =
+    'namespace App;\npublic class R {\n  public void Load(Conn c) {\n    using var cmd = new SqlCommand("SELECT * FROM orders", c);\n  }\n}\n';
+  assert.equal(run({ ...w, 'R.cs': cs }, 'w.ts#save', 'R.cs#R.Load', 'orders'), 'found');
+  assert.equal(
+    run({ ...w, 'r.py': 'def load(cur):\n    cur.execute(\'SELECT * FROM "orders"\')\n' }, 'w.ts#save', 'r.py#load', 'orders'),
+    'found',
+  );
+  const go = 'package u\n\nfunc List(w W, r *R) {\n\tif r.URL.Path != "/internal/users" { http.Error(w, "no", 404) }\n}\n';
+  const gw = { 'gw.ts': 'export const f = () => fetch("http://u/internal/users");\n' };
+  assert.equal(run({ ...gw, 'u.go': go }, 'gw.ts#f', 'u.go#List', '/internal/users'), 'found');
+});
+
+test('a Java class header longer than the scan window gives unsure', () => {
+  const bases = Array.from({ length: 20 }, (_, i) => `HandlerContract${i}<RequestEnvelope, ResponseEnvelope>`).join(',\n        ');
+  const outer = `package b;\npublic class Outer {\n  static class Inner extends Base\n      implements ${bases} {\n    void verify() {}\n    void login() { verify(); }\n  }\n}\n`;
+  assert.equal(run({ 'src/b/Outer.java': outer }, 'src/b/Outer.java#Outer.Inner.login', 'src/b/Outer.java#Outer.Inner.verify'), 'unsure');
+});
+
+test('a 20,000-line Java file with a long enum gives one edge result in under 1 s', () => {
+  const values = Array.from({ length: 20000 }, (_, i) => `    V${i},`).join('\n');
+  const java = `package u;\npublic class Codes {\n  static String P = "/internal/users";\n  public void a() {}\n  public void b() {}\n  enum E {\n${values}\n  }\n}\n`;
+  const files = { 'gw.ts': 'export const f = () => fetch("http://u/internal/users");\n', 'u/Codes.java': java };
+  const start = performance.now();
+  run(files, 'gw.ts#f', 'u/Codes.java#Codes.b', '/internal/users');
+  assert.ok(performance.now() - start < 1000);
+});
+
+test('a Rust re-export chain with a private item, a private use, a test module or an inline module is unsure', () => {
+  const err = 'pub struct Error {\n    code: u8,\n}\nimpl Error {\n    pub fn kind(&self) -> u8 {\n        self.code\n    }\n}\n';
+  const api = (use: string) => `${use}\nfn f(e: Error) {\n    e.kind();\n}\n`;
+  const crate = (models: string, error = err) => ({
+    'src/main.rs': 'mod db;\nmod util;\nmod api;\n',
+    'src/db/mod.rs': 'pub mod models;\npub use self::models::*;\n',
+    'src/db/models/mod.rs': models,
+    'src/db/models/error.rs': error,
+    'src/util.rs': 'pub use std::io::Error;\n',
+    'src/api.rs': api('use crate::db::*;\nuse crate::util::*;'),
+  });
+  const edge = (files: Record<string, string>) => run(files, 'src/api.rs#f', 'src/db/models/error.rs#Error.kind');
+  assert.equal(edge(crate('mod error;\npub use self::error::*;\n', err.replace('pub struct', 'struct'))), 'unsure');
+  assert.equal(edge(crate('mod error;\nuse self::error::Error;\n')), 'unsure');
+  assert.equal(edge(crate('#[cfg(test)]\nmod tests {\n    use crate::db::models::error::Error;\n}\nmod error;\n')), 'unsure');
+  const inline = {
+    'src/main.rs': 'mod db;\nmod api;\n',
+    'src/db.rs': `pub mod inner {\n${err}}\npub use std::io::Error;\n`,
+    'src/api.rs': api('use crate::db::Error;'),
+  };
+  assert.equal(run(inline, 'src/api.rs#f', 'src/db.rs#Error.kind'), 'unsure');
 });

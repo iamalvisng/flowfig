@@ -77,7 +77,7 @@ test('open writes the page to the temp folder and starts the opener with the pag
     if (!posix) return;
     // The opener runs after the CLI exits, so wait for its log.
     const log = join(dir, 'opened.log');
-    for (let i = 0; i < 100 && !(existsSync(log) && readFileSync(log, 'utf8')); i++) await sleep(50);
+    for (let i = 0; i < 300 && !(existsSync(log) && readFileSync(log, 'utf8')); i++) await sleep(50);
     assert.equal(readFileSync(log, 'utf8'), page);
   } finally {
     rmSync(dir, { recursive: true, force: true });

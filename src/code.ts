@@ -345,8 +345,8 @@ function defPatterns(lang: Lang, name: string, inContainer: boolean): RegExp[] {
     case 'cs':
       return [
         re(`\\b(class|interface|enum|record|struct)\\s+${N}${E}`),
-        re(`(^|[\\n;{}])[ \\t]*([\\w<>\\[\\],.?]+\\s+)+${N}\\s*(<[^>]*>)?\\s*\\(`),
-        re(`(^|[\\n;{}\\]])[ \\t]*([\\w<>\\[\\],.?]+\\s+)+${N}\\s*(=(?![=>])|;|\\{\\s*(get|set|init)\\b|=>)`),
+        re(`(^|[\\n;{}])[ \\t]*([\\w<>\\[\\],.?]+\\s+){1,12}${N}\\s*(<[^>]*>)?\\s*\\(`),
+        re(`(^|[\\n;{}\\]])[ \\t]*([\\w<>\\[\\],.?]+\\s+){1,12}${N}\\s*(=(?![=>])|;|\\{\\s*(get|set|init)\\b|=>)`),
       ];
     case 'rs':
       return [re(`\\bfn\\s+${N}${E}`), re(`\\b(struct|enum|trait|type|mod|const|static|union)\\s+${N}${E}`)];
@@ -394,7 +394,7 @@ function findIn(code: string, lang: Lang, name: string, lo: number, hi: number, 
     let m;
     while ((m = re.exec(code)) && m.index < hi) {
       const nameAt = m.index + m[0].lastIndexOf(name);
-      const start = m.index + (m[0].length - m[0].trimStart().length);
+      const start = m.index + /^[;{}\]]?\s*/.exec(m[0])![0].length;
       if (lang === 'go' && receiver != null && !/^\s*func\s*\(/.test(m[0])) continue;
       if (lang === 'go' && receiver != null && /^func\s*\(/.test(m[0])) {
         const recv = /^func\s*\(([^)]*)\)/

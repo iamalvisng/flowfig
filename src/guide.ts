@@ -66,7 +66,8 @@ If the code does not show a fact, leave the fact out. Do not guess a part, a nam
 
 Each fact becomes a box, an edge, a beat, a \`data\` card or a \`show\` row. Use the real names from the code as labels, and
 real example data from the code or its tests. Keep each fact that you leave out, with the reason, for the reply.
-Give each box and edge that draws code a \`source\`, from the fact list: \`"src/auth/login.ts#verifyPassword"\`. A store or an outside part may have none.
+Give each box and edge that draws code a \`source\`, from the fact list: \`"src/auth/login.ts#verifyPassword"\`. A method uses \`Owner.name\`: \`"src/auth/session.ts#Session.refresh"\`. An edge \`source\` names the function that makes the call. An edge needs no \`source\` when the code of its \`from\` box makes the call. An edge across a process (HTTP, a queue, a topic, a table) gets \`via\`: the route, queue, topic or table name that both sides use in the code, for example \`"via": "order-paid"\`. A store box may have no \`source\`, but an edge to it still needs \`via\`.
+For an HTTP edge, \`via\` is the path that both sides use: \`"via": "/internal/users"\`. An edge to a store box (a table, a file, a folder, a cache key) uses \`via\` with the name that the caller code uses: \`"via": "sales_facts"\`. A route handler with no name keeps a file \`source\`, and an edge into it uses \`via\` with the route path. An edge out of it in the same process uses no \`via\`.
 A box that draws a step from a document links to that document: \`"docs/sop/refunds.md#step-3-approve-the-refund"\`, the heading as a GitHub anchor. \`verify\` checks it the same way.
 
 Mermaid mapping:
@@ -112,7 +113,7 @@ command writes no SVG and lists the faults. Fix each fault and render again.
 Run \`npx flowfig --spec out.svg\`. Compare the spec with the fact list. Check that each edge goes from the caller to the callee
 that its fact names. Add each fact that is missing, fix each wrong edge, and render again.
 
-Run \`npx flowfig verify out.svg\` from the repo root. Fix each \`missing-file\` or \`missing-symbol\`.
+Run \`npx flowfig verify out.svg\` from the repo root. Fix each \`missing-file\` and \`missing-symbol\`. For each \`edge-not-found\`, the code does not make that call: remove the edge, or point its \`source\` at the function that makes the call. An \`unsure\` edge is allowed, but if a function with a typed receiver makes the call, point the edge \`source\` at it. A \`not checked\` edge has no code to check: give it a \`source\` or a \`via\` if one exists. Do not invent an edge to make verify pass.
 
 ### 6. Look at the SVG
 
@@ -132,7 +133,8 @@ The reply has these parts, in this order:
 4. what the figure leaves out, and why;
 5. the two check lines that the render printed, \`0 errors, 0 warnings\` and \`figure: ...\`, copied as printed, and whether
    you looked at the SVG;
-6. one line \`npx flowfig open <path>\` for each SVG, at the end of the reply. Do not run that command yourself.
+6. the \`verify\` edge counts from its count line, for example "edges: 5 found, 0 not found, 1 unsure, 0 not checked";
+7. one line \`npx flowfig open <path>\` for each SVG, at the end of the reply. Do not run that command yourself.
 
 To change an SVG later, print its spec with \`--spec\`, change the spec, and render again.
 
@@ -174,7 +176,7 @@ Every other item is a box.
 | \`from\`    | In a \`timeline\` figure: the start of the item, or the date of a milestone, as YYYY-MM-DD. |
 | \`to\`      | In a \`timeline\` figure: the last day of the item, as YYYY-MM-DD. Without it the box is a milestone. |
 | \`width\`   | Width in px. This overrides the width that the layout picks.                                              |
-| \`source\`  | The code this draws: \`path\` or \`path#symbol\`, relative to the repo root. \`flowfig verify\` checks it.  |
+| \`source\`  | The code this draws: \`path\` or \`path#Owner.name\`, relative to the repo root. \`flowfig verify\` checks it.  |
 | \`lines\`   | The least number of text lines that a content card keeps. The card still grows to fit its content.        |
 | \`tone\`    | The state color of the box: a 1 px border and a light tint. Use \`blue\`, \`purple\`, \`green\`, \`orange\`, \`red\` or \`gray\`.                  |
 | \`mark\`    | \`"start"\` or \`"end"\` | A lifecycle mark: a filled dot before a start state, a ringed dot after an end state. |
@@ -188,7 +190,8 @@ An edge has these fields.
 - \`label\`: text on the edge, drawn as a small pill.
 - \`around\`: \`"above"\` or \`"below"\`. This routes the edge over or under the boxes in between (loops, skip-ahead edges).
 - \`quiet\`: if \`true\`, the SVG draws the edge only while a step uses it.
-- \`source\`: the code this edge draws, as \`path\` or \`path#symbol\`. \`flowfig verify\` checks it.
+- \`source\`: the code this edge draws, as \`path\` or \`path#Owner.name\`. \`flowfig verify\` checks it.
+- \`via\`: the route, queue, topic or table name that both sides of a cross-process edge use in the code.
 
 ### steps
 
@@ -203,7 +206,7 @@ boxes to highlight for the whole step).
 
 The beat fields:
 
-- \`edges\`: an edge id, a hop object, or an array of these. A hop object is \`{ edge, back?, data?, tone?, async?, source? }\`.
+- \`edges\`: an edge id, a hop object, or an array of these. A hop object is \`{ edge, back?, data?, tone?, async?, source?, via? }\`.
   - \`back: true\` runs the packet from the \`to\` box to the \`from\` box.
   - \`data\` is a small card that moves with the packet.
   - \`async: true\` marks a message that does not wait for an answer. The rail draws it dashed, with an \`async\` tag.
@@ -275,7 +278,7 @@ npx flowfig - out.svg < spec.json      # render a spec from stdin
 npx flowfig spec.json out.svg          # render a spec file
 npx flowfig figure.ts out.svg          # render a module whose default export is a spec
 npx flowfig check <input> [--json]     # list the faults. The input can also be an SVG that flowfig wrote.
-npx flowfig verify <input>...          # check that the code each source names still exists
+npx flowfig verify <input>...          # check each source and each edge against the code
 npx flowfig diff <old> <new>           # list what changed in the spec between two figures
 npx flowfig --spec out.svg             # print the spec that an SVG carries
 npx flowfig open out.svg               # show the figure in the default browser

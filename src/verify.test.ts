@@ -211,3 +211,9 @@ test('a via that is not a string is a bad source for check, and verify does not 
     assert.equal(verifyReport(fig, { root }).coverage.notChecked, 1);
   });
 });
+
+test('a client call such as axios.get("/x", cfg) does not define a symbol', () => {
+  withRepo({ 'src/c.ts': 'export async function load() {\n  return axios.get("/x", cfg);\n}\n' }, (root) => {
+    assert.deepEqual(rules(verify(figWith('src/c.ts#/x'), { root })), ['missing-symbol']);
+  });
+});

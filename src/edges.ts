@@ -28,6 +28,40 @@ type Src = { path: string; symbol?: string };
 
 type Verdict = { res: 'found' | 'not' | 'unsure' | 'skip'; why: string };
 const word = (name: string) => new RegExp(`(?<![\\w$])${esc(name)}(?![\\w$])`);
+const viaToken = (t: string) => new RegExp(`${/^[\w$]/.test(t) ? '(?<![\\w$])' : ''}${esc(t)}${/[\w$]$/.test(t) ? '(?![\\w$])' : ''}`, 'g');
+function viaHits(via: string, keep: string, code: string | null): { at: number; near: boolean }[] {
+  const tail = /[\w$]$/.test(via);
+  return [...keep.matchAll(viaToken(via))].map((m) => ({
+    at: m.index,
+    near: tail && (code == null || code[m.index] !== keep[m.index]) && /^[./-]/.test(keep.slice(m.index + m[0].length)),
+  }));
+}
+const IMPORT_LINE: Record<Lang, RegExp> = {
+  ts: /^\s*(?:(?:import|export)\b[^'"]*\bfrom\s*|import\s*|\}\s*from\s*|(?:const|let|var)\s+[^=]+=\s*require\(\s*)['"][^'"]*['"]\s*\)?\s*;?\s*$/,
+  py: /^\s*(?:import\s+[\w.]+(?:\s+as\s+\w+)?(?:\s*,\s*[\w.]+(?:\s+as\s+\w+)?)*|from\s+[\w.]+\s+import\s+[^=()]+)\s*$/,
+  go: /^\s*(?:import\s*(?:\w+\s+)?"[^"]*"|(?:[\w.]+\s+)?"[^"]*")\s*$/,
+  java: /^\s*import\s+(?:static\s+)?[\w.*]+\s*;\s*$/,
+  cs: /^\s*(?:global\s+)?using\s+(?:static\s+)?[\w.]+\s*;\s*$/,
+  rs: /^\s*(?:pub(?:\([^)]*\))?\s+)?use\s+[^;]*;\s*$/,
+};
+const LOG_CALL = /\b(?:log|logger|console|logging)\s*\.\s*\w+\s*\(|(?<![\w.])(?:print|println|printf)!?\s*\(/;
+const FUNCS: Record<Lang, RegExp> = {
+  ts: /\bfunction\b|=>|^[ \t]*(?:(?:public|private|protected|static|async|get|set|override)\s+)*(?!(?:if|for|while|switch|catch)\b)[\w$]+\s*\([^()]*\)\s*(?::[^{;]*)?\{/gm,
+  py: /\bdef\s|\blambda\b/g,
+  go: /\bfunc\b/g,
+  rs: /\bfn\s/g,
+  java: /->|^[ \t]*(?:[\w<>[\],.?]+[ \t]+)+(?!(?:if|for|while|switch|catch|new|return)\b)\w+\s*\([^;{]*\)\s*(?:throws[^{;]*)?\{/gm,
+  cs: /=>|^[ \t]*(?:[\w<>[\],.?]+[ \t]+)+(?!(?:if|for|while|switch|catch|new|return|using|lock)\b)\w+\s*\([^;{]*\)\s*\{/gm,
+};
+const CONSTS: Record<Lang, RegExp> = {
+  ts: /^(?:export\s+)?const\s+([\w$]+)\s*(?::\s*string\s*)?=\s*(['"`])([^'"`\n]*)\2/gm,
+  py: /^([A-Za-z_]\w*)\s*(?::\s*str\s*)?=\s*(['"])([^'"\n]*)\2/gm,
+  go: /^const\s+(\w+)\s*(?:string\s*)?=\s*(["`])([^"`\n]*)\2/gm,
+  java: /^[ \t]*(?:(?:public|private|protected)\s+)?static\s+final\s+String\s+(\w+)\s*=\s*(")([^"\n]*)"/gm,
+  cs: /^[ \t]*(?:(?:public|private|protected|internal)\s+)?const\s+string\s+(\w+)\s*=\s*(")([^"\n]*)"/gm,
+  rs: /^(?:pub(?:\([^)]*\))?\s+)?const\s+(\w+)\s*:\s*&(?:'static\s+)?str\s*=\s*(")([^"\n]*)"/gm,
+};
+
 const IMPORT_LINES =
   /\b(?:import|export)\s+(?:type\s+)?[\w*\s,{}$]*?\bfrom\b|^[ \t]*(?:from|use|using|package|import)\b.*|.*\brequire\(.*/gm;
 const MODIFIERS = new Set([
@@ -94,29 +128,90 @@ const defaultIs = (ti: CodeFile, symbol: string) =>
 
 const label = (s: Src) => s.symbol ?? s.path;
 
+function pyBindings(code: string, n: string, limit: number): number {
+  let count = 0;
+  for (const m of code.matchAll(
+    new RegExp(`^([ \\t]*)(?:(?:(?:async\\s+)?def|class)\\s+${esc(n)}\\b|${esc(n)}\\s*(?::[^=\\n]*)?=(?!=))`, 'gm'),
+  )) {
+    let ind = m[1].length;
+    let line = m.index;
+    while (ind > 0 && line > 0) {
+      line = code.lastIndexOf('\n', line - 2) + 1;
+      const head = /^([ \t]*)(\S.*)/.exec(code.slice(line, code.indexOf('\n', line)));
+      if (!head || head[1].length >= ind) continue;
+      if (/^(?:async\s+)?(?:def|class)\b/.test(head[2])) break;
+      ind = head[1].length;
+    }
+    if (ind === 0 && ++count >= limit) break;
+  }
+  return count;
+}
+
 const twice = (fi: CodeFile, imps: Import[], n: string) =>
-  imps.filter((i) => i.local === n).length +
-    (fi.lang === 'py' && new RegExp(`^(?:(?:async\\s+)?def|class)\\s+${esc(n)}\\b|^${esc(n)}\\s*(?::[^=\\n]*)?=(?!=)`, 'm').test(fi.code)
-      ? 1
-      : 0) >
-  1;
+  imps.filter((i) => i.local === n).length + (fi.lang === 'py' ? pyBindings(fi.code, n, 2) : 0) > 1;
+
+function javaScopes(code: string, pos: number): (string | null)[] {
+  const out: (string | null)[] = [];
+  for (let i = pos, d = 0; i >= 0; i--) {
+    if (code[i] === '}') d++;
+    else if (code[i] === '{' && d-- === 0) {
+      d = 0;
+      const head = code.slice(Math.max(0, i - 300), i).trimEnd();
+      const named = /\b(?:class|interface|enum|record)\s+(\w+)[^;{}]*$/.exec(head);
+      if (named) out.push(named[1]);
+      else if (i > 300 && !/[;{}]/.test(head)) {
+        out.push(null);
+        break;
+      } else if (head.endsWith(')')) {
+        let k = head.length - 1;
+        for (let p = 0; k >= 0; k--)
+          if (head[k] === ')') p++;
+          else if (head[k] === '(' && --p === 0) break;
+        if (/\bnew\s+[\w.<>[\]]+\s*$/.test(head.slice(0, k))) out.push(null);
+      }
+    }
+  }
+  return out;
+}
 
 function viaResult(root: string, from: Src, to: Src | undefined, via: string, read: Read, cache: Map<string, CodeFile | null>) {
-  const body = (s: Src) => {
-    const file = codeFile(root, s.path, read, cache);
-    if (!file) return null;
-    const at = s.symbol ? locate(file, s.symbol) : { start: 0, end: file.keep.length };
-    return at && file.keep.slice(at.start, at.end);
-  };
-  const token = word(via);
-  const a = body(from);
-  if (a == null) return { result: 'not-checked' as const, reason: `${label(from)} is not in code that verify reads` };
-  if (!token.test(a)) return { result: 'not-found' as const, reason: `"${via}" is not in ${label(from)}` };
+  const longer = (where: string) => ({ result: 'unsure' as const, reason: `"${via}" is in ${where} only as part of a longer name` });
+  const fi = codeFile(root, from.path, read, cache);
+  const at = fi && (from.symbol ? locate(fi, from.symbol) : { start: 0, end: fi.keep.length });
+  if (!fi || !at) return { result: 'not-checked' as const, reason: `${label(from)} is not in code that verify reads` };
+  const own = viaHits(via, fi.keep, fi.code).filter((h) => h.at >= at.start && h.at < at.end);
+  if (!own.some((h) => !h.near)) {
+    const code = fi.code.slice(at.start, at.end);
+    const fromName = from.symbol?.split('.').at(-1);
+    let near = own.length > 0;
+    const names: string[] = [];
+    for (const m of fi.keep.matchAll(CONSTS[fi.lang])) {
+      const hs = word(m[1]).test(code) ? viaHits(via, m[3], null) : [];
+      if (hs.some((h) => !h.near)) names.push(m[1]);
+      else if (hs.length) near = true;
+    }
+    if (!names.length) return near ? longer(label(from)) : { result: 'not-found' as const, reason: `"${via}" is not in ${label(from)}` };
+    const local = names.find(
+      (n) => shadows(code, n, fi.lang, fromName, !from.symbol) || new RegExp(`\\.\\s*${esc(n)}(?![\\w$])`).test(code),
+    );
+    if (local) return { result: 'unsure' as const, reason: `${label(from)} has a local or member named ${local}` };
+  }
   if (!to) return { result: 'found' as const, reason: `"${via}" is in ${label(from)}` };
-  const b = body(to);
-  if (b == null) return { result: 'not-checked' as const, reason: `${label(to)} is not in code that verify reads` };
-  if (!token.test(b)) return { result: 'not-found' as const, reason: `"${via}" is not in ${label(to)}` };
-  return { result: 'found' as const, reason: `"${via}" is in ${label(from)} and in ${label(to)}` };
+  const ti = codeFile(root, to.path, read, cache);
+  const tb = ti && (to.symbol ? locate(ti, to.symbol) : { start: 0, end: ti.keep.length });
+  if (!ti || !tb) return { result: 'not-checked' as const, reason: `${label(to)} is not in code that verify reads` };
+  const lineAt = (k: number) =>
+    ti.keep.slice(ti.keep.lastIndexOf('\n', k) + 1, ti.keep.indexOf('\n', k) < 0 ? undefined : ti.keep.indexOf('\n', k));
+  const raw = viaHits(via, ti.keep, ti.code);
+  const all = raw.filter((h) => !IMPORT_LINE[ti.lang].test(lineAt(h.at)) && !LOG_CALL.test(lineAt(h.at)));
+  const hits = all.filter((h) => !h.near).map((h) => h.at);
+  if (!hits.length && all.length) return longer(to.path);
+  if (!hits.length && raw.length) return { result: 'unsure' as const, reason: `"${via}" is in ${to.path} only on an import or log line` };
+  if (!hits.length) return { result: 'not-found' as const, reason: `"${via}" is not in ${to.path}` };
+  const yes = { result: 'found' as const, reason: `"${via}" is in ${label(from)} and in ${label(to)}` };
+  if (hits.some((k) => k >= tb.start && k < tb.end)) return yes;
+  if (hits.some((k) => ti.code[k] !== ti.keep[k]) && [...ti.code.matchAll(FUNCS[ti.lang])].length <= 1) return yes;
+  return { result: 'unsure' as const, reason: `"${via}" is in ${to.path} outside ${label(to)}` };
 }
 
 function fileResult(
@@ -202,9 +297,18 @@ export function edgeResult(
   if (to.symbol && !locate(ti, to.symbol)) return skip(`${to.symbol} is not defined`);
 
   const whole = !from.symbol;
+  const hint = () =>
+    (fi.lang !== 'ts' && fi.lang !== 'py') ||
+    from.path === to.path ||
+    importsOf(root, fi, read).some((i) => i.path != null && leadsTo(root, i.path, to.path, i.name, read, cache) != null)
+      ? ''
+      : '; if this edge crosses a process, add via';
   let body = fi.code.slice(at.start, at.end);
   if (whole) body = body.replace(IMPORT_LINES, (m) => m.replace(/[^\n]/g, ' '));
-  if (!to.symbol) return fileResult(root, fi, ti, body, whole, from, to, read, cache);
+  if (!to.symbol) {
+    const r = fileResult(root, fi, ti, body, whole, from, to, read, cache);
+    return r.result === 'not-found' ? { ...r, reason: r.reason + hint() } : r;
+  }
   const toParts = to.symbol.split('.');
   const toName = toParts.at(-1)!;
   const owner = toParts.length > 1 ? toParts.at(-2)! : null;
@@ -222,6 +326,7 @@ export function edgeResult(
   const byLocal = new Map(imps.map((i) => [i.local, i]));
   const pyStar = lang === 'py' && imps.some((i) => i.local === '*');
   const isDefault = defaultIs(ti, to.symbol);
+  const wrapped = !isDefault && new RegExp(`\\bexport\\s+default\\b[^;]*${word(toName).source}`).test(ti.code);
   const reach = (path: string | null | undefined, name: string) => (path == null ? null : leadsTo(root, path, to.path, name, read, cache));
   const isCallee = (r: string | null) => r != null && (r === '*' || r === toName || (r === 'default' && isDefault));
   const names = new Set([toName]);
@@ -231,7 +336,7 @@ export function edgeResult(
       word(i.local).test(body) &&
       (i.path == null
         ? i.name === toName || (i.name === 'default' && isDefault)
-        : isCallee(reach(i.path, i.name)) || reach(i.path, i.name) === '?')
+        : isCallee(reach(i.path, i.name)) || reach(i.path, i.name) === '?' || (wrapped && reach(i.path, i.name) === 'default'))
     )
       names.add(i.local);
   const same = from.path === to.path || ((lang === 'go' || lang === 'java') && dirname(from.path) === dirname(to.path));
@@ -250,20 +355,34 @@ export function edgeResult(
       if (owner && n === owner && /\bnew\s+$/.test(body.slice(Math.max(0, idx - 10), idx)))
         return byReach(reaches(cx, { kind: 'type', name: n, ctx: fi }, ownerDecl, owner, toName, to.path), 'with new');
       if ((lang === 'java' || lang === 'cs') && owner && /^\s*[(<]/.test(body.slice(idx + n.length))) {
+        const st = new RegExp(`^\\s*(?:import|using)\\s+static\\s+([\\w.]+?)(?:\\.(${esc(n)}|\\*))?\\s*;`, 'gm');
+        const statics = [...fi.keep.matchAll(st)].filter((m) => lang === 'cs' || m[2]);
+        const exact = statics.filter((m) => m[2] === n);
+        const named = (m: RegExpMatchArray) =>
+          lang === 'java' && m[1].split('.').at(-1) === owner && to.path.endsWith(`${m[1].replace(/\./g, '/')}.java`);
+        if (lang === 'java') {
+          const scopes = javaScopes(fi.code, at.start + idx);
+          if (!scopes.length) return unsure(`the class of ${who} is not known`);
+          for (const s of scopes) {
+            const d = s == null ? null : declIn(fi, s);
+            if (!d) return unsure(`the class around ${n} is not read`);
+            const up = ancestors(cx, d);
+            if ([d, ...up.flatMap((a) => (a.d ? [a.d] : []))].some((x) => defines(cx, x, n)))
+              return byReach(reaches(cx, { kind: 'type', name: d.name, ctx: fi }, ownerDecl, owner, toName, to.path), `on ${d.name}`);
+            if (up.some((a) => !a.d)) return unsure(`a base of ${d.name} is not read`);
+          }
+          if (!statics.length) return not(`${who} does not call ${toName}`);
+          return exact.length === 1 && named(exact[0]) ? found('through a static import') : unsure(`the static import of ${n} is not read`);
+        }
         if (!fromContainer) return unsure(`the class of ${who} is not known`);
         const r = reaches(cx, { kind: 'type', name: fromContainer, ctx: fi }, ownerDecl, owner, toName, to.path);
         if (r === 'yes') return found('on this');
-        const st = new RegExp(`^\\s*(?:import|using)\\s+static\\s+([\\w.]+?)(?:\\.(${esc(n)}|\\*))?\\s*;`, 'gm');
-        const statics = [...fi.keep.matchAll(st)].filter((m) => lang === 'cs' || m[2]);
         if (!statics.length) return byReach(r, 'on this');
-        const exact = statics.filter((m) => m[2] === n);
         const scope = fromParts.slice(0, -1).map((c) => declIn(fi, c));
         const clear = scope.every((d) => {
           const up = d && ancestors(cx, d);
           return up && up.every((a) => a.d) && [d, ...up.map((a) => a.d!)].every((x) => !defines(cx, x, n));
         });
-        const named = (m: RegExpMatchArray) =>
-          lang === 'java' && m[1].split('.').at(-1) === owner && to.path.endsWith(`${m[1].replace(/\./g, '/')}.java`);
         if (exact.length === 1 && named(exact[0]) && clear) return found('through a static import');
         return unsure(`the static import of ${n} is not read`);
       }
@@ -282,7 +401,7 @@ export function edgeResult(
         return unsure(`${n} has no path to ${owner}`);
       }
       const dynamic = new RegExp(`\\{[^}]*\\b${esc(n)}\\b[^}]*\\}\\s*=\\s*(?:await\\s+)?(?:import|require)\\(`).test(body);
-      if ((shadowed || (n === toName && !dynamic && localType(cx, fi, body, n, lang))) && n !== fromName) return ignore;
+      if ((shadowed || (n === toName && !dynamic && localType(cx, fi, body, n, lang, !whole))) && n !== fromName) return ignore;
       if (pyStar) return unsure(`${n} can come from a star import`);
       const bind = byLocal.get(n);
       if (bind && twice(fi, imps, n)) return unsure(`${n} has two bindings`);
@@ -290,6 +409,7 @@ export function edgeResult(
       if (bind) {
         const r = reach(bind.path, bind.name);
         if (r === '?') return unsure(`${n} can come from a star import`);
+        if (r === 'default' && wrapped) return unsure(`the default export wraps ${toName}`);
         if (!isCallee(r)) return ignore;
         if (r === '*') {
           const member = /^\s*\.\s*([\w$]+)/.exec(body.slice(idx + n.length))?.[1];
@@ -313,6 +433,7 @@ export function edgeResult(
     if (owner && chain.length === 1 && chain[0] === owner)
       return byReach(reaches(cx, { kind: 'type', name: owner, ctx: fi }, ownerDecl, owner, toName, to.path), 'through its class');
     const rt = receiver(cx, fi, body, chain, fromContainer, fromDecl);
+    if ((rt.kind === 'module' || rt.kind === 'value') && twice(fi, imps, chain[0])) return unsure(`${chain[0]} has two bindings`);
     if (rt.kind === 'rsmod') {
       if (owner && ownerDecl) return not(`${who} uses a module path for a method`);
       const use = rustUses(fi, chain[0], to.path);
@@ -358,8 +479,8 @@ export function edgeResult(
     const shadowed = shadows(body, n, lang, fromName, whole);
     const re = new RegExp(word(n).source, 'g');
     let m;
-    while ((m = re.exec(body))) {
-      const before = body.slice(0, m.index);
+    while ((m = re.exec(body)) && verdicts.at(-1)?.res !== 'found') {
+      const before = m.index < 200 ? body.slice(0, m.index) : '';
       if (!skippedDef && fromName === n && m.index < 200 && before.trim().length < 60 && !/(\.|::)\s*$/.test(before)) {
         skippedDef = true;
         continue;
@@ -369,5 +490,5 @@ export function edgeResult(
   }
   const pick = verdicts.find((v) => v.res === 'found') ?? verdicts.find((v) => v.res === 'unsure');
   if (pick) return { result: pick.res === 'found' ? 'found' : 'unsure', reason: pick.why };
-  return { result: 'not-found', reason: `${who} does not call ${toName}` };
+  return { result: 'not-found', reason: `${who} does not call ${toName}${hint()}` };
 }

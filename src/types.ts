@@ -176,13 +176,13 @@ function callLocal(text: string, n: string, lang: Lang): Local | null {
   return { chain: [...m[1].split(/\??\.|::/), '()'] };
 }
 
-export function localType(cx: Ctx, info: CodeFile, text: string, n: string, lang: Lang): Local | null {
-  const r = localType0(cx, info, text, n, lang);
+export function localType(cx: Ctx, info: CodeFile, text: string, n: string, lang: Lang, hasHead = true): Local | null {
+  const r = localType0(cx, info, text, n, lang, hasHead);
   return r?.declared ? (callLocal(text, n, lang) ?? r) : r;
 }
 
-function localType0(cx: Ctx, info: CodeFile, text: string, n: string, lang: Lang): Local | null {
-  const head = headOf(text, lang);
+function localType0(cx: Ctx, info: CodeFile, text: string, n: string, lang: Lang, hasHead: boolean): Local | null {
+  const head = hasHead ? headOf(text, lang) : '';
   const N = esc(n);
   const NB = `(?<![\\w$.])${N}`;
   const tries: { type?: string; ctor?: string }[] = [];
