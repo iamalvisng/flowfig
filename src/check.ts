@@ -22,7 +22,7 @@ import {
 import type { Finding, Scene, SceneEdge } from './scene.ts';
 import { layoutRail } from './rail.ts';
 import type { SvgOptions } from './svg.ts';
-import { crosses, type Pt, type Rect } from './geometry.ts';
+import { crosses, hit as curveHit, type Pt, type Rect } from './geometry.ts';
 import { textWidth } from './text.ts';
 import { owners, parseSource } from './source.ts';
 
@@ -211,11 +211,9 @@ export function checkScene(scene: Scene, { width = 830, minText = 10 }: CheckOpt
   for (const e of scene.edges) {
     if (e.behind && !e.elbow) continue;
     const line = e.elbow ?? e.pts;
-    const pts = line
-      ? line.slice(1).flatMap((q, k) => Array.from({ length: 17 }, (_, i) => lerp(line[k], q, i / 16)))
-      : Array.from({ length: 33 }, (_, i) => at(e.curve, i / 32));
+    const pts = line?.slice(1).flatMap((q, k) => Array.from({ length: 17 }, (_, i) => lerp(line[k], q, i / 16)));
     for (const b of scene.boxes)
-      if (b.id !== e.from && b.id !== e.to && pts.some((p) => inside(p, b.rect, 2)))
+      if (b.id !== e.from && b.id !== e.to && (pts ? pts.some((p) => inside(p, b.rect, 2)) : curveHit(e.curve, [b.rect], -2).length))
         out.push(err('edge-crosses-box', [e.id, b.id], `edge "${e.id}" passes through box "${b.id}"`));
   }
   const pills = scene.edges.filter((e) => e.pts && e.label);

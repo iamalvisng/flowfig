@@ -28,6 +28,7 @@ export const avoidOf = (boxes: Rect[], extra: Rect[], lanes: boolean): Avoid[] =
 type Around = 'above' | 'below' | 'left' | 'right';
 type Pick = {
   id: string;
+  plain: [Side, Side];
   a: Rect;
   b: Rect;
   sa: Side;
@@ -91,8 +92,8 @@ const spanOf = (a: Rect, b: Rect, around: Around) => {
   return [Math.min(p, q), Math.max(p, q)];
 };
 const SIDES: Record<Around, [Side, Side]> = { above: ['t', 't'], below: ['b', 'b'], left: ['l', 'l'], right: ['r', 'r'] };
-const hit = (curve: [Pt, Pt, Pt, Pt], boxes: Rect[], m: number) => {
-  const pts = Array.from({ length: 65 }, (_, i) => bezier(curve, i / 64));
+export const hit = (curve: [Pt, Pt, Pt, Pt], boxes: Rect[], m: number) => {
+  const pts = Array.from({ length: 33 }, (_, i) => bezier(curve, i / 32));
   return boxes.filter((r) => pts.some((q) => q.x > r.x - m && q.x < r.x + r.w + m && q.y > r.y - m && q.y < r.y + r.h + m));
 };
 
@@ -126,18 +127,17 @@ export function route(
     const others = avoid.filter((r) => r.box && !same(r, a) && !same(r, b));
     const plain: [Side, Side] = stacked ? (a.y < b.y ? ['b', 't'] : ['t', 'b']) : a.x < b.x ? ['r', 'l'] : ['l', 'r'];
     const past = hit(bend(sideMid(a, plain[0]), sideMid(b, plain[1]), plain[0]), others, -2);
-    const blocked = (way: Around, at: number, m = 2) =>
-      (m > 0 ? [0.5] : [0.5, 0.75]).every(
-        (f) => hit(arcLine(sideAt(a, SIDES[way][0], f), sideAt(b, SIDES[way][1], f), way, at), others, m).length > 0,
-      );
+    const misses = (way: Around, at: number) =>
+      [0.2, 0.5, 0.8].filter((f) => hit(arcLine(sideAt(a, SIDES[way][0], f), sideAt(b, SIDES[way][1], f), way, at), others, -2).length > 0)
+        .length;
+    const blocked = (way: Around, at: number) => misses(way, at) === 3;
     let around = e.around;
     let elbow = e.elbow;
     let arc = around && arcAt(a, b, around, past, e.labelW);
     const outward = (way: Around, k: number) => arcAt(a, b, way, past) + (way === 'above' || way === 'left' ? -1 : 1) * k * ARC_STEP;
-    if (around && blocked(around, arc!, -2)) {
+    if (around && blocked(around, arc!)) {
       const fits = Array.from({ length: ARC_STEPS + 1 }, (_, k): [Around, number] => [around!, outward(around!, k)]);
-      [around, arc] = fits.find(([way, at]) => !blocked(way, at, -2)) ?? [];
-      elbow = e.elbow || !around;
+      arc = fits.find(([way, at]) => !blocked(way, at))?.[1] ?? arc;
     }
     if (!around && !e.sides && !e.stub && !e.elbow && past.length) {
       const ways = stacked ? (['left', 'right'] as const) : (['above', 'below'] as const);
@@ -151,7 +151,14 @@ export function route(
           tries.push([way, out * Math.max(out * arcAt(a, b, way, past, e.labelW), ...near.map((n) => out * n + ARC_STEP))]);
         }
       for (let k = 0; k <= ARC_STEPS; k++) for (const way of ways) tries.push([way, outward(way, k)]);
-      [around, arc] = tries.find(([way, at]) => !blocked(way, at)) ?? [];
+      const best = tries.reduce<[number, [Around, number] | undefined]>(
+        (m, t) => {
+          const n = misses(...t);
+          return n < m[0] ? [n, t] : m;
+        },
+        [3, undefined],
+      )[1];
+      [around, arc] = best ?? [];
       elbow = e.elbow || !around;
     }
     if (around) {
@@ -159,41 +166,56 @@ export function route(
       arcs.push({ way: around, lo, hi, at: arc! });
     }
     const [sa, sb] = e.sides ?? (e.stub ? ['r', 'l'] : around ? SIDES[around] : plain);
-    picks.push({ ...e, a, b, sa, sb, around, arc, elbow });
+    picks.push({ ...e, plain, a, b, sa, sb, around, arc, elbow });
   }
 
-  const ends = new Map<string, { pick: Pick; start: boolean }[]>();
-  for (const pick of picks) {
-    for (const start of [true, false]) {
-      const key = (start ? pick.from : pick.to) + ':' + (start ? pick.sa : pick.sb);
-      if (!ends.has(key)) ends.set(key, []);
-      ends.get(key)!.push({ pick, start });
+  let anchor = new Map<string, { x: number; y: number }>();
+  const place = () => {
+    anchor = new Map();
+    const ends = new Map<string, { pick: Pick; start: boolean }[]>();
+    for (const pick of picks) {
+      for (const start of [true, false]) {
+        const key = (start ? pick.from : pick.to) + ':' + (start ? pick.sa : pick.sb);
+        if (!ends.has(key)) ends.set(key, []);
+        ends.get(key)!.push({ pick, start });
+      }
     }
+    for (const [key, list] of ends) {
+      const tip = tips.has(key.slice(0, key.lastIndexOf(':')));
+      const side = list[0].start ? list[0].pick.sa : list[0].pick.sb;
+      const horiz = side === 't' || side === 'b';
+      const other = (x: { pick: Pick; start: boolean }) => {
+        const r = x.start ? x.pick.b : x.pick.a;
+        return horiz ? cx(r) : cy(r);
+      };
+      list.sort((p, q) => other(p) - other(q));
+      list.forEach((x, i) => {
+        const r = x.start ? x.pick.a : x.pick.b;
+        const f = tip ? 0.5 : (i + 1) / (list.length + 1);
+        const pt =
+          side === 'l'
+            ? { x: r.x, y: r.y + r.h * f }
+            : side === 'r'
+              ? { x: r.x + r.w, y: r.y + r.h * f }
+              : side === 't'
+                ? { x: r.x + r.w * f, y: r.y }
+                : { x: r.x + r.w * f, y: r.y + r.h };
+        anchor.set(x.pick.id + (x.start ? ':s' : ':e'), pt);
+      });
+    }
+  };
+  place();
+  let moved = false;
+  for (const p of picks) {
+    const [s, e] = [anchor.get(p.id + ':s'), anchor.get(p.id + ':e')];
+    if (!p.around || !s || !e) continue;
+    const others = avoid.filter((r) => r.box && !same(r, p.a) && !same(r, p.b));
+    if (!hit(arcLine(s, e, p.around, p.arc!), others, -2).length) continue;
+    const [pa, pb] = p.plain;
+    const straight = hit(bend(sideMid(p.a, pa), sideMid(p.b, pb), pa), others, -2).length > 0;
+    [p.sa, p.sb, p.around, p.arc, p.elbow, moved] = [pa, pb, undefined, undefined, p.elbow || straight, true];
   }
-  const anchor = new Map<string, { x: number; y: number }>();
-  for (const [key, list] of ends) {
-    const tip = tips.has(key.slice(0, key.lastIndexOf(':')));
-    const side = list[0].start ? list[0].pick.sa : list[0].pick.sb;
-    const horiz = side === 't' || side === 'b';
-    const other = (x: { pick: Pick; start: boolean }) => {
-      const r = x.start ? x.pick.b : x.pick.a;
-      return horiz ? cx(r) : cy(r);
-    };
-    list.sort((p, q) => other(p) - other(q));
-    list.forEach((x, i) => {
-      const r = x.start ? x.pick.a : x.pick.b;
-      const f = tip ? 0.5 : (i + 1) / (list.length + 1);
-      const pt =
-        side === 'l'
-          ? { x: r.x, y: r.y + r.h * f }
-          : side === 'r'
-            ? { x: r.x + r.w, y: r.y + r.h * f }
-            : side === 't'
-              ? { x: r.x + r.w * f, y: r.y }
-              : { x: r.x + r.w * f, y: r.y + r.h };
-      anchor.set(x.pick.id + (x.start ? ':s' : ':e'), pt);
-    });
-  }
+  if (moved) place();
 
   const drawn = (id: string, curve: [Pt, Pt, Pt, Pt], mid: Pt): Routed => {
     const [s, c1, c2, e] = curve;
