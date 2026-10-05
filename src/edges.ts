@@ -28,7 +28,18 @@ type Src = { path: string; symbol?: string };
 
 type Verdict = { res: 'found' | 'not' | 'unsure' | 'skip'; why: string };
 const word = (name: string) => new RegExp(`(?<![\\w$])${esc(name)}(?![\\w$])`);
-const viaToken = (t: string) => new RegExp(`${/^[\w$]/.test(t) ? '(?<![\\w$])' : ''}${esc(t)}${/[\w$]$/.test(t) ? '(?![\\w$])' : ''}`);
+const viaToken = (t: string) =>
+  new RegExp(`${/^[\w$]/.test(t) ? '(?<![\\w$])' : ''}${esc(t)}${/[\w$]$/.test(t) ? '(?![\\w$./-])' : ''}`, 'g');
+const NOT_VIA =
+  /^\s*(?:import|from|use|using|package)\b|\b(?:require|import)\s*\(|\bfrom\s*['"]|\b(?:log|info|warn|error|debug|trace|print|println|printf)!?\s*\(/i;
+const FUNCS: Record<Lang, RegExp> = {
+  ts: /\bfunction\b|=>|^[ \t]*(?:(?:public|private|protected|static|async|get|set|override)\s+)*(?!(?:if|for|while|switch|catch)\b)[\w$]+\s*\([^()]*\)\s*(?::[^{;]*)?\{/gm,
+  py: /\bdef\s|\blambda\b/g,
+  go: /\bfunc\b/g,
+  rs: /\bfn\s/g,
+  java: /->|^[ \t]*(?:[\w<>[\],.?]+\s+)+(?!(?:if|for|while|switch|catch|new|return)\b)\w+\s*\([^;{]*\)\s*(?:throws[^{;]*)?\{/gm,
+  cs: /=>|^[ \t]*(?:[\w<>[\],.?]+\s+)+(?!(?:if|for|while|switch|catch|new|return|using|lock)\b)\w+\s*\([^;{]*\)\s*\{/gm,
+};
 const CONSTS: Record<Lang, RegExp> = {
   ts: /^(?:export\s+)?const\s+([\w$]+)\s*(?::\s*string\s*)?=\s*(['"`])([^'"`\n]*)\2/gm,
   py: /^([A-Za-z_]\w*)\s*(?::\s*str\s*)?=\s*(['"])([^'"\n]*)\2/gm,
@@ -113,19 +124,32 @@ const twice = (fi: CodeFile, imps: Import[], n: string) =>
 
 function viaResult(root: string, from: Src, to: Src | undefined, via: string, read: Read, cache: Map<string, CodeFile | null>) {
   const token = viaToken(via);
+  const has = (text: string) => text.search(token) >= 0;
   const fi = codeFile(root, from.path, read, cache);
   const at = fi && (from.symbol ? locate(fi, from.symbol) : { start: 0, end: fi.keep.length });
   if (!fi || !at) return { result: 'not-checked' as const, reason: `${label(from)} is not in code that verify reads` };
-  const code = fi.code.slice(at.start, at.end);
-  const named = [...fi.keep.matchAll(CONSTS[fi.lang])].some((m) => token.test(m[3]) && word(m[1]).test(code));
-  if (!token.test(fi.keep.slice(at.start, at.end)) && !named)
-    return { result: 'not-found' as const, reason: `"${via}" is not in ${label(from)}` };
+  if (!has(fi.keep.slice(at.start, at.end))) {
+    const code = fi.code.slice(at.start, at.end);
+    const fromName = from.symbol?.split('.').at(-1);
+    const names = [...fi.keep.matchAll(CONSTS[fi.lang])].filter((m) => has(m[3]) && word(m[1]).test(code)).map((m) => m[1]);
+    if (!names.length) return { result: 'not-found' as const, reason: `"${via}" is not in ${label(from)}` };
+    const local = names.find(
+      (n) => shadows(code, n, fi.lang, fromName, !from.symbol) || new RegExp(`\\.\\s*${esc(n)}(?![\\w$])`).test(code),
+    );
+    if (local) return { result: 'unsure' as const, reason: `${label(from)} has a local or member named ${local}` };
+  }
   if (!to) return { result: 'found' as const, reason: `"${via}" is in ${label(from)}` };
   const ti = codeFile(root, to.path, read, cache);
-  if (!ti || (to.symbol && !locate(ti, to.symbol)))
-    return { result: 'not-checked' as const, reason: `${label(to)} is not in code that verify reads` };
-  if (!token.test(ti.keep)) return { result: 'not-found' as const, reason: `"${via}" is not in ${to.path}` };
-  return { result: 'found' as const, reason: `"${via}" is in ${label(from)} and in ${to.path}` };
+  const tb = ti && (to.symbol ? locate(ti, to.symbol) : { start: 0, end: ti.keep.length });
+  if (!ti || !tb) return { result: 'not-checked' as const, reason: `${label(to)} is not in code that verify reads` };
+  const lineAt = (k: number) =>
+    ti.keep.slice(ti.keep.lastIndexOf('\n', k) + 1, ti.keep.indexOf('\n', k) < 0 ? undefined : ti.keep.indexOf('\n', k));
+  const hits = [...ti.keep.matchAll(token)].map((m) => m.index).filter((k) => !NOT_VIA.test(lineAt(k)));
+  if (!hits.length) return { result: 'not-found' as const, reason: `"${via}" is not in ${to.path}` };
+  const yes = { result: 'found' as const, reason: `"${via}" is in ${label(from)} and in ${label(to)}` };
+  if (hits.some((k) => k >= tb.start && k < tb.end)) return yes;
+  if (hits.some((k) => ti.code[k] !== ti.keep[k]) && [...ti.code.matchAll(FUNCS[ti.lang])].length <= 1) return yes;
+  return { result: 'unsure' as const, reason: `"${via}" is in ${to.path} outside ${label(to)}` };
 }
 
 function fileResult(

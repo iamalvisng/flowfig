@@ -468,8 +468,47 @@ test('via: a path token after a port is found when the callee file holds it outs
     'users/index.ts': 'app.get("/internal/users", listUsers);\nexport function listUsers(req, res) { res.json([]); }\n',
     'pricing/index.ts': '// pricing service\nexport function quote() {}\n',
   };
-  assert.equal(run(files, 'gateway/index.ts#callUsers', 'users/index.ts#listUsers', '/internal'), 'found');
-  assert.equal(run(files, 'gateway/index.ts#callUsers', 'pricing/index.ts#quote', '/internal'), 'not-found');
+  assert.equal(run(files, 'gateway/index.ts#callUsers', 'users/index.ts#listUsers', '/internal/users'), 'found');
+  assert.equal(run(files, 'gateway/index.ts#callUsers', 'pricing/index.ts#quote', '/internal/users'), 'not-found');
+});
+
+test('via: a token does not match a longer path or name', () => {
+  const files = {
+    'gw.ts':
+      'export const f = () => fetch("http://admin:3000/internal-admin/stats");\nexport const g = () => fetch("http://x/internal.json");\nexport const h = () => fetch("http://x/internal/users");\n',
+    'a.ts': 'export function f() { bus.publish("order-paid-v2", x); }\n',
+  };
+  for (const caller of ['gw.ts#f', 'gw.ts#g', 'gw.ts#h']) assert.equal(run(files, caller, undefined, '/internal'), 'not-found', caller);
+  assert.equal(run(files, 'a.ts#f', undefined, 'order-paid'), 'not-found');
+});
+
+test('via: a module constant is unsure when the caller has a local, a parameter or a member of the same name', () => {
+  const consumer = { 'w.py': 'def consume():\n    ch.basic_consume("audit-events", m)\n' };
+  const at = (src: string, path = 'a.ts') => ({ ...consumer, [path]: src });
+  const ts = 'const QUEUE = "audit-events";\nexport function f';
+  assert.equal(run(at(`${ts}() { ch.sendToQueue(cfg.QUEUE, b); }\n`), 'a.ts#f', 'w.py#consume', 'audit-events'), 'unsure');
+  assert.equal(
+    run(at(`${ts}() { const QUEUE = "billing"; ch.sendToQueue(QUEUE, b); }\n`), 'a.ts#f', 'w.py#consume', 'audit-events'),
+    'unsure',
+  );
+  assert.equal(run(at(`${ts}(QUEUE) { ch.sendToQueue(QUEUE, b); }\n`), 'a.ts#f', 'w.py#consume', 'audit-events'), 'unsure');
+  assert.equal(
+    run(at('QUEUE = "audit-events"\n\ndef f(QUEUE):\n    ch.send(QUEUE)\n', 'a.py'), 'a.py#f', 'w.py#consume', 'audit-events'),
+    'unsure',
+  );
+});
+
+test('via: the callee token does not count on an import or log line, or in another function of the callee file', () => {
+  const caller = { 'gw.ts': 'export const f = () => fetch("http://p:3000/internal/quote");\n' };
+  const at = (src: string) => ({ ...caller, 'p.ts': src });
+  const callee = (src: string, to: string) => run(at(src), 'gw.ts#f', to, '/internal/quote');
+  assert.equal(callee('import { db } from "../lib/internal/quote";\nexport function quote() {}\n', 'p.ts#quote'), 'not-found');
+  assert.equal(
+    callee('export function quote() { log.info("not served: /internal/quote"); }\nexport function other() {}\n', 'p.ts#other'),
+    'not-found',
+  );
+  assert.equal(callee('app.get("/internal/quote", pay);\nexport function pay() {}\nexport function ship() {}\n', 'p.ts#ship'), 'unsure');
+  assert.equal(callee('app.get("/internal/quote", pay);\nexport function pay() {}\nexport function ship() {}\n', 'p.ts'), 'found');
 });
 
 test('via: the caller can hold the token in a top-level constant of its file', () => {
