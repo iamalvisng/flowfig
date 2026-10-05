@@ -78,8 +78,24 @@ test('render writes the SVG with its spec, creates the folder, and writes nothin
     const out = join(dir, 'sub', 'out.svg');
     const r = call('render', { spec: props, out });
     assert.equal(r.result.isError, undefined);
-    assert.match(text(r), new RegExp(`0 errors, 0 warnings\\nfigure: .*\\n${out.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} — [\\d.]+ kB$`));
+    assert.match(
+      text(r),
+      new RegExp(`0 errors, 0 warnings\\nfigure: .*\\n(.+\\n)*${out.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} — [\\d.]+ kB$`),
+    );
     assert.match(readFileSync(out, 'utf8'), /<metadata id="figure-spec">/);
+    const linked = call('render', {
+      spec: {
+        ...props,
+        layout: {
+          children: [
+            { id: 'a', label: 'A', source: 'no/such.ts' },
+            { id: 'b', label: 'B' },
+          ],
+        },
+      },
+      out,
+    });
+    assert.match(text(linked), /missing-file .*: box "a" -> no\/such\.ts: file not found\n.*: 0 of 1 boxes defined/);
     const bad = call('render', { spec: { ...props, edges: [{ id: 'w', from: 'a', to: 'zzz' }] }, out: join(dir, 'bad.svg') });
     assert.equal(bad.result.isError, true);
     assert.equal(existsSync(join(dir, 'bad.svg')), false);

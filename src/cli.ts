@@ -14,7 +14,7 @@ import { openedLine, openSvg, runOpen } from './open.ts';
 import { pageHtml } from './page.ts';
 import { decodePng } from './png.ts';
 import { diff, formatDiff } from './diff.ts';
-import { loadSpec, reportLines, sortFindings, specOf, svgWithSpec } from './load.ts';
+import { loadSpec, reportLines, sortFindings, specOf, summaryLines, svgWithSpec, verifyLines } from './load.ts';
 import type { FlowProps } from './model.ts';
 import { check, render, toSvg, type Finding } from './svg.ts';
 import { checkRendered } from './check.ts';
@@ -31,7 +31,7 @@ const USAGE = `usage: flowfig <-|spec.json|figure.ts> [out.svg] [--open]   rende
        flowfig draw "<question>" [--out <path>] [--model <alias>] [--max-turns <n>] [--json] [--open]   ask Claude Code for a figure, then check it
        flowfig open <figure.svg> [--html <path>]          show the figure in the default browser
        flowfig gif <figure.svg> [out.gif] [--step <n>] [--dark] [--fps <n>] [--scale <n>] [--mp4]   write an animated GIF
-flags for render and check: --strict (warnings are errors), --json, --width <px>, --min-text <px>, --no-check (render only)`;
+flags for render and check: --strict (warnings are errors), --json, --width <px>, --min-text <px>, --no-check (render only), --no-verify (render only)`;
 function usage(message: string): never {
   console.error(message);
   process.exit(2);
@@ -300,6 +300,7 @@ const command = args[0] === 'check' ? args.shift()! : 'render';
 const json = flag('--json'),
   strict = flag('--strict'),
   skip = flag('--no-check'),
+  skipVerify = flag('--no-verify'),
   open = flag('--open');
 if (command === 'check' && open) usage('--open works with a render, not with check');
 const opts = { width: value('--width'), minText: value('--min-text') };
@@ -314,10 +315,10 @@ const rendered = skip ? undefined : render(props, opts);
 const findings: Finding[] = rendered ? sortFindings(checkRendered(props, opts, rendered.scene), strict) : [];
 const errors = findings.filter((f) => f.severity === 'error').length;
 
-const report = (print: (s: string) => void, tty: boolean | undefined) => {
+const report = (print: (s: string) => void, tty: boolean | undefined, extra: string[] = []) => {
   const paint = (s: string) =>
     tty && !process.env.NO_COLOR ? s.replace(/^(error {3}|warning )/, (w) => `\x1b[${w[0] === 'e' ? 31 : 33}m${w}\x1b[0m`) : s;
-  for (const line of reportLines(props, findings, !skip)) print(paint(line));
+  for (const line of [...reportLines(props, findings, !skip), ...extra]) print(paint(line));
 };
 
 if (command === 'check') {
@@ -326,9 +327,9 @@ if (command === 'check') {
   process.exit(errors ? 1 : 0);
 }
 
-report(console.error, process.stderr.isTTY);
-if (errors) process.exit(1);
 const dest = out ?? (input === '-' ? 'figure.svg' : input.replace(/\.[^./\\]+$/, '') + '.svg');
+report(console.error, process.stderr.isTTY, errors ? [] : [...summaryLines(props), ...(skipVerify ? [] : verifyLines(props, dest))]);
+if (errors) process.exit(1);
 const withSpec = svgWithSpec(props, opts, rendered?.svg);
 writeFileSync(dest, withSpec);
 console.log(`${dest} — ${(withSpec.length / 1024).toFixed(1)} kB`);

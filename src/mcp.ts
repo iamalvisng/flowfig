@@ -3,7 +3,7 @@ import { dirname } from 'node:path';
 import { createInterface } from 'node:readline';
 import { diff, formatDiff } from './diff.ts';
 import { GUIDE } from './guide.ts';
-import { loadSpec, reportLines, sortFindings, svgWithSpec } from './load.ts';
+import { loadSpec, reportLines, sortFindings, summaryLines, svgWithSpec, verifyLines } from './load.ts';
 import { check, render } from './svg.ts';
 import { checkRendered } from './check.ts';
 import { coverageLine, unsureLines, verifyReport } from './verify.ts';
@@ -106,7 +106,7 @@ function run(name: string, args: Record<string, unknown>): Result {
     } catch (e) {
       throw new Fault(`${out}: ${(e as Error).message}`);
     }
-    return ok([...lines, `${out} — ${(svg.length / 1024).toFixed(1)} kB`].join('\n'));
+    return ok([...lines, ...summaryLines(props), ...verifyLines(props, out), `${out} — ${(svg.length / 1024).toFixed(1)} kB`].join('\n'));
   }
   if (name === 'verify') {
     need(args, name, ['paths']);
