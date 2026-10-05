@@ -494,22 +494,6 @@ test('a middleware passed as a route argument is found; another middleware is no
   assert.equal(run(files, 'src/admin.ts', 'src/limit.ts#loginRateLimit'), 'not-found');
 });
 
-test('a route key is a source: its handler calls count, the calls of another route do not', () => {
-  const files = {
-    'src/session.ts': 'export function createSession() {}\n',
-    'src/auth.ts':
-      "import { createSession } from './session.ts';\n" +
-      'authRouter.post("/login", async (req, res) => { await createSession(); });\n' +
-      'authRouter.post("/logout", async (req, res) => { res.end(); });\n' +
-      'router.post("documents.archive", auth(), async (ctx) => { await createSession(); });\n' +
-      'const v = req.get("rearm", () => createSession());\n',
-  };
-  assert.equal(run(files, 'src/auth.ts#/login', 'src/session.ts#createSession'), 'found');
-  assert.equal(run(files, 'src/auth.ts#documents.archive', 'src/session.ts#createSession'), 'found');
-  assert.equal(run(files, 'src/auth.ts#/logout', 'src/session.ts#createSession'), 'not-found');
-  assert.equal(run(files, 'src/auth.ts#rearm', 'src/session.ts#createSession'), 'not-checked');
-});
-
 test('a not-found edge with no import path to the callee file asks for via', () => {
   const files = {
     'src/a.ts': 'export function a() {}\n',

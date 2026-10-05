@@ -1,5 +1,5 @@
 import { dirname } from 'node:path';
-import { codeFile, esc, langOf, locate, matchClose, outside, readFile, routeKeys, type CodeFile, type Lang, type Read } from './code.ts';
+import { codeFile, esc, langOf, locate, matchClose, outside, readFile, type CodeFile, type Lang, type Read } from './code.ts';
 import { importsOf, leadsTo, type Import } from './imports.ts';
 import {
   ancestors,
@@ -38,12 +38,6 @@ const CONSTS: Record<Lang, RegExp> = {
   rs: /^(?:pub(?:\([^)]*\))?\s+)?const\s+(\w+)\s*:\s*&(?:'static\s+)?str\s*=\s*(")([^"\n]*)"/gm,
 };
 
-function place(file: CodeFile, symbol: string): { start: number; end: number; route?: true } | 'many' | null {
-  const at = locate(file, symbol);
-  if (at) return at;
-  const keys = routeKeys(file, symbol);
-  return keys.length > 1 ? 'many' : keys.length ? { ...keys[0], route: true } : null;
-}
 const IMPORT_LINES =
   /\b(?:import|export)\s+(?:type\s+)?[\w*\s,{}$]*?\bfrom\b|^[ \t]*(?:from|use|using|package|import)\b.*|.*\brequire\(.*/gm;
 const MODIFIERS = new Set([
@@ -120,16 +114,15 @@ const twice = (fi: CodeFile, imps: Import[], n: string) =>
 function viaResult(root: string, from: Src, to: Src | undefined, via: string, read: Read, cache: Map<string, CodeFile | null>) {
   const token = viaToken(via);
   const fi = codeFile(root, from.path, read, cache);
-  const at = fi && (from.symbol ? place(fi, from.symbol) : { start: 0, end: fi.keep.length });
+  const at = fi && (from.symbol ? locate(fi, from.symbol) : { start: 0, end: fi.keep.length });
   if (!fi || !at) return { result: 'not-checked' as const, reason: `${label(from)} is not in code that verify reads` };
-  if (at === 'many') return { result: 'unsure' as const, reason: `${from.symbol} is a route key in two calls` };
   const code = fi.code.slice(at.start, at.end);
   const named = [...fi.keep.matchAll(CONSTS[fi.lang])].some((m) => token.test(m[3]) && word(m[1]).test(code));
   if (!token.test(fi.keep.slice(at.start, at.end)) && !named)
     return { result: 'not-found' as const, reason: `"${via}" is not in ${label(from)}` };
   if (!to) return { result: 'found' as const, reason: `"${via}" is in ${label(from)}` };
   const ti = codeFile(root, to.path, read, cache);
-  if (!ti || (to.symbol && !place(ti, to.symbol)))
+  if (!ti || (to.symbol && !locate(ti, to.symbol)))
     return { result: 'not-checked' as const, reason: `${label(to)} is not in code that verify reads` };
   if (!token.test(ti.keep)) return { result: 'not-found' as const, reason: `"${via}" is not in ${to.path}` };
   return { result: 'found' as const, reason: `"${via}" is in ${label(from)} and in ${to.path}` };
@@ -213,13 +206,11 @@ export function edgeResult(
   const fi = codeFile(root, from.path, read, cache);
   const ti = codeFile(root, to.path, read, cache);
   if (!fi || !ti) return skip('a file is missing');
-  const at = from.symbol ? place(fi, from.symbol) : { start: 0, end: fi.code.length };
+  const at = from.symbol ? locate(fi, from.symbol) : { start: 0, end: fi.code.length };
   if (!at) return skip(`${from.symbol} is not defined`);
-  if (at === 'many') return { result: 'unsure', reason: `${from.symbol} is a route key in two calls` };
   if (to.symbol && !locate(ti, to.symbol)) return skip(`${to.symbol} is not defined`);
 
   const whole = !from.symbol;
-  const route = 'route' in at;
   const hint = () =>
     from.path === to.path ||
     ((fi.lang === 'go' || fi.lang === 'java') && dirname(from.path) === dirname(to.path)) ||
@@ -235,7 +226,7 @@ export function edgeResult(
   const toParts = to.symbol.split('.');
   const toName = toParts.at(-1)!;
   const owner = toParts.length > 1 ? toParts.at(-2)! : null;
-  const fromParts = route ? [] : (from.symbol?.split('.') ?? []);
+  const fromParts = from.symbol?.split('.') ?? [];
   const fromName = fromParts.at(-1);
   const fromContainer = fromParts.length > 1 ? fromParts.at(-2)! : null;
   const cx = makeCtx(root, read, cache);
@@ -310,7 +301,7 @@ export function edgeResult(
         return unsure(`${n} has no path to ${owner}`);
       }
       const dynamic = new RegExp(`\\{[^}]*\\b${esc(n)}\\b[^}]*\\}\\s*=\\s*(?:await\\s+)?(?:import|require)\\(`).test(body);
-      if ((shadowed || (n === toName && !dynamic && localType(cx, fi, body, n, lang, !whole && !route))) && n !== fromName) return ignore;
+      if ((shadowed || (n === toName && !dynamic && localType(cx, fi, body, n, lang, !whole))) && n !== fromName) return ignore;
       if (pyStar) return unsure(`${n} can come from a star import`);
       const bind = byLocal.get(n);
       if (bind && twice(fi, imps, n)) return unsure(`${n} has two bindings`);

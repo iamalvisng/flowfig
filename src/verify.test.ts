@@ -212,9 +212,8 @@ test('a via that is not a string is a bad source for check, and verify does not 
   });
 });
 
-test('a route key in a handler call is a defined box; a req.get key is not', () => {
-  withRepo({ 'src/auth.ts': 'authRouter.post("/login", async (req, res) => {});\nconst v = req.get("rearm", () => 1);\n' }, (root) => {
-    assert.deepEqual(rules(verify(figWith('src/auth.ts#/login'), { root })), []);
-    assert.deepEqual(rules(verify(figWith('src/auth.ts#rearm'), { root })), ['missing-symbol']);
+test('a client call such as axios.get("/x", cfg) does not define a symbol', () => {
+  withRepo({ 'src/c.ts': 'export async function load() {\n  return axios.get("/x", cfg);\n}\n' }, (root) => {
+    assert.deepEqual(rules(verify(figWith('src/c.ts#/x'), { root })), ['missing-symbol']);
   });
 });
