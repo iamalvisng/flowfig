@@ -22,7 +22,7 @@ A diagram in a repo drifts from the code. Someone renames a function, and the di
 check fails, so no one sees the drift.
 
 flowfig links each part of a diagram to the code that it draws. `flowfig verify` fails when a linked file or symbol is
-gone. Run `verify` in CI, and a stale diagram fails the pull request.
+gone, and warns when the code does not make an edge. Run `verify` in CI, and a stale diagram fails the pull request.
 
 ## Fail CI when the diagram drifts
 
@@ -36,12 +36,14 @@ Rename `verifyPassword` to `checkPassword`. Then `verify` fails with exit code 1
 
 ```console
 $ npx flowfig verify login.svg
-error    missing-symbol     login.svg: box "verify" -> src/auth/login.ts#verifyPassword: symbol not found
+error    missing-symbol     login.svg: box "verify" -> src/auth/login.ts#verifyPassword: symbol not defined
 1 error, 0 warnings
+login.svg: 0 of 1 boxes defined
 ```
 
-`verify` checks that each linked file exists and that the symbol name still occurs in it. A link to a Markdown file can
-name a heading, so a process diagram can follow its SOP document.
+`verify` checks that each linked file exists and that it defines the symbol. It also checks each edge against the code
+(see [Verify in CI](#verify-in-ci)). A link to a Markdown file can name a heading, so a process diagram can follow its SOP
+document.
 
 The GitHub Action runs `verify` on every figure in a pull request. For each SVG that the PR changes, it comments the old
 image, the new image and the spec changes. It also names each figure whose linked code the PR changes.
@@ -252,7 +254,7 @@ Each SVG from the CLI carries its own spec. These commands made the rail-only fi
 npx flowfig --spec docs/checkout.svg > checkout.json   # print the spec in the SVG
 # edit checkout.json: set "props.rail" to "only"
 npx flowfig checkout.json docs/checkout-rail-only.svg
-npx flowfig verify docs/checkout.svg                    # check that each source still exists
+npx flowfig verify docs/checkout.svg                    # check each source and each edge against the code
 npx flowfig diff old.svg docs/checkout.svg              # list what changed in the spec
 ```
 
@@ -540,7 +542,8 @@ writeFileSync('first.svg', toSvg(spec));
 - `check(spec, options)` returns the findings. It also takes `width` and `minText`.
 - `render(spec, options)` returns `{ svg, scene }`. The scene is the layout that the check reads. Its shape can change.
 
-`flowfig/verify` is for Node only. It exports `verify`, `links`, `owners` and `parseSource`, the same checks as `flowfig verify`.
+`flowfig/verify` is for Node only. It exports `verify`, `verifyReport` (the findings and the counts), `links`, `owners` and `parseSource`, the same checks
+as `flowfig verify`.
 
 `toSvg` does not put the spec in the SVG. Only the CLI adds the spec, which `--spec` reads back.
 
