@@ -162,7 +162,6 @@ function findType0(cx: Ctx, ctx: CodeFile, name: string, qual?: string | null): 
   if (lang === 'rs') {
     const mods = qual ? [qual] : rustUsePaths(ctx, name);
     if (!mods.length || mods.some((m) => !/^(crate|self|super)\b/.test(m))) return null;
-    if (all.length === 1) return all[0];
     const hits = all.filter((d) => mods.some((m) => lastSeg(m) === rustMod(d.info.path)));
     return hits.length === 1 ? hits[0] : null;
   }

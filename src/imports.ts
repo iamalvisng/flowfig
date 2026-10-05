@@ -177,7 +177,7 @@ function reexports(root: string, file: CodeFile, name: string, read: Read): [str
     if (new RegExp(`^(?:(?:async\\s+)?def|class)\\s+${N}\\b|^${N}\\s*[:=]`, 'm').test(file.code)) return out;
     for (const i of importsOf(root, file, read))
       if (i.local === name || i.local === '*') out.push([i.path, i.local === '*' ? '?' : i.name]);
-    return out;
+    return out.length > 1 ? [[null, '?']] : out;
   }
   if (file.lang !== 'ts') return out;
   if (new RegExp(`^export\\s+(?:default\\s+)?(?:async\\s+)?(?:function\\s*\\*?|class|const|let|var|enum)\\s*${N}\\b`, 'm').test(file.code))

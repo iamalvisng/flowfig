@@ -394,7 +394,7 @@ function findIn(code: string, lang: Lang, name: string, lo: number, hi: number, 
     let m;
     while ((m = re.exec(code)) && m.index < hi) {
       const nameAt = m.index + m[0].lastIndexOf(name);
-      const start = m.index + (m[0].length - m[0].trimStart().length);
+      const start = m.index + /^[;{}\]]?\s*/.exec(m[0])![0].length;
       if (lang === 'go' && receiver != null && !/^\s*func\s*\(/.test(m[0])) continue;
       if (lang === 'go' && receiver != null && /^func\s*\(/.test(m[0])) {
         const recv = /^func\s*\(([^)]*)\)/

@@ -354,8 +354,54 @@ test('a Java static import gives found only when it names the callee class and n
   };
   assert.equal(run(files, 'src/b/Login.java#Login.login', 'src/a/Auth.java#Auth.verify'), 'found');
   assert.equal(run(files, 'src/b/Login.java#Login.login', 'src/a/Auth.java#Helper.verify'), 'unsure');
-  assert.equal(run(files, 'src/b/Outer.java#Outer.Inner.login', 'src/a/Auth.java#Auth.verify'), 'unsure');
+  assert.equal(run(files, 'src/b/Outer.java#Outer.Inner.login', 'src/a/Auth.java#Auth.verify'), 'not-found');
   assert.equal(run(files, 'src/b/Act.java#Act.login', 'src/a/Auth.java#Auth.verify'), 'unsure');
+});
+
+test('a Java call reads the classes around the call: inner, local and anonymous classes', () => {
+  const auth = 'package a;\npublic class Auth {\n  public static void verify() {}\n}\n';
+  const outer = 'package b;\npublic class Outer {\n  void verify() {}\n  static class Inner {\n    void login() { verify(); }\n  }\n}\n';
+  const files = {
+    'src/a/Auth.java': auth,
+    'src/b/Outer.java': outer,
+    'src/b/Nested.java': outer.replace('package b;\n', 'package b;\nimport static a.Auth.verify;\n').replace(/Outer/g, 'Nested'),
+    'src/b/Anon.java':
+      'package b;\nimport static a.Auth.verify;\npublic class Anon {\n  void login() {\n    new Runnable() {\n      void verify() {}\n      public void run() { verify(); }\n    };\n  }\n}\n',
+    'src/b/Local.java':
+      'package b;\nimport static a.Auth.verify;\npublic class Local {\n  void login() {\n    class L { void verify() {} void go() { verify(); } }\n  }\n}\n',
+  };
+  assert.equal(run(files, 'src/b/Outer.java#Outer.Inner.login', 'src/b/Outer.java#Outer.verify'), 'found');
+  assert.equal(run(files, 'src/b/Nested.java#Inner.login', 'src/a/Auth.java#Auth.verify'), 'not-found');
+  assert.equal(run(files, 'src/b/Anon.java#Anon.login', 'src/a/Auth.java#Auth.verify'), 'unsure');
+  assert.equal(run(files, 'src/b/Local.java#Local.login', 'src/a/Auth.java#Auth.verify'), 'not-found');
+});
+
+test('a Python name bound twice in module scope or through an __init__ star import is unsure', () => {
+  const py = { 'app/__init__.py': '', 'app/db.py': 'def save():\n    pass\n', 'app/other.py': 'def save():\n    pass\n' };
+  const main = 'from app import save\n\ndef create():\n    save()\n';
+  const init = (src: string) => ({ ...py, 'app/__init__.py': src, 'main.py': main });
+  assert.equal(run(init('from app.other import save\nfrom app.db import *\n'), 'main.py#create', 'app/other.py#save'), 'unsure');
+  assert.equal(run(init('from app.db import *\nfrom app.other import save\n'), 'main.py#create', 'app/other.py'), 'unsure');
+  const api = (src: string) => run({ ...py, 'app/api.py': `${src}\ndef create():\n    save()\n` }, 'app/api.py#create', 'app/db.py#save');
+  assert.equal(api('from app.db import save\nif X:\n    def save():\n        pass\n'), 'unsure');
+  assert.equal(api('try:\n    from app.db import save\nexcept ImportError:\n    def save():\n        pass\n'), 'unsure');
+  assert.equal(api('from app.db import save\n\ndef other():\n    save = 1\n'), 'found');
+  const member = (src: string) =>
+    run({ ...py, 'app/api.py': `${src}\ndef create():\n    db.save()\n` }, 'app/api.py#create', 'app/db.py#save');
+  assert.equal(member('from app import db\ndb = None\n'), 'unsure');
+});
+
+test('a Rust type through a crate path is the repo type only when that module declares it', () => {
+  const err = 'pub struct Error {\n    code: u8,\n}\nimpl Error {\n    pub fn kind(&self) -> u8 {\n        self.code\n    }\n}\n';
+  const at = (mod: string, use: string) => ({
+    'src/lib.rs': 'mod error;\nmod a;\nmod c;\n',
+    'src/error.rs': err,
+    'src/a.rs': mod,
+    'src/c.rs': `${use}\nfn f(e: Error) {\n    e.kind();\n}\n`,
+  });
+  assert.equal(run(at('pub use std::io::Error;\n', 'use crate::a::Error;'), 'src/c.rs#f', 'src/error.rs#Error.kind'), 'unsure');
+  assert.equal(run(at('pub use std::io::*;\n', 'use crate::a::*;'), 'src/c.rs#f', 'src/error.rs#Error.kind'), 'unsure');
+  assert.equal(run(at('\n', 'use crate::error::Error;'), 'src/c.rs#f', 'src/error.rs#Error.kind'), 'found');
 });
 
 test('a type name unique in the repo but not imported is outside the repo: java.lang and a C# using', () => {
@@ -533,7 +579,7 @@ test('a middleware passed as a route argument is found; another middleware is no
   assert.equal(run(files, 'src/admin.ts', 'src/limit.ts#loginRateLimit'), 'not-found');
 });
 
-test('a not-found edge with no import path to the callee file asks for via', () => {
+test('a not-found edge asks for via only from a TS or Python caller with no import path to the callee file', () => {
   const files = {
     'src/a.ts': 'export function a() {}\n',
     'src/b.ts': "import { a } from './a.ts';\nexport function b() {}\n",
@@ -542,6 +588,12 @@ test('a not-found edge with no import path to the callee file asks for via', () 
   const reason = (caller: string) => edgeResult(ROOT, caller, 'src/a.ts#a', undefined, repo(files)).reason;
   assert.match(reason('src/c.ts#c'), /if this edge crosses a process, add via$/);
   assert.doesNotMatch(reason('src/b.ts#b'), /add via/);
+  const rs = {
+    'src/lib.rs': 'mod fs;\nmod c;\n',
+    'src/fs.rs': 'pub fn read() {}\npub fn write() {}\n',
+    'src/c.rs': 'use crate::fs::write;\nfn f() {\n    write();\n}\n',
+  };
+  assert.doesNotMatch(edgeResult(ROOT, 'src/c.rs#f', 'src/fs.rs#read', undefined, repo(rs)).reason, /add via/);
 });
 
 test('a call through a default export that wraps the callee is unsure, not "not found"', () => {
