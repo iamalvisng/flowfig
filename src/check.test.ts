@@ -450,3 +450,29 @@ test('an edge label that would cover a box moves along its edge to a free spot',
     [],
   );
 });
+
+test('two labeled edges down to the next row get a row gap that holds both labels', () => {
+  const fig: FlowProps = {
+    layout: {
+      direction: 'column',
+      children: [
+        { direction: 'row', children: [{ id: 'a', label: 'A' }] },
+        {
+          direction: 'row',
+          children: [
+            { id: 'b', label: 'B' },
+            { id: 'c', label: 'C' },
+          ],
+        },
+      ],
+    },
+    edges: [
+      { from: 'a', to: 'b', label: 'check the password' },
+      { from: 'a', to: 'c', label: 'send session id' },
+    ],
+  };
+  assert.deepEqual(
+    checkScene(render(fig).scene).filter((f) => f.rule === 'label-overlap'),
+    [],
+  );
+});
