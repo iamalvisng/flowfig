@@ -686,3 +686,18 @@ test('an edge is unsure, not "not found", when the caller passes control to a pa
   assert.equal(run(files, 'src/limit.ts#limit', 'src/routes.ts#router'), 'unsure');
   assert.equal(run(files, 'app/hooks.py#run', 'app/save.py#save'), 'unsure');
 });
+
+test('an edge from a router variable is found in the handlers that are statements on the variable', () => {
+  const files = {
+    'src/session.ts': 'export function destroySession(id: string) {}\n',
+    'src/auth.ts':
+      "import { destroySession } from './session.ts';\n" +
+      'export const authRouter = Router();\n\n' +
+      "authRouter.post('/logout', async (req, res) => {\n  await destroySession(req.sid);\n});\n",
+    'app/session.py': 'def destroy_session(sid):\n    pass\n',
+    'app/routes.py':
+      'from app.session import destroy_session\n\nrouter = APIRouter()\n\nrouter.add_api_route(\n    "/logout", destroy_session\n)\n',
+  };
+  assert.equal(run(files, 'src/auth.ts#authRouter', 'src/session.ts#destroySession'), 'found');
+  assert.equal(run(files, 'app/routes.py#router', 'app/session.py#destroy_session'), 'found');
+});

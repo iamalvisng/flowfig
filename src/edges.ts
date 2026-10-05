@@ -62,6 +62,29 @@ const CONSTS: Record<Lang, RegExp> = {
   rs: /^(?:pub(?:\([^)]*\))?\s+)?const\s+(\w+)\s*:\s*&(?:'static\s+)?str\s*=\s*(")([^"\n]*)"/gm,
 };
 
+const VARIABLE: Record<Lang, RegExp> = {
+  ts: /^\s*(?:export\s+)?(?:const|let|var)\s/,
+  py: /^[\p{L}_][\p{L}\p{N}_]*\s*(?::[^=\n]*)?=(?!=)/u,
+  go: /^\s*(?:var|const)\b/,
+  rs: /^\s*(?:pub(?:\([^)]*\))?\s+)?(?:static|const|let)\b/,
+  java: /^[^({=;]*[=;]/,
+  cs: /^[^({=;]*[=;]/,
+};
+
+function topStatements(code: string, name: string): string {
+  let out = '';
+  for (const m of code.matchAll(new RegExp(`^${esc(name)}\\s*[.[(]`, 'gm'))) {
+    let i = m.index;
+    for (let d = 0; i < code.length; i++) {
+      if ('([{'.includes(code[i])) d++;
+      else if (')]}'.includes(code[i])) d--;
+      else if (d <= 0 && (code[i] === ';' || (code[i] === '\n' && !/^\s*[.)]/.test(code.slice(i + 1, i + 80))))) break;
+    }
+    out += '\n' + code.slice(m.index, i + 1);
+  }
+  return out;
+}
+
 const IMPORT_LINES =
   /\b(?:import|export)\s+(?:type\s+)?[\w*\s,{}$]*?\bfrom\b|^[ \t]*(?:from|use|using|package|import)\b.*|.*\brequire\(.*/gm;
 const MODIFIERS = new Set([
@@ -315,7 +338,11 @@ export function edgeResult(
       : '; if this edge crosses a process, add via';
   let body = fi.code.slice(at.start, at.end);
   if (whole) body = body.replace(IMPORT_LINES, (m) => m.replace(/[^\n]/g, ' '));
+  const isVar = !whole && VARIABLE[fi.lang].test(body);
+  if (isVar && (fi.lang === 'ts' || fi.lang === 'py')) body += topStatements(fi.code, from.symbol!.split('.').at(-1)!);
   const doubt = () => {
+    if (isVar && fi.lang !== 'ts' && fi.lang !== 'py')
+      return { result: 'unsure' as const, reason: `${label(from)} is a variable; verify does not read its uses` };
     const p = whole ? undefined : paramCall(body, fi.lang, from.symbol?.split('.').at(-1));
     return p ? { result: 'unsure' as const, reason: `the caller calls its parameter ${p}; the target is not known` } : null;
   };
@@ -415,7 +442,7 @@ export function edgeResult(
         return unsure(`${n} has no path to ${owner}`);
       }
       const dynamic = new RegExp(`\\{[^}]*\\b${esc(n)}\\b[^}]*\\}\\s*=\\s*(?:await\\s+)?(?:import|require)\\(`).test(body);
-      if ((shadowed || (n === toName && !dynamic && localType(cx, fi, body, n, lang, !whole))) && n !== fromName) return ignore;
+      if ((shadowed || (n === toName && !dynamic && localType(cx, fi, body, n, lang, !whole && !isVar))) && n !== fromName) return ignore;
       if (pyStar) return unsure(`${n} can come from a star import`);
       const bind = byLocal.get(n);
       if (bind && twice(fi, imps, n)) return unsure(`${n} has two bindings`);
