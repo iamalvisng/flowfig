@@ -1403,3 +1403,31 @@ test('an automatic elbow edge gives its drawn corners to the check', () => {
   assert.ok(e.elbow, 'the scene edge has the elbow corners');
   assert.ok(!checkScene(scene).some((f) => f.rule === 'edge-crosses-box'));
 });
+
+test('a set around side that is blocked still gives a path that crosses no box', () => {
+  const props = {
+    layout: {
+      children: [
+        { id: 'u', label: 'Browser' },
+        { id: 'g', label: 'Gateway' },
+        {
+          direction: 'column' as const,
+          children: [
+            { id: 'a', label: 'Auth service' },
+            { id: 'o', label: 'Order service' },
+            { id: 'n', label: 'Notifier' },
+          ],
+        },
+      ],
+    },
+    edges: [
+      { id: 'ug', from: 'u', to: 'g' },
+      { id: 'ga', from: 'g', to: 'a' },
+      { id: 'go', from: 'g', to: 'o' },
+      { id: 'gn', from: 'g', to: 'n' },
+      { id: 'nu', from: 'n', to: 'u', around: 'above' as const },
+    ],
+    steps: [{ label: 'Go', flow: [{ edges: { edge: 'nu', data: 'push' }, say: 'The notifier pushes.' }] }],
+  };
+  assert.ok(!check(props).some((f) => f.rule === 'edge-crosses-box'));
+});

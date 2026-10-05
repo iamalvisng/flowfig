@@ -1,4 +1,4 @@
-import { STUB } from './model.ts';
+import { EDGE_ON, STUB } from './model.ts';
 export type Rect = { x: number; y: number; w: number; h: number };
 export type Side = 'l' | 'r' | 't' | 'b';
 export type Pt = { x: number; y: number };
@@ -138,6 +138,7 @@ export function route(
     if (around && blocked(around, arc!)) {
       const fits = Array.from({ length: ARC_STEPS + 1 }, (_, k): [Around, number] => [around!, outward(around!, k)]);
       arc = fits.find(([way, at]) => !blocked(way, at))?.[1] ?? arc;
+      if (blocked(around, arc!)) around = undefined;
     }
     if (!around && !e.sides && !e.stub && !e.elbow && past.length) {
       const ways = stacked ? (['left', 'right'] as const) : (['above', 'below'] as const);
@@ -238,6 +239,7 @@ export function route(
   const all = Object.values(rects);
   const [x0, y0] = [Math.min(...all.map((r) => r.x)), Math.min(...all.map((r) => r.y))];
   const [x1, y1] = [Math.max(...all.map((r) => r.x + r.w)), Math.max(...all.map((r) => r.y + r.h))];
+  const room = (d: number) => (d > 0 ? d + EDGE_ON / 2 : 0);
   const outside = (way: Around, { x, y }: Pt) => (way === 'above' ? y0 - y : way === 'below' ? y - y1 : way === 'left' ? x0 - x : x - x1);
   const roomOf = (way: Around, at: number, curve: [Pt, Pt, Pt, Pt], labelW?: number) =>
     Math.max(
@@ -400,18 +402,6 @@ export function route(
       if (e.x - s.x < 16 && s.y === e.y) {
         return { id: p.id, d: `M ${s.x} ${s.y} H ${e.x}`, mid: { x: (s.x + e.x) / 2, y: s.y }, curve: [s, s, e, e], elbow: [s, e] };
       }
-      if (e.x - s.x < 16) {
-        const mx = s.x + 8,
-          ex = e.x - 8,
-          my = (s.y + e.y) / 2;
-        return {
-          id: p.id,
-          d: `M ${s.x} ${s.y} H ${mx} V ${my} H ${ex} V ${e.y} H ${e.x}`,
-          mid: { x: (mx + ex) / 2, y: my },
-          curve: [s, { x: mx, y: my }, { x: ex, y: my }, e],
-          elbow: [s, { x: mx, y: s.y }, { x: mx, y: my }, { x: ex, y: my }, { x: ex, y: e.y }, e],
-        };
-      }
       const own = (r: Rect) => [p.a, p.b].some((q) => same(q, r));
       const all = avoid.filter((r) => !own(r));
       const boxes = all.filter((r) => r.box);
@@ -419,6 +409,23 @@ export function route(
         !all.some((r) => x > r.x - m && x < r.x + r.w + m && Math.max(ya, yb) > r.y && Math.min(ya, yb) < r.y + r.h);
       const hClear = (y: number, xa: number, xb: number, list: Rect[] = boxes, m = 2) =>
         !list.some((r) => y > r.y - m && y < r.y + r.h + m && Math.max(xa, xb) > r.x && Math.min(xa, xb) < r.x + r.w);
+      if (e.x - s.x < 16) {
+        const mx = s.x + 8,
+          ex = e.x - 8,
+          mid = (s.y + e.y) / 2;
+        const ys = Array.from({ length: Math.floor((y1 - y0 + 24) / 4) + 1 }, (_, i) => y0 - 12 + i * 4).sort(
+          (u, w) => Math.abs(u - mid) - Math.abs(w - mid),
+        );
+        const my = ys.find((y) => vClear(mx, s.y, y) && hClear(y, ex, mx, all) && vClear(ex, y, e.y)) ?? mid;
+        return {
+          id: p.id,
+          d: `M ${s.x} ${s.y} H ${mx} V ${my} H ${ex} V ${e.y} H ${e.x}`,
+          mid: { x: (mx + ex) / 2, y: my },
+          curve: [s, { x: mx, y: my }, { x: ex, y: my }, e],
+          elbow: [s, { x: mx, y: s.y }, { x: mx, y: my }, { x: ex, y: my }, { x: ex, y: e.y }, e],
+          bleed: { above: room(y0 - my), below: room(my - y1) },
+        };
+      }
       const mid = (s.x + e.x) / 2;
       const gap = Array.from({ length: Math.floor((e.x - s.x - 16) / 4) + 1 }, (_, i) => s.x + 8 + i * 4).sort(
         (u, w) => Math.abs(u - mid) - Math.abs(w - mid),
@@ -451,10 +458,10 @@ export function route(
             curve: [s, { x, y }, { x: ex, y }, e],
             elbow: [s, { x, y: s.y }, { x, y }, { x: ex, y }, { x: ex, y: e.y }, e],
             bleed: {
-              left: Math.max(0, x0 - Math.min(x, ex)),
-              right: Math.max(0, Math.max(x, ex) - x1),
-              above: Math.max(0, y0 - y),
-              below: Math.max(0, y - y1),
+              left: room(x0 - Math.min(x, ex)),
+              right: room(Math.max(x, ex) - x1),
+              above: room(y0 - y),
+              below: room(y - y1),
             },
           };
         }

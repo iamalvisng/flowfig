@@ -217,3 +217,20 @@ test('a client call such as axios.get("/x", cfg) does not define a symbol', () =
     assert.deepEqual(rules(verify(figWith('src/c.ts#/x'), { root })), ['missing-symbol']);
   });
 });
+
+test('Owner.name finds an enum member and not a name that is no member', () => {
+  const enums: Record<string, [string, string]> = {
+    'a.ts': ['export enum Owner { Pending = "p", Paid, Shipped = 3 }\n// Ghost\nconst s = "Ghost";\n', 'Paid'],
+    'b.java': ['enum Owner { PENDING, PAID("x"), SHIPPED; int n; }\n// GHOST\n', 'PAID'],
+    'c.cs': ['enum Owner { Pending, Paid = 1 }\n// Ghost\n', 'Paid'],
+    'd.rs': ['enum Owner { Pending, Paid(u8), Shipped { at: u8 } }\n// Ghost\n', 'Shipped'],
+    'e.py': ['class Owner(Enum):\n    PENDING = 1\n    PAID = 2\n# GHOST\n', 'PAID'],
+  };
+  withRepo(Object.fromEntries(Object.entries(enums).map(([f, [text]]) => [`src/${f}`, text])), (root) => {
+    for (const [f, [, member]] of Object.entries(enums)) {
+      const run = (n: string) => verify(figWith(`src/${f}#Owner.${n}`), { root }).map((x) => x.rule);
+      assert.deepEqual(run(member), [], f);
+      assert.deepEqual(run(member.toUpperCase() === member ? 'GHOST' : 'Ghost'), ['missing-symbol'], f);
+    }
+  });
+});

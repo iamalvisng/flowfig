@@ -486,7 +486,7 @@ export function codeFile(root: string, path: string, read: Read = readFile, cach
   return file;
 }
 
-export function locate(file: CodeFile, symbol: string): { start: number; end: number } | null {
+function locateDefinition(file: CodeFile, symbol: string): { start: number; end: number } | null {
   const { code, lang } = file;
   const parts = symbol.split('.');
   if (!parts.every((p) => /^[\p{L}_$][\p{L}\p{N}_$]*$/u.test(p))) return null;
@@ -531,5 +531,29 @@ export function locate(file: CodeFile, symbol: string): { start: number; end: nu
   }
   return null;
 }
+
+function enumMember(file: CodeFile, symbol: string): { start: number; end: number } | null {
+  const { code, lang } = file;
+  const [owner, name, ...rest] = symbol.split('.');
+  if (!name || rest.length || lang === 'go' || lang === 'py') return null;
+  const head = new RegExp(`\\benum\\s+${esc(owner)}${E}[^;{}]*\\{`, 'u').exec(code);
+  if (!head) return null;
+  const open = head.index + head[0].length - 1;
+  const close = matchClose(code, open);
+  let from = open + 1;
+  for (let i = from, d = 0; i <= close; i++) {
+    const c = code[i];
+    if ('{(['.includes(c)) d++;
+    else if (')]'.includes(c) || (c === '}' && i < close)) d--;
+    else if (d > 0 || (c !== ',' && c !== ';' && i < close)) continue;
+    const seg = code.slice(from, i).replace(/^(\s|@\w+(\([^)]*\))?|#\[[^\]]*\]|\[[^\]]*\])+/, '');
+    if (new RegExp(`^${esc(name)}${E}`, 'u').test(seg)) return { start: i - seg.length, end: i };
+    if (c === ';') return null;
+    from = i + 1;
+  }
+  return null;
+}
+
+export const locate = (file: CodeFile, symbol: string) => locateDefinition(file, symbol) ?? enumMember(file, symbol);
 
 export const isDefined = (file: CodeFile, symbol: string): boolean => locate(file, symbol) != null;
