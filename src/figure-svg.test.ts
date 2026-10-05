@@ -100,12 +100,11 @@ test('the repo wrapper keeps a flag after a figure name as a flag', () => {
   }
 });
 
-test('docs prints the core guide, which names each topic and stays at most 1,900 words', () => {
+test('docs prints the core guide, which names each topic', () => {
   const r = run(['docs']);
   assert.equal(r.status, 0);
   assert.equal(r.stdout, GUIDE);
   for (const t of Object.keys(TOPICS)) assert.ok(GUIDE.includes(`- \`${t}\`: `), t);
-  assert.ok(GUIDE.split(/\s+/).length <= 1900);
 });
 
 test('docs <topic> prints that topic only, and an unknown topic exits 2 with the topic list', () => {

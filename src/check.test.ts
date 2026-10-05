@@ -5,6 +5,7 @@ import { TONES, toneFill, type FlowProps } from './model.ts';
 import type { Scene, SceneBox } from './scene.ts';
 import type { Pt } from './geometry.ts';
 import { render } from './svg.ts';
+import { PLAIN_EXAMPLES } from './guide.ts';
 
 const fig: FlowProps = {
   layout: {
@@ -523,4 +524,21 @@ test('plain-text warns on code-shaped labels, long lines, filler words and code 
   assert.match(msgs, /say 3 has 21 words; keep it to 20/);
   assert.match(msgs, /label "ReportsController" looks like code/);
   assert.doesNotMatch(msgs, /Redis|Check input|Find user|session id|The gateway calls auth|GitHub|DynamoDB|sweep/);
+});
+
+test('each good plain-text example in the guide passes, and each checked bad example warns', () => {
+  const warns = (field: string, text: string, symbol: string) => {
+    const box = { id: 'a', label: field === 'label' ? text : 'A', sub: field === 'sub' ? text : undefined, source: `src/x.ts#${symbol}` };
+    const hop = { edge: 'e', data: field === 'data' ? text : undefined };
+    const spec: FlowProps = {
+      layout: { children: [box, { id: 'b', label: 'B' }] },
+      edges: [{ id: 'e', from: 'a', to: 'b', label: field === 'edge' ? text : 'send' }],
+      steps: [{ label: field === 'step' ? text : 'Send', flow: [{ edges: hop, say: field === 'say' ? text : 'A sends.' }] }],
+    };
+    return checkSpec(spec).some((f) => f.rule === 'plain-text');
+  };
+  for (const x of PLAIN_EXAMPLES) {
+    assert.equal(warns(x.field, x.good, x.bad), false, x.good);
+    if (!x.style) assert.equal(warns(x.field, x.bad, x.bad), true, x.bad);
+  }
 });

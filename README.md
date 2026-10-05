@@ -360,7 +360,7 @@ figure: 5 boxes, 3 groups, 4 edges, 2 steps, 6 messages
 
 The last line gives the counts of the parts of the figure. Compare the counts with the parts that you planned.
 
-`flowfig check` has 23 rules: 11 errors and 11 warnings.
+`flowfig check` has 23 rules: 11 errors and 12 warnings.
 
 | Rule                        | Severity | What it finds                                                                                       |
 | --------------------------- | -------- | --------------------------------------------------------------------------------------------------- |
