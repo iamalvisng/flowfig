@@ -571,15 +571,16 @@ export function labelAlong(r: Routed, w: number, boxes: Rect[], placed: Rect[], 
           y: Math.max(fig.y + 9, Math.min(at.y, fig.y + fig.h - 9)),
         }
       : at;
-  const free = (at: Pt, strict: boolean) => {
+  const free = (at: Pt, strict: boolean, room = 1) => {
     const pill = { x: at.x - w / 2, y: at.y - 9, w, h: 18 };
     return (
       inFig(at) &&
-      !boxes.some((b) => overlaps(pill, b, 1)) &&
+      !boxes.some((b) => overlaps(pill, b, room)) &&
       !placed.some((b) => overlaps(pill, b, 1)) &&
       (!strict || !lines.some((q) => q.x > pill.x - 2 && q.x < pill.x + w + 2 && q.y > pill.y - 2 && q.y < pill.y + 20))
     );
   };
+  for (const at of spots) if (free(at, true, 6)) return at;
   for (const strict of [true, false]) for (const at of spots) if (free(at, strict)) return at;
   for (const at of spots.map(clamp)) if (free(at, false)) return at;
   return fig ? labelAlong(r, w, boxes, placed) : r.mid;

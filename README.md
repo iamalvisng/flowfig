@@ -65,7 +65,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - uses: iamalvisng/flowfig@v0.8.3
+      - uses: iamalvisng/flowfig@v0.8.4
         with:
           figures: 'docs/**/*.svg' # default **/*.svg
 ```
@@ -478,7 +478,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - uses: iamalvisng/flowfig@v0.8.3
+      - uses: iamalvisng/flowfig@v0.8.4
         with:
           figures: 'docs/**/*.svg' # default **/*.svg
 ```
