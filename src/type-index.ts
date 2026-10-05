@@ -158,13 +158,8 @@ function findType0(cx: Ctx, ctx: CodeFile, name: string, qual?: string | null): 
       : (g.find((p) => dirname(p) === dirname(ctx.path)) ?? wild(g, ctx));
     return pick ? declIn(file(cx, pick), name) : null;
   }
+  if (lang === 'rs') return rustFollow(cx, ctx, qual ? [qual] : rustUsePaths(ctx, name), name, 0);
   const all = (global(cx, lang).types.get(name) ?? []).map((p) => declIn(file(cx, p), name)).filter((d) => d != null);
-  if (lang === 'rs') {
-    const mods = qual ? [qual] : rustUsePaths(ctx, name);
-    if (!mods.length || mods.some((m) => !/^(crate|self|super)\b/.test(m))) return null;
-    const hits = all.filter((d) => mods.some((m) => lastSeg(m) === rustMod(d.info.path)));
-    return hits.length === 1 ? hits[0] : null;
-  }
   const ns = (f: CodeFile) => /\bnamespace\s+([\w.]+)/.exec(f.code)?.[1] ?? '';
   const usings = new Set([...ctx.code.matchAll(/^\s*using\s+([\w.]+)\s*;/gm)].map((m) => m[1]));
   const g = global(cx, 'cs');
@@ -178,6 +173,36 @@ function findType0(cx: Ctx, ctx: CodeFile, name: string, qual?: string | null): 
     if (hits.length) return hits.length === 1 ? hits[0] : null;
   }
   return null;
+}
+
+function rustModFile(cx: Ctx, from: CodeFile, path: string): CodeFile | null {
+  const own = /^(mod|lib|main)\.rs$/.test(basename(from.path)) ? dirname(from.path) : from.path.slice(0, -3);
+  const segs = path.split('::');
+  let dir: string;
+  if (segs[0] === 'crate') {
+    dir = dirname(from.path);
+    while (!['lib.rs', 'main.rs'].some((f) => file(cx, posix.join(dir, f))) && dir !== '.' && dir !== '/') dir = dirname(dir);
+  } else if (segs[0] === 'self') dir = own;
+  else dir = dirname(own);
+  for (const s of segs.slice(1)) {
+    if (s === 'super') dir = dirname(dir);
+    else dir = posix.join(dir, s);
+  }
+  if (segs.length === 1 && segs[0] === 'crate') return file(cx, posix.join(dir, 'lib.rs')) ?? file(cx, posix.join(dir, 'main.rs'));
+  if (segs.length === 1 && segs[0] === 'self') return from;
+  return file(cx, `${dir}.rs`) ?? file(cx, posix.join(dir, 'mod.rs'));
+}
+
+function rustFollow(cx: Ctx, from: CodeFile, mods: string[], name: string, depth: number): Decl | null {
+  if (!mods.length || depth > 3 || mods.some((m) => !/^(crate|self|super)\b/.test(m))) return null;
+  const hits: Decl[] = [];
+  for (const m of mods) {
+    const f = rustModFile(cx, from, m);
+    if (!f) return null;
+    const d = declIn(f, name) ?? rustFollow(cx, f, rustUsePaths(f, name), name, depth + 1);
+    if (d) hits.push(d);
+  }
+  return hits.length === 1 ? hits[0] : null;
 }
 
 function wild(g: string[], ctx: CodeFile): string | null {

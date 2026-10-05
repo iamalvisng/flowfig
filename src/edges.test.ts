@@ -404,6 +404,20 @@ test('a Rust type through a crate path is the repo type only when that module de
   assert.equal(run(at('\n', 'use crate::error::Error;'), 'src/c.rs#f', 'src/error.rs#Error.kind'), 'found');
 });
 
+test('a Rust type re-exported twice inside the crate is found; a std re-export is unsure', () => {
+  const err = 'pub struct Error {\n    code: u8,\n}\nimpl Error {\n    pub fn kind(&self) -> u8 {\n        self.code\n    }\n}\n';
+  const files = (models: string) => ({
+    'src/main.rs': 'mod db;\nmod api;\n',
+    'src/db/mod.rs': 'pub mod models;\npub use self::models::*;\n',
+    'src/db/models/mod.rs': models,
+    'src/db/models/error.rs': err,
+    'src/api.rs': 'use crate::db::*;\nfn f(e: Error) {\n    e.kind();\n}\n',
+  });
+  const edge = (models: string) => run(files(models), 'src/api.rs#f', 'src/db/models/error.rs#Error.kind');
+  assert.equal(edge('mod error;\npub use self::error::Error;\n'), 'found');
+  assert.equal(edge('mod error;\npub use std::io::Error;\n'), 'unsure');
+});
+
 test('a type name unique in the repo but not imported is outside the repo: java.lang and a C# using', () => {
   const files = {
     'src/a/Process.java': 'package a;\npublic class Process {\n  public void destroy() {}\n}\n',
