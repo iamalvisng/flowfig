@@ -14,8 +14,8 @@ const props: Figure['props'] = {
         direction: 'column',
         gap: 36,
         children: [
-          { id: 'orders', label: 'Orders', width: 170, source: 'examples/shop/orders.ts#createOrder' },
-          { id: 'db', label: 'Orders DB', shape: 'store', width: 170, source: 'examples/shop/db.ts#insertOrder' },
+          { id: 'orders', label: 'Orders', width: 160, source: 'examples/shop/orders.ts#createOrder' },
+          { id: 'db', label: 'Orders DB', shape: 'store', width: 160, source: 'examples/shop/db.ts#insertOrder' },
         ],
       },
       {

@@ -697,6 +697,8 @@ export const counts = (p: FlowProps) => {
 
 const idsIn = (c: FigNode | FigGroup): string[] => (isGroup(c) ? [...(c.id ? [c.id] : []), ...c.children.flatMap(idsIn)] : [c.id]);
 
+const LINE_CLEAR = 16;
+
 export function groupGap(g: FigGroup, edges: FigEdge[]): number {
   const side = new Map<string, number>();
   g.children.forEach((c, i) => idsIn(c).forEach((id) => side.set(id, i)));
@@ -704,13 +706,13 @@ export function groupGap(g: FigGroup, edges: FigEdge[]): number {
     (e) => e.label != null && side.has(e.from) && side.has(e.to) && side.get(e.from) !== side.get(e.to) && !(g.gap != null && e.around),
   );
   if (g.gap != null && !spans.length) return g.gap;
-  const need = Math.max(0, ...spans.map((e) => labelPillW(str(e.label)) + 16));
-  if (g.gap != null && g.direction !== 'column') return Math.max(g.gap, need - 16);
+  const need = Math.max(0, ...spans.map((e) => labelPillW(str(e.label)) + 2 * LINE_CLEAR));
+  if (g.gap != null && g.direction !== 'column') return Math.max(g.gap, need);
   let auto: number;
   if (g.direction === 'column') {
     const ends = spans.map((e) => [side.get(e.from)!, side.get(e.to)!].sort((p, q) => p - q));
     const most = Math.max(0, ...g.children.map((_, k) => ends.filter(([lo, hi]) => lo <= k && k < hi).length));
-    auto = most > 1 ? Math.min(most, 3) * 22 + 16 : 28;
+    auto = most ? Math.min(most, 3) * 22 + 2 * LINE_CLEAR - 4 : 28;
   } else auto = Math.max(56, need);
   return Math.max(g.gap ?? 0, auto);
 }
