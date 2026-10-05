@@ -62,6 +62,29 @@ const CONSTS: Record<Lang, RegExp> = {
   rs: /^(?:pub(?:\([^)]*\))?\s+)?const\s+(\w+)\s*:\s*&(?:'static\s+)?str\s*=\s*(")([^"\n]*)"/gm,
 };
 
+const VARIABLE: Record<Lang, RegExp> = {
+  ts: /^\s*(?:export\s+)?(?:const|let|var)\s/,
+  py: /^[\p{L}_][\p{L}\p{N}_]*\s*(?::[^=\n]*)?=(?!=)/u,
+  go: /^\s*(?:var|const)\b/,
+  rs: /^\s*(?:pub(?:\([^)]*\))?\s+)?(?:static|const|let)\b/,
+  java: /^[^({=;]*[=;]/,
+  cs: /^[^({=;]*[=;]/,
+};
+
+function topStatements(code: string, name: string): string {
+  let out = '';
+  for (const m of code.matchAll(new RegExp(`^${esc(name)}\\s*[.[(]`, 'gm'))) {
+    let i = m.index;
+    for (let d = 0; i < code.length; i++) {
+      if ('([{'.includes(code[i])) d++;
+      else if (')]}'.includes(code[i])) d--;
+      else if (d <= 0 && (code[i] === ';' || (code[i] === '\n' && !/^\s*[.)]/.test(code.slice(i + 1, i + 80))))) break;
+    }
+    out += '\n' + code.slice(m.index, i + 1);
+  }
+  return out;
+}
+
 const IMPORT_LINES =
   /\b(?:import|export)\s+(?:type\s+)?[\w*\s,{}$]*?\bfrom\b|^[ \t]*(?:from|use|using|package|import)\b.*|.*\brequire\(.*/gm;
 const MODIFIERS = new Set([
@@ -109,13 +132,23 @@ function params(body: string, from: string | undefined): string[] {
   return [...parts, text.slice(last)];
 }
 
+function paramName(p: string, lang: Lang): string | undefined {
+  const tokens = (p.split('=')[0].match(/[\w$]+/g) ?? []).filter((t) => !MODIFIERS.has(t));
+  return lang === 'java' || lang === 'cs' ? tokens.at(-1) : tokens[0];
+}
+
+function paramCall(body: string, lang: Lang, fromName: string | undefined): string | undefined {
+  const open = body.indexOf('(', fromName ? Math.max(0, body.indexOf(fromName)) : 0);
+  if (open < 0) return undefined;
+  const rest = body.slice(matchClose(body, open) + 1);
+  return params(body, fromName)
+    .map((p) => paramName(p, lang))
+    .find((n) => n && new RegExp(`(?<![\\w$.])${esc(n)}\\s*\\(`).test(rest));
+}
+
 function shadows(body: string, name: string, lang: Lang, fromName: string | undefined, whole: boolean): boolean {
   const n = esc(name);
-  if (!whole)
-    for (const p of params(body, fromName)) {
-      const tokens = (p.split('=')[0].match(/[\w$]+/g) ?? []).filter((t) => !MODIFIERS.has(t));
-      if ((lang === 'java' || lang === 'cs' ? tokens.at(-1) : tokens[0]) === name) return true;
-    }
+  if (!whole) for (const p of params(body, fromName)) if (paramName(p, lang) === name) return true;
   return (
     [`\\b(let|const|var|val|mut)\\s+${n}(?![\\w$])`, `(?<![\\w$.])${n}\\s*:=`, `(^|[\\n;{])[ \\t]*${n}\\s*(:[^=\\n]+)?=(?![=>])`].some(
       (p) => new RegExp(p).test(body),
@@ -305,9 +338,17 @@ export function edgeResult(
       : '; if this edge crosses a process, add via';
   let body = fi.code.slice(at.start, at.end);
   if (whole) body = body.replace(IMPORT_LINES, (m) => m.replace(/[^\n]/g, ' '));
+  const isVar = !whole && VARIABLE[fi.lang].test(body);
+  if (isVar && (fi.lang === 'ts' || fi.lang === 'py')) body += topStatements(fi.code, from.symbol!.split('.').at(-1)!);
+  const doubt = () => {
+    if (isVar && fi.lang !== 'ts' && fi.lang !== 'py')
+      return { result: 'unsure' as const, reason: `${label(from)} is a variable; verify does not read its uses` };
+    const p = whole ? undefined : paramCall(body, fi.lang, from.symbol?.split('.').at(-1));
+    return p ? { result: 'unsure' as const, reason: `the caller calls its parameter ${p}; the target is not known` } : null;
+  };
   if (!to.symbol) {
     const r = fileResult(root, fi, ti, body, whole, from, to, read, cache);
-    return r.result === 'not-found' ? { ...r, reason: r.reason + hint() } : r;
+    return r.result === 'not-found' ? (doubt() ?? { ...r, reason: r.reason + hint() }) : r;
   }
   const toParts = to.symbol.split('.');
   const toName = toParts.at(-1)!;
@@ -401,7 +442,7 @@ export function edgeResult(
         return unsure(`${n} has no path to ${owner}`);
       }
       const dynamic = new RegExp(`\\{[^}]*\\b${esc(n)}\\b[^}]*\\}\\s*=\\s*(?:await\\s+)?(?:import|require)\\(`).test(body);
-      if ((shadowed || (n === toName && !dynamic && localType(cx, fi, body, n, lang, !whole))) && n !== fromName) return ignore;
+      if ((shadowed || (n === toName && !dynamic && localType(cx, fi, body, n, lang, !whole && !isVar))) && n !== fromName) return ignore;
       if (pyStar) return unsure(`${n} can come from a star import`);
       const bind = byLocal.get(n);
       if (bind && twice(fi, imps, n)) return unsure(`${n} has two bindings`);
@@ -490,5 +531,7 @@ export function edgeResult(
   }
   const pick = verdicts.find((v) => v.res === 'found') ?? verdicts.find((v) => v.res === 'unsure');
   if (pick) return { result: pick.res === 'found' ? 'found' : 'unsure', reason: pick.why };
+  const d = [...names].some((n) => word(n).test(body)) ? null : doubt();
+  if (d) return d;
   return { result: 'not-found', reason: `${who} does not call ${toName}${hint()}` };
 }

@@ -675,3 +675,29 @@ test('a Rust re-export chain with a private item, a private use, a test module o
   };
   assert.equal(run(inline, 'src/api.rs#f', 'src/db.rs#Error.kind'), 'unsure');
 });
+
+test('an edge is unsure, not "not found", when the caller passes control to a parameter such as next()', () => {
+  const files = {
+    'src/limit.ts': 'export function limit(req: Req, res: Res, next: Next) {\n  if (req.ip) next();\n}\n',
+    'src/routes.ts': 'export const router = makeRouter();\n',
+    'app/hooks.py': 'def run(event, done):\n    done(event)\n',
+    'app/save.py': 'def save(event):\n    pass\n',
+  };
+  assert.equal(run(files, 'src/limit.ts#limit', 'src/routes.ts#router'), 'unsure');
+  assert.equal(run(files, 'app/hooks.py#run', 'app/save.py#save'), 'unsure');
+});
+
+test('an edge from a router variable is found in the handlers that are statements on the variable', () => {
+  const files = {
+    'src/session.ts': 'export function destroySession(id: string) {}\n',
+    'src/auth.ts':
+      "import { destroySession } from './session.ts';\n" +
+      'export const authRouter = Router();\n\n' +
+      "authRouter.post('/logout', async (req, res) => {\n  await destroySession(req.sid);\n});\n",
+    'app/session.py': 'def destroy_session(sid):\n    pass\n',
+    'app/routes.py':
+      'from app.session import destroy_session\n\nrouter = APIRouter()\n\nrouter.add_api_route(\n    "/logout", destroy_session\n)\n',
+  };
+  assert.equal(run(files, 'src/auth.ts#authRouter', 'src/session.ts#destroySession'), 'found');
+  assert.equal(run(files, 'app/routes.py#router', 'app/session.py#destroy_session'), 'found');
+});

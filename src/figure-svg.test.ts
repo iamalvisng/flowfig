@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { GUIDE } from './guide.ts';
+import { GUIDE, TOPICS } from './guide.ts';
 
 const cli = join(dirname(dirname(fileURLToPath(import.meta.url))), 'scripts', 'figure-svg.mjs');
 const SPEC = {
@@ -100,11 +100,20 @@ test('the repo wrapper keeps a flag after a figure name as a flag', () => {
   }
 });
 
-test('docs prints the guide', () => {
+test('docs prints the core guide, which names each topic', () => {
   const r = run(['docs']);
   assert.equal(r.status, 0);
-  for (const w of ['rail', 'layout', 'edges', 'steps', 'npx flowfig check']) assert.ok(r.stdout.includes(w), w);
-  assert.equal(r.stdout, GUIDE.endsWith('\n') ? GUIDE : GUIDE + '\n');
+  assert.equal(r.stdout, GUIDE);
+  for (const t of Object.keys(TOPICS)) assert.ok(GUIDE.includes(`- \`${t}\`: `), t);
+});
+
+test('docs <topic> prints that topic only, and an unknown topic exits 2 with the topic list', () => {
+  const r = run(['docs', 'lanes']);
+  assert.equal(r.status, 0);
+  assert.equal(r.stdout, TOPICS.lanes);
+  const bad = run(['docs', 'nope']);
+  assert.equal(bad.status, 2);
+  assert.match(bad.stderr, /rail, timeline, lanes, marks, verify/);
 });
 
 test('the example in GUIDE passes check --strict', () => {
@@ -166,7 +175,8 @@ test('check and render print the figure counts, and a render prints the error co
     const out = join(dir, 'out.svg');
     const rr = run(['-', out], JSON.stringify(spec));
     assert.ok(rr.stderr.split('\n').includes(line), rr.stderr);
-    assert.match(rr.stderr, /^0 errors, 0 warnings\nfigure: /m);
+    assert.match(rr.stderr, /^0 errors, 0 warnings\nfigure: .*\na -> b\nb -> c\nstep "one": 2 hops\nstep "two": 1 hop\n$/m);
+    assert.doesNotMatch(rr.stderr, /boxes defined/);
     assert.doesNotMatch(rr.stdout, /figure:/);
   } finally {
     rmSync(dir, { recursive: true });
@@ -493,6 +503,35 @@ test('gif exits 2 for bad use, before a browser starts', () => {
       assert.equal(r.status, 2, `${args.join(' ')}: ${r.stderr}`);
       assert.match(r.stderr, message);
     }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a render prints the edge summary and the verify counts; --no-verify drops the counts', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'figure-svg-'));
+  try {
+    writeFileSync(join(dir, 'a.ts'), 'export function send() {}\n');
+    const spec = {
+      props: {
+        ...SPEC.props,
+        layout: {
+          children: [
+            { id: 'a', label: 'Client', source: 'a.ts#send' },
+            { id: 'b', label: 'Server', source: 'gone.ts' },
+          ],
+        },
+      },
+    };
+    const go = (...flags: string[]) =>
+      spawnSync('node', [cli, '-', 'out.svg', ...flags], { input: JSON.stringify(spec), cwd: dir, encoding: 'utf8' });
+    const r = go();
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(
+      r.stderr,
+      /^figure: .*\na -> b: write\nstep "write": 1 hop\nerror {4}missing-file {7}out\.svg: box "b" -> gone\.ts: file not found\nout\.svg: 1 of 2 boxes defined; edges: .*\n$/m,
+    );
+    assert.doesNotMatch(go('--no-verify').stderr, /boxes defined/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

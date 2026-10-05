@@ -22,7 +22,7 @@ import {
 import type { Finding, Scene, SceneEdge } from './scene.ts';
 import { layoutRail } from './rail.ts';
 import type { SvgOptions } from './svg.ts';
-import { crosses, type Pt, type Rect } from './geometry.ts';
+import { crosses, hit as curveHit, type Pt, type Rect } from './geometry.ts';
 import { textWidth } from './text.ts';
 import { owners, parseSource } from './source.ts';
 
@@ -30,6 +30,67 @@ const err = (rule: string, ids: string[], message: string): Finding => ({ rule, 
 const warn = (rule: string, ids: string[], message: string): Finding => ({ rule, severity: 'warning', ids, message });
 
 const groupIds = (g: FigGroup): string[] => [...(g.id ? [g.id] : []), ...g.children.flatMap((c) => (isGroup(c) ? groupIds(c) : []))];
+
+const FILLER =
+  /\b(seamless(ly)?|robust|powerful|leverag(e|es|ed|ing)|effortless(ly)?|cutting-edge|state-of-the-art|holistic|synergy|empower(s|ed|ing)?|elegant(ly)?)\b/i;
+const codeShape = (t: string) => /^[^A-Za-z]*[a-z][A-Za-z0-9]*[A-Z]|[A-Za-z]_[A-Za-z]|\(\)|::|\w\.\w+\(/.test(t);
+const DB_COMMAND =
+  /^(SELECT|INSERT|UPDATE|DELETE|UPSERT|MERGE|SET|GET|DEL|HSET|HGET|HDEL|EXPIRE|INCR|DECR|LPUSH|RPUSH|LPOP|RPOP|SADD|ZADD|PUBLISH|XADD)\b/;
+const HTTP_LINE = /^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS) \//;
+const codeToken = (t: string) => codeShape(t) || t.split(/[./]/).some(codeShape);
+
+function plainText(fig: FlowProps): Finding[] {
+  const out: Finding[] = [];
+  const check = (
+    owner: string,
+    field: string,
+    text: unknown,
+    o: { code?: boolean; words?: boolean; source?: string; command?: boolean } = {},
+  ) => {
+    const t = str(text).trim();
+    if (!t) return;
+    const tokens = t.split(/\s+/);
+    const symbol = o.source
+      ? parseSource(o.source)
+          ?.symbol?.split(/[.#:]+/)
+          .pop()
+      : undefined;
+    const code = o.code === false ? undefined : tokens.find((w) => codeToken(w) || (w === symbol && /[a-z][A-Z]/.test(w)));
+    const filler = FILLER.exec(t)?.[0];
+    const command = o.command && DB_COMMAND.test(t) && !HTTP_LINE.test(t);
+    const why = [
+      command && `${field} "${t}" looks like code; use plain words`,
+      code &&
+        (tokens.length === 1 && field === 'label'
+          ? `${field} "${t}" looks like code; use plain words, the code name goes in source; if this is a product name, keep it`
+          : `${field} has the code name "${code}"; use plain words; if this is a product name, keep it`),
+      symbol && t === symbol && !code && !/^[A-Za-z]+$/.test(t) && `${field} "${t}" repeats its source; use plain words`,
+      filler && `${field} "${t}" has the filler word "${filler}"`,
+      o.words && tokens.length > 20 && `${field} has ${tokens.length} words; keep it to 20`,
+    ].filter(Boolean);
+    if (why.length) out.push(warn('plain-text', [], `${owner}: ${why.join('; ')}`));
+  };
+  for (const n of nodes(fig.layout)) {
+    check(`box "${n.id}"`, 'label', n.label, { source: n.source, command: true });
+    check(`box "${n.id}"`, 'sub', n.sub);
+  }
+  const groupLabels = (g: FigGroup): void => {
+    if (g.label != null) check(`group "${g.id ?? str(g.label)}"`, 'label', g.label);
+    for (const c of g.children) if (isGroup(c)) groupLabels(c);
+  };
+  groupLabels(fig.layout);
+  fig.edges.forEach((e) => check(`edge "${edgeId(e)}"`, 'label', e.label, { source: e.source, command: true }));
+  for (const s of fig.steps ?? []) {
+    const name = str(s.label);
+    check(`step "${name}"`, 'label', s.label);
+    check(`step "${name}"`, 'caption', s.caption, { words: true });
+    s.flow.map(toBeat).forEach((b, i) => {
+      check(`step "${name}"`, `say ${i + 1}`, b.say, { words: true });
+      b.hops.forEach((h) => check(`step "${name}"`, `data ${i + 1}`, h.data, { code: false }));
+    });
+  }
+  return out;
+}
 
 /** Faults in the spec: dangling ids, duplicate ids, empty steps. The renderers skip them silently. */
 export function checkSpec(fig: FlowProps): Finding[] {
@@ -131,6 +192,7 @@ export function checkSpec(fig: FlowProps): Finding[] {
   }
   for (const n of nodes(fig.layout))
     if (n.at != null && !validAt(n.at)) out.push(err('bad-at', [n.id], `box "${n.id}": at ${n.at} is not an integer of 0 or more`));
+  out.push(...plainText(fig));
   return out;
 }
 
@@ -159,11 +221,9 @@ export function checkScene(scene: Scene, { width = 830, minText = 10 }: CheckOpt
   for (const e of scene.edges) {
     if (e.behind && !e.elbow) continue;
     const line = e.elbow ?? e.pts;
-    const pts = line
-      ? line.slice(1).flatMap((q, k) => Array.from({ length: 17 }, (_, i) => lerp(line[k], q, i / 16)))
-      : Array.from({ length: 33 }, (_, i) => at(e.curve, i / 32));
+    const pts = line?.slice(1).flatMap((q, k) => Array.from({ length: 17 }, (_, i) => lerp(line[k], q, i / 16)));
     for (const b of scene.boxes)
-      if (b.id !== e.from && b.id !== e.to && pts.some((p) => inside(p, b.rect, 2)))
+      if (b.id !== e.from && b.id !== e.to && (pts ? pts.some((p) => inside(p, b.rect, 2)) : curveHit(e.curve, [b.rect], -2).length))
         out.push(err('edge-crosses-box', [e.id, b.id], `edge "${e.id}" passes through box "${b.id}"`));
   }
   const pills = scene.edges.filter((e) => e.pts && e.label);
@@ -216,6 +276,9 @@ export function checkScene(scene: Scene, { width = 830, minText = 10 }: CheckOpt
         out.push(err('label-overlap', [e.id, f.id], `the labels of edges "${e.id}" and "${f.id}" overlap`));
     for (const b of scene.boxes)
       if (overlap(e.label!, b.rect, 1)) out.push(err('label-overlap', [e.id, b.id], `the label of edge "${e.id}" covers box "${b.id}"`));
+    const [p, a] = [e.label!, scene.area];
+    if (a && e.step == null && (p.x < a.x - 0.5 || p.y < a.y - 0.5 || p.x + p.w > a.x + a.w + 0.5 || p.y + p.h > a.y + a.h + 0.5))
+      out.push(err('label-overlap', [e.id], `the label of edge "${e.id}" is outside the figure`));
   });
   const shown = scene.minFont * Math.min(1, width / scene.width);
   if (shown < minText) out.push(warn('small-text', [], `at ${width} px the smallest text is ${px(shown)} px (minimum ${minText} px)`));

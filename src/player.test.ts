@@ -2,7 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
-import type { FlowProps } from './model.ts';
+import { nodeWidth, type FlowProps } from './model.ts';
+import { render as toSvgScene } from './svg.ts';
 
 // Server markup shows the first frame only; clicks and the clock need a DOM.
 const { Flow } = await import(new URL('../dist/index.js', import.meta.url).href);
@@ -254,4 +255,36 @@ test('lanes wrap: every block has the gutter of the plan, and an empty block is 
   (far.layout.children[1] as { children: { id: string; at?: number }[] }).children.find((b) => b.id === 'rejected')!.at = 20;
   const blocks = [...render(far).matchAll(/data-fig-block="(\d+)"/g)].map((m) => +m[1]);
   assert.deepEqual(blocks, lanePlan(far).blocks);
+});
+
+test('a label that fits at its own box width draws one line in the player', () => {
+  const html = render({ layout: { children: [{ id: 'a', label: 'Review the claim' }] }, edges: [] });
+  const box = html.match(/data-fig="a"[^>]*>([\s\S]*?)<\/div><\/div>/)!;
+  assert.equal([...box[1].matchAll(/white-space:nowrap/g)].length, 1);
+});
+
+test('a long box label draws two lines in the player, and the box has the SVG width and height', () => {
+  const node = { id: 'a', label: 'Check the session and the rate limit' };
+  const fig2: FlowProps = { layout: { children: [node] }, edges: [] };
+  const html = render(fig2);
+  const box = html.match(/data-fig="a"[^>]*style="([^"]*)"[^>]*>([\s\S]*?)<\/div><\/div>/)!;
+  assert.match(box[1], new RegExp(`(^|;)width:${nodeWidth(node, false)}px`));
+  const lines = [...box[2].matchAll(/white-space:nowrap;line-height:(\d+)px/g)].map((m) => Number(m[1]));
+  assert.deepEqual(lines, [18, 18]);
+  const pads = [...box[1].match(/padding:([^;]*)/)![1].matchAll(/calc\((\d+)px/g)].map((m) => Number(m[1]));
+  assert.equal(pads[0] + lines[0] + lines[1] + pads[2], toSvgScene(fig2).scene.boxes[0].rect.h);
+});
+
+test('a box with a source shows it as a title', () => {
+  const html = render({
+    layout: {
+      children: [
+        { id: 'a', label: 'A', source: 'src/a.ts#login' },
+        { id: 'b', label: 'B' },
+      ],
+    },
+    edges: [],
+  });
+  assert.match(html, /title="src\/a\.ts#login"/);
+  assert.equal(html.match(/ title="src/g)?.length, 1);
 });

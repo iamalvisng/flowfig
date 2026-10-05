@@ -171,6 +171,11 @@ export const toBeat = (b: FigHop | FigHop[] | FigBeat): Beat => {
   };
 };
 
+export const edgeTip = (id: string, source: string | undefined, beats: Beat[]): string | undefined => {
+  const all = new Set(source ? [source] : []);
+  for (const b of beats) for (const h of b.hops) if (h.edge === id && h.source) all.add(h.source);
+  return all.size ? [...all].join('\n') : undefined;
+};
 // A React node can be an object, so test for the `text` key.
 export const isRows = (c: FigContent): c is FigRow[] =>
   Array.isArray(c) && c.every((r) => r != null && typeof r === 'object' && 'text' in r);
@@ -263,6 +268,7 @@ export function laneColumns(fig: FlowProps): Map<string, number> {
   return cols;
 }
 
+export const LABEL_LINE = 18;
 export const FRAME_SIDE = 18,
   NODE_MIN_W = 100,
   NODE_MAX_W = 190;
@@ -272,12 +278,40 @@ export const STUB = 12,
   STUB_ROOM = 30;
 
 /** The width of a box as the SVG draws it, before a diamond adds its 70 px. */
-export function nodeWidth(item: FigNode, carded: boolean): number {
+export function nodeWidth(item: FigNode, carded: boolean, cap = NODE_MAX_W): number {
   if (item.width != null) return item.width;
   if (carded) return CARD_WIDTH;
   const label = textWidth(str(item.label), 14) + 32;
   const sub = textWidth(str(item.sub), 12) + 32;
-  return Math.min(NODE_MAX_W, Math.max(NODE_MIN_W, label, sub));
+  return Math.min(item.shape === 'decision' ? NODE_MAX_W : cap, Math.max(NODE_MIN_W, label, sub));
+}
+
+export function labelLines(item: FigNode, w: number): string[] {
+  const label = str(item.label);
+  if (item.shape === 'decision' || textWidth(label, 14) <= w - 32 + 0.5) return [label];
+  const lines = wrap(label, w - 32, 14);
+  return lines.length === 2 && lines.every((l) => textWidth(l, 14) <= w - 32) ? lines : [label];
+}
+
+export function itemWidth(item: FigNode | FigGroup, carded: { has(id: string): boolean }, edges: FigEdge[], cap = NODE_MAX_W): number {
+  if (!isGroup(item)) return nodeWidth(item, carded.has(item.id), cap) + (item.shape === 'decision' ? 70 : 0);
+  const ws = item.children.map((c) => itemWidth(c, carded, edges, cap));
+  const inner = item.direction === 'column' ? Math.max(...ws) : ws.reduce((a, b) => a + b, 0) + groupGap(item, edges) * (ws.length - 1);
+  return inner + (item.label != null ? FRAME_SIDE * 2 : 0);
+}
+
+export function fitCap(fig: FlowProps, width: number, padding = 24): number {
+  if ((fig.lanes || fig.timeline) && isLanesLayout(fig.layout)) return NODE_MAX_W;
+  const carded = new Set((fig.steps ?? []).flatMap((s) => s.flow.flatMap((b) => Object.keys(toBeat(b).show ?? {}))));
+  const fits = (n: FigNode, cap: number) => {
+    const w = nodeWidth(n, carded.has(n.id), cap);
+    return Math.max(textWidth(str(n.sub), 12), ...labelLines(n, w).map((l) => textWidth(l, 14))) + 32 <= w + 0.5;
+  };
+  const keep = nodes(fig.layout).filter((n) => fits(n, NODE_MAX_W));
+  let cap = NODE_MAX_W;
+  while (cap > 110 && itemWidth(fig.layout, carded, fig.edges, cap) + padding * 2 > width && keep.every((n) => fits(n, cap - 20)))
+    cap -= 20;
+  return cap;
 }
 
 export const diamondRoom = (w: number, h: number, far: number) => w * Math.max(0, 1 - far / (h / 2)) - 8;
@@ -663,14 +697,20 @@ export const counts = (p: FlowProps) => {
 
 const idsIn = (c: FigNode | FigGroup): string[] => (isGroup(c) ? [...(c.id ? [c.id] : []), ...c.children.flatMap(idsIn)] : [c.id]);
 
-/** A row's default gap grows to hold its widest edge label, plus 8 px each side. */
 export function groupGap(g: FigGroup, edges: FigEdge[]): number {
-  if (g.gap != null) return g.gap;
-  if (g.direction === 'column') return 28;
   const side = new Map<string, number>();
   g.children.forEach((c, i) => idsIn(c).forEach((id) => side.set(id, i)));
-  const pills = edges
-    .filter((e) => e.label != null && side.has(e.from) && side.has(e.to) && side.get(e.from) !== side.get(e.to))
-    .map((e) => labelPillW(str(e.label)) + 16);
-  return Math.max(56, ...pills);
+  const spans = edges.filter(
+    (e) => e.label != null && side.has(e.from) && side.has(e.to) && side.get(e.from) !== side.get(e.to) && !(g.gap != null && e.around),
+  );
+  if (g.gap != null && !spans.length) return g.gap;
+  const need = Math.max(0, ...spans.map((e) => labelPillW(str(e.label)) + 16));
+  if (g.gap != null && g.direction !== 'column') return Math.max(g.gap, need - 16);
+  let auto: number;
+  if (g.direction === 'column') {
+    const ends = spans.map((e) => [side.get(e.from)!, side.get(e.to)!].sort((p, q) => p - q));
+    const most = Math.max(0, ...g.children.map((_, k) => ends.filter(([lo, hi]) => lo <= k && k < hi).length));
+    auto = most > 1 ? Math.min(most, 3) * 22 + 16 : 28;
+  } else auto = Math.max(56, need);
+  return Math.max(g.gap ?? 0, auto);
 }

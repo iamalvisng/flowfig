@@ -5,13 +5,30 @@ export type Pt = { x: number; y: number };
 /** A cross-lane edge as two stubs, their pills and their points. */
 export type Stub = { parts: [string, string]; pills: [Rect, Rect]; pts: [Pt[], Pt[]]; short?: true; tight: [boolean, boolean] };
 /** `elbow` holds the corners of an elbow path for `check`. */
-export type Routed = { id: string; d: string; mid: Pt; curve: [Pt, Pt, Pt, Pt]; stub?: Stub; elbow?: Pt[] };
+export type Routed = {
+  id: string;
+  d: string;
+  mid: Pt;
+  curve: [Pt, Pt, Pt, Pt];
+  stub?: Stub;
+  elbow?: Pt[];
+  around?: Around;
+  /** The px a detour and its label need outside the boxes on the `around` side. */
+  room?: number;
+  /** The px an elbow detour goes outside the boxes, for each side. */
+  bleed?: Partial<Record<Around, number>>;
+};
 /** A rect that a route keeps clear of. `box` marks a box. */
 export type Avoid = Rect & { box?: boolean };
+export const avoidOf = (boxes: Rect[], extra: Rect[], lanes: boolean): Avoid[] => [
+  ...extra,
+  ...boxes.map((r) => (lanes ? r : { ...r, box: true })),
+];
 
-type Around = 'above' | 'below';
+type Around = 'above' | 'below' | 'left' | 'right';
 type Pick = {
   id: string;
+  plain: [Side, Side];
   a: Rect;
   b: Rect;
   sa: Side;
@@ -19,6 +36,7 @@ type Pick = {
   from: string;
   to: string;
   around?: Around;
+  arc?: number;
   elbow?: boolean;
   stub?: number[];
   bands?: [Rect | undefined, Rect | undefined];
@@ -32,6 +50,51 @@ const bezier = ([p0, p1, p2, p3]: [Pt, Pt, Pt, Pt], t: number): Pt => {
   const u = 1 - t;
   const [a, b, c, d] = [u * u * u, 3 * u * u * t, 3 * u * t * t, t * t * t];
   return { x: a * p0.x + b * p1.x + c * p2.x + d * p3.x, y: a * p0.y + b * p1.y + c * p2.y + d * p3.y };
+};
+const same = (r: Rect, q: Rect) => r.x === q.x && r.y === q.y && r.w === q.w && r.h === q.h;
+const sideMid = (r: Rect, side: Side): Pt =>
+  side === 'l'
+    ? { x: r.x, y: cy(r) }
+    : side === 'r'
+      ? { x: r.x + r.w, y: cy(r) }
+      : side === 't'
+        ? { x: cx(r), y: r.y }
+        : { x: cx(r), y: r.y + r.h };
+const sideAt = (r: Rect, side: Side, f: number): Pt =>
+  side === 'l' || side === 'r'
+    ? { x: r.x + (side === 'r' ? r.w : 0), y: r.y + r.h * f }
+    : { x: r.x + r.w * f, y: r.y + (side === 'b' ? r.h : 0) };
+const bend = (s: Pt, e: Pt, sa: Side): [Pt, Pt, Pt, Pt] => {
+  const horiz = sa === 'l' || sa === 'r';
+  const k = (horiz ? Math.abs(e.x - s.x) : Math.abs(e.y - s.y)) / 2;
+  const sign = sa === 'r' || sa === 'b' ? 1 : -1;
+  const c1 = horiz ? { x: s.x + sign * k, y: s.y } : { x: s.x, y: s.y + sign * k };
+  const c2 = horiz ? { x: e.x - sign * k, y: e.y } : { x: e.x, y: e.y - sign * k };
+  return [s, c1, c2, e];
+};
+const arcLine = (s: Pt, e: Pt, around: Around, at: number): [Pt, Pt, Pt, Pt] =>
+  around === 'above' || around === 'below' ? [s, { x: s.x, y: at }, { x: e.x, y: at }, e] : [s, { x: at, y: s.y }, { x: at, y: e.y }, e];
+const ARC = 50;
+const ARC_STEP = 16;
+const ARC_STEPS = 24;
+const upright = (around: Around) => around === 'left' || around === 'right';
+const arcAt = (a: Rect, b: Rect, around: Around, past: Rect[], labelW = 0) => {
+  const rs = [a, b, ...past];
+  // A cubic arc reaches 0.75 of its control offset at t = 0.5.
+  const gap = upright(around) ? Math.max(ARC, (labelW / 2 + 12) / 0.75) : ARC;
+  if (around === 'above') return Math.min(...rs.map((r) => r.y)) - gap;
+  if (around === 'below') return Math.max(...rs.map((r) => r.y + r.h)) + gap;
+  if (around === 'left') return Math.min(...rs.map((r) => r.x)) - gap;
+  return Math.max(...rs.map((r) => r.x + r.w)) + gap;
+};
+const spanOf = (a: Rect, b: Rect, around: Around) => {
+  const [p, q] = upright(around) ? [cy(a), cy(b)] : [cx(a), cx(b)];
+  return [Math.min(p, q), Math.max(p, q)];
+};
+const SIDES: Record<Around, [Side, Side]> = { above: ['t', 't'], below: ['b', 'b'], left: ['l', 'l'], right: ['r', 'r'] };
+export const hit = (curve: [Pt, Pt, Pt, Pt], boxes: Rect[], m: number) => {
+  const pts = Array.from({ length: 33 }, (_, i) => bezier(curve, i / 32));
+  return boxes.filter((r) => pts.some((q) => q.x > r.x - m && q.x < r.x + r.w + m && q.y > r.y - m && q.y < r.y + r.h + m));
 };
 
 /** Routes edges between measured boxes as curved SVG paths. `elbow` draws right-angle paths; `stub` splits a cross-lane edge in two. */
@@ -52,63 +115,107 @@ export function route(
   avoid: Avoid[] = [],
   area?: Rect,
   lanes?: { bands: Rect[]; boxes: Rect[] },
+  pad = 24,
 ): Routed[] {
   const picks: Pick[] = [];
+  const arcs: { way: Around; lo: number; hi: number; at: number }[] = [];
   for (const e of edges) {
     const a = rects[e.from],
       b = rects[e.to];
     if (!a || !b) continue;
     const stacked = a.x < b.x + b.w && b.x < a.x + a.w;
-    const [sa, sb]: Side[] = e.sides
-      ? e.sides
-      : e.stub
-        ? ['r', 'l']
-        : e.around
-          ? e.around === 'above'
-            ? ['t', 't']
-            : ['b', 'b']
-          : stacked
-            ? a.y < b.y
-              ? ['b', 't']
-              : ['t', 'b']
-            : a.x < b.x
-              ? ['r', 'l']
-              : ['l', 'r'];
-    picks.push({ ...e, a, b, sa, sb });
+    const others = avoid.filter((r) => r.box && !same(r, a) && !same(r, b));
+    const plain: [Side, Side] = stacked ? (a.y < b.y ? ['b', 't'] : ['t', 'b']) : a.x < b.x ? ['r', 'l'] : ['l', 'r'];
+    const past = hit(bend(sideMid(a, plain[0]), sideMid(b, plain[1]), plain[0]), others, -2);
+    const misses = (way: Around, at: number) =>
+      [0.2, 0.5, 0.8].filter((f) => hit(arcLine(sideAt(a, SIDES[way][0], f), sideAt(b, SIDES[way][1], f), way, at), others, -2).length > 0)
+        .length;
+    const blocked = (way: Around, at: number) => misses(way, at) === 3;
+    let around = e.around;
+    let elbow = e.elbow;
+    let arc = around && arcAt(a, b, around, past, e.labelW);
+    const outward = (way: Around, k: number) => arcAt(a, b, way, past) + (way === 'above' || way === 'left' ? -1 : 1) * k * ARC_STEP;
+    if (around && blocked(around, arc!)) {
+      const fits = Array.from({ length: ARC_STEPS + 1 }, (_, k): [Around, number] => [around!, outward(around!, k)]);
+      arc = fits.find(([way, at]) => !blocked(way, at))?.[1] ?? arc;
+    }
+    if (!around && !e.sides && !e.stub && !e.elbow && past.length) {
+      const ways = stacked ? (['left', 'right'] as const) : (['above', 'below'] as const);
+      const tries: [Around, number][] = [];
+      for (const share of [false, true])
+        for (const way of ways) {
+          const [lo, hi] = spanOf(a, b, way);
+          const near = arcs.filter((q) => q.way === way && q.lo < hi && lo < q.hi).map((q) => q.at);
+          if (near.length && !share) continue;
+          const out = way === 'above' || way === 'left' ? -1 : 1;
+          tries.push([way, out * Math.max(out * arcAt(a, b, way, past, e.labelW), ...near.map((n) => out * n + ARC_STEP))]);
+        }
+      for (let k = 0; k <= ARC_STEPS; k++) for (const way of ways) tries.push([way, outward(way, k)]);
+      const best = tries.reduce<[number, [Around, number] | undefined]>(
+        (m, t) => {
+          const n = misses(...t);
+          return n < m[0] ? [n, t] : m;
+        },
+        [3, undefined],
+      )[1];
+      [around, arc] = best ?? [];
+      elbow = e.elbow || !around;
+    }
+    if (around) {
+      const [lo, hi] = spanOf(a, b, around);
+      arcs.push({ way: around, lo, hi, at: arc! });
+    }
+    const [sa, sb] = e.sides ?? (e.stub ? ['r', 'l'] : around ? SIDES[around] : plain);
+    picks.push({ ...e, plain, a, b, sa, sb, around, arc, elbow });
   }
 
-  const ends = new Map<string, { pick: Pick; start: boolean }[]>();
-  for (const pick of picks) {
-    for (const start of [true, false]) {
-      const key = (start ? pick.from : pick.to) + ':' + (start ? pick.sa : pick.sb);
-      if (!ends.has(key)) ends.set(key, []);
-      ends.get(key)!.push({ pick, start });
+  let anchor = new Map<string, { x: number; y: number }>();
+  const place = () => {
+    anchor = new Map();
+    const ends = new Map<string, { pick: Pick; start: boolean }[]>();
+    for (const pick of picks) {
+      for (const start of [true, false]) {
+        const key = (start ? pick.from : pick.to) + ':' + (start ? pick.sa : pick.sb);
+        if (!ends.has(key)) ends.set(key, []);
+        ends.get(key)!.push({ pick, start });
+      }
     }
+    for (const [key, list] of ends) {
+      const tip = tips.has(key.slice(0, key.lastIndexOf(':')));
+      const side = list[0].start ? list[0].pick.sa : list[0].pick.sb;
+      const horiz = side === 't' || side === 'b';
+      const other = (x: { pick: Pick; start: boolean }) => {
+        const r = x.start ? x.pick.b : x.pick.a;
+        return horiz ? cx(r) : cy(r);
+      };
+      list.sort((p, q) => other(p) - other(q));
+      list.forEach((x, i) => {
+        const r = x.start ? x.pick.a : x.pick.b;
+        const f = tip ? 0.5 : (i + 1) / (list.length + 1);
+        const pt =
+          side === 'l'
+            ? { x: r.x, y: r.y + r.h * f }
+            : side === 'r'
+              ? { x: r.x + r.w, y: r.y + r.h * f }
+              : side === 't'
+                ? { x: r.x + r.w * f, y: r.y }
+                : { x: r.x + r.w * f, y: r.y + r.h };
+        anchor.set(x.pick.id + (x.start ? ':s' : ':e'), pt);
+      });
+    }
+  };
+  place();
+  let moved = false;
+  for (const p of picks) {
+    const [s, e] = [anchor.get(p.id + ':s'), anchor.get(p.id + ':e')];
+    if (!p.around || !s || !e) continue;
+    const others = avoid.filter((r) => r.box && !same(r, p.a) && !same(r, p.b));
+    if (!hit(arcLine(s, e, p.around, p.arc!), others, -2).length) continue;
+    const [pa, pb] = p.plain;
+    const straight = hit(bend(sideMid(p.a, pa), sideMid(p.b, pb), pa), others, -2).length > 0;
+    [p.sa, p.sb, p.around, p.arc, p.elbow, moved] = [pa, pb, undefined, undefined, p.elbow || straight, true];
   }
-  const anchor = new Map<string, { x: number; y: number }>();
-  for (const [key, list] of ends) {
-    const tip = tips.has(key.slice(0, key.lastIndexOf(':')));
-    const side = list[0].start ? list[0].pick.sa : list[0].pick.sb;
-    const horiz = side === 't' || side === 'b';
-    const other = (x: { pick: Pick; start: boolean }) => {
-      const r = x.start ? x.pick.b : x.pick.a;
-      return horiz ? cx(r) : cy(r);
-    };
-    list.sort((p, q) => other(p) - other(q));
-    list.forEach((x, i) => {
-      const r = x.start ? x.pick.a : x.pick.b;
-      const f = tip ? 0.5 : (i + 1) / (list.length + 1);
-      const pt =
-        side === 'l'
-          ? { x: r.x, y: r.y + r.h * f }
-          : side === 'r'
-            ? { x: r.x + r.w, y: r.y + r.h * f }
-            : side === 't'
-              ? { x: r.x + r.w * f, y: r.y }
-              : { x: r.x + r.w * f, y: r.y + r.h };
-      anchor.set(x.pick.id + (x.start ? ':s' : ':e'), pt);
-    });
-  }
+  if (moved) place();
 
   const drawn = (id: string, curve: [Pt, Pt, Pt, Pt], mid: Pt): Routed => {
     const [s, c1, c2, e] = curve;
@@ -128,6 +235,15 @@ export function route(
     (!area || (r.x >= area.x && r.x + r.w <= area.x + area.w && r.y >= area.y && r.y + r.h <= area.y + area.h)) &&
     ![...avoid, ...pills].some((q) => r.x < q.x + q.w + 2 && q.x < r.x + r.w + 2 && r.y < q.y + q.h + 2 && q.y < r.y + r.h + 2) &&
     !paths.some((q) => q.x > r.x - 2 && q.x < r.x + r.w + 2 && q.y > r.y - 2 && q.y < r.y + r.h + 2);
+  const all = Object.values(rects);
+  const [x0, y0] = [Math.min(...all.map((r) => r.x)), Math.min(...all.map((r) => r.y))];
+  const [x1, y1] = [Math.max(...all.map((r) => r.x + r.w)), Math.max(...all.map((r) => r.y + r.h))];
+  const outside = (way: Around, { x, y }: Pt) => (way === 'above' ? y0 - y : way === 'below' ? y - y1 : way === 'left' ? x0 - x : x - x1);
+  const roomOf = (way: Around, at: number, curve: [Pt, Pt, Pt, Pt], labelW?: number) =>
+    Math.max(
+      ARC - 6,
+      lanes || !labelW ? outside(way, { x: at, y: at }) - 6 : outside(way, bezier(curve, 0.5)) + (upright(way) ? labelW / 2 : 9),
+    );
   const one = (p: Pick): Routed => {
     const s = anchor.get(p.id + ':s')!,
       e = anchor.get(p.id + ':e')!;
@@ -296,7 +412,7 @@ export function route(
           elbow: [s, { x: mx, y: s.y }, { x: mx, y: my }, { x: ex, y: my }, { x: ex, y: e.y }, e],
         };
       }
-      const own = (r: Rect) => [p.a, p.b].some((q) => q.x === r.x && q.y === r.y && q.w === r.w && q.h === r.h);
+      const own = (r: Rect) => [p.a, p.b].some((q) => same(q, r));
       const all = avoid.filter((r) => !own(r));
       const boxes = all.filter((r) => r.box);
       const vClear = (x: number, ya: number, yb: number, m = 2) =>
@@ -334,6 +450,12 @@ export function route(
             mid: { x: (x + ex) / 2, y },
             curve: [s, { x, y }, { x: ex, y }, e],
             elbow: [s, { x, y: s.y }, { x, y }, { x: ex, y }, { x: ex, y: e.y }, e],
+            bleed: {
+              left: Math.max(0, x0 - Math.min(x, ex)),
+              right: Math.max(0, Math.max(x, ex) - x1),
+              above: Math.max(0, y0 - y),
+              below: Math.max(0, y - y1),
+            },
           };
         }
       }
@@ -349,35 +471,117 @@ export function route(
       };
     }
     if (p.around) {
-      // ponytail: arcs 50 px past the box ends; a taller box between can be crossed.
-      const y = p.around === 'above' ? Math.min(p.a.y, p.b.y) - 50 : Math.max(p.a.y + p.a.h, p.b.y + p.b.h) + 50;
-      return drawn(p.id, [s, { x: s.x, y }, { x: e.x, y }, e], { x: (s.x + e.x) / 2, y: (s.y + 6 * y + e.y) / 8 });
+      const curve = arcLine(s, e, p.around, p.arc!);
+      return { ...drawn(p.id, curve, bezier(curve, 0.5)), around: p.around, room: roomOf(p.around, p.arc!, curve, p.labelW) };
     }
-    const horiz = p.sa === 'l' || p.sa === 'r';
-    const k = (horiz ? Math.abs(e.x - s.x) : Math.abs(e.y - s.y)) / 2;
-    const sign = p.sa === 'r' || p.sa === 'b' ? 1 : -1;
-    const c1 = horiz ? { x: s.x + sign * k, y: s.y } : { x: s.x, y: s.y + sign * k };
-    const c2 = horiz ? { x: e.x - sign * k, y: e.y } : { x: e.x, y: e.y - sign * k };
-    return drawn(p.id, [s, c1, c2, e], { x: (s.x + e.x) / 2, y: (s.y + e.y) / 2 });
+    return drawn(p.id, bend(s, e, p.sa), { x: (s.x + e.x) / 2, y: (s.y + e.y) / 2 });
   };
   const done = new Map<Pick, Routed>();
-  for (const p of picks) {
-    if (p.stub) continue;
-    const r = one(p);
-    done.set(p, r);
-    if (p.labelW && lanes) r.mid = labelInBand(r, p.labelW, lanes, pills);
-    if (p.labelW) pills.push({ x: r.mid.x - p.labelW / 2, y: r.mid.y - 9, w: p.labelW, h: 18 });
+  for (const p of picks) if (!p.stub) done.set(p, one(p));
+  const routed = [...done.values()];
+  const areaOf = (m: number) => {
+    const side = (way: Around) => Math.max(m, arcRoom(routed, way));
+    const [l, t] = [side('left'), side('above')];
+    return { x: x0 - l, y: y0 - t, w: x1 - x0 + l + side('right'), h: y1 - y0 + t + side('below') };
+  };
+  const [fig, drawnArea] = [areaOf(Math.min(pad, PLAYER_PAD)), areaOf(pad)];
+  const lineOf = (r: Routed) =>
+    r.elbow
+      ? r.elbow.slice(1).flatMap((q, k) => Array.from({ length: 17 }, (_, i) => lerp(r.elbow![k], q, i / 16)))
+      : Array.from({ length: 33 }, (_, i) => bezier(r.curve, i / 32));
+  const boxes = avoid.filter((q) => q.box);
+  const pillAt = (at: Pt, w: number) => ({ x: at.x - w / 2, y: at.y - 9, w, h: 18 });
+  const placeAll = (fresh: boolean) => {
+    const out: Rect[] = [];
+    const mids: Pt[] = [];
+    let bad = 0;
+    for (const [p, r] of done) {
+      if (!p.labelW) continue;
+      const at = lanes
+        ? labelInBand(r, p.labelW, lanes, out)
+        : fresh
+          ? labelAlong(r, p.labelW, boxes, out, fig, routed.filter((o) => o !== r).flatMap(lineOf))
+          : labelAlong(r, p.labelW, boxes, out);
+      const pill = pillAt(at, p.labelW);
+      if (!inside(pill, drawnArea) || [...boxes, ...out].some((q) => overlaps(pill, q, 1))) bad++;
+      out.push(pill);
+      mids.push(at);
+    }
+    return { out, mids, bad };
+  };
+  const fresh = placeAll(true);
+  const old = fresh.bad && !lanes ? placeAll(false) : fresh;
+  const use = old.bad < fresh.bad ? old : fresh;
+  pills.push(...use.out);
+  let k = 0;
+  for (const [p, r] of done) {
+    if (p.labelW) r.mid = use.mids[k++];
     track(Array.from({ length: 33 }, (_, i) => bezier(r.curve, i / 32)));
   }
   for (const p of picks) if (p.stub) done.set(p, one(p));
   return picks.map((p) => done.get(p)!);
 }
 
+export const arcRoom = (routed: Routed[], way: Around) =>
+  Math.max(0, ...routed.map((r) => (r.around === way ? r.room! : (r.bleed?.[way] ?? 0))));
+
+// The player pads its root by 4 px on a side with no detour.
+const PLAYER_PAD = 4;
+const inside = (r: Rect, q: Rect) => r.x >= q.x - 0.5 && r.x + r.w <= q.x + q.w + 0.5 && r.y >= q.y - 0.5 && r.y + r.h <= q.y + q.h + 0.5;
+const overlaps = (a: Rect, b: Rect, m: number) => a.x < b.x + b.w + m && b.x < a.x + a.w + m && a.y < b.y + b.h + m && b.y < a.y + a.h + m;
+
+const lerp = (a: Pt, b: Pt, t: number): Pt => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+
+export function labelAlong(r: Routed, w: number, boxes: Rect[], placed: Rect[], fig?: Rect, lines: Pt[] = []): Pt {
+  const [p0, p1, p2, p3] = r.curve;
+  const spots: Pt[] = [];
+  const line = r.elbow;
+  const lens = line?.slice(1).map((q, k) => Math.hypot(q.x - line[k].x, q.y - line[k].y));
+  const total = lens?.reduce((m, l) => m + l, 0) ?? 0;
+  for (const t of [0.5, 0.45, 0.55, 0.4, 0.6, 0.35, 0.65, 0.3, 0.7, 0.25, 0.75, 0.2, 0.8]) {
+    let q: Pt, dx: number, dy: number;
+    if (line && lens && total > 0) {
+      let k = 0;
+      let rest = t * total;
+      while (k < lens.length - 1 && rest > lens[k]) rest -= lens[k++];
+      const f = lens[k] ? rest / lens[k] : 0;
+      q = lerp(line[k], line[k + 1], f);
+      [dx, dy] = [line[k + 1].x - line[k].x, line[k + 1].y - line[k].y];
+    } else {
+      const u = 1 - t;
+      dx = 3 * (u * u * (p1.x - p0.x) + 2 * u * t * (p2.x - p1.x) + t * t * (p3.x - p2.x));
+      dy = 3 * (u * u * (p1.y - p0.y) + 2 * u * t * (p2.y - p1.y) + t * t * (p3.y - p2.y));
+      q = t === 0.5 ? r.mid : bezier(r.curve, t);
+    }
+    const len = Math.hypot(dx, dy) || 1;
+    for (const k of [0, 11, -11]) spots.push({ x: q.x - (dy / len) * k, y: q.y + (dx / len) * k });
+  }
+  const inFig = (at: Pt) => !fig || inside({ x: at.x - w / 2, y: at.y - 9, w, h: 18 }, fig);
+  const clamp = (at: Pt) =>
+    fig
+      ? {
+          x: Math.max(fig.x + w / 2, Math.min(at.x, fig.x + fig.w - w / 2)),
+          y: Math.max(fig.y + 9, Math.min(at.y, fig.y + fig.h - 9)),
+        }
+      : at;
+  const free = (at: Pt, strict: boolean) => {
+    const pill = { x: at.x - w / 2, y: at.y - 9, w, h: 18 };
+    return (
+      inFig(at) &&
+      !boxes.some((b) => overlaps(pill, b, 1)) &&
+      !placed.some((b) => overlaps(pill, b, 1)) &&
+      (!strict || !lines.some((q) => q.x > pill.x - 2 && q.x < pill.x + w + 2 && q.y > pill.y - 2 && q.y < pill.y + 20))
+    );
+  };
+  for (const strict of [true, false]) for (const at of spots) if (free(at, strict)) return at;
+  for (const at of spots.map(clamp)) if (free(at, false)) return at;
+  return fig ? labelAlong(r, w, boxes, placed) : r.mid;
+}
+
 function labelInBand(r: Routed, w: number, { bands, boxes }: { bands: Rect[]; boxes: Rect[] }, pills: Rect[]): Pt {
-  const hit = (a: Rect, b: Rect, m: number) => a.x < b.x + b.w + m && b.x < a.x + a.w + m && a.y < b.y + b.h + m && b.y < a.y + a.h + m;
   const ts = Array.from({ length: 65 }, (_, i) => i / 64).sort((a, b) => Math.abs(a - 0.5) - Math.abs(b - 0.5));
   const path = ts.map((t) => bezier(r.curve, t));
-  const clear = (pill: Rect) => !boxes.some((b) => hit(pill, b, 1)) && !pills.some((b) => hit(pill, b, 1));
+  const clear = (pill: Rect) => !boxes.some((b) => overlaps(pill, b, 1)) && !pills.some((b) => overlaps(pill, b, 1));
   const room = (x: number, b: Rect) => x - w / 2 >= b.x + LABEL_CLEAR && x + w / 2 <= b.x + b.w - LABEL_CLEAR;
   for (const q of path) {
     const pill = { x: q.x - w / 2, y: q.y - 9, w, h: 18 };

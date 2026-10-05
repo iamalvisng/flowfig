@@ -80,14 +80,14 @@ svg { --accent:#0074d9; --fg:#1c1e21; --muted:#606770; --bg:#ffffff; --surface:#
 <path id="p-m-usage" d="M 340.0638961038961 217.33333333333334 H 348.37558441558446 V 90 H 356.6872727272728" fill="none" stroke="var(--muted)" stroke-width="1.25" marker-end="url(#arrow)"/>
 <path id="p-m-ledger" d="M 340.0638961038961 226.66666666666666 H 348.37558441558446 V 222 H 356.6872727272728" fill="none" stroke="var(--muted)" stroke-width="1.25" marker-end="url(#arrow)"/>
 <path id="p-usage-page" d="M 572.7911688311689 90 H 700.7911688311689 V 204 H 639.5963636363637 V 318 H 647.5963636363637" fill="none" stroke="var(--muted)" stroke-width="1.25" marker-end="url(#arrow)"/>
-<rect x="124" y="76" width="157.9" height="28" rx="6" fill="var(--bg)" stroke="var(--border)" class="a0"/><text x="132" y="94.5" class="bar">Invoice redesign</text>
-<rect x="473.1" y="112" width="216.1" height="28" rx="6" fill="var(--bg)" stroke="var(--border)" class="a1"/><text x="481.1" y="130.5" class="bar">Self-serve plan change</text>
-<rect x="356.7" y="76" width="216.1" height="28" rx="6" fill="var(--bg)" stroke="var(--border)" class="a2"/><text x="364.7" y="94.5" class="bar">Usage-based pricing</text>
-<rect x="124" y="208" width="216.1" height="28" rx="6" fill="var(--bg)" stroke="var(--border)" class="a3"/><text x="132" y="226.5" class="bar">Metering pipeline</text>
-<rect x="356.7" y="208" width="274.3" height="28" rx="6" fill="var(--bg)" stroke="var(--border)" class="a4"/><text x="364.7" y="226.5" class="bar">Ledger migration</text>
-<polygon points="589.4,311 596.4,318 589.4,325 582.4,318" fill="color-mix(in srgb, #8b5cf6 8%, var(--bg))" stroke="#8b5cf6" class="a5"/><text x="602.4" y="322.5" class="bar">Beta</text>
-<rect x="647.6" y="304" width="41.6" height="28" rx="6" fill="var(--bg)" stroke="var(--border)" class="a6"/><text x="695.2" y="322.5" class="bar">Price page</text>
-<polygon points="714.1,347 721.1,354 714.1,361 707.1,354" fill="color-mix(in srgb, #8b5cf6 8%, var(--bg))" stroke="#8b5cf6" class="a7"/><text x="727.1" y="358.5" class="bar">GA</text>
+<g><title>docs/roadmap-example.md#invoice-redesign</title><rect x="124" y="76" width="157.9" height="28" rx="6" fill="var(--bg)" stroke="var(--border)" class="a0"/><text x="132" y="94.5" class="bar">Invoice redesign</text></g>
+<g><title>docs/roadmap-example.md#self-serve-plan-change</title><rect x="473.1" y="112" width="216.1" height="28" rx="6" fill="var(--bg)" stroke="var(--border)" class="a1"/><text x="481.1" y="130.5" class="bar">Self-serve plan change</text></g>
+<g><title>docs/roadmap-example.md#usage-based-pricing</title><rect x="356.7" y="76" width="216.1" height="28" rx="6" fill="var(--bg)" stroke="var(--border)" class="a2"/><text x="364.7" y="94.5" class="bar">Usage-based pricing</text></g>
+<g><title>docs/roadmap-example.md#metering-pipeline</title><rect x="124" y="208" width="216.1" height="28" rx="6" fill="var(--bg)" stroke="var(--border)" class="a3"/><text x="132" y="226.5" class="bar">Metering pipeline</text></g>
+<g><title>docs/roadmap-example.md#ledger-migration</title><rect x="356.7" y="208" width="274.3" height="28" rx="6" fill="var(--bg)" stroke="var(--border)" class="a4"/><text x="364.7" y="226.5" class="bar">Ledger migration</text></g>
+<g><title>docs/roadmap-example.md#beta-with-20-customers</title><polygon points="589.4,311 596.4,318 589.4,325 582.4,318" fill="color-mix(in srgb, #8b5cf6 8%, var(--bg))" stroke="#8b5cf6" class="a5"/><text x="602.4" y="322.5" class="bar">Beta</text></g>
+<g><title>docs/roadmap-example.md#pricing-page-update</title><rect x="647.6" y="304" width="41.6" height="28" rx="6" fill="var(--bg)" stroke="var(--border)" class="a6"/><text x="695.2" y="322.5" class="bar">Price page</text></g>
+<g><title>docs/roadmap-example.md#general-availability</title><polygon points="714.1,347 721.1,354 714.1,361 707.1,354" fill="color-mix(in srgb, #8b5cf6 8%, var(--bg))" stroke="#8b5cf6" class="a7"/><text x="727.1" y="358.5" class="bar">GA</text></g>
 
 
 <text x="237.3" y="46" text-anchor="end" class="today">today</text><g class="a8"><text x="717.1" y="46" opacity="0" class="today a9">5 Oct</text><text x="717.1" y="46" opacity="0" class="today a10">2 Nov</text><text x="717.1" y="46" opacity="0" class="today a11">16 Nov</text><text x="717.1" y="46" opacity="0" class="today a12">30 Nov</text><text x="717.1" y="46" opacity="0" class="today a13">7 Dec</text><text x="717.1" y="46" opacity="0" class="today a14">15 Dec</text></g>

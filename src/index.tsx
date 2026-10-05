@@ -1,6 +1,6 @@
 'use client';
 import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { route, type Avoid, type Pt, type Rect, type Routed, type Side } from './geometry.ts';
+import { arcRoom, avoidOf, route, type Pt, type Rect, type Routed, type Side } from './geometry.ts';
 import { foldedLabel, groupBox, layoutRail, railState, RAIL } from './rail.ts';
 import { textWidth } from './text.ts';
 import { checkScene, checkSpec, checkTheme } from './check.ts';
@@ -10,7 +10,6 @@ import {
   BASE_RATE,
   CARD_LINE,
   CARD_PAD,
-  CARD_WIDTH,
   EDGE_OFF,
   EDGE_ON,
   LIGHT,
@@ -45,6 +44,9 @@ import {
   diamondRoom,
   tightCopies,
   nodeWidth,
+  labelLines,
+  fitCap,
+  LABEL_LINE,
   beatMs,
   STEP_HOLD_MS,
   playheadItem,
@@ -55,6 +57,7 @@ import {
   type FigNode,
   type FigTheme,
   type FlowProps,
+  edgeTip,
 } from './model.ts';
 
 export type * from './model.ts';
@@ -208,7 +211,9 @@ export function Flow({
     [layout, tl, edges, timeline, today],
   );
   const step = active == null ? null : steps[active];
+  const allBeats = useMemo(() => steps.flatMap((s) => s.flow.map(toBeat)), [steps]);
   const beats = useMemo(() => (step?.flow ?? []).map(toBeat), [step]);
+  const cap = useMemo(() => fitCap({ layout, edges, steps, lanes, timeline }, 830), [layout, edges, steps, lanes, timeline]);
   const carded = useMemo(() => {
     const all = new Map<string, FigContent[]>();
     for (const b of steps.flatMap((s) => s.flow.map(toBeat)))
@@ -276,20 +281,22 @@ export function Flow({
           h: r.height / k,
         };
       });
-      const avoid: Avoid[] = [];
+      const extra: Rect[] = [];
       el.querySelectorAll<HTMLElement>('[data-fig-outside]').forEach((n) => {
         const r = n.getBoundingClientRect();
-        avoid.push({ x: (r.left - base.left) / k, y: (r.top - base.top) / k, w: r.width / k, h: r.height / k });
+        extra.push({ x: (r.left - base.left) / k, y: (r.top - base.top) / k, w: r.width / k, h: r.height / k });
       });
-      if (tl) for (const n of nodes(layout)) if (rects[n.id]) avoid.push({ ...rects[n.id], box: true });
       const stubs = lanePlan?.stubs ?? new Map<string, string[]>();
-      if (stubs.size) {
-        for (const n of nodes(layout)) if (rects[n.id]) avoid.push(rects[n.id]);
+      if (stubs.size)
         el.querySelectorAll<HTMLElement>('[data-fig-gutter]').forEach((n) => {
           const r = n.getBoundingClientRect();
-          avoid.push({ x: (r.left - base.left) / k, y: (r.top - base.top) / k, w: r.width / k, h: r.height / k });
+          extra.push({ x: (r.left - base.left) / k, y: (r.top - base.top) / k, w: r.width / k, h: r.height / k });
         });
-      }
+      const avoid = avoidOf(
+        nodes(layout).flatMap((n) => (rects[n.id] ? [rects[n.id]] : [])),
+        extra,
+        stubs.size > 0,
+      );
       const bands: Record<string, Rect> = {};
       el.querySelectorAll<HTMLElement>('[data-fig-copy]').forEach((n) => {
         const r = n.getBoundingClientRect();
@@ -327,7 +334,7 @@ export function Flow({
             stub: stubs.get(ids[i])!.map(labelPillW),
             bands: [bandOf(ids[i], e.from, 0), bandOf(ids[i], e.to, 1)] as [Rect | undefined, Rect | undefined],
           }),
-          ...((stubs.size || lanePlan) && e.label != null && { labelW: labelPillW(str(e.label)) }),
+          ...(!tl && e.label != null && { labelW: labelPillW(str(e.label)) }),
         })),
         rects,
         tips,
@@ -414,7 +421,17 @@ export function Flow({
           const e = edges[ids.indexOf(r.id)];
           if (r.stub)
             return r.stub.pts.map((pts, j) => ({ id: r.id, from: e.from, to: e.to, curve: r.curve, pts, label: labels[`${r.id}:${j}`] }));
-          return [{ id: r.id, from: e.from, to: e.to, curve: r.curve, label: labels[r.id], ...(tl && { behind: true as const }) }];
+          return [
+            {
+              id: r.id,
+              from: e.from,
+              to: e.to,
+              curve: r.curve,
+              label: labels[r.id],
+              ...(tl && { behind: true as const }),
+              ...(r.elbow && { elbow: r.elbow }),
+            },
+          ];
         }),
         ...(rail?.rows ?? []).flatMap((row) => {
           const r = row.kind === 'message' ? labels[`rail:${row.n}`] : undefined;
@@ -595,6 +612,7 @@ export function Flow({
       <div
         key={n.id}
         data-fig={n.id}
+        title={n.source}
         data-diamond={it.milestone || undefined}
         onMouseEnter={() => setHover(n.id)}
         onMouseLeave={() => setHover(null)}
@@ -930,11 +948,14 @@ export function Flow({
     const store = item.shape === 'store';
     const card = carded.has(item.id);
     const dl = diamond && !card ? diamondLines(item, nodeWidth(item, false) + 70) : null;
+    const w = diamond || card || item.width != null || str(item.label) ? nodeWidth(item, card, cap) + (diamond ? 70 : 0) : undefined;
+    const lines = w != null && !diamond && str(item.label) ? labelLines(item, w) : null;
     const bt = item.tone && TONES[item.tone];
     return (
       <div
         key={item.id}
         data-fig={item.id}
+        title={item.source}
         data-diamond={diamond || undefined}
         onMouseEnter={() => setHover(item.id)}
         onMouseLeave={() => setHover(null)}
@@ -942,8 +963,8 @@ export function Flow({
           position: 'relative',
           isolation: 'isolate',
           minWidth: 100,
-          maxWidth: card || diamond ? undefined : 190,
-          width: diamond ? nodeWidth(item, card) + 70 : (item.width ?? (card ? CARD_WIDTH : undefined)),
+          maxWidth: w == null ? cap : undefined,
+          width: w,
           minHeight: dl ? Math.max(dl.h, (minHeight(item.id) ?? 0) + 24) : minHeight(item.id),
           boxSizing: 'border-box',
           display: 'flex',
@@ -1026,7 +1047,15 @@ export function Flow({
             }}
           />
         )}
-        <div>{item.label}</div>
+        {lines ? (
+          lines.map((l, i) => (
+            <div key={i} style={{ whiteSpace: 'nowrap', lineHeight: `${LABEL_LINE}px` }}>
+              {l}
+            </div>
+          ))
+        ) : (
+          <div style={{ lineHeight: `${LABEL_LINE}px` }}>{item.label}</div>
+        )}
         {dl
           ? dl.subs.map((l, i) => (
               <div key={i} style={{ fontSize: 12, fontWeight: 400, color: v('muted'), lineHeight: '15px', whiteSpace: 'nowrap' }}>
@@ -1151,13 +1180,10 @@ export function Flow({
                   margin: '0 auto',
                   transform: fit.scale < 1 ? `scale(${fit.scale})` : undefined,
                   transformOrigin: 'top left',
-                  padding: 4,
-                  paddingTop: edges.some((e, i) => e.around === 'above' && !lanePlan?.stubs.has(ids[i])) ? 44 : 4,
-                  paddingBottom: edges.some(
-                    (e, i) => (e.around === 'below' || (!e.around && lanePlan?.around.has(ids[i]))) && !lanePlan?.stubs.has(ids[i]),
-                  )
-                    ? 44
-                    : 4,
+                  paddingTop: arcRoom(routed, 'above') || 4,
+                  paddingBottom: arcRoom(routed, 'below') || 4,
+                  paddingLeft: arcRoom(routed, 'left') || 4,
+                  paddingRight: arcRoom(routed, 'right') || 4,
                 }}
               >
                 {renderItem(layout, 0)}
@@ -1192,6 +1218,7 @@ export function Flow({
                     const on = litEdges.has(r.id);
                     const tone = hopTone(r.id);
                     const hidden = !on && edges[ids.indexOf(r.id)].quiet;
+                    const tip = edgeTip(r.id, edges[ids.indexOf(r.id)].source, allBeats);
                     const look = (d: string, key: string, guides = false) => (
                       <path
                         key={key}
@@ -1208,8 +1235,10 @@ export function Flow({
                         strokeWidth={on ? EDGE_ON : EDGE_OFF}
                         strokeOpacity={hidden ? 0 : focus && !on ? 0.35 : 1}
                         markerEnd={hidden ? undefined : `url(#fig-arrow-${on ? 'on' : 'off'})`}
-                        style={{ transition: 'stroke .25s, stroke-opacity .25s' }}
-                      />
+                        style={{ transition: 'stroke .25s, stroke-opacity .25s', pointerEvents: tip ? 'stroke' : undefined }}
+                      >
+                        {tip && <title>{tip}</title>}
+                      </path>
                     );
                     const guide = (
                       <path
@@ -1383,6 +1412,7 @@ export function Flow({
               const ly = y + RAIL.row / 2;
               const tone = state === 'now' && row.tone ? TONES[row.tone] : undefined;
               const g = row.group != null ? rail.groups[row.group] : null;
+              const tip = edgeTip(row.edge, edges[ids.indexOf(row.edge)].source, allBeats);
               return (
                 <g
                   key={`m${i}`}
@@ -1394,6 +1424,7 @@ export function Flow({
                   onMouseEnter={() => setHoverEdge(row.edge)}
                   onMouseLeave={() => setHoverEdge(null)}
                 >
+                  {tip && <title>{tip}</title>}
                   {g && g.rows[0] === i && (
                     <rect
                       x={groupBox(rail, g).x}

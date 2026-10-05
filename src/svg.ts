@@ -1,5 +1,5 @@
 // Wrapping is approximate: text is measured by character class, not by a browser.
-import { route, type Pt, type Rect, type Side } from './geometry.ts';
+import { arcRoom, avoidOf, route, type Pt, type Rect, type Side } from './geometry.ts';
 import { foldedLabel, groupBox, layoutRail, railState, RAIL, type Rail } from './rail.ts';
 import { textWidth, wrap } from './text.ts';
 import { checkRendered, planFor, type CheckOptions } from './check.ts';
@@ -39,7 +39,10 @@ import {
   laneEnd,
   tightCopies,
   type LanePlan,
-  nodeWidth,
+  LABEL_LINE,
+  itemWidth,
+  labelLines,
+  fitCap,
   diamondLines,
   diamondRoom,
   isLanesLayout,
@@ -65,6 +68,7 @@ import {
   type FigTheme,
   type FigTone,
   type FlowProps,
+  edgeTip,
 } from './model.ts';
 
 export { LIGHT, DARK } from './model.ts';
@@ -72,8 +76,7 @@ export { LIGHT, DARK } from './model.ts';
 const LINE = CARD_LINE,
   CARD_SIDE = 8,
   ROW_GAP = 4;
-const LABEL_LINE = 18,
-  SUB_LINE = 15;
+const SUB_LINE = 15;
 const FRAME_TOP = 37,
   FRAME_BOTTOM = 18;
 
@@ -121,24 +124,24 @@ type Sizes = {
   fig: FlowProps;
   plan: LanePlan | null;
   tall: Set<string>;
+  cap: number;
 };
 
 function size(item: FigNode | FigGroup, s: Sizes): { w: number; h: number } {
   if (!isGroup(item)) {
     const contents = s.cards.get(item.id);
-    const w = nodeWidth(item, contents != null) + (item.shape === 'decision' ? 70 : 0);
+    const w = itemWidth(item, s.cards, s.fig.edges, s.cap);
     const top = item.shape === 'store' ? 24 : 10;
     const card = contents ? 8 + s.cardH.get(item.id)! : 0;
-    const h = Math.max(top + LABEL_LINE + (item.sub ? SUB_LINE : 0) + card + 10, s.minH(item.id));
+    const label = labelLines(item, w).length * LABEL_LINE;
+    const h = Math.max(top + label + (item.sub ? SUB_LINE : 0) + card + 10, s.minH(item.id));
     if (item.shape !== 'decision') return { w, h };
     return { w, h: contents ? h + 24 : Math.max(diamondLines(item, w).h, s.minH(item.id) + 24) };
   }
   const kids = item.children.map((c) => size(c, s));
-  const gap = s.gap(item);
-  const along = kids.reduce((n, k) => n + (item.direction === 'column' ? k.h : k.w), 0) + gap * (kids.length - 1);
-  const across = Math.max(...kids.map((k) => (item.direction === 'column' ? k.w : k.h)));
-  const inner = item.direction === 'column' ? { w: across, h: along } : { w: along, h: across };
-  return item.label != null ? { w: inner.w + FRAME_SIDE * 2, h: inner.h + FRAME_TOP + FRAME_BOTTOM } : inner;
+  const h =
+    item.direction === 'column' ? kids.reduce((n, k) => n + k.h, 0) + s.gap(item) * (kids.length - 1) : Math.max(...kids.map((k) => k.h));
+  return { w: itemWidth(item, s.cards, s.fig.edges, s.cap), h: h + (item.label != null ? FRAME_TOP + FRAME_BOTTOM : 0) };
 }
 
 function placeLanes(fig: FlowProps, x: number, y: number, s: Sizes, out: Placed[]): void {
@@ -288,7 +291,16 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
   const cardH = new Map<string, number>();
   const lanes = !tl && fig.lanes && isLanesLayout(fig.layout);
   const plan = lanes ? planFor(fig, opts) : null;
-  const sizes: Sizes = { cards, cardH, minH, gap: (g) => groupGap(g, fig.edges), fig, plan, tall: new Set(plan?.tall) };
+  const sizes: Sizes = {
+    cards,
+    cardH,
+    minH,
+    gap: (g) => groupGap(g, fig.edges),
+    fig,
+    plan,
+    tall: new Set(plan?.tall),
+    cap: fitCap(fig, opts.width ?? 830, pad),
+  };
   for (const [id, contents] of cards) {
     const width = CARD_WIDTH;
     const widths = [width];
@@ -328,18 +340,20 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
         around: e.around ?? (plan?.around.has(ids[i]) ? ('below' as const) : undefined),
         ...(tl && { sides: ['r', 'l'] as [Side, Side], elbow: true }),
         ...(stubs.has(ids[i]) && { stub: stubs.get(ids[i])!.map(labelPillW), bands: [bandOf(ids[i], e.from, 0), bandOf(ids[i], e.to, 1)] }),
-        ...((stubs.size || lanes) && e.label != null && { labelW: labelPillW(str(e.label)) }),
+        ...(!tl && e.label != null && { labelW: labelPillW(str(e.label)) }),
       })),
       rects,
       tips,
-      stubs.size
-        ? placed.flatMap((p) => (!isGroup(p.item) ? [p] : p.lane ? [{ x: p.x, y: p.y, w: gutter, h: p.h }] : []))
-        : [
-            ...placed.filter((p) => p.tl && !p.tl.labelInside).map((p) => outsideLabelRect(p, str(p.item.label))),
-            ...placed.filter((p) => p.tl).map((p) => ({ x: p.x, y: p.y, w: p.w, h: p.h, box: true })),
-          ],
+      avoidOf(
+        placed.filter((p) => !isGroup(p.item)),
+        stubs.size
+          ? placed.filter((p) => p.lane).map((p) => ({ x: p.x, y: p.y, w: gutter, h: p.h }))
+          : placed.filter((p) => p.tl && !p.tl.labelInside).map((p) => outsideLabelRect(p, str(p.item.label))),
+        stubs.size > 0,
+      ),
       stubs.size ? { x: placed[0].x + gutter, y: placed[0].y, w: placed[0].w - gutter, h: placed[0].h } : undefined,
       lanes ? { bands: placed.filter((p) => p.lane), boxes: placed.filter((p) => !isGroup(p.item)) } : undefined,
+      pad,
     );
   };
   let routed = go();
@@ -367,7 +381,11 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
     const dl = dia ? diamondLines(p.item as FigNode, p.w) : null;
     const room = (far: number) => diamondRoom(p.w, p.h, far);
     const flat = (p.item.shape === 'decision' ? p.w - 70 : p.w) - 16;
-    const texts: SceneBox['texts'] = [{ text: str(p.item.label), fontSize: 14, room: dl ? room(dl.label.far) : flat }];
+    const texts: SceneBox['texts'] = labelLines(p.item as FigNode, p.w).map((text) => ({
+      text,
+      fontSize: 14,
+      room: dl ? room(dl.label.far) : flat,
+    }));
     if (dl) for (const l of dl.subs) texts.push({ text: l.text, fontSize: 12, room: room(l.far) });
     else if (p.item.sub) texts.push({ text: str(p.item.sub), fontSize: 12, room: flat });
     if (p.item.sub) fonts.push(12);
@@ -551,6 +569,7 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
         `/><text x="${n2(p.x + FRAME_SIDE)}" y="${n2(p.lane ? p.y + p.h / 2 + 4 : p.y + 20)}" class="frame">${esc(str(item.label).toUpperCase())}</text>`
       );
     }
+    const tip = (inner: string) => (item.source ? `<g><title>${esc(item.source)}</title>${inner}</g>` : inner);
     const bt = item.tone && TONES[item.tone];
     const stroke = cls(boxAnim(item.id, true, bt));
     if (p.tl) {
@@ -564,7 +583,7 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
         ? `<polygon points="${n2(cx)},${n2(p.y)} ${n2(p.x + p.w)},${n2(cy)} ${n2(cx)},${n2(p.y + p.h)} ${n2(p.x)},${n2(cy)}" fill="${fill0}" stroke="${stroke0}"${stroke}/>`
         : `<rect x="${n2(p.x)}" y="${n2(p.y)}" width="${n2(p.w)}" height="${n2(p.h)}" rx="6" fill="${fill0}" stroke="${stroke0}"${stroke}/>`;
       const tx = inside ? p.x + 8 : p.x + p.w + 6;
-      return shape + `<text x="${n2(tx)}" y="${n2(cy + 4.5)}" class="bar">${esc(label)}</text>`;
+      return tip(shape + `<text x="${n2(tx)}" y="${n2(cy + 4.5)}" class="bar">${esc(label)}</text>`);
     }
     const rim = item.shape === 'store' ? cls(boxAnim(item.id, false, bt)) : '';
     const fill0 = bt ? toneTint(bt, 'var(--bg)') : 'var(--bg)';
@@ -582,11 +601,14 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
           ? `<path d="M${n2(p.x)} ${n2(p.y + 12)} a ${n2(p.w / 2)} 12 0 0 1 ${n2(p.w)} 0 v ${n2(p.h - 24)} a ${n2(p.w / 2)} 12 0 0 1 ${n2(-p.w)} 0 z" fill="${fill0}" stroke="${stroke0}"${stroke}/>` +
             `<path d="M${n2(p.x)} ${n2(p.y + 12)} a ${n2(p.w / 2)} 12 0 0 0 ${n2(p.w)} 0" fill="none" stroke="${stroke0}"${rim}/>`
           : `<rect x="${n2(p.x)}" y="${n2(p.y)}" width="${n2(p.w)}" height="${n2(p.h)}" rx="10" fill="${fill0}" stroke="${stroke0}"${stroke}/>`;
-    const label = `<text x="${n2(cx)}" y="${n2(labelY)}" class="label">${esc(str(item.label))}</text>`;
+    const lines = labelLines(item, p.w);
+    const extra = (lines.length - 1) * LABEL_LINE;
+    const firstY = item.shape === 'store' || contents ? labelY : labelY - extra / 2;
+    const label = lines.map((l, i) => `<text x="${n2(cx)}" y="${n2(firstY + i * LABEL_LINE)}" class="label">${esc(l)}</text>`).join('');
     const sub = dl
       ? dl.subs.map((l) => `<text x="${n2(cx)}" y="${n2(p.y + p.h / 2 + l.dy)}" class="sub">${esc(l.text)}</text>`).join('')
       : item.sub
-        ? `<text x="${n2(cx)}" y="${n2(labelY + SUB_LINE)}" class="sub">${esc(str(item.sub))}</text>`
+        ? `<text x="${n2(cx)}" y="${n2(firstY + extra + SUB_LINE)}" class="sub">${esc(str(item.sub))}</text>`
         : '';
     const dot = bt ?? 'var(--accent)';
     const my = n2(p.y + p.h / 2);
@@ -596,7 +618,7 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
         : item.mark === 'end'
           ? `<circle cx="${n2(p.x + p.w + 12)}" cy="${my}" r="6.25" fill="none" stroke="${dot}" stroke-width="1.5"/><circle cx="${n2(p.x + p.w + 12)}" cy="${my}" r="4" fill="${dot}"/>`
           : '';
-    return shape + label + sub + mark + (contents ? card(p as Rect & { item: FigNode }, cardTop, contents) : '');
+    return tip(shape + label + sub + mark + (contents ? card(p as Rect & { item: FigNode }, cardTop, contents) : ''));
   });
 
   function card(p: Rect & { item: FigNode }, top: number, contents: FigContent[]): string {
@@ -677,11 +699,13 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
           )
         : anim(on, `stroke: var(--accent); stroke-width: ${EDGE_ON}`, off, 'e'),
     );
-    const path = r.stub
+    const tip = edgeTip(r.id, e.source, beats.flat());
+    const path0 = r.stub
       ? r.stub.parts
           .map((d) => `<path d="${d}" fill="none" stroke="var(--muted)" stroke-width="${EDGE_OFF}" marker-end="url(#arrow)"${lit}/>`)
           .join('') + `<path id="p-${esc(r.id)}" d="${r.d}" fill="none" stroke="none"/>`
       : `<path id="p-${esc(r.id)}" d="${r.d}" fill="none" stroke="var(--muted)" stroke-width="${EDGE_OFF}" marker-end="url(#arrow)"${lit}/>`;
+    const path = tip ? `<g><title>${esc(tip)}</title>${path0}</g>` : path0;
     const pill = (x: number, y: number, lw: number, text: string) =>
       `<rect x="${n2(x - lw / 2)}" y="${n2(y - 9)}" width="${n2(lw)}" height="18" rx="9" fill="var(--bg)" stroke="var(--border)"` +
       cls(
@@ -818,18 +842,18 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
   }
 
   const bounds = placed[0];
-  const arcs = fig.edges.some((e, i) => (e.around || plan?.around.has(ids[i])) && !stubs.has(ids[i]));
+  const [arcT, arcB, arcL, arcR] = (['above', 'below', 'left', 'right'] as const).map((w) => arcRoom(routed, w));
   const capLines = [...new Set(captions)].flatMap((c) => wrap(c, Math.max(560, bounds.w), 13.5).length);
-  const mapW = Math.max(bounds.w + pad * 2, 560);
+  const mapW = Math.max(bounds.w + pad * 2 + arcL + arcR, 560);
   const rail: Rail | null = fig.rail ? layoutRail(fig, fig.rail === 'only' ? 560 : mapW) : null;
   const only = fig.rail === 'only' && rail != null;
   const capTop = rail ? 20 : 26;
   const capH = steps.length ? capTop + 4 + Math.max(0, ...capLines) * 20 : 0;
   const W = only ? Math.max(560, rail.width) : Math.max(mapW, rail?.width ?? 0);
-  const mapH = only ? 0 : bounds.h + pad * 2 + (arcs ? 44 : 0);
+  const mapH = only ? 0 : bounds.h + pad * 2 + arcT + arcB;
   const top = only ? pad : mapH + RAIL.gap;
   const H = only ? pad + rail.height + capH : mapH + (rail ? RAIL.gap + rail.height : 0) + capH;
-  const shift = (W - (bounds.w + pad * 2)) / 2;
+  const shift = (W - (bounds.w + pad * 2 + arcL + arcR)) / 2 + arcL;
   const railX = rail ? (W - rail.width) / 2 : 0;
 
   const labels =
@@ -924,8 +948,9 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
             ? `<rect x="${n2(row.pill.x)}" y="${n2(ly - 9)}" width="${n2(row.pill.w)}" height="18" rx="9" fill="var(--bg)" stroke="var(--border)"${cls(anim(now, `fill: ${row.tone ? toneFill(col) : col}; stroke: ${col}`, 'fill: var(--bg); stroke: var(--border)', row.tone ? 'l' + col : 'l'))}/>` +
               `<text x="${n2(row.pill.x + row.pill.w / 2)}" y="${n2(ly + 4)}"${cls('edgelabel', anim(now, `fill: ${ON_ACCENT}`, 'fill: var(--muted)', 'x'))}>${esc(row.text)}</text>`
             : '';
+          const tip = edgeTip(row.edge, fig.edges[ids.indexOf(row.edge)].source, beats.flat());
           parts.push(
-            `<g${cls('railrow', moveRow(i))}><g${cls(anim(next, 'opacity: .45', 'opacity: 1', 'r'))}>` +
+            `<g${cls('railrow', moveRow(i))}>${tip ? `<title>${esc(tip)}</title>` : ''}<g${cls(anim(next, 'opacity: .45', 'opacity: 1', 'r'))}>` +
               `<path d="M ${n2(x1)} ${n2(ly)} H ${n2(x2)}" fill="none" stroke="var(--muted)" stroke-width="${EDGE_OFF}"${row.async ? ' stroke-dasharray="4 3"' : ''} marker-end="url(#arrow)"${cls(lit)}/>` +
               tag +
               pill +
@@ -966,7 +991,7 @@ ${css.join('\n')}
 ${
   only
     ? ''
-    : `<g transform="translate(${n2(shift)} ${arcs ? 44 : 0})">
+    : `<g transform="translate(${n2(shift)} ${arcT})">
 ${axisSvg}
 ${tl ? boxes.filter((b, i) => b && isGroup(placed[i].item)).join('\n') : ''}${lineSvg && `\n${lineSvg}`}
 ${tl ? edgeSvg.join('\n') : ''}
@@ -984,6 +1009,7 @@ ${said.join('\n')}
   if (rail) fonts.push(12, 13);
   const scene: Scene = {
     width: n2(W),
+    ...(!only && { area: { x: -shift, y: -arcT, w: W, h: mapH } }),
     boxes: only ? [] : sceneBoxes,
     edges: [
       ...(only ? [] : routed).flatMap((r): SceneEdge[] => {
@@ -996,14 +1022,15 @@ ${said.join('\n')}
             to: e.to,
             curve: r.curve,
             label: labelRects[r.id],
-            ...(tl && { behind: true as const, elbow: r.elbow }),
+            ...(tl && { behind: true as const }),
+            ...(r.elbow && { elbow: r.elbow }),
           },
         ];
       }),
       ...(rail?.rows ?? []).flatMap((row, i) => {
         if (row.kind !== 'message') return [];
         const dx = only ? railX : railX - shift,
-          dy = only ? top : top - (arcs ? 44 : 0);
+          dy = only ? top : top - arcT;
         const y = dy + railState(rail!, row.step)[i].y + RAIL.row / 2;
         const [x1, x2] = [dx + rail!.columns[row.from].x, dx + rail!.columns[row.to].x];
         const p = { x: x1, y },

@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
-import { counts, type FlowProps } from './model.ts';
+import { counts, toBeat, type FlowProps } from './model.ts';
+import { coverageLine, owners, unsureLines, verifyReport } from './verify.ts';
 import { toSvg, type Finding, type SvgOptions } from './svg.ts';
 
 const SPEC_OPEN = '<metadata id="figure-spec"><![CDATA[';
@@ -55,4 +56,28 @@ export function reportLines(props: FlowProps, findings: Finding[], withCounts = 
     `figure: ${n(c.boxes, 'box').replace('boxs', 'boxes')}, ${n(c.groups, 'group')}, ${n(c.edges, 'edge')}, ${n(c.steps, 'step')}, ${n(c.messages, 'message')}`,
   );
   return out;
+}
+
+const text = (x: unknown) => (typeof x === 'string' ? x : '');
+
+export function summaryLines(props: FlowProps): string[] {
+  const edges = props.edges.map((e) => {
+    const label = text(e.label);
+    return `${e.from} -> ${e.to}${label ? `: ${label}` : ''}`;
+  });
+  const steps = (props.steps ?? []).map((s) => {
+    const hops = s.flow.reduce((k, b) => k + toBeat(b).hops.length, 0);
+    return `step "${text(s.label)}": ${hops} ${hops === 1 ? 'hop' : 'hops'}`;
+  });
+  return [...edges, ...steps];
+}
+
+export function verifyLines(props: FlowProps, figure: string, root = process.cwd()): string[] {
+  if (!owners(props).some(([, source, via]) => source != null || via != null)) return [];
+  const { findings, coverage } = verifyReport(props, { root });
+  return [
+    ...findings.map((f) => `${f.severity.padEnd(8)} ${f.rule.padEnd(18)} ${figure}: ${f.message}`),
+    coverageLine(figure, coverage),
+    ...unsureLines(coverage),
+  ];
 }

@@ -65,7 +65,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - uses: iamalvisng/flowfig@v0.8.0
+      - uses: iamalvisng/flowfig@v0.8.1
         with:
           figures: 'docs/**/*.svg' # default **/*.svg
 ```
@@ -117,7 +117,7 @@ the run.
 
 1. **The agent writes JSON, not pictures.** The agent reads the code and writes a spec of the parts, the calls and their
    order. flowfig does the layout.
-2. **flowfig checks the spec.** `flowfig check` has 22 rules. It finds ids that point nowhere, text wider than its box,
+2. **flowfig checks the spec.** `flowfig check` has 23 rules. It finds ids that point nowhere, text wider than its box,
    edges through boxes, overlapping labels and low contrast. A render runs the same check and writes nothing on an error.
    The agent reads the faults and fixes the spec.
 3. **The output is one animated SVG with no script.** The SVG plays in a GitHub README, PR or issue. It follows the light
@@ -167,7 +167,7 @@ The options are in [Open and share a figure](#open-and-share-a-figure).
 | ------------------------------ | --------------------------------- | ------------------------------------ | ---------------- |
 | Made by an agent from the code | Yes, with the `init` instructions | Yes, as Mermaid text                 | No               |
 | Linked to the code             | Yes, `verify` fails in CI         | No                                   | No               |
-| Checked for faults             | Yes, 22 rules in `flowfig check`  | Syntax errors only                   | No               |
+| Checked for faults             | Yes, 23 rules in `flowfig check`  | Syntax errors only                   | No               |
 | Animated                       | Yes, one packet per message       | No                                   | No               |
 | Shows payloads and order       | Yes, on the map and the rail      | Order and text in a sequence diagram | No               |
 | Plays in a GitHub README       | Yes, as an SVG                    | Yes, GitHub renders it               | Yes, as an image |
@@ -215,7 +215,7 @@ Save this spec as `first.json`. The spec has 3 boxes, 2 edges and 1 step.
   },
   "edges": [
     { "from": "browser", "to": "api", "label": "GET /user" },
-    { "from": "api", "to": "db", "label": "SELECT" }
+    { "from": "api", "to": "db", "label": "read the user" }
   ],
   "steps": [
     {
@@ -235,9 +235,17 @@ Render the spec:
 
 ```console
 $ npx flowfig first.json
+0 errors, 0 warnings
 figure: 3 boxes, 0 groups, 2 edges, 1 step, 4 messages
-first.svg — 8.8 kB
+browser -> api: GET /user
+api -> db: read the user
+step "Load a user": 4 hops
+first.svg — 9.7 kB
 ```
+
+The render prints the check result, the counts, one line per edge and one line per step. Read these lines to check the figure
+without a second command. If a box or an edge has a `source` or a `via`, the render also prints the `verify` counts.
+`--no-verify` skips them.
 
 The command writes `first.svg`:
 
@@ -283,14 +291,14 @@ full reference, run `npx flowfig docs`.
 
 `layout` is a group. A group holds boxes and other groups.
 
-| Field       | Meaning                                                         | Default                                             |
-| ----------- | --------------------------------------------------------------- | --------------------------------------------------- |
-| `children`  | The boxes and groups in the group, in order.                    | required                                            |
-| `id`        | The name that an edge can use to reach the whole group.         | none                                                |
-| `label`     | The title of the frame. Only a group with a label has a frame.  | none                                                |
-| `direction` | `"row"` puts the children side by side. `"column"` stacks them. | `"row"`                                             |
-| `gap`       | The space between the children in px.                           | column: 28; row: fits the widest label, at least 56 |
-| `align`     | `"start"`, `"center"` or `"end"`, across the direction.         | `"center"` (a column stretches)                     |
+| Field       | Meaning                                                                                                  | Default                                             |
+| ----------- | -------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| `children`  | The boxes and groups in the group, in order.                                                             | required                                            |
+| `id`        | The name that an edge can use to reach the whole group.                                                  | none                                                |
+| `label`     | The title of the frame. Only a group with a label has a frame.                                           | none                                                |
+| `direction` | `"row"` puts the children side by side. `"column"` stacks them.                                          | `"row"`                                             |
+| `gap`       | The smallest space between the children in px. It grows to fit the labels of edges that cross the group. | column: 28; row: fits the widest label, at least 56 |
+| `align`     | `"start"`, `"center"` or `"end"`, across the direction.                                                  | `"center"` (a column stretches)                     |
 
 ### Edges
 
@@ -360,7 +368,7 @@ figure: 5 boxes, 3 groups, 4 edges, 2 steps, 6 messages
 
 The last line gives the counts of the parts of the figure. Compare the counts with the parts that you planned.
 
-`flowfig check` has 22 rules: 11 errors and 11 warnings.
+`flowfig check` has 23 rules: 11 errors and 12 warnings.
 
 | Rule                        | Severity | What it finds                                                                                       |
 | --------------------------- | -------- | --------------------------------------------------------------------------------------------------- |
@@ -386,6 +394,7 @@ The last line gives the counts of the parts of the figure. Compare the counts wi
 | `timeline-and-lanes`        | warning  | The figure sets `timeline` and `lanes`. The renderers draw the timeline and ignore `lanes`.         |
 | `font-estimated`            | warning  | `theme.font` is set. The SVG check estimates text width for the system font.                        |
 | `color-not-checked`         | warning  | A color that the check cannot read, so its contrast is not checked.                                 |
+| `plain-text`                | warning  | Text with a code name, a filler word, or a `say` or caption over 20 words.                          |
 
 | Option            | Effect                                                                                                     |
 | ----------------- | ---------------------------------------------------------------------------------------------------------- |
@@ -469,7 +478,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - uses: iamalvisng/flowfig@v0.8.0
+      - uses: iamalvisng/flowfig@v0.8.1
         with:
           figures: 'docs/**/*.svg' # default **/*.svg
 ```
@@ -477,7 +486,8 @@ jobs:
 ## MCP server
 
 `npx flowfig mcp` serves the tools `docs`, `check`, `render`, `verify` and `diff` over stdio, for an agent with no shell.
-`render` writes the SVG file and returns the check lines and the path, so no SVG text goes through the model.
+`render` writes the SVG file and returns the check lines and the path, so no SVG text goes through the model. `docs` takes an
+optional `topic`.
 
 `npx flowfig init` registers the server for Claude Code (`.mcp.json`), Cursor (`.cursor/mcp.json`), GitHub Copilot
 (`.vscode/mcp.json`), Gemini CLI (`.gemini/settings.json`) and Kiro (`.kiro/settings/mcp.json`). It merges one entry into
@@ -503,6 +513,7 @@ The player has these controls:
 - A pause button, and a speed button that changes between 1× and 2×.
 - A full screen button. Esc closes full screen.
 - A hover on a box highlights its edges. With the rail, a click on a row starts that message, and a hover highlights its edge.
+- A hover on a box, an edge or a rail row with a `source` shows the `source`. The SVG shows it as a tooltip too.
 
 The player props are the spec fields. `theme` sets the colors, `speed` sets the packet time, and `autoplay={false}` stops the
 auto start. `check` runs the check rules. If a figure is wider than its container, the player shrinks the figure to half size at
@@ -586,7 +597,8 @@ A section sits between `<!-- flowfig:start -->` and `<!-- flowfig:end -->`. A se
 of the file. A second run also replaces a whole file that `init` wrote. If a whole file exists and did not come from `init`,
 `init` skips the file. `init` also skips a section file that has a start marker and no end marker.
 
-`npx flowfig docs` prints the full guide as Markdown.
+`npx flowfig docs` prints the core guide as Markdown. `npx flowfig docs <topic>` prints one topic: `lanes`, `timeline`, `rail`,
+`marks` or `verify`.
 
 ## What flowfig does not draw
 

@@ -4,6 +4,8 @@ import { checkSpec, checkScene, checkTheme, contrast } from './check.ts';
 import { TONES, toneFill, type FlowProps } from './model.ts';
 import type { Scene, SceneBox } from './scene.ts';
 import type { Pt } from './geometry.ts';
+import { render } from './svg.ts';
+import { PLAIN_EXAMPLES } from './guide.ts';
 
 const fig: FlowProps = {
   layout: {
@@ -92,6 +94,13 @@ test('an edge through a box it does not connect is an error; its own ends are no
     { x: 400, y: 20 },
   ];
   assert.deepEqual(checkScene(scene({ boxes, edges: [{ id: 'ab', from: 'a', to: 'b', curve: over }] })), []);
+});
+
+test('an edge label outside the drawn figure area is an error', () => {
+  const edge = (x: number) => ({ id: 'e', from: 'a', to: 'b', curve: line(0, 300, 10, 300), label: { x, y: 200, w: 50, h: 18 } });
+  const area = { x: 0, y: 0, w: 600, h: 400 };
+  assert.deepEqual(rules(checkScene(scene({ area, edges: [edge(-20)] }))), ['label-overlap']);
+  assert.deepEqual(checkScene(scene({ area, edges: [edge(0)] })), []);
 });
 
 test('labels that overlap each other or a box are errors; labels that only touch are not', () => {
@@ -421,4 +430,130 @@ test('a timeline elbow through a box it does not connect is edge-crosses-box', (
   assert.deepEqual(found({ ...edge, elbow: [...curve] }), [['edge-crosses-box', ['e', 'c']]]);
   assert.deepEqual(found(edge), [], 'a behind edge with no corners is skipped');
   assert.deepEqual(found({ ...edge, elbow: [p(100, 20), p(120, 20), p(120, 220), p(300, 220)] }), []);
+});
+
+test('two edge labels from one box that would overlap each other move apart', () => {
+  const fig: FlowProps = {
+    layout: {
+      direction: 'column',
+      children: [
+        { direction: 'row', children: [{ id: 'a', label: 'A' }] },
+        {
+          direction: 'row',
+          children: [
+            { id: 'b', label: 'B' },
+            { id: 'c', label: 'C' },
+          ],
+        },
+      ],
+    },
+    edges: [
+      { from: 'a', to: 'b', label: 'check password hash' },
+      { from: 'a', to: 'c', label: 'session id' },
+    ],
+  };
+  const { scene } = render(fig);
+  assert.deepEqual(
+    checkScene(scene).filter((f) => f.rule === 'label-overlap'),
+    [],
+  );
+});
+
+test('two labeled edges down to the next row get a row gap that holds both labels', () => {
+  const fig: FlowProps = {
+    layout: {
+      direction: 'column',
+      children: [
+        { direction: 'row', children: [{ id: 'a', label: 'A' }] },
+        {
+          direction: 'row',
+          children: [
+            { id: 'b', label: 'B' },
+            { id: 'c', label: 'C' },
+          ],
+        },
+      ],
+    },
+    edges: [
+      { from: 'a', to: 'b', label: 'check the password' },
+      { from: 'a', to: 'c', label: 'send session id' },
+    ],
+  };
+  assert.deepEqual(
+    checkScene(render(fig).scene).filter((f) => f.rule === 'label-overlap'),
+    [],
+  );
+});
+
+test('plain-text warns on code-shaped labels, long lines, filler words and code names in sentences', () => {
+  const spec: FlowProps = {
+    layout: {
+      children: [
+        { id: 'a', label: 'findUserByEmail', source: 'src/u.ts#findUserByEmail' },
+        { id: 'b', label: 'Redis' },
+        { id: 'c', label: 'Check input' },
+        { id: 'd', label: 'Find user', source: 'src/u.ts#findUser' },
+        { id: 'e', label: 'GitHub' },
+        { id: 'f', label: 'DynamoDB', source: 'src/db.ts#saveOrder' },
+        { id: 'g', label: 'ReportsController', source: 'src/reports.ts#ReportsController' },
+        { id: 'h', label: 'sweep', source: 'src/jobs.ts#sweep' },
+        { id: 'i', label: 'user.findById' },
+        { id: 'j', label: 'req.userId' },
+        { id: 'k', label: 'src/loginHandler.ts' },
+        { id: 'l', label: 'SELECT' },
+      ],
+    },
+    edges: [
+      { id: 'e3', from: 'a', to: 'l', label: 'SET sess: EX 3600' },
+      { id: 'e4', from: 'l', to: 'a', label: 'GET /user' },
+      { id: 'e1', from: 'a', to: 'b', label: 'seamless sync' },
+      { id: 'e2', from: 'c', to: 'd', label: 'session id' },
+    ],
+    steps: [
+      {
+        label: 'login',
+        flow: [
+          { edges: 'e1', say: 'validate_rows returns the good rows' },
+          { edges: 'e2', say: 'The gateway calls auth' },
+          { edges: 'e2', say: 'user.findById reads the row' },
+          { edges: 'e2', say: 'send magic link' },
+          { edges: 'e2', say: 'word '.repeat(21).trim() },
+        ],
+      },
+    ],
+  };
+  const msgs = checkSpec(spec)
+    .filter((f) => f.rule === 'plain-text')
+    .map((f) => f.message)
+    .join('\n');
+  assert.match(msgs, /label "findUserByEmail" looks like code; use plain words, the code name goes in source/);
+  assert.match(msgs, /label "seamless sync" has the filler word "seamless"/);
+  assert.match(msgs, /say 1 has the code name "validate_rows"; use plain words/);
+  assert.match(msgs, /say 5 has 21 words; keep it to 20/);
+  assert.match(msgs, /label "ReportsController" looks like code/);
+  assert.match(msgs, /say 3 has the code name "user.findById"/);
+  assert.match(msgs, /label "user.findById" looks like code/);
+  assert.match(msgs, /label "req.userId" looks like code/);
+  assert.match(msgs, /label "src\/loginHandler.ts" looks like code/);
+  assert.match(msgs, /label "SELECT" looks like code/);
+  assert.match(msgs, /label "SET sess: EX 3600" looks like code/);
+  assert.doesNotMatch(msgs, /GET \/user/);
+  assert.doesNotMatch(msgs, /Redis|Check input|Find user|session id|The gateway calls auth|GitHub|DynamoDB|sweep|send magic link/);
+});
+
+test('each good plain-text example in the guide passes, and each checked bad example warns', () => {
+  const warns = (field: string, text: string, symbol: string) => {
+    const box = { id: 'a', label: field === 'label' ? text : 'A', sub: field === 'sub' ? text : undefined, source: `src/x.ts#${symbol}` };
+    const hop = { edge: 'e', data: field === 'data' ? text : undefined };
+    const spec: FlowProps = {
+      layout: { children: [box, { id: 'b', label: 'B' }] },
+      edges: [{ id: 'e', from: 'a', to: 'b', label: field === 'edge' ? text : 'send' }],
+      steps: [{ label: field === 'step' ? text : 'Send', flow: [{ edges: hop, say: field === 'say' ? text : 'A sends.' }] }],
+    };
+    return checkSpec(spec).some((f) => f.rule === 'plain-text');
+  };
+  for (const x of PLAIN_EXAMPLES) {
+    assert.equal(warns(x.field, x.good, x.bad), false, x.good);
+    if (!x.style) assert.equal(warns(x.field, x.bad, x.bad), true, x.bad);
+  }
 });

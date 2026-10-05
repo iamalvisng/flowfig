@@ -1,8 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="560" height="150" viewBox="0 0 560 150" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
-<metadata id="figure-spec"><![CDATA[{"props":{"layout":{"children":[{"id":"browser","label":"Browser"},{"id":"api","label":"API"},{"id":"db","label":"Database","shape":"store"}]},"edges":[{"from":"browser","to":"api","label":"GET /user"},{"from":"api","to":"db","label":"SELECT"}],"steps":[{"label":"Load a user","flow":[{"edges":"browser->api","say":"The browser asks the API for the user."},{"edges":"api->db","say":"The API reads the row."},{"edges":{"edge":"api->db","back":true},"say":"The row comes back."},{"edges":{"edge":"browser->api","back":true},"say":"The API sends the user as JSON."}]}]}}]]></metadata>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="579.6" height="150" viewBox="0 0 579.6 150" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+<metadata id="figure-spec"><![CDATA[{"props":{"layout":{"children":[{"id":"browser","label":"Browser"},{"id":"api","label":"API"},{"id":"db","label":"Database","shape":"store"}]},"edges":[{"from":"browser","to":"api","label":"GET /user"},{"from":"api","to":"db","label":"read the user"}],"steps":[{"label":"Load a user","flow":[{"edges":"browser->api","say":"The browser asks the API for the user."},{"edges":"api->db","say":"The API reads the row."},{"edges":{"edge":"api->db","back":true},"say":"The row comes back."},{"edges":{"edge":"browser->api","back":true},"say":"The API sends the user as JSON."}]}]}}]]></metadata>
 <style>
-svg { --accent:#0074d9; --fg:#1c1e21; --muted:#606770; --bg:#ffffff; --surface:#f5f7fa; --border:#d0d7de; --card-on:#eef5fd; }
-@media (prefers-color-scheme: dark) { svg { --accent:#1f78c8; --fg:#e3e3e3; --muted:#9aa0a6; --bg:#1b1b1d; --surface:#242526; --border:#3a3b3c; --card-on:#1d2733; } }
+svg { --accent:#0074d9; --fg:#1c1e21; --muted:#606770; --bg:#ffffff; --surface:#f5f7fa; --border:#d0d7de; --card-on:#eef5fd; --tint:color-mix(in srgb, var(--accent) 10%, var(--surface)); }
+@media (prefers-color-scheme: dark) { svg { --accent:#1f78c8; --fg:#e3e3e3; --muted:#9aa0a6; --bg:#1b1b1d; --surface:#242526; --border:#3a3b3c; --card-on:#1d2733; --tint:color-mix(in srgb, var(--accent) 10%, var(--surface)); } }
 .label { fill: var(--fg); font-size: 14px; font-weight: 500; text-anchor: middle; }
 .sub { fill: var(--muted); font-size: 12px; text-anchor: middle; }
 .frame { fill: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: .04em; }
@@ -10,6 +10,9 @@ svg { --accent:#0074d9; --fg:#1c1e21; --muted:#606770; --bg:#ffffff; --surface:#
 .row { fill: var(--fg); font-size: 11px; }
 .row.mono { font-size: 10.5px; font-family: ui-monospace, Menlo, monospace; }
 .muted { fill: var(--muted); }
+.bar { fill: var(--fg); font-size: 13px; font-weight: 500; }
+.tick { fill: var(--muted); font-size: 11px; }
+.today { fill: var(--accent); font-size: 11px; font-weight: 600; }
 .tag { font-size: 9px; font-weight: 600; letter-spacing: .03em; text-anchor: middle; }
 .mark { fill: var(--accent); font-size: 11px; font-weight: 600; text-anchor: end; }
 .chip { fill: #ffffff; font-size: 11.5px; text-anchor: middle; }
@@ -19,58 +22,66 @@ svg { --accent:#0074d9; --fg:#1c1e21; --muted:#606770; --bg:#ffffff; --surface:#
 .railphase { fill: var(--fg); font-size: 13px; font-weight: 600; font-family: ui-monospace, Menlo, monospace; }
 .railphase.muted { fill: var(--muted); }
 .end { text-anchor: end; }
-@keyframes a0 { 0%,18.2% { stroke: var(--accent) } 18.2%,36.4% { stroke: var(--accent) } 36.4%,54.5% { stroke: var(--accent) } 54.5%,100% { stroke: var(--accent) } }
-.a0 { animation: a0 4s infinite step-end; }
-@keyframes a1 { 0%,18.2% { stroke: var(--border) } 18.2%,36.4% { stroke: var(--accent) } 36.4%,54.5% { stroke: var(--accent) } 54.5%,100% { stroke: var(--accent) } }
-.a1 { animation: a1 4s infinite step-end; }
-@keyframes a2 { 0%,18.2% { stroke: var(--accent); stroke-width: 2 } 18.2%,36.4% { stroke: var(--accent); stroke-width: 2 } 36.4%,54.5% { stroke: var(--accent); stroke-width: 2 } 54.5%,100% { stroke: var(--accent); stroke-width: 2 } }
-.a2 { animation: a2 4s infinite step-end; }
-@keyframes a3 { 0%,18.2% { fill: var(--accent); stroke: var(--accent) } 18.2%,36.4% { fill: var(--accent); stroke: var(--accent) } 36.4%,54.5% { fill: var(--accent); stroke: var(--accent) } 54.5%,100% { fill: var(--accent); stroke: var(--accent) } }
-.a3 { animation: a3 4s infinite step-end; }
-@keyframes a4 { 0%,18.2% { fill: #ffffff } 18.2%,36.4% { fill: #ffffff } 36.4%,54.5% { fill: #ffffff } 54.5%,100% { fill: #ffffff } }
-.a4 { animation: a4 4s infinite step-end; }
-@keyframes a5 { 0%,18.2% { stroke: var(--muted); stroke-width: 1.25 } 18.2%,36.4% { stroke: var(--accent); stroke-width: 2 } 36.4%,54.5% { stroke: var(--accent); stroke-width: 2 } 54.5%,100% { stroke: var(--accent); stroke-width: 2 } }
-.a5 { animation: a5 4s infinite step-end; }
-@keyframes a6 { 0%,18.2% { fill: var(--bg); stroke: var(--border) } 18.2%,36.4% { fill: var(--accent); stroke: var(--accent) } 36.4%,54.5% { fill: var(--accent); stroke: var(--accent) } 54.5%,100% { fill: var(--accent); stroke: var(--accent) } }
-.a6 { animation: a6 4s infinite step-end; }
-@keyframes a7 { 0%,18.2% { fill: var(--muted) } 18.2%,36.4% { fill: #ffffff } 36.4%,54.5% { fill: #ffffff } 54.5%,100% { fill: #ffffff } }
-.a7 { animation: a7 4s infinite step-end; }
-@keyframes p0 { 0%,0% { opacity: 0 } 0%,18.2% { opacity: 1 } 18.2%,100% { opacity: 0 } }
-.p0 { animation: p0 4s infinite step-end; }
-@keyframes p1 { 0%,18.2% { opacity: 0 } 18.2%,36.4% { opacity: 1 } 36.4%,100% { opacity: 0 } }
-.p1 { animation: p1 4s infinite step-end; }
-@keyframes p2 { 0%,36.4% { opacity: 0 } 36.4%,54.5% { opacity: 1 } 54.5%,100% { opacity: 0 } }
-.p2 { animation: p2 4s infinite step-end; }
-@keyframes p3 { 0%,54.5% { opacity: 0 } 54.6%,72.7% { opacity: 1 } 72.7%,100% { opacity: 0 } }
-.p3 { animation: p3 4s infinite step-end; }
-@keyframes a8 { 0%,18.2% { opacity: 1 } 18.2%,36.4% { opacity: 1 } 36.4%,54.5% { opacity: 1 } 54.5%,100% { opacity: 1 } }
-.a8 { animation: a8 4s infinite step-end; }
-@keyframes a9 { 0%,18.2% { opacity: 1 } 18.2%,36.4% { opacity: 0 } 36.4%,54.5% { opacity: 0 } 54.5%,100% { opacity: 0 } }
-.a9 { animation: a9 4s infinite step-end; }
-@keyframes a10 { 0%,18.2% { opacity: 0 } 18.2%,36.4% { opacity: 1 } 36.4%,54.5% { opacity: 0 } 54.5%,100% { opacity: 0 } }
-.a10 { animation: a10 4s infinite step-end; }
-@keyframes a11 { 0%,18.2% { opacity: 0 } 18.2%,36.4% { opacity: 0 } 36.4%,54.5% { opacity: 1 } 54.5%,100% { opacity: 0 } }
-.a11 { animation: a11 4s infinite step-end; }
-@keyframes a12 { 0%,18.2% { opacity: 0 } 18.2%,36.4% { opacity: 0 } 36.4%,54.5% { opacity: 0 } 54.5%,100% { opacity: 1 } }
-.a12 { animation: a12 4s infinite step-end; }
+@keyframes a0 { 0%,68.51% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 68.52%,96.13% { fill: var(--tint); stroke: var(--accent); stroke-width: 2; filter: drop-shadow(0 0 4px var(--accent)) } 99.98%,99.99% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } }
+.a0 { animation: a0 10.4s infinite linear; }
+@keyframes a1 { 0%,6.93% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 6.94%,24.84% { fill: var(--tint); stroke: var(--accent); stroke-width: 2; filter: drop-shadow(0 0 4px var(--accent)) } 28.7%,51.07% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 51.08%,61.56% { fill: var(--tint); stroke: var(--accent); stroke-width: 2; filter: drop-shadow(0 0 4px var(--accent)) } 65.43%,99.99% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } }
+.a1 { animation: a1 10.4s infinite linear; }
+@keyframes a2 { 0%,24.84% { fill: var(--bg); stroke: var(--border); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 24.85%,31.78% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 31.79%,44.13% { fill: var(--tint); stroke: var(--accent); stroke-width: 2; filter: drop-shadow(0 0 4px var(--accent)) } 47.99%,99.99% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } }
+.a2 { animation: a2 10.4s infinite linear; }
+@keyframes a3 { 0%,24.84% { stroke: var(--border); stroke-width: 1 } 24.85%,31.78% { stroke: var(--accent); stroke-width: 1 } 31.79%,44.13% { stroke: var(--accent); stroke-width: 2 } 47.99%,99.99% { stroke: var(--accent); stroke-width: 1 } }
+.a3 { animation: a3 10.4s infinite linear; }
+@keyframes a4 { 0%,99.99% { stroke: var(--accent); stroke-width: 2 } }
+.a4 { animation: a4 10.4s infinite step-end; }
+@keyframes a5 { 0%,99.99% { fill: var(--accent); stroke: var(--accent) } }
+.a5 { animation: a5 10.4s infinite step-end; }
+@keyframes a6 { 0%,99.99% { fill: #ffffff } }
+.a6 { animation: a6 10.4s infinite step-end; }
+@keyframes a7 { 0%,24.84% { stroke: var(--muted); stroke-width: 1.25 } 24.85%,99.99% { stroke: var(--accent); stroke-width: 2 } }
+.a7 { animation: a7 10.4s infinite step-end; }
+@keyframes a8 { 0%,24.84% { fill: var(--bg); stroke: var(--border) } 24.85%,99.99% { fill: var(--accent); stroke: var(--accent) } }
+.a8 { animation: a8 10.4s infinite step-end; }
+@keyframes a9 { 0%,24.84% { fill: var(--muted) } 24.85%,99.99% { fill: #ffffff } }
+.a9 { animation: a9 10.4s infinite step-end; }
+@keyframes p0 { 0%,0% { opacity: 0 } 0.01%,24.84% { opacity: 1 } 24.85%,100% { opacity: 0 } }
+.p0 { animation: p0 10.4s infinite step-end; }
+@keyframes p1 { 0%,24.85% { opacity: 0 } 24.86%,44.13% { opacity: 1 } 44.14%,100% { opacity: 0 } }
+.p1 { animation: p1 10.4s infinite step-end; }
+@keyframes p2 { 0%,44.14% { opacity: 0 } 44.15%,61.56% { opacity: 1 } 61.57%,100% { opacity: 0 } }
+.p2 { animation: p2 10.4s infinite step-end; }
+@keyframes p3 { 0%,61.57% { opacity: 0 } 61.58%,84.56% { opacity: 1 } 84.57%,100% { opacity: 0 } }
+.p3 { animation: p3 10.4s infinite step-end; }
+@keyframes a10 { 0%,99.99% { opacity: 1 } }
+.a10 { animation: a10 10.4s infinite step-end; }
+@keyframes a11 { 0%,24.84% { opacity: 1 } 24.85%,99.99% { opacity: 0 } }
+.a11 { animation: a11 10.4s infinite step-end; }
+@keyframes a12 { 0%,24.84% { opacity: 0 } 24.85%,44.13% { opacity: 1 } 44.14%,99.99% { opacity: 0 } }
+.a12 { animation: a12 10.4s infinite step-end; }
+@keyframes a13 { 0%,44.13% { opacity: 0 } 44.14%,61.56% { opacity: 1 } 61.57%,99.99% { opacity: 0 } }
+.a13 { animation: a13 10.4s infinite step-end; }
+@keyframes a14 { 0%,61.56% { opacity: 0 } 61.57%,99.99% { opacity: 1 } }
+.a14 { animation: a14 10.4s infinite step-end; }
 </style>
-<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 1 L 9 5 L 0 9 z" fill="var(--muted)"/></marker></defs>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 1 L 9 5 L 0 9 z" fill="context-stroke"/></marker></defs>
 <rect width="100%" height="100%" fill="var(--bg)"/>
-<g transform="translate(16.6 0)">
+<g transform="translate(0 0)">
+
+
+
 <rect x="24" y="31" width="100" height="38" rx="10" fill="var(--bg)" stroke="var(--border)" class="a0"/><text x="74" y="55" class="label">Browser</text>
-<rect x="213.4" y="31" width="100" height="38" rx="10" fill="var(--bg)" stroke="var(--border)" class="a0"/><text x="263.4" y="55" class="label">API</text>
-<path d="M402.8 36 a 50 12 0 0 1 100 0 v 28 a 50 12 0 0 1 -100 0 z" fill="var(--bg)" stroke="var(--border)" class="a1"/><path d="M402.8 36 a 50 12 0 0 0 100 0" fill="none" stroke="var(--border)" class="a1"/><text x="452.8" y="61" class="label">Database</text>
-<path id="p-browser-&gt;api" d="M 124 50 C 168.7 50, 168.7 50, 213.39999999999998 50" fill="none" stroke="var(--muted)" stroke-width="1.25" marker-end="url(#arrow)" class="a2"/><rect x="132" y="41" width="73.4" height="18" rx="9" fill="var(--bg)" stroke="var(--border)" class="a3"/><text x="168.7" y="54" class="edgelabel a4">GET /user</text>
-<path id="p-api-&gt;db" d="M 313.4 50 C 358.09999999999997 50, 358.09999999999997 50, 402.79999999999995 50" fill="none" stroke="var(--muted)" stroke-width="1.25" marker-end="url(#arrow)" class="a5"/><rect x="331.3" y="41" width="53.6" height="18" rx="9" fill="var(--bg)" stroke="var(--border)" class="a6"/><text x="358.1" y="54" class="edgelabel a7">SELECT</text>
-<g class="p0" opacity="0"><circle r="10" fill="var(--accent)" opacity="0.2"/><circle r="4.5" fill="var(--accent)"/><animateMotion dur="4s" repeatCount="indefinite" keyTimes="0;0;0.2;1" keyPoints="0;0;1;1" calcMode="linear"><mpath href="#p-browser-&gt;api" xlink:href="#p-browser-&gt;api"/></animateMotion></g>
-<g class="p1" opacity="0"><circle r="10" fill="var(--accent)" opacity="0.2"/><circle r="4.5" fill="var(--accent)"/><animateMotion dur="4s" repeatCount="indefinite" keyTimes="0;0.2;0.4;1" keyPoints="0;0;1;1" calcMode="linear"><mpath href="#p-api-&gt;db" xlink:href="#p-api-&gt;db"/></animateMotion></g>
-<g class="p2" opacity="0"><circle r="10" fill="var(--accent)" opacity="0.2"/><circle r="4.5" fill="var(--accent)"/><animateMotion dur="4s" repeatCount="indefinite" keyTimes="0;0.4;0.5;1" keyPoints="1;1;0;0" calcMode="linear"><mpath href="#p-api-&gt;db" xlink:href="#p-api-&gt;db"/></animateMotion></g>
-<g class="p3" opacity="0"><circle r="10" fill="var(--accent)" opacity="0.2"/><circle r="4.5" fill="var(--accent)"/><animateMotion dur="4s" repeatCount="indefinite" keyTimes="0;0.5;0.7;1" keyPoints="1;1;0;0" calcMode="linear"><mpath href="#p-browser-&gt;api" xlink:href="#p-browser-&gt;api"/></animateMotion></g>
+<rect x="239.8" y="31" width="100" height="38" rx="10" fill="var(--bg)" stroke="var(--border)" class="a1"/><text x="289.8" y="55" class="label">API</text>
+<path d="M455.6 36 a 50 12 0 0 1 100 0 v 28 a 50 12 0 0 1 -100 0 z" fill="var(--bg)" stroke="var(--border)" class="a2"/><path d="M455.6 36 a 50 12 0 0 0 100 0" fill="none" stroke="var(--border)" class="a3"/><text x="505.6" y="61" class="label">Database</text>
+<path id="p-browser-&gt;api" d="M 124 50 C 181.89999999999998 50, 181.89999999999998 50, 239.79999999999998 50" fill="none" stroke="var(--muted)" stroke-width="1.25" marker-end="url(#arrow)" class="a4"/><rect x="145.2" y="41" width="73.4" height="18" rx="9" fill="var(--bg)" stroke="var(--border)" class="a5"/><text x="181.9" y="54" class="edgelabel a6">GET /user</text>
+<path id="p-api-&gt;db" d="M 339.79999999999995 50 C 397.69999999999993 50, 397.69999999999993 50, 455.59999999999997 50" fill="none" stroke="var(--muted)" stroke-width="1.25" marker-end="url(#arrow)" class="a7"/><rect x="347.8" y="41" width="99.8" height="18" rx="9" fill="var(--bg)" stroke="var(--border)" class="a8"/><text x="397.7" y="54" class="edgelabel a9">read the user</text>
+<g class="p0" opacity="0"><circle r="10" fill="var(--accent)" opacity="0.2"/><circle r="4.5" fill="var(--accent)"/><animateMotion dur="10.4s" repeatCount="indefinite" keyTimes="0;0;0.0694;1" keyPoints="0;0;1;1" calcMode="linear"><mpath href="#p-browser-&gt;api" xlink:href="#p-browser-&gt;api"/></animateMotion></g>
+<g class="p1" opacity="0"><circle r="10" fill="var(--accent)" opacity="0.2"/><circle r="4.5" fill="var(--accent)"/><animateMotion dur="10.4s" repeatCount="indefinite" keyTimes="0;0.2485;0.3179;1" keyPoints="0;0;1;1" calcMode="linear"><mpath href="#p-api-&gt;db" xlink:href="#p-api-&gt;db"/></animateMotion></g>
+<g class="p2" opacity="0"><circle r="10" fill="var(--accent)" opacity="0.2"/><circle r="4.5" fill="var(--accent)"/><animateMotion dur="10.4s" repeatCount="indefinite" keyTimes="0;0.4414;0.5108;1" keyPoints="1;1;0;0" calcMode="linear"><mpath href="#p-api-&gt;db" xlink:href="#p-api-&gt;db"/></animateMotion></g>
+<g class="p3" opacity="0"><circle r="10" fill="var(--accent)" opacity="0.2"/><circle r="4.5" fill="var(--accent)"/><animateMotion dur="10.4s" repeatCount="indefinite" keyTimes="0;0.6157;0.6852;1" keyPoints="1;1;0;0" calcMode="linear"><mpath href="#p-browser-&gt;api" xlink:href="#p-browser-&gt;api"/></animateMotion></g>
+
 </g>
 
-<text x="280" y="116" opacity="0" class="steplabel a8">Load a user</text>
-<g opacity="0" class="a9"><text x="280" y="142" class="caption">The browser asks the API for the user.</text></g>
-<g opacity="0" class="a10"><text x="280" y="142" class="caption">The API reads the row.</text></g>
-<g opacity="0" class="a11"><text x="280" y="142" class="caption">The row comes back.</text></g>
-<g opacity="0" class="a12"><text x="280" y="142" class="caption">The API sends the user as JSON.</text></g>
+<text x="289.8" y="116" opacity="0" class="steplabel a10">Load a user</text>
+<g opacity="0" class="a11"><text x="289.8" y="142" class="caption">The browser asks the API for the user.</text></g>
+<g opacity="0" class="a12"><text x="289.8" y="142" class="caption">The API reads the row.</text></g>
+<g opacity="0" class="a13"><text x="289.8" y="142" class="caption">The row comes back.</text></g>
+<g opacity="0" class="a14"><text x="289.8" y="142" class="caption">The API sends the user as JSON.</text></g>
 </svg>

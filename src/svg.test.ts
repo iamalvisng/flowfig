@@ -18,6 +18,7 @@ import {
 } from './model.ts';
 import type { Pt } from './geometry.ts';
 import { layoutRail, railState, RAIL } from './rail.ts';
+import { checkScene } from './check.ts';
 
 const fig: FlowProps = {
   speed: 1000,
@@ -1179,4 +1180,226 @@ test('timeline: the roadmap elbows clear every box they do not connect, and chec
       }
   }
   assert.ok(!check(demo.props).some((f) => f.rule === 'edge-crosses-box'));
+});
+
+test('a map figure with an edge across a middle box renders with no edge-crosses-box finding', () => {
+  const fig: FlowProps = {
+    layout: {
+      direction: 'row',
+      children: [
+        { id: 'a', label: 'A' },
+        { id: 'b', label: 'B' },
+        { id: 'c', label: 'C' },
+      ],
+    },
+    edges: [
+      { from: 'a', to: 'b' },
+      { from: 'b', to: 'c' },
+      { from: 'a', to: 'c' },
+    ],
+  };
+  const { svg, scene } = render(fig);
+  assert.deepEqual(
+    checkScene(scene).filter((f) => f.rule === 'edge-crosses-box'),
+    [],
+  );
+  assert.ok(scene.width > 0 && !/NaN/.test(svg));
+});
+
+test('a long box label wraps to two lines and keeps the 14 px font', () => {
+  const { scene } = render({ layout: { children: [{ id: 'a', label: 'Check the session and the rate limit' }] }, edges: [] });
+  assert.equal(scene.boxes[0].texts.filter((t) => t.fontSize === 14).length, 2);
+  assert.deepEqual(
+    checkScene(scene).filter((f) => f.rule === 'text-overflow' || f.rule === 'small-text'),
+    [],
+  );
+});
+
+test('a label that fits at its own box width stays on one line', () => {
+  const words = ['Review', 'the', 'claim', 'Check', 'input', 'Find', 'user', 'Rate', 'limiter', 'Send', 'email', 'Read', 'cache'];
+  for (const a of words)
+    for (const b of words)
+      for (const c of words) {
+        const label = `${a} ${b} ${c}`;
+        if (textWidth(label, 14) + 32 >= 190) continue;
+        const { scene } = render({ layout: { children: [{ id: 'a', label }] }, edges: [] });
+        assert.equal(scene.boxes[0].texts.filter((t) => t.fontSize === 14).length, 1, label);
+      }
+});
+
+test('a left detour label sits inside the figure and off every other edge', () => {
+  const fig: FlowProps = {
+    layout: {
+      direction: 'column',
+      align: 'start',
+      children: [
+        {
+          direction: 'row',
+          children: [
+            { id: 'a', label: 'Browser' },
+            { id: 'x', label: 'CDN' },
+            { id: 'y', label: 'Edge cache' },
+            { id: 'z', label: 'Origin' },
+          ],
+        },
+        { id: 'b', label: 'Load balancer' },
+        { id: 'c', label: 'App server' },
+      ],
+    },
+    edges: [
+      { from: 'a', to: 'x' },
+      { from: 'x', to: 'y' },
+      { from: 'y', to: 'z' },
+      { from: 'a', to: 'b' },
+      { from: 'b', to: 'c' },
+      { from: 'a', to: 'c', label: 'open the websocket connection' },
+    ],
+  };
+  const { scene } = render(fig);
+  const [p, a] = [scene.edges.find((e) => e.id === 'a->c')!.label!, scene.area!];
+  assert.ok(p.x >= a.x && p.x + p.w <= a.x + a.w && p.y >= a.y && p.y + p.h <= a.y + a.h);
+  for (const e of scene.edges.filter((e) => e.id !== 'a->c'))
+    for (let t = 0; t <= 1; t += 1 / 32) {
+      const [p0, p1, p2, p3] = e.curve;
+      const k = [(1 - t) ** 3, 3 * (1 - t) ** 2 * t, 3 * (1 - t) * t * t, t ** 3];
+      const [x, y] = [k[0] * p0.x + k[1] * p1.x + k[2] * p2.x + k[3] * p3.x, k[0] * p0.y + k[1] * p1.y + k[2] * p2.y + k[3] * p3.y];
+      assert.ok(!(x > p.x && x < p.x + p.w && y > p.y && y < p.y + p.h), `edge ${e.id} passes under the label`);
+    }
+  assert.deepEqual(
+    checkScene(scene).filter((f) => f.rule === 'label-overlap'),
+    [],
+  );
+});
+
+test('a label wider than its column stays on its edge and inside the SVG', () => {
+  const fig: FlowProps = {
+    layout: {
+      direction: 'column',
+      children: [
+        { id: 'a', label: 'A' },
+        { id: 'b', label: 'B' },
+      ],
+    },
+    edges: [{ from: 'a', to: 'b', label: 'open the websocket connection to the origin server now' }],
+  };
+  assert.deepEqual(checkScene(render(fig).scene), []);
+});
+
+test('a labeled side detour with no room for its label keeps a 50 px arc clear of the boxes', () => {
+  const fig: FlowProps = {
+    layout: {
+      direction: 'column',
+      children: [
+        { id: 'n0', label: 'Cache' },
+        {
+          direction: 'row',
+          children: [
+            { id: 'n1', label: 'Order service' },
+            { id: 'n2', label: 'DB' },
+            { id: 'n3', label: 'Order service' },
+          ],
+        },
+        { id: 'n4', label: 'Cache' },
+      ],
+    },
+    edges: [
+      { from: 'n2', to: 'n4', label: 'open the websocket connection' },
+      { from: 'n1', to: 'n0', label: 'read the cache' },
+      { from: 'n3', to: 'n0', label: 'send the order' },
+      { from: 'n4', to: 'n0', label: 'open the websocket connection' },
+    ],
+  };
+  assert.deepEqual(checkScene(render(fig).scene), []);
+});
+
+test('an edge label stays inside the SVG at a small padding', () => {
+  const fig: FlowProps = {
+    layout: {
+      direction: 'column',
+      children: [
+        { id: 'n0', label: 'Cache' },
+        {
+          direction: 'row',
+          children: [
+            { id: 'n1', label: 'DB' },
+            { id: 'n2', label: 'DB' },
+            { id: 'n3', label: 'Cache' },
+          ],
+        },
+      ],
+    },
+    edges: [
+      { from: 'n1', to: 'n0', label: 'write the row' },
+      { from: 'n1', to: 'n2' },
+      { from: 'n2', to: 'n1', label: 'read the cache' },
+    ],
+  };
+  assert.deepEqual(checkScene(render(fig, { padding: 8 }).scene), []);
+});
+
+test('a wide row narrows its boxes before it scales, so the text stays at least 10 px', () => {
+  const kids = Array.from({ length: 6 }, (_, i) => ({ id: `n${i}`, label: `Step ${i} reads the order data` }));
+  const { scene } = render({ layout: { direction: 'row', children: kids }, edges: [] }, { width: 830 });
+  assert.deepEqual(
+    checkScene(scene, { width: 830 }).filter((f) => f.rule === 'small-text' || f.rule === 'text-overflow'),
+    [],
+  );
+});
+
+test('one long word or a CJK label does not wrap inside a word and still reports text-overflow', () => {
+  for (const label of ['Supercalifragilisticexpialidociousness', '注文データを読み込んで検証して保存する処理']) {
+    const { scene } = render({ layout: { children: [{ id: 'a', label, width: 100 }] }, edges: [] });
+    assert.ok(
+      checkScene(scene).some((f) => f.rule === 'text-overflow'),
+      label,
+    );
+  }
+});
+
+test('a box and an edge with a source show it as a title, and others show none', () => {
+  const props: FlowProps = {
+    layout: {
+      children: [
+        { id: 'a', label: 'A', source: 'src/a.ts#login' },
+        { id: 'b', label: 'B' },
+      ],
+    },
+    edges: [{ id: 'q', from: 'a', to: 'b', source: 'src/q.ts' }],
+    steps: [{ label: 's', flow: [{ edges: { edge: 'q', source: 'src/h.ts' } }] }],
+  };
+  const svg = toSvg(props);
+  assert.match(svg, /<g><title>src\/a\.ts#login<\/title>/);
+  assert.match(svg, /<title>src\/q\.ts\nsrc\/h\.ts<\/title>/);
+  assert.equal(svg.match(/<title>/g)?.length, 2);
+});
+
+test('a rail-only figure shows the edge source as a title on its rail row', () => {
+  const svg = toSvg({
+    rail: 'only',
+    layout: {
+      children: [
+        { id: 'a', label: 'A' },
+        { id: 'b', label: 'B' },
+      ],
+    },
+    edges: [{ id: 'q', from: 'a', to: 'b', source: 'src/q.ts#send' }],
+    steps: [{ label: 's', flow: ['q'] }],
+  });
+  assert.match(svg, /class="railrow[^>]*><title>src\/q\.ts#send<\/title>/);
+});
+
+test('an automatic elbow edge gives its drawn corners to the check', () => {
+  const col = (ids: string[]) => ({ direction: 'column' as const, gap: 20, children: ids.map((id) => ({ id, label: id })) });
+  const fig = {
+    layout: {
+      direction: 'row' as const,
+      gap: 130,
+      children: [col(['cli', 'server', 'cleanup']), col(['convert', 'preview', 'config']), col(['out', 'tmp'])],
+    },
+    edges: [{ id: 's2', from: 'server', to: 'out', around: 'below' as const }],
+  };
+  const { scene } = render(fig);
+  const e = scene.edges.find((q) => q.id === 's2')!;
+  assert.ok(e.elbow, 'the scene edge has the elbow corners');
+  assert.ok(!checkScene(scene).some((f) => f.rule === 'edge-crosses-box'));
 });

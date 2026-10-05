@@ -1,6 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { route } from './geometry.ts';
+import { labelAlong, route, type Pt, type Routed } from './geometry.ts';
+
+const bezier = ([p0, p1, p2, p3]: [Pt, Pt, Pt, Pt], t: number): Pt => {
+  const u = 1 - t;
+  const [a, b, c, d] = [u * u * u, 3 * u * u * t, 3 * u * t * t, t * t * t];
+  return { x: a * p0.x + b * p1.x + c * p2.x + d * p3.x, y: a * p0.y + b * p1.y + c * p2.y + d * p3.y };
+};
 
 test('side by side boxes connect right -> left, parallel edges spread out', () => {
   const rects = { a: { x: 0, y: 0, w: 100, h: 90 }, b: { x: 200, y: 0, w: 100, h: 90 } };
@@ -191,4 +197,92 @@ test('an elbow keeps clear of a box it does not connect: a clear x in the gap, e
   }
   assert.ok(r.elbow![1].x >= wide.x + wide.w + 8, 'the detour passes right of the box');
   assert.match(route(elbow, rects, new Set(), [{ x: 104, y: 80, w: 250, h: 28 }])[0].d, /^M 100 14 H 200 V 214 H 300$/);
+});
+
+test('an edge whose straight path crosses a box in a row goes around it', () => {
+  const rects = { a: { x: 0, y: 100, w: 100, h: 40 }, b: { x: 150, y: 100, w: 100, h: 40 }, c: { x: 300, y: 100, w: 100, h: 40 } };
+  const avoid = Object.values(rects).map((r) => ({ ...r, box: true as const }));
+  const [r] = route([{ id: 'a->c', from: 'a', to: 'c' }], rects, new Set(), avoid);
+  assert.ok(r.around === 'above' || r.around === 'below');
+  for (let t = 0; t <= 1; t += 0.03) {
+    const p = bezier(r.curve, t);
+    assert.ok(!(p.x > 150 && p.x < 250 && p.y > 100 && p.y < 140), `point ${t} is inside b`);
+  }
+});
+
+test('an edge between stacked boxes with a box between them goes around at the side', () => {
+  const rects = { a: { x: 0, y: 0, w: 100, h: 40 }, b: { x: 0, y: 80, w: 100, h: 40 }, c: { x: 0, y: 160, w: 100, h: 40 } };
+  const avoid = Object.values(rects).map((r) => ({ ...r, box: true as const }));
+  const [r] = route([{ id: 'a->c', from: 'a', to: 'c' }], rects, new Set(), avoid);
+  assert.ok(r.around === 'left' || r.around === 'right');
+});
+
+test('an edge with both detour heights blocked steps the arc out past the blocking boxes', () => {
+  const rects = {
+    a: { x: 0, y: 100, w: 100, h: 40 },
+    b: { x: 150, y: 100, w: 100, h: 40 },
+    c: { x: 300, y: 100, w: 100, h: 40 },
+    up: { x: 100, y: 0, w: 220, h: 100 },
+    dn: { x: 100, y: 140, w: 220, h: 100 },
+  };
+  const avoid = Object.values(rects).map((r) => ({ ...r, box: true as const }));
+  const [r] = route([{ id: 'a->c', from: 'a', to: 'c' }], rects, new Set(), avoid);
+  assert.ok(r.around === 'above' || r.around === 'below');
+  for (let t = 0; t <= 1; t += 0.03) {
+    const p = bezier(r.curve, t);
+    assert.ok(
+      !avoid.some((q) => p.x > q.x + 2 && p.x < q.x + q.w - 2 && p.y > q.y + 2 && p.y < q.y + q.h - 2),
+      `point ${t} is inside a box`,
+    );
+  }
+});
+
+test('a set around that crosses a box in a grid is drawn clear of every box', () => {
+  const col = (x: number, ys: number[]) => ys.map((y) => ({ x, y, w: 100, h: 40 }));
+  const [cli, server, cleanup] = col(0, [0, 80, 130]);
+  const [convert, preview] = col(200, [0, 80]);
+  const [out] = col(400, [0]);
+  const rects = { cli, server, cleanup, convert, preview, out };
+  const avoid = Object.values(rects).map((r) => ({ ...r, box: true as const }));
+  const [r] = route([{ id: 's', from: 'server', to: 'out', around: 'below' }], rects, new Set(), avoid);
+  const line = r.elbow;
+  const steps = line
+    ? line.slice(1).flatMap((q, k) =>
+        Array.from({ length: 17 }, (_, i) => ({
+          x: line[k].x + ((q.x - line[k].x) * i) / 16,
+          y: line[k].y + ((q.y - line[k].y) * i) / 16,
+        })),
+      )
+    : Array.from({ length: 33 }, (_, i) => bezier(r.curve, i / 32));
+  for (const [id, q] of Object.entries(rects).filter(([id]) => id !== 'server' && id !== 'out'))
+    assert.ok(!steps.some((p) => p.x > q.x + 2 && p.x < q.x + q.w - 2 && p.y > q.y + 2 && p.y < q.y + q.h - 2), `the path crosses ${id}`);
+});
+
+test('two detours over the same boxes take the two sides and do not cross', () => {
+  const rects = { a: { x: 0, y: 100, w: 100, h: 40 }, b: { x: 150, y: 100, w: 100, h: 40 }, c: { x: 300, y: 100, w: 100, h: 40 } };
+  const avoid = Object.values(rects).map((r) => ({ ...r, box: true as const }));
+  const [go, back] = route(
+    [
+      { id: 'a->c', from: 'a', to: 'c' },
+      { id: 'c->a', from: 'c', to: 'a' },
+    ],
+    rects,
+    new Set(),
+    avoid,
+  );
+  assert.deepEqual([go.around, back.around].sort(), ['above', 'below']);
+});
+
+test('an edge label moves off a box on the curve middle, and stays at the middle with no free spot', () => {
+  const curve: [Pt, Pt, Pt, Pt] = [
+    { x: 0, y: 0 },
+    { x: 100, y: 0 },
+    { x: 200, y: 0 },
+    { x: 300, y: 0 },
+  ];
+  const r: Routed = { id: 'e', d: '', mid: { x: 150, y: 0 }, curve };
+  const box = { x: 130, y: -10, w: 40, h: 20 };
+  const q = labelAlong(r, 40, [box], []);
+  assert.ok(q.x + 20 < box.x - 1 || q.x - 20 > box.x + box.w + 1 || q.y + 9 < box.y - 1 || q.y - 9 > box.y + box.h + 1);
+  assert.deepEqual(labelAlong(r, 40, [{ x: -50, y: -50, w: 400, h: 100 }], []), r.mid);
 });
