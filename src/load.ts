@@ -60,7 +60,6 @@ export function reportLines(props: FlowProps, findings: Finding[], withCounts = 
 
 const text = (x: unknown) => (typeof x === 'string' ? x : '');
 
-/** One line per edge, then one line per step with its hop count. */
 export function summaryLines(props: FlowProps): string[] {
   const edges = props.edges.map((e) => {
     const label = text(e.label);
@@ -73,7 +72,6 @@ export function summaryLines(props: FlowProps): string[] {
   return [...edges, ...steps];
 }
 
-/** The verify lines of a render: findings, the count line and the unsure edges. Empty if no source or via. */
 export function verifyLines(props: FlowProps, figure: string, root = process.cwd()): string[] {
   if (!owners(props).some(([, source, via]) => source != null || via != null)) return [];
   const { findings, coverage } = verifyReport(props, { root });

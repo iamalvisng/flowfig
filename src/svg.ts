@@ -948,8 +948,9 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
             ? `<rect x="${n2(row.pill.x)}" y="${n2(ly - 9)}" width="${n2(row.pill.w)}" height="18" rx="9" fill="var(--bg)" stroke="var(--border)"${cls(anim(now, `fill: ${row.tone ? toneFill(col) : col}; stroke: ${col}`, 'fill: var(--bg); stroke: var(--border)', row.tone ? 'l' + col : 'l'))}/>` +
               `<text x="${n2(row.pill.x + row.pill.w / 2)}" y="${n2(ly + 4)}"${cls('edgelabel', anim(now, `fill: ${ON_ACCENT}`, 'fill: var(--muted)', 'x'))}>${esc(row.text)}</text>`
             : '';
+          const tip = edgeTip(row.edge, fig.edges[ids.indexOf(row.edge)].source, beats.flat());
           parts.push(
-            `<g${cls('railrow', moveRow(i))}><g${cls(anim(next, 'opacity: .45', 'opacity: 1', 'r'))}>` +
+            `<g${cls('railrow', moveRow(i))}>${tip ? `<title>${esc(tip)}</title>` : ''}<g${cls(anim(next, 'opacity: .45', 'opacity: 1', 'r'))}>` +
               `<path d="M ${n2(x1)} ${n2(ly)} H ${n2(x2)}" fill="none" stroke="var(--muted)" stroke-width="${EDGE_OFF}"${row.async ? ' stroke-dasharray="4 3"' : ''} marker-end="url(#arrow)"${cls(lit)}/>` +
               tag +
               pill +

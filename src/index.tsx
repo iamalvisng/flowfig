@@ -1402,6 +1402,7 @@ export function Flow({
               const ly = y + RAIL.row / 2;
               const tone = state === 'now' && row.tone ? TONES[row.tone] : undefined;
               const g = row.group != null ? rail.groups[row.group] : null;
+              const tip = edgeTip(row.edge, edges[ids.indexOf(row.edge)].source, allBeats);
               return (
                 <g
                   key={`m${i}`}
@@ -1413,6 +1414,7 @@ export function Flow({
                   onMouseEnter={() => setHoverEdge(row.edge)}
                   onMouseLeave={() => setHoverEdge(null)}
                 >
+                  {tip && <title>{tip}</title>}
                   {g && g.rows[0] === i && (
                     <rect
                       x={groupBox(rail, g).x}

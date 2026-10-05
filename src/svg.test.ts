@@ -1372,3 +1372,18 @@ test('a box and an edge with a source show it as a title, and others show none',
   assert.match(svg, /<title>src\/q\.ts\nsrc\/h\.ts<\/title>/);
   assert.equal(svg.match(/<title>/g)?.length, 2);
 });
+
+test('a rail-only figure shows the edge source as a title on its rail row', () => {
+  const svg = toSvg({
+    rail: 'only',
+    layout: {
+      children: [
+        { id: 'a', label: 'A' },
+        { id: 'b', label: 'B' },
+      ],
+    },
+    edges: [{ id: 'q', from: 'a', to: 'b', source: 'src/q.ts#send' }],
+    steps: [{ label: 's', flow: ['q'] }],
+  });
+  assert.match(svg, /class="railrow[^>]*><title>src\/q\.ts#send<\/title>/);
+});

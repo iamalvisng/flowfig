@@ -171,12 +171,12 @@ export const toBeat = (b: FigHop | FigHop[] | FigBeat): Beat => {
   };
 };
 
-// A React node can be an object, so test for the `text` key.
 export const edgeTip = (id: string, source: string | undefined, beats: Beat[]): string | undefined => {
   const all = new Set(source ? [source] : []);
   for (const b of beats) for (const h of b.hops) if (h.edge === id && h.source) all.add(h.source);
   return all.size ? [...all].join('\n') : undefined;
 };
+// A React node can be an object, so test for the `text` key.
 export const isRows = (c: FigContent): c is FigRow[] =>
   Array.isArray(c) && c.every((r) => r != null && typeof r === 'object' && 'text' in r);
 
