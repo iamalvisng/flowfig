@@ -63,7 +63,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - uses: iamalvisng/flowfig@v0.7.0
+      - uses: iamalvisng/flowfig@v0.8.0
         with:
           figures: 'docs/**/*.svg' # default **/*.svg
 ```
@@ -431,6 +431,23 @@ fails when the file or the symbol is gone. The action runs `verify` on every fig
 the new image for each SVG the PR changes, with the spec changes as a list, and it names each figure whose linked code the PR
 changes.
 
+`verify` prints one count line for each figure, and gives each edge one result:
+
+```console
+docs/login.svg: 7 of 7 boxes defined; edges: 9 found, 0 not found, 1 unsure, 1 not checked
+```
+
+- found: the caller code calls or references the callee through an import, the same file or a typed receiver.
+- not found: the caller code does not. `verify` warns, and `--strict` makes it an error.
+- unsure: `verify` cannot decide, for example when a receiver has no declared type. `verify` lists it with the reason. It never fails CI.
+- not checked: the edge has no `source`, or the language is not supported.
+
+A method source is `path#Owner.name`. An edge `source` names the function that makes the call.
+
+`via` on an edge names the route, queue, topic, table, file or key that both sides use. For a `via` edge, found means that the caller code and the callee file both use that token. It does not prove that a handler serves it.
+
+Edge checks support TypeScript/JavaScript, Python, Go, Java, C# and Rust. Other files keep the name check for boxes.
+
 A process figure for a team links its boxes to the SOP document, not to code: `"source": "docs/sop/refunds.md#step-3-approve-or-reject"`. The symbol is the heading as a GitHub anchor. If the heading is gone, `verify` fails.
 
 ```yaml
@@ -450,7 +467,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - uses: iamalvisng/flowfig@v0.7.0
+      - uses: iamalvisng/flowfig@v0.8.0
         with:
           figures: 'docs/**/*.svg' # default **/*.svg
 ```
