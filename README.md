@@ -333,6 +333,10 @@ Use it when you do not want to plan rows and columns, or when `check` reports an
 }
 ```
 
+Render the spec with `npx flowfig spec.json docs/auto-layout.svg`. This figure has 9 boxes, 1 frame, 1 decision, 1 store and 2 steps:
+
+![Flow figure: Shopper, Web shop, In stock?, Order, Payment, Shipping, Orders, Email, Back order. Steps: Item in stock, Item sold out.](docs/auto-layout.svg)
+
 A group with a `label` or an `id` stays together as one frame. flowfig removes a group with neither, with its `direction`, `gap`
 and `align`. flowfig ignores `around` on the edges. A `direction` on the root forces `"row"` or `"column"`. `lanes` and
 `timeline` figures ignore `auto`.
@@ -729,6 +733,25 @@ The input is a `.mmd` file with one diagram, or a Markdown file. In a Markdown f
 
 The command exits 1 if a diagram has a line that the converter does not read. It prints `<file>:<line>: <reason>` for each
 line, and writes no spec for that diagram. The command never guesses.
+
+This flowchart has a decision, a subgraph and a store:
+
+```mermaid
+flowchart TD
+    A([Visitor]) --> B[Sign-up form]
+    B --> C{Email valid?}
+    C -->|no| X[Show error]
+    C -->|yes| D
+    subgraph auth [Account service]
+        D[Create account] --> E[Hash password]
+    end
+    E --> F[(Users)]
+    E --> G[Welcome email]
+```
+
+`npx flowfig from-mermaid signup.mmd > signup.json` converts it. `npx flowfig signup.json docs/from-mermaid.svg` renders it:
+
+![Flow figure: Visitor, Sign-up form, Email valid?, Show error, Create account, Hash password, Users, Welcome email.](docs/from-mermaid.svg)
 
 A flowchart (`flowchart` or `graph`) becomes a still map with automatic layout:
 
