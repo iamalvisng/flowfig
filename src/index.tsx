@@ -284,6 +284,7 @@ function FlowBody({
     const el = root.current,
       box = outer.current;
     if (!el || !box) return;
+    let last = '';
     const measure = () => {
       const scale = Math.max(0.5, Math.min(1, box.clientWidth / el.offsetWidth));
       setFit({ scale, height: el.offsetHeight * scale });
@@ -342,6 +343,9 @@ function FlowBody({
         const li = layout.children.findIndex((l) => isGroup(l) && (l.id === id || l.children.some((b) => (b as FigNode).id === id)));
         return laneBands[`${li}@${lanePlan?.ends.get(eid)?.[j]}`];
       };
+      const key = JSON.stringify([rects, extra, bands, laneBands, pillArea], (_k, v) => (typeof v === 'number' ? Math.round(v) : v));
+      if (key === last) return;
+      last = key;
       const end = (eid: string, id: string, start: boolean) =>
         lanePlan ? laneEnd(lanePlan, eid, id, start, (lane, b) => bands[`${lane}@${b}`], rects) : id;
       const next = route(
