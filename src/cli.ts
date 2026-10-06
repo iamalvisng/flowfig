@@ -13,7 +13,7 @@ import { serve } from './mcp.ts';
 import { openedLine, openSvg, runOpen } from './open.ts';
 import { pageHtml } from './page.ts';
 import { decodePng } from './png.ts';
-import { diff, formatDiff } from './diff.ts';
+import { diff, formatDiff, mergeFigures } from './diff.ts';
 import { loadSpec, reportLines, sortFindings, specOf, summaryLines, svgWithSpec, verifyLines } from './load.ts';
 import type { FlowProps } from './model.ts';
 import { check, render, toSvg, type Finding } from './svg.ts';
@@ -26,7 +26,7 @@ const USAGE = `usage: flowfig <-|spec.json|figure.ts> [out.svg] [--open]   rende
        flowfig check <-|spec.json|figure.ts|figure.svg>   list the faults; the input can be an SVG this wrote
        flowfig --spec figure.svg                          print the spec the SVG carries
        flowfig verify <input>... [--root <dir>] [--json] [--strict]   check the code links of one or more figures
-       flowfig diff <old> <new> [--json|--md]   list the spec changes between two figures
+       flowfig diff <old> <new> [--json|--md] [--svg <out.svg>]   list the spec changes between two figures, or draw them in one SVG
        flowfig trace <file#symbol> [--depth <n>] [--max <n>] [--root <dir>] [--json]   list the calls under a symbol, each one checked
        flowfig coverage [--figures <glob>] [--entries <glob>] [--root <dir>] [--strict] [--json]   list failing and stale figures, and code with no figure
        flowfig docs [topic]                               print the guide, or one topic (Markdown)
@@ -182,10 +182,19 @@ if (args[0] === 'diff') {
   args.shift();
   const json = flag('--json'),
     md = flag('--md');
+  const svgOut = option('--svg');
   const unknown = args.find((a) => a.startsWith('-') && a !== '-');
   if (unknown) usage(`unknown flag ${unknown}`);
-  if (args.length !== 2) usage('diff needs two figures: flowfig diff <old> <new> [--json|--md]');
-  const changes = diff(await load(args[0]), await load(args[1]));
+  if (args.length !== 2) usage('diff needs two figures: flowfig diff <old> <new> [--json|--md] [--svg <out.svg>]');
+  const [before, after] = [await load(args[0]), await load(args[1])];
+  const changes = diff(before, after);
+  if (svgOut) {
+    const { figure, marks } = mergeFigures(before, after);
+    const { svg, scene } = render(figure, { marks });
+    for (const f of sortFindings(checkRendered(figure, {}, scene), false))
+      console.error(`${f.severity.padEnd(8)} ${f.rule.padEnd(18)} ${f.message}`);
+    writeFileSync(svgOut, svg);
+  }
   console.log(json ? JSON.stringify(changes, null, 2) : formatDiff(changes, md ? 'md' : 'text'));
   process.exit(0);
 }

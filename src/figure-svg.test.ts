@@ -373,6 +373,12 @@ test('diff prints the spec changes between two figures, as text, Markdown or JSO
     assert.equal(JSON.parse(json.stdout)[0].kind, 'edge');
     assert.equal(run(['diff', join(dir, 'old.json'), join(dir, 'old.json')]).stdout.trim(), 'no change in the spec');
     assert.equal(run(['diff', join(dir, 'old.json')]).status, 2);
+    const drawn = run(['diff', join(dir, 'old.json'), join(dir, 'new.json'), '--svg', join(dir, 'diff.svg')]);
+    assert.equal(drawn.status, 0, drawn.stderr);
+    assert.equal(drawn.stdout.trim(), 'edge changed: w (label "write" -> "read")');
+    const svg = readFileSync(join(dir, 'diff.svg'), 'utf8');
+    assert.match(svg, /changed 1/);
+    assert.doesNotMatch(svg, /figure-spec/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

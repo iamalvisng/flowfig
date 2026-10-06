@@ -266,7 +266,11 @@ npx flowfig --spec docs/checkout.svg > checkout.json   # print the spec in the S
 npx flowfig checkout.json docs/checkout-rail-only.svg
 npx flowfig verify docs/checkout.svg                    # check each source and each edge against the code
 npx flowfig diff old.svg docs/checkout.svg              # list what changed in the spec
+npx flowfig diff old.svg docs/checkout.svg --svg diff.svg   # draw the change in one figure
 ```
+
+The diff SVG is a still figure. Green marks an added box or edge, red and dashed marks a removed one, and orange marks a changed one.
+The diff SVG has no spec, so `verify` and `--spec` skip it.
 
 ## The spec
 

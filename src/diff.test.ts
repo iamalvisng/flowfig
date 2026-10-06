@@ -1,7 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { diff, formatDiff } from './diff.ts';
-import type { FlowProps } from './model.ts';
+import { diff, formatDiff, mergeFigures } from './diff.ts';
+import { checkSpec } from './check.ts';
+import { TONES, type FlowProps } from './model.ts';
+import { toSvg } from './svg.ts';
 
 const base: FlowProps = {
   layout: {
@@ -114,4 +116,65 @@ test('diff reports a via change, a removed repeated hop and a caption change', (
   assert.match(lines, /edge changed: q \(via "order-paid" -> "order-shipped"\)/);
   assert.match(lines, /message removed/);
   assert.match(lines, /step changed: pay \(caption/);
+});
+
+const labels = (g: FlowProps['layout']): string[] => g.children.flatMap((c) => ('children' in c ? [`[${labels(c).join(' ')}]`] : [c.id]));
+
+test('a removed box goes after its surviving old sibling, in the same group', () => {
+  const box = (id: string) => ({ id, label: id });
+  const old: FlowProps = {
+    layout: { children: [box('a'), { label: 'Zone', children: [box('b'), box('x'), box('c')] }, box('d')] },
+    edges: [],
+  };
+  const next: FlowProps = { layout: { children: [box('a'), { label: 'Zone', children: [box('b'), box('c')] }, box('d')] }, edges: [] };
+  const { figure, marks } = mergeFigures(old, next);
+  assert.deepEqual(labels(figure.layout), ['a', '[b x c]', 'd']);
+  assert.deepEqual(marks.boxes, { x: 'removed' });
+});
+
+test('in an auto figure a removed box goes into its surviving old frame', () => {
+  const box = (id: string) => ({ id, label: id });
+  const old: FlowProps = { layout: { auto: true, children: [box('a'), { label: 'Zone', children: [box('b'), box('x')] }] }, edges: [] };
+  const next: FlowProps = { layout: { auto: true, children: [box('a'), { label: 'Zone', children: [box('b')] }] }, edges: [] };
+  assert.deepEqual(labels(mergeFigures(old, next).figure.layout), ['a', '[b x]']);
+});
+
+test('an edge that keeps its id and gets new ends becomes a removed and an added edge', () => {
+  const box = (id: string) => ({ id, label: id });
+  const layout = { children: [box('a'), box('b'), box('c')] };
+  const { figure, marks } = mergeFigures(
+    { layout, edges: [{ id: 'e', from: 'a', to: 'b' }] },
+    { layout, edges: [{ id: 'e', from: 'a', to: 'c' }] },
+  );
+  assert.deepEqual(marks.edges, { e: 'added', 'e (old)': 'removed' });
+  assert.equal(
+    checkSpec(figure).some((f) => f.rule === 'duplicate-id'),
+    false,
+  );
+});
+
+test('the diff SVG draws an added edge green, a removed edge red and dashed, and an unchanged edge muted', () => {
+  const box = (id: string) => ({ id, label: id });
+  const layout = { children: [box('a'), box('b'), box('c')] };
+  const old: FlowProps = {
+    layout,
+    edges: [
+      { id: 'keep', from: 'a', to: 'b' },
+      { id: 'gone', from: 'b', to: 'c' },
+    ],
+  };
+  const next: FlowProps = {
+    layout,
+    edges: [
+      { id: 'keep', from: 'a', to: 'b' },
+      { id: 'new', from: 'a', to: 'c' },
+    ],
+  };
+  const { figure, marks } = mergeFigures(old, next);
+  const svg = toSvg(figure, { marks });
+  const stroke = (id: string) => svg.match(new RegExp(`<path id="p-${id}"[^>]*stroke="([^"]+)"`))![1];
+  assert.equal(stroke('new'), TONES.green);
+  assert.equal(stroke('gone'), TONES.red);
+  assert.equal(stroke('keep'), 'var(--muted)');
+  assert.match(svg, /<g opacity="0.5" stroke-dasharray="5 4"><path id="p-gone"/);
 });
