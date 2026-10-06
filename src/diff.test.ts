@@ -1,7 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { diff, formatDiff } from './diff.ts';
-import type { FlowProps } from './model.ts';
+import { diff, formatDiff, mergeFigures } from './diff.ts';
+import { checkSpec } from './check.ts';
+import { nodes, TONES, type FigNode, type FlowProps } from './model.ts';
+import { check, toSvg } from './svg.ts';
 
 const base: FlowProps = {
   layout: {
@@ -114,4 +116,158 @@ test('diff reports a via change, a removed repeated hop and a caption change', (
   assert.match(lines, /edge changed: q \(via "order-paid" -> "order-shipped"\)/);
   assert.match(lines, /message removed/);
   assert.match(lines, /step changed: pay \(caption/);
+});
+
+const labels = (g: FlowProps['layout']): string[] => g.children.flatMap((c) => ('children' in c ? [`[${labels(c).join(' ')}]`] : [c.id]));
+
+test('a removed box goes after its surviving old sibling, in the same group', () => {
+  const box = (id: string) => ({ id, label: id });
+  const old: FlowProps = {
+    layout: { children: [box('a'), { label: 'Zone', children: [box('b'), box('x'), box('c')] }, box('d')] },
+    edges: [],
+  };
+  const next: FlowProps = { layout: { children: [box('a'), { label: 'Zone', children: [box('b'), box('c')] }, box('d')] }, edges: [] };
+  const { figure, marks } = mergeFigures(old, next);
+  assert.deepEqual(labels(figure.layout), ['a', '[b x c]', 'd']);
+  assert.deepEqual(marks.boxes, { x: 'removed' });
+});
+
+test('in an auto figure a removed box goes into its surviving old frame', () => {
+  const box = (id: string) => ({ id, label: id });
+  const old: FlowProps = { layout: { auto: true, children: [box('a'), { label: 'Zone', children: [box('b'), box('x')] }] }, edges: [] };
+  const next: FlowProps = { layout: { auto: true, children: [box('a'), { label: 'Zone', children: [box('b')] }] }, edges: [] };
+  assert.deepEqual(labels(mergeFigures(old, next).figure.layout), ['a', '[b x]']);
+});
+
+test('an edge that keeps its id and gets new ends becomes a removed and an added edge', () => {
+  const box = (id: string) => ({ id, label: id });
+  const layout = { children: [box('a'), box('b'), box('c')] };
+  const { figure, marks } = mergeFigures(
+    { layout, edges: [{ id: 'e', from: 'a', to: 'b' }] },
+    { layout, edges: [{ id: 'e', from: 'a', to: 'c' }] },
+  );
+  assert.deepEqual(marks.edges, { e: 'added', 'e (old)': 'removed' });
+  assert.equal(
+    checkSpec(figure).some((f) => f.rule === 'duplicate-id'),
+    false,
+  );
+});
+
+test('the diff SVG draws an added edge green, a removed edge red and dashed, and an unchanged edge muted', () => {
+  const box = (id: string) => ({ id, label: id });
+  const layout = { children: [box('a'), box('b'), box('c')] };
+  const old: FlowProps = {
+    layout,
+    edges: [
+      { id: 'keep', from: 'a', to: 'b' },
+      { id: 'gone', from: 'b', to: 'c' },
+    ],
+  };
+  const next: FlowProps = {
+    layout,
+    edges: [
+      { id: 'keep', from: 'a', to: 'b' },
+      { id: 'new', from: 'a', to: 'c' },
+    ],
+  };
+  const { figure, marks } = mergeFigures(old, next);
+  const svg = toSvg(figure, { marks });
+  const stroke = (id: string) => svg.match(new RegExp(`<path id="p-${id}"[^>]*stroke="([^"]+)"`))![1];
+  assert.equal(stroke('new'), TONES.green);
+  assert.equal(stroke('gone'), TONES.red);
+  assert.equal(stroke('keep'), 'var(--muted)');
+  assert.match(svg, /<g opacity="0.5" stroke-dasharray="5 4"><path id="p-gone"/);
+});
+
+test('a removed top-level box in an auto figure is placed and does not throw', () => {
+  const box = (id: string) => ({ id, label: id });
+  const { figure } = mergeFigures(
+    { layout: { auto: true, children: [box('a'), box('x')] }, edges: [] },
+    { layout: { auto: true, children: [box('a'), box('b')] }, edges: [] },
+  );
+  assert.deepEqual(labels(figure.layout), ['a', 'b', 'x']);
+});
+
+test('a removed box beside an unlabeled row goes after the row, not inside it', () => {
+  const box = (id: string) => ({ id, label: id });
+  const row = { direction: 'row' as const, children: [box('a'), box('b')] };
+  const { figure } = mergeFigures({ layout: { children: [row, box('x')] }, edges: [] }, { layout: { children: [row] }, edges: [] });
+  assert.deepEqual(labels(figure.layout), ['[a b]', 'x']);
+});
+
+test('a lanes diff keeps the time columns that the steps gave, so the figure stays in one block', () => {
+  const lane = (label: string, ...ids: string[]) => ({ label, children: ids.map((id) => ({ id, label: id })) });
+  const next: FlowProps = {
+    lanes: true,
+    layout: { direction: 'column', children: [lane('One', 'a'), lane('Two', 'b')] },
+    edges: [{ id: 'e', from: 'b', to: 'a' }],
+    steps: [{ label: 's', flow: ['e'] }],
+  };
+  const { figure } = mergeFigures({ ...next, layout: { direction: 'column', children: [lane('One', 'a', 'x'), lane('Two', 'b')] } }, next);
+  const at = Object.fromEntries(nodes(figure.layout).map((n) => [n.id, n.at]));
+  assert.deepEqual(at, { a: 1, b: 0, x: 2 });
+});
+
+test('a timeline diff SVG is still', () => {
+  const tl = (extra: FigNode[]): FlowProps => ({
+    timeline: true,
+    layout: {
+      direction: 'column',
+      children: [{ label: 'Product', children: [{ id: 'spec', label: 'Spec', from: '2026-10-05', to: '2026-10-16' }, ...extra] }],
+    },
+    edges: [],
+  });
+  const { figure, marks } = mergeFigures(tl([]), tl([{ id: 'b', label: 'Build', from: '2026-10-19', to: '2026-11-06' }]));
+  assert.doesNotMatch(toSvg(figure, { marks }), /@keyframes/);
+});
+
+test('an edge with no label and a new source shows orange', () => {
+  const layout = {
+    children: [
+      { id: 'a', label: 'a' },
+      { id: 'b', label: 'b' },
+    ],
+  };
+  const { figure, marks } = mergeFigures(
+    { layout, edges: [{ id: 'e', from: 'a', to: 'b' }] },
+    { layout, edges: [{ id: 'e', from: 'a', to: 'b', source: 'x.ts' }] },
+  );
+  assert.match(toSvg(figure, { marks }), new RegExp(`<path id="p-e"[^>]*stroke="${TONES.orange}"`));
+});
+
+const laneFig = (...ids: string[]): FlowProps => ({
+  lanes: true,
+  layout: { direction: 'column', children: [{ label: 'L', children: ids.map((id) => ({ id, label: id })) }] },
+  edges: [],
+});
+
+test('a lanes diff gives each removed box its own column between its old neighbors', () => {
+  const { figure } = mergeFigures(laneFig('a', 'x', 'y'), laneFig('a', 'y'));
+  assert.deepEqual(Object.fromEntries(nodes(figure.layout).map((n) => [n.id, n.at])), { a: 0, y: 2, x: 1 });
+  assert.equal(
+    check(figure).some((f) => f.rule === 'lane-column-taken'),
+    false,
+  );
+});
+
+test('a surviving labeled frame whose old boxes are all removed stays one frame', () => {
+  const frame = (...ids: string[]) => ({ id: 'f', label: 'Finance', children: ids.map((id) => ({ id, label: id })) });
+  const { figure } = mergeFigures(
+    { layout: { children: [{ id: 'a', label: 'a' }, frame('x')] }, edges: [] },
+    { layout: { children: [{ id: 'a', label: 'a' }, frame('y')] }, edges: [] },
+  );
+  assert.deepEqual(labels(figure.layout), ['a', '[y x]']);
+  assert.equal(
+    checkSpec(figure).some((f) => f.rule === 'duplicate-id'),
+    false,
+  );
+});
+
+test('a removed box inside an unlabeled row does not throw', () => {
+  const box = (id: string) => ({ id, label: id });
+  const { figure } = mergeFigures(
+    { layout: { children: [box('a'), { direction: 'row', children: [box('x')] }] }, edges: [] },
+    { layout: { children: [box('a')] }, edges: [] },
+  );
+  assert.deepEqual(labels(figure.layout), ['a', 'x']);
 });

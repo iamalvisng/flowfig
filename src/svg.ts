@@ -5,11 +5,12 @@ import { textWidth, wrap } from './text.ts';
 import { checkRendered, planFor, type CheckOptions } from './check.ts';
 import type { Finding, Scene, SceneBox, SceneEdge } from './scene.ts';
 import { autoLayout } from './auto.ts';
+import type { DiffMark, DiffMarks } from './diff.ts';
 export type { CheckOptions } from './check.ts';
 export type { Finding, Scene } from './scene.ts';
 export type * from './model.ts';
 export { parseSource, links, type Link } from './source.ts';
-export { diff, formatDiff, type Change } from './diff.ts';
+export { diff, formatDiff, mergeFigures, type Change, type DiffMark, type DiffMarks } from './diff.ts';
 import {
   ASYNC_TAG_W,
   BASE_RATE,
@@ -264,7 +265,35 @@ export type SvgOptions = {
   /** Lanes: page width and smallest text size that set the wrap. Default: 830 and 10. */
   width?: number;
   minText?: number;
+  /** Draws a still diff with a legend. `mergeFigures` makes the marks. */
+  marks?: DiffMarks;
 };
+
+const MARK_COLOR: Record<DiffMark, string> = { added: TONES.green, removed: TONES.red, changed: TONES.orange };
+const marked = (mark: DiffMark | undefined, inner: string) =>
+  mark === 'removed' ? `<g opacity="0.5" stroke-dasharray="5 4">${inner}</g>` : mark ? `<g stroke-width="2">${inner}</g>` : inner;
+
+function legendOf(m: DiffMarks): { color: string; text: string }[] {
+  const count = (kind: DiffMark) =>
+    Object.values(m.boxes).filter((k) => k === kind).length + Object.values(m.edges).filter((k) => k === kind).length;
+  const items = (['added', 'removed', 'changed'] as const).filter(count).map((k) => ({ color: MARK_COLOR[k], text: `${k} ${count(k)}` }));
+  if (m.steps) items.push({ color: 'none', text: 'steps: see the text diff' });
+  return items.length ? items : [{ color: 'none', text: 'no change in boxes and edges' }];
+}
+
+function legendSvg(items: { color: string; text: string }[], W: number, H: number): string {
+  if (!items.length) return '';
+  const widths = items.map((i) => textWidth(i.text, 12) + (i.color === 'none' ? 0 : 16));
+  let x = (W - widths.reduce((a, b) => a + b, 0) - 20 * (items.length - 1)) / 2;
+  return items
+    .map((i, k) => {
+      const sq = i.color === 'none' ? '' : `<rect x="${n2(x)}" y="${n2(H - 24)}" width="10" height="10" rx="2" fill="${i.color}"/>`;
+      const out = `${sq}<text x="${n2(x + (i.color === 'none' ? 0 : 16))}" y="${n2(H - 15)}" font-size="12" fill="var(--muted)">${esc(i.text)}</text>\n`;
+      x += widths[k] + 20;
+      return out;
+    })
+    .join('');
+}
 
 const SYSTEM_FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
 
@@ -274,7 +303,7 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
   const speed = (opts.speed ?? fig.speed ?? 900) / 1000 / BASE_RATE;
   const pad = opts.padding ?? 24;
   const tl = fig.timeline && isLanesLayout(fig.layout) ? timelineLayout(fig, TL_AXIS_W) : null;
-  const synthetic = tl != null && !fig.steps?.length;
+  const synthetic = tl != null && !fig.steps?.length && !opts.marks;
   const steps = synthetic ? timelineBeats(fig) : (fig.steps ?? []);
   const beats: Beat[][] = steps.map((s) => s.flow.map(toBeat));
 
@@ -572,8 +601,9 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
         `/><text x="${n2(p.x + FRAME_SIDE)}" y="${n2(p.lane ? p.y + p.h / 2 + 4 : p.y + 20)}" class="frame">${esc(str(item.label).toUpperCase())}</text>`
       );
     }
-    const tip = (inner: string) => (item.source ? `<g><title>${esc(item.source)}</title>${inner}</g>` : inner);
-    const bt = item.tone && TONES[item.tone];
+    const diffMark = opts.marks?.boxes[item.id];
+    const tip = (inner: string) => marked(diffMark, item.source ? `<g><title>${esc(item.source)}</title>${inner}</g>` : inner);
+    const bt = diffMark ? MARK_COLOR[diffMark] : item.tone && TONES[item.tone];
     const stroke = cls(boxAnim(item.id, true, bt));
     if (p.tl) {
       const fill0 = bt ? toneTint(bt, 'var(--bg)') : 'var(--bg)';
@@ -702,15 +732,18 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
           )
         : anim(on, `stroke: var(--accent); stroke-width: ${EDGE_ON}`, off, 'e'),
     );
+    const em = opts.marks?.edges[r.id];
+    const line = em && (em !== 'changed' || e.label == null) ? MARK_COLOR[em] : 'var(--muted)';
     const tip = edgeTip(r.id, e.source, beats.flat());
     const path0 = r.stub
       ? r.stub.parts
-          .map((d) => `<path d="${d}" fill="none" stroke="var(--muted)" stroke-width="${EDGE_OFF}" marker-end="url(#arrow)"${lit}/>`)
+          .map((d) => `<path d="${d}" fill="none" stroke="${line}" stroke-width="${EDGE_OFF}" marker-end="url(#arrow)"${lit}/>`)
           .join('') + `<path id="p-${esc(r.id)}" d="${r.d}" fill="none" stroke="none"/>`
-      : `<path id="p-${esc(r.id)}" d="${r.d}" fill="none" stroke="var(--muted)" stroke-width="${EDGE_OFF}" marker-end="url(#arrow)"${lit}/>`;
+      : `<path id="p-${esc(r.id)}" d="${r.d}" fill="none" stroke="${line}" stroke-width="${EDGE_OFF}" marker-end="url(#arrow)"${lit}/>`;
     const path = tip ? `<g><title>${esc(tip)}</title>${path0}</g>` : path0;
+    const pillColor = em ? MARK_COLOR[em] : undefined;
     const pill = (x: number, y: number, lw: number, text: string) =>
-      `<rect x="${n2(x - lw / 2)}" y="${n2(y - 9)}" width="${n2(lw)}" height="18" rx="9" fill="var(--bg)" stroke="var(--border)"` +
+      `<rect x="${n2(x - lw / 2)}" y="${n2(y - 9)}" width="${n2(lw)}" height="18" rx="9" fill="${pillColor ? toneTint(pillColor, 'var(--bg)', 14) : 'var(--bg)'}" stroke="${pillColor ?? 'var(--border)'}"` +
       cls(
         toned
           ? frames(
@@ -722,7 +755,7 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
             )
           : anim(on, 'fill: var(--accent); stroke: var(--accent)', 'fill: var(--bg); stroke: var(--border)', 'l'),
       ) +
-      `/><text x="${n2(x)}" y="${n2(y + 4)}"${cls('edgelabel', anim(on, `fill: ${ON_ACCENT}`, 'fill: var(--muted)', 'x'))}>${esc(text)}</text>`;
+      `/><text x="${n2(x)}" y="${n2(y + 4)}"${cls('edgelabel', anim(on, `fill: ${ON_ACCENT}`, 'fill: var(--muted)', 'x'))}${pillColor ? ' style="fill: var(--fg)"' : ''}>${esc(text)}</text>`;
     let label = '';
     if (r.stub) {
       fonts.push(11);
@@ -734,7 +767,7 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
       fonts.push(11);
       label = pill(r.mid.x, r.mid.y, lw, str(e.label));
     }
-    return hidden ? `<g opacity="0"${shown}>${path}${label}</g>` : path + label;
+    return marked(em === 'removed' ? em : undefined, hidden ? `<g opacity="0"${shown}>${path}${label}</g>` : path + label);
   });
 
   const packets = hops.map((h, i) => {
@@ -855,7 +888,9 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
   const W = only ? Math.max(560, rail.width) : Math.max(mapW, rail?.width ?? 0);
   const mapH = only ? 0 : bounds.h + pad * 2 + arcT + arcB;
   const top = only ? pad : mapH + RAIL.gap;
-  const H = only ? pad + rail.height + capH : mapH + (rail ? RAIL.gap + rail.height : 0) + capH;
+  const legend = opts.marks ? legendOf(opts.marks) : [];
+  const legendH = opts.marks ? 34 : 0;
+  const H = (only ? pad + rail.height + capH : mapH + (rail ? RAIL.gap + rail.height : 0) + capH) + legendH;
   const shift = (W - (bounds.w + pad * 2 + arcL + arcR)) / 2 + arcL;
   const railX = rail ? (W - rail.width) / 2 : 0;
 
@@ -1012,9 +1047,10 @@ ${todaySvg}
 }${railSvg}
 ${labels.join('\n')}
 ${said.join('\n')}
-</svg>
+${legendSvg(legend, W, H)}</svg>
 `;
   if (rail) fonts.push(12, 13);
+  if (legend.length) fonts.push(12);
   const scene: Scene = {
     width: n2(W),
     ...(!only && { area: { x: -shift, y: -arcT, w: W, h: mapH } }),
