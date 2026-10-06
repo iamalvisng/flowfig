@@ -5,7 +5,7 @@ import { foldedLabel, groupBox, layoutRail, railState, RAIL } from './rail.ts';
 import { textWidth } from './text.ts';
 import { checkScene, checkSpec, checkTheme } from './check.ts';
 import type { Scene } from './scene.ts';
-import { autoLayout } from './auto.ts';
+import { autoLayout, rowBreaks } from './auto.ts';
 import {
   ASYNC_TAG_W,
   BASE_RATE,
@@ -351,6 +351,7 @@ function FlowBody({
           to: end(ids[i], e.to, false),
           around: e.around ?? (lanePlan?.around.has(ids[i]) ? ('below' as const) : undefined),
           ...(tl && { sides: ['r', 'l'] as [Side, Side], elbow: true }),
+          ...(rowBreaks.has(e) && { drop: true }),
           ...(stubs.has(ids[i]) && {
             stub: stubs.get(ids[i])!.map(labelPillW),
             bands: [bandOf(ids[i], e.from, 0), bandOf(ids[i], e.to, 1)] as [Rect | undefined, Rect | undefined],

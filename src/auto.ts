@@ -3,6 +3,7 @@ import {
   fitCap,
   idsIn,
   isGroup,
+  isRows,
   itemWidth,
   nodes,
   toBeat,
@@ -204,39 +205,44 @@ const pruned = (g: FigGroup): FigGroup => ({
 const titled = (it: Item): boolean => isGroup(it) && (it.label != null || it.children.some(titled));
 
 function smallFont(f: FlowProps, carded: Set<string>): number {
+  const shown = (f.steps ?? []).flatMap((s) => s.flow.flatMap((b) => Object.values(toBeat(b).show ?? {})));
+  if (shown.some((c) => isRows(c) && c.some((r) => r.mono))) return 10.5;
   if (carded.size || f.edges.some((e) => e.label != null) || titled(f.layout)) return 11;
   if ((f.steps ?? []).some((s) => s.flow.some((b) => toBeat(b).hops.some((h) => h.data != null)))) return 11.5;
   if (nodes(f.layout).some((n) => n.sub != null)) return 12;
   return f.steps?.length ? 13.5 : 14;
 }
 
+export const rowBreaks = new WeakSet<FigEdge>();
+
 function fold(f: FlowProps, carded: Set<string>): FlowProps {
   const room = (PAGE * smallFont(f, carded)) / MIN_TEXT - 2 * PAD;
-  if (itemWidth(f.layout, carded, f.edges, fitCap(f, PAGE)) <= room) return f;
+  if (f.rail || itemWidth(f.layout, carded, f.edges, fitCap(f, PAGE)) <= room) return f;
   const ranks = f.layout.children;
+  const n = ranks.length;
   const unit = new Map(ranks.flatMap((r, k) => idsIn(r).map((id): [string, number] => [id, k])));
-  const width = (rs: Item[]) => itemWidth({ direction: 'row', children: rs }, carded, f.edges);
-  const cuts = (k: number, from = 1): number[][] =>
-    k === 0
-      ? [[]]
-      : Array.from({ length: ranks.length - from }, (_, i) => from + i).flatMap((c) => cuts(k - 1, c + 1).map((r) => [c, ...r]));
-  for (let k = 1; k < ranks.length; k++) {
-    let best: { rows: Item[][]; cost: number[] } | undefined;
-    for (const cs of cuts(k)) {
-      const rows = [0, ...cs].map((c, i) => ranks.slice(c, [...cs, ranks.length][i]));
-      if (f.edges.some((e) => e.around && [e.from, e.to].some((id) => unit.get(id)! < cs.at(-1)!))) continue;
-      const ws = rows.map(width);
-      if (ws.some((w) => w > room)) continue;
-      const crossing = f.edges.filter((e) => cs.some((c) => unit.get(e.from)! < c !== unit.get(e.to)! < c)).length;
-      const cost = [crossing, Math.max(...ws)];
-      if (!best || cost[0] < best.cost[0] || (cost[0] === best.cost[0] && cost[1] < best.cost[1])) best = { rows, cost };
+  const ends = f.edges.filter((e) => unit.has(e.from) && unit.has(e.to)).map((e): [number, number] => [unit.get(e.from)!, unit.get(e.to)!]);
+  const across = (c: number) => ends.filter(([a, b]) => a < c !== b < c).length;
+  const last = Math.min(n - 1, ...f.edges.filter((e) => e.around).flatMap((e) => [e.from, e.to].map((id) => unit.get(id) ?? n)));
+  type Plan = { cost: [number, number, number]; from: number };
+  const better = (p: Plan['cost'], q: Plan['cost']) => p[0] - q[0] || p[1] - q[1] || p[2] - q[2];
+  const plans: (Plan | undefined)[] = [{ cost: [0, 0, 0], from: -1 }];
+  for (let j = 1; j <= n; j++)
+    for (let i = j - 1; i >= 0; i--) {
+      const w = itemWidth({ direction: 'row', children: ranks.slice(i, j) }, carded, f.edges);
+      if (w > room) break;
+      const prev = plans[i];
+      if (!prev || (j === n && i > last)) continue;
+      const cost: Plan['cost'] = [prev.cost[0] + 1, prev.cost[1] + (i ? across(i) : 0), Math.max(prev.cost[2], w)];
+      if (!plans[j] || better(cost, plans[j]!.cost) < 0) plans[j] = { cost, from: i };
     }
-    if (best) {
-      const children = best.rows.map((rs): Item => (rs.length === 1 ? rs[0] : { direction: 'row', children: rs }));
-      return { ...f, layout: { direction: 'column', children } };
-    }
-  }
-  return f;
+  if (!plans[n] || plans[n]!.cost[0] < 2) return f;
+  const cuts: number[] = [];
+  for (let j = n; j > 0; j = plans[j]!.from) cuts.unshift(plans[j]!.from);
+  const rows = cuts.map((c, k) => ranks.slice(c, cuts[k + 1] ?? n));
+  for (const e of f.edges) if (cuts.some((c) => c && unit.get(e.from)! < c && unit.get(e.to)! >= c)) rowBreaks.add(e);
+  const children = rows.map((rs): Item => (rs.length === 1 ? rs[0] : { direction: 'row', children: rs }));
+  return { ...f, layout: { direction: 'column', children } };
 }
 
 export function autoLayout(spec: FlowProps): FlowProps {

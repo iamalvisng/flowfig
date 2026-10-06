@@ -424,39 +424,59 @@ test('a loop back edge returns around the outer side and crosses no box', () => 
   }
 });
 
+const PIPELINE_IDS = ['push', 'lint', 'test', 'build', 'scan', 'deploy', 'prod', 'preview'];
+const PIPELINE_LABELS = [
+  'Git push',
+  'Lint',
+  'Unit tests',
+  'Build image',
+  'Security scan',
+  'Main branch?',
+  'Deploy to production',
+  'Deploy preview',
+];
+const PIPELINE: FlowProps = {
+  layout: {
+    auto: true,
+    direction: 'row',
+    children: PIPELINE_IDS.map((id, i) => ({ id, label: PIPELINE_LABELS[i], ...(id === 'deploy' && { shape: 'decision' as const }) })),
+  },
+  edges: [
+    { from: 'push', to: 'lint' },
+    { from: 'push', to: 'test' },
+    { from: 'lint', to: 'build' },
+    { from: 'test', to: 'build' },
+    { from: 'build', to: 'scan' },
+    { from: 'scan', to: 'deploy' },
+    { from: 'deploy', to: 'prod', label: 'yes' },
+    { from: 'deploy', to: 'preview', label: 'no' },
+  ],
+};
+
 test('a long left-to-right pipeline folds into rows instead of small text', () => {
-  const ids = ['push', 'lint', 'test', 'build', 'scan', 'deploy', 'prod', 'preview'];
-  const labels = [
-    'Git push',
-    'Lint',
-    'Unit tests',
-    'Build image',
-    'Security scan',
-    'Main branch?',
-    'Deploy to production',
-    'Deploy preview',
-  ];
-  const fig: FlowProps = {
-    layout: {
-      auto: true,
-      direction: 'row',
-      children: ids.map((id, i) => ({ id, label: labels[i], ...(id === 'deploy' && { shape: 'decision' as const }) })),
-    },
-    edges: [
-      { from: 'push', to: 'lint' },
-      { from: 'push', to: 'test' },
-      { from: 'lint', to: 'build' },
-      { from: 'test', to: 'build' },
-      { from: 'build', to: 'scan' },
-      { from: 'scan', to: 'deploy' },
-      { from: 'deploy', to: 'prod', label: 'yes' },
-      { from: 'deploy', to: 'preview', label: 'no' },
-    ],
-  };
   assert.deepEqual(
-    check(fig)
+    check(PIPELINE)
       .filter((f) => f.rule === 'small-text' || f.rule === 'edge-crosses-box')
       .map((f) => f.rule),
     [],
   );
+});
+
+test('the edge from the end of one folded row enters the next row from above', () => {
+  const { scene } = render(PIPELINE);
+  const top = scene.boxes.find((b) => b.id === 'deploy')!.rect.y;
+  const end = scene.edges.find((e) => e.from === 'scan' && e.to === 'deploy')!.curve[3];
+  assert.ok(Math.abs(end.y - top) < 1, `the edge ends at y ${end.y}, the box top is ${top}`);
+  for (const e of scene.edges.filter((q) => q.from === 'deploy')) assert.notDeepEqual(e.curve[0], end);
+});
+
+test('a 40-box left-to-right chain lays out in under 1 s', () => {
+  const ids = Array.from({ length: 40 }, (_, i) => 'n' + i);
+  const fig: FlowProps = {
+    layout: { auto: true, direction: 'row', children: ids.map((id) => ({ id, label: 'Service step ' + id })) },
+    edges: ids.slice(1).map((id, i) => ({ from: ids[i], to: id })),
+  };
+  const t = performance.now();
+  autoLayout(fig);
+  assert.ok(performance.now() - t < 1000);
 });

@@ -4,7 +4,7 @@ import { foldedLabel, groupBox, layoutRail, railState, RAIL, type Rail } from '.
 import { textWidth, wrap } from './text.ts';
 import { checkRendered, planFor, type CheckOptions } from './check.ts';
 import type { Finding, Scene, SceneBox, SceneEdge } from './scene.ts';
-import { autoLayout } from './auto.ts';
+import { autoLayout, rowBreaks } from './auto.ts';
 import type { DiffMark, DiffMarks } from './diff.ts';
 export type { CheckOptions } from './check.ts';
 export type { Finding, Scene } from './scene.ts';
@@ -373,6 +373,7 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
         to: end(ids[i], e.to, false),
         around: e.around ?? (plan?.around.has(ids[i]) ? ('below' as const) : undefined),
         ...(tl && { sides: ['r', 'l'] as [Side, Side], elbow: true }),
+        ...(rowBreaks.has(e) && { drop: true }),
         ...(stubs.has(ids[i]) && { stub: stubs.get(ids[i])!.map(labelPillW), bands: [bandOf(ids[i], e.from, 0), bandOf(ids[i], e.to, 1)] }),
         ...(!tl && e.label != null && { labelW: labelPillW(str(e.label)) }),
       })),
