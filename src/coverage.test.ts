@@ -110,3 +110,15 @@ test('a linked file that git ignores does not make the figure stale', () => {
     assert.equal(coverageReport({ root }).figures[0].state, 'ok');
   });
 });
+
+test('coverage skips test files in the folder counts and the uncovered list', () => {
+  const files = { 'src/a.ts': 'export {};\n', 'src/a.test.ts': 'export {};\n', 'pkg/x_test.go': 'package x\n', 'pkg/x.go': 'package x\n' };
+  withRepo(files, (root) => {
+    assert.deepEqual(coverageReport({ root }).folders, [
+      { folder: 'pkg', covered: 0, total: 1 },
+      { folder: 'src', covered: 0, total: 1 },
+    ]);
+    assert.deepEqual(coverageReport({ root, entries: '**/*' }).entries?.uncovered.sort(), ['pkg/x.go', 'src/a.ts']);
+    assert.equal(coverageReport({ root, entries: 'src/a.test.ts' }).entries?.total, 1);
+  });
+});
