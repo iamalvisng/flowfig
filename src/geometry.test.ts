@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { labelAlong, route, type Pt, type Routed } from './geometry.ts';
+import { labelAlong, route, samples, type Pt, type Routed } from './geometry.ts';
 
 const bezier = ([p0, p1, p2, p3]: [Pt, Pt, Pt, Pt], t: number): Pt => {
   const u = 1 - t;
@@ -285,4 +285,40 @@ test('an edge label moves off a box on the curve middle, and stays at the middle
   const q = labelAlong(r, 40, [box], []);
   assert.ok(q.x + 20 < box.x - 1 || q.x - 20 > box.x + box.w + 1 || q.y + 9 < box.y - 1 || q.y - 9 > box.y + box.h + 1);
   assert.deepEqual(labelAlong(r, 40, [{ x: -50, y: -50, w: 400, h: 100 }], []), r.mid);
+});
+
+test('the router draws no edge through a box', () => {
+  const through = (r: Routed, box: { x: number; y: number; w: number; h: number }) => {
+    const line = r.elbow ?? [];
+    const pts = r.elbow
+      ? line.slice(1).flatMap((q, k) =>
+          Array.from({ length: 65 }, (_, i) => ({
+            x: line[k].x + ((q.x - line[k].x) * i) / 64,
+            y: line[k].y + ((q.y - line[k].y) * i) / 64,
+          })),
+        )
+      : samples(r.curve);
+    return pts.some((q) => q.x > box.x + 6 && q.x < box.x + box.w - 6 && q.y > box.y + 6 && q.y < box.y + box.h - 6);
+  };
+  const long = { a: { x: 0, y: 0, w: 100, h: 40 }, b: { x: 1900, y: 0, w: 100, h: 40 }, c: { x: 1035, y: 57, w: 20, h: 40 } };
+  const [arc] = route(
+    [{ id: 'e', from: 'a', to: 'b', around: 'below' }],
+    long,
+    new Set(),
+    Object.values(long).map((r) => ({ ...r, box: true })),
+  );
+  assert.ok(!through(arc, long.c), `a long arc steps over a narrow box: ${arc.d}`);
+  const back = {
+    a: { x: 300, y: 0, w: 100, h: 40 },
+    b: { x: 0, y: 200, w: 100, h: 40 },
+    c: { x: 280, y: 100, w: 140, h: 40 },
+    d: { x: 60, y: 60, w: 80, h: 100 },
+  };
+  const [elbow] = route(
+    [{ id: 'e', from: 'a', to: 'b', elbow: true }],
+    back,
+    new Set(),
+    Object.values(back).map((r) => ({ ...r, box: true })),
+  );
+  assert.ok(!through(elbow, back.c) && !through(elbow, back.d), `an elbow to a box on the left: ${elbow.d}`);
 });
