@@ -7,6 +7,9 @@ inputs:
   comment:
     description: Post one comment on the pull request with the diagram diff and the verify faults.
     default: 'true'
+  coverage:
+    description: Run flowfig coverage --strict. The job fails if a figure is stale or fails verify.
+    default: 'false'
 runs:
   using: composite
   steps:
@@ -24,3 +27,8 @@ runs:
         REPO: ${{ github.repository }}
         FORK: ${{ github.event.pull_request.head.repo.fork }}
       run: bash "${{ github.action_path }}/action/comment.sh"
+    - if: ${{ inputs.coverage == 'true' }}
+      shell: bash
+      env:
+        FIGURES: ${{ inputs.figures }}
+      run: npx --no-install flowfig coverage --strict --figures "$FIGURES"

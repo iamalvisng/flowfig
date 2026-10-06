@@ -68,7 +68,10 @@ jobs:
       - uses: iamalvisng/flowfig@v0.9.0
         with:
           figures: 'docs/**/*.svg' # default **/*.svg
+          # coverage: true # also fail the job if a figure is stale
 ```
+
+Set `coverage: true` to run `flowfig coverage --strict` after the comment. The job then fails if a figure is stale or fails verify.
 
 ## Use it
 
