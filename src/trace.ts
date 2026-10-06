@@ -257,11 +257,18 @@ export function trace(start: string, { root = process.cwd(), depth = 2, max = 40
 const count = (k: number, word: string) => `${k} ${word}${k === 1 ? '' : 's'}`;
 
 export function traceLines(r: TraceResult, depth: number, max: number): string[] {
-  const pairs = r.edges.map((e) => `${e.from} -> ${e.to}`);
-  const width = Math.max(0, ...pairs.map((p) => p.length));
+  const file = (id: string) => id.slice(0, id.indexOf('#'));
+  const lineNo = (e: TraceEdge) => (e.at.startsWith(`${file(e.from)}:`) ? e.at.slice(file(e.from).length + 1) : e.at);
+  const width = Math.max(0, ...r.edges.map((e) => lineNo(e).length));
   const symbols = new Set([r.start, ...r.edges.map((e) => e.to)]).size;
+  let last = '';
   return [
-    ...r.edges.map((e, i) => `${pairs[i].padEnd(width)}   ${e.at}`),
+    ...r.edges.flatMap((e) => {
+      const head = e.from === last ? [] : [e.from];
+      last = e.from;
+      const to = file(e.to) === file(e.from) ? e.to.slice(e.to.indexOf('#') + 1) : e.to;
+      return [...head, `  ${lineNo(e).padEnd(width)}  ${to}`];
+    }),
     ...r.unsure.map((u) => `unsure  ${u.at}  ${u.reason}`),
     ...r.open.map((o) => `open    ${o.at}  ${o.reason}`),
     ...r.stops.map((s) => `stop    ${s.reason} ${s.reason === 'depth' ? depth : max}: ${count(s.count, 'symbol')} not followed`),

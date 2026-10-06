@@ -493,23 +493,26 @@ before it writes a figure. Then the agent reads only the lines that the trace na
 
 ```console
 $ npx flowfig trace src/verify.ts#verify
-src/verify.ts#verify -> src/verify.ts#verifyReport          src/verify.ts:104
-src/verify.ts#verifyReport -> src/verify.ts#emptyCoverage   src/verify.ts:48
-src/verify.ts#verifyReport -> src/source.ts#links           src/verify.ts:49
-src/verify.ts#verifyReport -> src/code.ts#outside           src/verify.ts:58
-src/verify.ts#verifyReport -> src/code.ts#codeFile          src/verify.ts:65
-src/verify.ts#verifyReport -> src/code.ts#isDefined         src/verify.ts:67
-src/verify.ts#verifyReport -> src/verify.ts#escape          src/verify.ts:69
-src/verify.ts#verifyReport -> src/verify.ts#hasHeading      src/verify.ts:70
-src/verify.ts#verifyReport -> src/model.ts#nodes            src/verify.ts:79
-src/verify.ts#verifyReport -> src/edges.ts#edgeResult       src/verify.ts:81
-src/verify.ts#verifyReport -> src/model.ts#edgeId           src/verify.ts:91
-src/verify.ts#verifyReport -> src/model.ts#toBeat           src/verify.ts:95
+src/verify.ts#verify
+  104  verifyReport
+src/verify.ts#verifyReport
+  48   emptyCoverage
+  49   src/source.ts#links
+  58   src/code.ts#outside
+  65   src/code.ts#codeFile
+  67   src/code.ts#isDefined
+  69   escape
+  70   hasHeading
+  79   src/model.ts#nodes
+  81   src/edges.ts#edgeResult
+  91   src/model.ts#edgeId
+  95   src/model.ts#toBeat
 stop    depth 2: 11 symbols not followed
 summary: 13 symbols, 12 found, 0 unsure, 0 open, 4 calls outside the repo, 0.1 s
 ```
 
-- An edge line gives the caller, the callee, and the file and line of the call.
+- A header line gives a caller as `file#symbol`. Each call line under it gives the line of the call, then the callee.
+  The call is in the file of the caller. A callee in the same file shows only its symbol.
 - `unsure`: trace cannot name the target. An example is a call of a parameter.
 - `open`: the target is a name in a string, for example a route table entry. Read that line yourself.
 - `stop`: the trace reached `--depth` or `--max`. The line gives the number of functions that it did not follow.
