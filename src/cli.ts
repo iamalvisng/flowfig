@@ -20,6 +20,7 @@ import { check, render, toSvg, type Finding } from './svg.ts';
 import { checkRendered } from './check.ts';
 import { coverageLine, links, parseSource, unsureLines, verifyReport, type Coverage, type Link } from './verify.ts';
 import { trace, traceLines } from './trace.ts';
+import { coverageLines, coverageReport } from './coverage.ts';
 
 const USAGE = `usage: flowfig <-|spec.json|figure.ts> [out.svg] [--open]   render a figure; a spec on stdin with -
        flowfig check <-|spec.json|figure.ts|figure.svg>   list the faults; the input can be an SVG this wrote
@@ -27,6 +28,7 @@ const USAGE = `usage: flowfig <-|spec.json|figure.ts> [out.svg] [--open]   rende
        flowfig verify <input>... [--root <dir>] [--json] [--strict]   check the code links of one or more figures
        flowfig diff <old> <new> [--json|--md]   list the spec changes between two figures
        flowfig trace <file#symbol> [--depth <n>] [--max <n>] [--root <dir>] [--json]   list the calls under a symbol, each one checked
+       flowfig coverage [--figures <glob>] [--entries <glob>] [--root <dir>] [--strict] [--json]   list failing and stale figures, and code with no figure
        flowfig docs [topic]                               print the guide, or one topic (Markdown)
        flowfig mcp                                        serve check, render, verify, diff and docs over MCP (stdio)
        flowfig init [dir] [--agents <ids>] [-y] [--global] [--dry-run] [--no-mcp]   write flowfig instructions for the coding agents of a repo
@@ -158,6 +160,22 @@ if (args[0] === 'trace') {
     process.exit(1);
   }
   process.exit(0);
+}
+
+if (args[0] === 'coverage') {
+  args.shift();
+  const json = flag('--json'),
+    strict = flag('--strict');
+  const root = resolve(option('--root') ?? '.');
+  const figures = option('--figures'),
+    entries = option('--entries');
+  const unknown = args.find((a) => a.startsWith('-'));
+  if (unknown) usage(`unknown flag ${unknown}`);
+  if (args.length) usage('usage: flowfig coverage [--figures <glob>] [--entries <glob>] [--root <dir>] [--strict] [--json]');
+  if (!existsSync(root)) usage(`${root}: the folder does not exist`);
+  const r = coverageReport({ root, figures, entries });
+  console.log(json ? JSON.stringify(r, null, 2) : coverageLines(r).join('\n'));
+  process.exit(strict && r.figures.some((f) => f.state === 'fail' || f.state === 'stale') ? 1 : 0);
 }
 
 if (args[0] === 'diff') {

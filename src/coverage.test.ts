@@ -1,10 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { coverageReport } from './coverage.ts';
+
+const cli = join(dirname(dirname(fileURLToPath(import.meta.url))), 'dist', 'cli.js');
 
 const figure = (source: string) =>
   `<svg xmlns="http://www.w3.org/2000/svg"><metadata id="figure-spec"><![CDATA[${JSON.stringify({
@@ -68,6 +71,34 @@ test('a figure with a broken spec is fail, and the other figures still get a sta
           ['docs/login.svg', 'ok'],
         ],
       );
+    },
+  );
+});
+
+test('a figure with a missing symbol is fail, and --strict then exits 1', () => {
+  withRepo({ 'src/login.ts': 'export function login() {}\n', 'docs/old.svg': figure('src/login.ts#logout') }, (root) => {
+    const plain = spawnSync('node', [cli, 'coverage', '--root', root], { encoding: 'utf8' });
+    assert.equal(plain.status, 0);
+    assert.match(plain.stdout, /^docs\/old\.svg +fail +1 error: missing-symbol$/m);
+    assert.equal(spawnSync('node', [cli, 'coverage', '--root', root, '--strict'], { encoding: 'utf8' }).status, 1);
+  });
+});
+
+test('a code file that no figure links shows in the --entries list', () => {
+  withRepo(
+    {
+      'src/routes/refunds.ts': 'export function refund() {}\n',
+      'src/routes/orders.ts': 'export function order() {}\n',
+      'src/lib/util.ts': 'export function util() {}\n',
+      'docs/orders.svg': figure('src/routes/orders.ts#order'),
+    },
+    (root) => {
+      assert.deepEqual(coverageReport({ root, entries: 'src/routes/**' }).entries, {
+        glob: 'src/routes/**',
+        total: 2,
+        uncovered: ['src/routes/refunds.ts'],
+      });
+      assert.deepEqual(coverageReport({ root, entries: './src/routes/**' }).entries?.uncovered, ['src/routes/refunds.ts']);
     },
   );
 });

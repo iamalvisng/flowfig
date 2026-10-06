@@ -1,14 +1,19 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { posix, resolve } from 'node:path';
-import { readFile, type CodeFile } from './code.ts';
+import { langOf, readFile, type CodeFile } from './code.ts';
 import { loadSpec, specOf } from './load.ts';
 import { links, verifyReport } from './verify.ts';
 
 export type FigureState = 'fail' | 'stale' | 'ok' | 'none';
 export type FigureHealth = { figure: string; state: FigureState; detail: string };
-export type CoverageReport = { figures: FigureHealth[]; git: boolean };
-export type CoverageOptions = { root?: string; figures?: string };
+export type CoverageReport = {
+  figures: FigureHealth[];
+  git: boolean;
+  entries?: { glob: string; total: number; uncovered: string[] };
+  folders?: { folder: string; covered: number; total: number }[];
+};
+export type CoverageOptions = { root?: string; figures?: string; entries?: string };
 
 const MARK = '<metadata id="figure-spec">';
 
@@ -46,11 +51,12 @@ function gitTimes(root: string): ((path: string) => number) | null {
   }
 }
 
-export function coverageReport({ root = process.cwd(), figures = '**/*.svg' }: CoverageOptions = {}): CoverageReport {
+export function coverageReport({ root = process.cwd(), figures = '**/*.svg', entries }: CoverageOptions = {}): CoverageReport {
   const all = readFile.files!(root).filter((p) => !p.split('/').includes('dist'));
   const want = globRe(figures);
   const time = gitTimes(root);
   const cache = new Map<string, CodeFile | null>();
+  const covered = new Set<string>();
   const out: FigureHealth[] = [];
   for (const figure of all.filter((p) => p.endsWith('.svg') && want.test(p))) {
     const text = readFileSync(resolve(root, figure), 'utf8');
@@ -63,6 +69,7 @@ export function coverageReport({ root = process.cwd(), figures = '**/*.svg' }: C
       continue;
     }
     const paths = [...new Set(links(fig).map((l) => posix.normalize(l.path)))];
+    paths.forEach((p) => covered.add(p));
     if (!paths.length) {
       out.push({ figure, state: 'none', detail: 'no source links' });
       continue;
@@ -85,5 +92,39 @@ export function coverageReport({ root = process.cwd(), figures = '**/*.svg' }: C
         : { figure, state: 'ok', detail: `${coverage.boxesDefined} of ${coverage.boxes} boxes defined` },
     );
   }
-  return { figures: out, git: time != null };
+  const code = all.filter((p) => langOf(p) != null);
+  const report: CoverageReport = { figures: out, git: time != null };
+  if (entries) {
+    const re = globRe(entries);
+    const matched = code.filter((p) => re.test(p));
+    report.entries = { glob: entries, total: matched.length, uncovered: matched.filter((p) => !covered.has(p)) };
+  } else {
+    const by = new Map<string, { folder: string; covered: number; total: number }>();
+    for (const p of code) {
+      const folder = p.includes('/') ? p.slice(0, p.indexOf('/')) : '.';
+      const row = by.get(folder) ?? { folder, covered: 0, total: 0 };
+      row.total++;
+      if (covered.has(p)) row.covered++;
+      by.set(folder, row);
+    }
+    report.folders = [...by.values()];
+  }
+  return report;
+}
+
+export function coverageLines(r: CoverageReport): string[] {
+  const width = Math.max(0, ...r.figures.map((f) => f.figure.length));
+  const tally = (s: FigureState) => r.figures.filter((f) => f.state === s).length;
+  return [
+    ...(r.git ? [] : ['no git: stale is not checked']),
+    ...r.figures.map((f) => `${f.figure.padEnd(width + 4)}${f.state.padEnd(8)}${f.detail}`),
+    ...(r.entries
+      ? [
+          `uncovered ${r.entries.glob}: ${r.entries.uncovered.length} of ${r.entries.total} files have no figure`,
+          ...r.entries.uncovered.map((p) => `  ${p}`),
+        ]
+      : []),
+    ...(r.folders ?? []).map((f) => `code ${f.folder}: ${f.covered} of ${f.total} files have a figure`),
+    `summary: ${count(r.figures.length, 'figure')}: ${tally('ok')} ok, ${tally('stale')} stale, ${tally('fail')} fail, ${tally('none')} none`,
+  ];
 }
