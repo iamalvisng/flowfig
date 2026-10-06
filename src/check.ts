@@ -108,9 +108,20 @@ export function checkSpec(fig: FlowProps): Finding[] {
 
   const known = new Set([...boxIds, ...groups]);
   const knownEdges = new Set(edges);
+  const empty = new Set<string>();
+  const walk = (g: FigGroup): void => {
+    for (const c of g.children)
+      if (isGroup(c)) {
+        if (c.id != null && !nodes(c).length) empty.add(c.id);
+        walk(c);
+      }
+  };
+  walk(fig.layout);
   fig.edges.forEach((e, i) => {
     for (const end of [e.from, e.to])
       if (!known.has(end)) out.push(err('unknown-id', [edges[i], end], `edge "${edges[i]}" names box "${end}", which does not exist`));
+      else if (empty.has(end))
+        out.push(err('unknown-id', [edges[i], end], `edge "${edges[i]}" ends at group "${end}", which has no boxes`));
   });
   (fig.steps ?? []).forEach((s, si) => {
     const where = `step ${si + 1} ("${str(s.label)}")`;

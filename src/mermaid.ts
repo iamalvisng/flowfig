@@ -25,7 +25,10 @@ const CLASS = /:::[\w-]+/y;
 const clean = (text: string) =>
   text
     .replace(/#(\w+);/g, (all, code: string) => {
-      if (/^\d+$/.test(code)) return String.fromCodePoint(Number(code));
+      const n = /^\d+$/.test(code) ? Number(code) : NaN;
+      if ([9, 10, 13].includes(n) || (n >= 0x20 && n <= 0x10ffff && !(n >= 0xd800 && n <= 0xdfff) && n !== 0xfffe && n !== 0xffff))
+        return String.fromCodePoint(n);
+      if (!Number.isNaN(n)) throw new Error(`the entity code "${all}" is not a valid XML character`);
       if (Object.hasOwn(ENTITIES, code)) return ENTITIES[code];
       throw new Error(`the entity code "${all}" is not read`);
     })
@@ -56,6 +59,7 @@ function flowchart(body: { s: string; n: number }[], direction: 'row' | 'column'
   const open: (typeof groups)[number][] = [];
   const edges: FigEdge[] = [];
   const seen = new Map<string, number>();
+  const edgeLines: number[] = [];
   let order = 0;
 
   const text = (raw: string) => {
@@ -91,7 +95,7 @@ function flowchart(body: { s: string; n: number }[], direction: 'row' | 'column'
     return [id, at];
   };
 
-  const line = (raw: string) => {
+  const line = (raw: string, n: number) => {
     const s = raw.replace(/;$/, '');
     if (/^subgraph\b/.test(s)) {
       const sub = /^subgraph\s+([\p{L}\p{N}_]+)(?:\s*\[\s*(?:"([^"]*)"|([^\]"]*))\s*\])?$/u.exec(s);
@@ -156,12 +160,13 @@ function flowchart(body: { s: string; n: number }[], direction: 'row' | 'column'
           const count = (seen.get(id) ?? 0) + 1;
           seen.set(id, count);
           edges.push({ from, to, ...(label ? { label } : {}), ...(count > 1 ? { id: `${id}#${count}` } : {}) });
+          edgeLines.push(n);
         }
     });
   };
   for (const { s, n } of body)
     try {
-      line(s);
+      line(s, n);
     } catch (e) {
       faults.push({ line: n, reason: (e as Error).message });
     }
@@ -177,6 +182,12 @@ function flowchart(body: { s: string; n: number }[], direction: 'row' | 'column'
       .map((i) => ('mentions' in i ? (({ mentions: _m, ...g }) => g)(i) : i))
       .filter((i) => !('children' in i) || i.children.length);
   for (const g of [...groups].reverse()) g.children = children(g);
+  const dropped = new Set(groups.filter((g) => !g.children.length).map((g) => g.id));
+  edges.forEach((e, i) => {
+    for (const end of [e.from, e.to])
+      if (dropped.has(end)) faults.push({ line: edgeLines[i], reason: `the link names subgraph "${end}", which has no node` });
+  });
+  if (faults.length) return { faults };
   return { spec: { layout: { auto: true, direction, children: children() }, edges }, faults: [] };
 }
 

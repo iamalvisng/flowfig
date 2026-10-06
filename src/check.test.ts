@@ -1,5 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { checkSpec, checkScene, checkTheme, contrast } from './check.ts';
 import { TONES, toneFill, type FlowProps } from './model.ts';
 import type { Scene, SceneBox } from './scene.ts';
@@ -619,4 +622,20 @@ test('an empty group does not break the layout of the other boxes', () => {
       [],
     );
   }
+});
+
+test('an edge to a group with no boxes fails check --strict', () => {
+  const spec = {
+    layout: {
+      children: [
+        { id: 'g', children: [] },
+        { id: 'a', label: 'A' },
+      ],
+    },
+    edges: [{ from: 'a', to: 'g' }],
+  };
+  const cli = join(dirname(dirname(fileURLToPath(import.meta.url))), 'scripts', 'figure-svg.mjs');
+  const r = spawnSync(process.execPath, [cli, 'check', '-', '--strict'], { input: JSON.stringify(spec), encoding: 'utf8' });
+  assert.equal(r.status, 1);
+  assert.match(r.stdout, /edge "a->g" ends at group "g", which has no boxes/);
 });

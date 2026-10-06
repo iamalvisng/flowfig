@@ -102,6 +102,12 @@ test('a long run of spaces in a link fails fast', () => {
   assert.ok(performance.now() - start < 1000);
 });
 
+test('a link to a subgraph with no node is a fault on the line of the link', () => {
+  assert.deepEqual(fromMermaid('graph TD\nsubgraph x\nend\nA-->x').faults, [
+    { line: 4, reason: 'the link names subgraph "x", which has no node' },
+  ]);
+});
+
 test('an unknown line exits 1 with its file line and writes no spec', () =>
   inTemp((dir) => {
     const file = join(dir, 'a.mmd');
