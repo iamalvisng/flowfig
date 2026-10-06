@@ -692,26 +692,32 @@ line, and writes no spec for that diagram. The command never guesses.
 A flowchart (`flowchart` or `graph`) becomes a still map with automatic layout:
 
 - Nodes: `A`, `A[text]`, `A(text)`, `A([text])`, `A((text))`, `A{text}` (a decision) and `A[(text)]` (a store). The text can
-  have quotes. `<br>` becomes a space.
-- Links: `-->`, `---`, `-.->`, `==>`, with a label as `-->|text|` or `-- text -->`. Chains (`A --> B --> C`) and `&`
+  have quotes. `<br>` becomes a space. `#quot;`, `#amp;`, `#lt;`, `#gt;`, `#apos;`, `#nbsp;` and `#NN;` (a decimal code)
+  become their characters.
+- Links: `-->`, `-.->`, `==>`, with a label as `-->|text|` or `-- text -->`. Chains (`A --> B --> C`) and `&`
   (`A & B --> C`) are read.
-- `subgraph id [title]` ... `end` becomes a group with a frame.
+- `subgraph id`, `subgraph id [title]` or `subgraph id["title"]` ... `end` becomes a group with a frame. A subgraph with no
+  node is dropped.
 - `classDef`, `class`, `style`, `linkStyle`, `click`, `direction`, `:::class` and `%%` comments are ignored.
 
-A sequence diagram becomes a rail (`rail: "only"`) with one step:
+A sequence diagram becomes a rail (`rail: "only"`):
 
 - Each `participant` or `actor` is a box. A participant that first shows in a message is a box too.
 - Each pair of participants gets one edge. Each message is one hop on that edge, with its text in `data`.
 - A message in the other direction of the edge is a hop with `back: true`. `-)` gives `async: true`.
-- `loop`, `alt`, `opt`, `par`, `rect`, `else`, `and` and `end` lines are ignored. Their messages stay in order, in the one step.
+- With no `alt`, the figure has one step with all the messages.
+- Each `alt` or `else` branch becomes one step. The step has the messages before the `alt`, the messages of that branch, and
+  the messages after the `end`. The step label is the branch condition.
+- `loop`, `opt`, `par`, `and` and `rect` lines are ignored. Their messages stay in order in each step.
 - `activate`, `deactivate`, `+` and `-`, `Note` and `autonumber` are ignored.
 
 Limits:
 
 - `RL` reads as `LR`, and `BT` reads as `TB`. The automatic layout sets the order of the boxes.
 - `-.->` and `==>` give a plain edge. flowfig has no dotted or thick edge.
-- Other node shapes, `<-->`, `--o`, `--x`, `-x` and a message to the same participant are errors.
-- A sequence keeps no branches: the paths of an `alt` show one after the other. Split them into steps by hand if you need them.
+- A link with no arrow (`---`, `-.-`, `===`) is an error. Use `-->` to give it a direction.
+- Other node shapes, Markdown strings, `<-->`, `--o`, `--x`, `-x` and a message to the same participant are errors.
+- A subgraph title with no id, a second `alt` and an `alt` inside an `alt` are errors.
 
 ## MCP server
 

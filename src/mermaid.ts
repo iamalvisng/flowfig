@@ -15,13 +15,20 @@ const SHAPES: [string, string, FigNode['shape']][] = [
   ['(', ')', 'box'],
   ['{', '}', 'decision'],
 ];
-const ARROW = /(?:--+>|---+|-\.+->|-\.+-|==+>|===+)/y;
-const LABELED_ARROW = /(--|==|-\.)\s+(.+?)\s+(?:--+>|---+|==+>|===+|\.-+>|\.-+)/y;
+const ARROW = /(?:--+|-\.+-|==+)(>?)/y;
+const LABELED_ARROW = /(?:--|==|-\.)\s+(\S.*?)\s+(?:--+|==+|\.-+)(>?)/y;
+const NO_ARROW = 'a link with no arrow; use --> to give it a direction';
+const ENTITIES: Record<string, string> = { quot: '"', amp: '&', lt: '<', gt: '>', apos: "'", nbsp: ' ' };
 const PIPE_LABEL = /\s*\|"?([^|"]*)"?\|/y;
 const CLASS = /:::[\w-]+/y;
 
 const clean = (text: string) =>
   text
+    .replace(/#(\w+);/g, (all, code: string) => {
+      if (/^\d+$/.test(code)) return String.fromCodePoint(Number(code));
+      if (Object.hasOwn(ENTITIES, code)) return ENTITIES[code];
+      throw new Error(`the entity code "${all}" is not read`);
+    })
     .replace(/<br\s*\/?>/gi, ' ')
     .replace(/\s+/g, ' ')
     .trim();
@@ -31,7 +38,6 @@ function sticky(re: RegExp, s: string, at: number) {
   return re.exec(s);
 }
 
-/** One Mermaid diagram to a flowfig spec, or the lines it cannot read. `first` is the line number of the first line. */
 export function fromMermaid(text: string, first = 1): Result {
   const lines = text.split(/\r?\n/).map((raw, i) => ({ s: raw.trim(), n: first + i }));
   const body = lines.filter(({ s }) => s && !IGNORED.test(s));
@@ -49,11 +55,16 @@ function flowchart(body: { s: string; n: number }[], direction: 'row' | 'column'
   const groups: (FigGroup & { order: number; parent?: FigGroup; mentions: string[] })[] = [];
   const open: (typeof groups)[number][] = [];
   const edges: FigEdge[] = [];
+  const seen = new Map<string, number>();
   let order = 0;
 
-  const node = (s: string, at: number): [string, number] | string => {
+  const text = (raw: string) => {
+    if (raw.startsWith('`')) throw new Error('a Markdown string is not read');
+    return clean(raw);
+  };
+  const node = (s: string, at: number): [string, number] => {
     const id = sticky(ID, s, at)?.[0];
-    if (!id) return at < s.length ? `expected a node id at "${s.slice(at)}"` : 'the link has no target';
+    if (!id) throw new Error(at < s.length ? `expected a node id at "${s.slice(at)}"` : 'the link has no target');
     at += id.length;
     const found = nodes.get(id) ?? { id, label: id, order: order++ };
     nodes.set(id, found);
@@ -71,82 +82,81 @@ function flowchart(body: { s: string; n: number }[], direction: 'row' | 'column'
         if (close !== -1 && !/[[\](){}"]|^[/\\]/.test(inner)) [label, from] = [inner, close];
       }
       if (label === undefined || !s.startsWith(end, from)) continue;
-      Object.assign(found, { label: clean(label) || id }, shape === 'box' ? {} : { shape });
+      Object.assign(found, { label: text(label) || id }, shape === 'box' ? {} : { shape });
       at = from + end.length;
       break;
     }
-    if ('[({>'.includes(s[at] ?? ' ')) return `unsupported node shape at "${s.slice(at)}"`;
+    if ('[({>'.includes(s[at] ?? ' ')) throw new Error(`unsupported node shape at "${s.slice(at)}"`);
     if (sticky(CLASS, s, at)) at = CLASS.lastIndex;
     return [id, at];
   };
 
-  for (const { s: raw, n } of body) {
+  const line = (raw: string) => {
     const s = raw.replace(/;$/, '');
-    const sub = /^subgraph\s+([\p{L}\p{N}_]+)\s*\[\s*"?([^"\]]*)"?\s*\]$|^subgraph\s+(.+)$/u.exec(s);
-    if (sub) {
-      const label = clean(sub[2] ?? sub[3].replace(/^"|"$/g, ''));
-      const id = sub[1] ?? (/^[\p{L}\p{N}_]+$/u.test(label) ? label : undefined);
-      const g = { ...(id ? { id } : {}), label, children: [], order: order++, parent: open.at(-1), mentions: [] };
+    if (/^subgraph\b/.test(s)) {
+      const sub = /^subgraph\s+([\p{L}\p{N}_]+)(?:\s*\[\s*(?:"([^"]*)"|([^\]"]*))\s*\])?$/u.exec(s);
+      if (!sub) {
+        open.push({ label: '', children: [], order: order++, mentions: [] });
+        throw new Error('a subgraph needs the form "subgraph id" or "subgraph id [title]"');
+      }
+      const g = { id: sub[1], label: text(sub[2] ?? sub[3] ?? sub[1]), children: [], order: order++, parent: open.at(-1), mentions: [] };
       groups.push(g);
       open.push(g);
-      continue;
+      return;
     }
     if (s === 'end') {
       const g = open.pop();
-      if (!g) faults.push({ line: n, reason: '"end" has no subgraph' });
-      else for (const id of g.mentions) if (!nodes.get(id)!.parent) nodes.get(id)!.parent = g;
-      continue;
+      if (!g) throw new Error('"end" has no subgraph');
+      for (const id of g.mentions) if (!nodes.get(id)!.parent) nodes.get(id)!.parent = g;
+      return;
     }
     const chain: string[][] = [];
     const labels: (string | undefined)[] = [];
     let at = 0;
-    let fault: string | undefined;
     for (;;) {
       const side: string[] = [];
       for (;;) {
-        const got = node(s, at);
-        if (typeof got === 'string') {
-          fault = got;
-          break;
-        }
-        side.push(got[0]);
-        at = got[1];
+        const [id, next] = node(s, at);
+        side.push(id);
+        at = next;
         const amp = /\s*&\s*/y;
         if (!sticky(amp, s, at)) break;
         at = amp.lastIndex;
       }
-      if (fault) break;
       chain.push(side);
       while (s[at] === ' ') at++;
       if (at >= s.length) break;
       const labeled = sticky(LABELED_ARROW, s, at);
+      const plain = labeled ? null : sticky(ARROW, s, at);
+      if (!labeled && !plain) throw new Error(`unsupported text at "${s.slice(at)}"`);
+      if (!(labeled ?? plain)![labeled ? 2 : 1]) throw new Error(NO_ARROW);
       if (labeled) {
-        labels.push(clean(labeled[2]).replace(/^"|"$/g, ''));
+        labels.push(text(labeled[1].replace(/^"|"$/g, '')));
         at = LABELED_ARROW.lastIndex;
-      } else if (sticky(ARROW, s, at)) {
+      } else {
         at = ARROW.lastIndex;
         const pipe = sticky(PIPE_LABEL, s, at);
-        labels.push(pipe ? clean(pipe[1]) : undefined);
+        labels.push(pipe ? text(pipe[1]) : undefined);
         if (pipe) at = PIPE_LABEL.lastIndex;
-      } else {
-        fault = `unsupported text at "${s.slice(at)}"`;
-        break;
       }
       while (s[at] === ' ') at++;
-    }
-    if (fault) {
-      faults.push({ line: n, reason: fault });
-      continue;
     }
     labels.forEach((label, i) => {
       for (const from of chain[i])
         for (const to of chain[i + 1]) {
           const id = `${from}->${to}`;
-          const count = edges.filter((e) => `${e.from}->${e.to}` === id).length;
-          edges.push({ from, to, ...(label ? { label } : {}), ...(count ? { id: `${id}#${count + 1}` } : {}) });
+          const count = (seen.get(id) ?? 0) + 1;
+          seen.set(id, count);
+          edges.push({ from, to, ...(label ? { label } : {}), ...(count > 1 ? { id: `${id}#${count}` } : {}) });
         }
     });
-  }
+  };
+  for (const { s, n } of body)
+    try {
+      line(s);
+    } catch (e) {
+      faults.push({ line: n, reason: (e as Error).message });
+    }
   if (open.length) faults.push({ line: body.at(-1)?.n ?? 1, reason: `subgraph "${open.at(-1)!.label}" has no "end"` });
   if (faults.length) return { faults };
 
@@ -156,7 +166,8 @@ function flowchart(body: { s: string; n: number }[], direction: 'row' | 'column'
     items
       .filter((i) => i.parent === parent)
       .map(({ order: _o, parent: _p, ...rest }) => rest)
-      .map((i) => ('mentions' in i ? (({ mentions: _m, ...g }) => g)(i) : i));
+      .map((i) => ('mentions' in i ? (({ mentions: _m, ...g }) => g)(i) : i))
+      .filter((i) => !('children' in i) || i.children.length);
   for (const g of [...groups].reverse()) g.children = children(g);
   return { spec: { layout: { auto: true, direction, children: children() }, edges }, faults: [] };
 }
@@ -165,53 +176,64 @@ function sequence(body: { s: string; n: number }[]): Result {
   const faults: MermaidFault[] = [];
   const people = new Map<string, FigNode>();
   const edges: FigEdge[] = [];
-  const flow: FigHop[] = [];
+  const flow: { hop: FigHop; branch?: number }[] = [];
+  const branches: string[] = [];
+  const blocks: string[] = [];
   const meet = (id: string, label = id) => {
     if (!people.has(id) || label !== id) people.set(id, { id, label: clean(label).replace(/^"|"$/g, '') });
   };
-  for (const { s, n } of body) {
-    if (/^(activate|deactivate|note|autonumber|loop|alt|else|opt|par|and|rect|end)\b/i.test(s)) continue;
+  const line = (s: string) => {
+    if (/^(activate|deactivate|note|autonumber|and)\b/i.test(s)) return;
+    const block = /^(alt|else|opt|loop|par|rect)\b\s*(.*)$/.exec(s);
+    if (block) {
+      const [, kind, condition] = block;
+      if (kind === 'else' && blocks.at(-1) !== 'alt') throw new Error('"else" has no alt');
+      const nested = kind === 'alt' && blocks.includes('alt');
+      if (kind !== 'else') blocks.push(kind);
+      if (nested) throw new Error('an alt inside an alt is not read');
+      if (kind === 'alt' && branches.length) throw new Error('a second alt is not read; split the diagram');
+      if (kind === 'alt' || kind === 'else') branches.push(clean(condition) || `branch ${branches.length + 1}`);
+      return;
+    }
+    if (s === 'end') {
+      if (!blocks.pop()) throw new Error('"end" has no block');
+      return;
+    }
     const who = /^(?:participant|actor)\s+([\w.]+)(?:\s+as\s+(.+))?$/.exec(s);
-    if (who) {
-      meet(who[1], who[2]);
-      continue;
-    }
+    if (who) return meet(who[1], who[2]);
     const msg = /^([\w.]+)\s*(-->>|->>|-->|->|--\)|-\))\s*[+-]?([\w.]+)\s*(?::\s*(.*))?$/.exec(s);
-    if (!msg) {
-      faults.push({ line: n, reason: `unsupported line "${s}"` });
-      continue;
-    }
+    if (!msg) throw new Error(`unsupported line "${s}"`);
     const [, from, arrow, to, text] = msg;
-    if (from === to) {
-      faults.push({ line: n, reason: `a message from "${from}" to itself has no edge` });
-      continue;
-    }
+    if (from === to) throw new Error(`a message from "${from}" to itself has no edge`);
+    const data = clean(text ?? '');
     if (!people.has(from)) meet(from);
     if (!people.has(to)) meet(to);
     let edge = edges.find((e) => (e.from === from && e.to === to) || (e.from === to && e.to === from));
     if (!edge) edges.push((edge = { from, to }));
-    const data = clean(text ?? '');
-    flow.push({
+    const hop = {
       edge: `${edge.from}->${edge.to}`,
       ...(edge.from === to ? { back: true } : {}),
       ...(arrow.endsWith(')') ? { async: true } : {}),
       ...(data ? { data } : {}),
-    });
-  }
+    };
+    flow.push(blocks.includes('alt') ? { hop, branch: branches.length - 1 } : { hop });
+  };
+  for (const { s, n } of body)
+    try {
+      line(s);
+    } catch (e) {
+      faults.push({ line: n, reason: (e as Error).message });
+    }
+  if (blocks.length) faults.push({ line: body.at(-1)!.n, reason: `the ${blocks.at(-1)} block has no "end"` });
   if (faults.length) return { faults };
   if (!flow.length) return { faults: [{ line: body[0]?.n ?? 1, reason: 'the sequence has no message' }] };
-  return {
-    spec: {
-      layout: { auto: true, children: [...people.values()] },
-      edges,
-      steps: [{ label: 'Messages', flow }],
-      rail: 'only',
-    },
-    faults: [],
-  };
+  const steps = (branches.length ? branches : ['Messages']).map((label, i) => ({
+    label,
+    flow: flow.filter((f) => f.branch === undefined || f.branch === i).map((f) => f.hop),
+  }));
+  return { spec: { layout: { auto: true, children: [...people.values()] }, edges, steps, rail: 'only' }, faults: [] };
 }
 
-/** The Mermaid blocks of a Markdown text, each with the line number of its first line. */
 export function markdownBlocks(text: string): { text: string; line: number }[] {
   const out: { text: string; line: number }[] = [];
   const lines = text.split(/\r?\n/);
@@ -253,19 +275,26 @@ export function runFromMermaid(argv: string[]): number {
   if (blocks.length > 1 && !out) return fail(`${file} has ${blocks.length} diagrams; use --out <dir>`, 2);
   const name = file === '-' ? 'stdin' : basename(file).replace(/\.[^.]+$/, '');
   let code = 0;
-  blocks.forEach((b, i) => {
+  for (const [i, b] of blocks.entries()) {
     const r = fromMermaid(b.text, b.line);
     if (!r.spec) {
       code = 1;
       for (const f of r.faults) console.error(`${file === '-' ? '<stdin>' : file}:${f.line}: ${f.reason}`);
-      return;
+      continue;
     }
     const json = JSON.stringify(r.spec, null, 2) + '\n';
-    if (!out) return void process.stdout.write(json);
-    mkdirSync(out, { recursive: true });
+    if (!out) {
+      process.stdout.write(json);
+      continue;
+    }
     const path = join(out, markdown ? `${name}-${i + 1}.json` : `${name}.json`);
-    writeFileSync(path, json);
+    try {
+      mkdirSync(out, { recursive: true });
+      writeFileSync(path, json);
+    } catch (e) {
+      return fail(`--out ${out}: ${(e as Error).message}`, 2);
+    }
     console.log(path);
-  });
+  }
   return code;
 }

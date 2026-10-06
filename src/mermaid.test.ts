@@ -23,7 +23,7 @@ test('a flowchart keeps its shapes, edge labels and subgraph frame', () => {
     %% comment
     U([User]) -->|submit| api["Auth API"]:::hot
     subgraph auth [Auth service]
-      api --> V{Valid?}
+      api --> V{Valid #quot;pw#quot;?}
       V -- yes --> S[(Session<br/>store)]
     end
     V -.-> U & api
@@ -39,7 +39,7 @@ test('a flowchart keeps its shapes, edge labels and subgraph frame', () => {
           label: 'Auth service',
           children: [
             { id: 'api', label: 'Auth API' },
-            { id: 'V', label: 'Valid?', shape: 'decision' },
+            { id: 'V', label: 'Valid "pw"?', shape: 'decision' },
             { id: 'S', label: 'Session store', shape: 'store' },
           ],
         },
@@ -73,6 +73,30 @@ test('a sequence gives one hop per message, with replies back on the same edge a
     { edge: 'W->A', back: true, data: '200 cookie' },
     { edge: 'A->Q', async: true, data: 'user.logged_in' },
   ]);
+});
+
+test('each alt branch becomes its own step, with the messages around the alt', () => {
+  const r = fromMermaid(`sequenceDiagram
+    C->>S: checkout
+    alt card ok
+      S-->>C: 201 placed
+    else
+      S-->>C: 402 failed
+    end
+    C->>S: poll`);
+  assert.deepEqual(
+    r.spec?.steps?.map((s) => [s.label, s.flow.map((h) => (h as { data: string }).data)]),
+    [
+      ['card ok', ['checkout', '201 placed', 'poll']],
+      ['branch 2', ['checkout', '402 failed', 'poll']],
+    ],
+  );
+});
+
+test('a long run of spaces in a link fails fast', () => {
+  const start = performance.now();
+  fromMermaid(`graph TD\nA -- ${' '.repeat(4000)}x`);
+  assert.ok(performance.now() - start < 1000);
 });
 
 test('an unknown line exits 1 with its file line and writes no spec', () =>
