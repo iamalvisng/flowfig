@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { diff, formatDiff, mergeFigures } from './diff.ts';
 import { checkSpec } from './check.ts';
-import { TONES, type FlowProps } from './model.ts';
+import { nodes, TONES, type FigNode, type FlowProps } from './model.ts';
 import { toSvg } from './svg.ts';
 
 const base: FlowProps = {
@@ -177,4 +177,60 @@ test('the diff SVG draws an added edge green, a removed edge red and dashed, and
   assert.equal(stroke('gone'), TONES.red);
   assert.equal(stroke('keep'), 'var(--muted)');
   assert.match(svg, /<g opacity="0.5" stroke-dasharray="5 4"><path id="p-gone"/);
+});
+
+test('a removed top-level box in an auto figure is placed and does not throw', () => {
+  const box = (id: string) => ({ id, label: id });
+  const { figure } = mergeFigures(
+    { layout: { auto: true, children: [box('a'), box('x')] }, edges: [] },
+    { layout: { auto: true, children: [box('a'), box('b')] }, edges: [] },
+  );
+  assert.deepEqual(labels(figure.layout), ['a', 'b', 'x']);
+});
+
+test('a removed box beside an unlabeled row goes after the row, not inside it', () => {
+  const box = (id: string) => ({ id, label: id });
+  const row = { direction: 'row' as const, children: [box('a'), box('b')] };
+  const { figure } = mergeFigures({ layout: { children: [row, box('x')] }, edges: [] }, { layout: { children: [row] }, edges: [] });
+  assert.deepEqual(labels(figure.layout), ['[a b]', 'x']);
+});
+
+test('a lanes diff keeps the time columns that the steps gave, so the figure stays in one block', () => {
+  const lane = (label: string, ...ids: string[]) => ({ label, children: ids.map((id) => ({ id, label: id })) });
+  const next: FlowProps = {
+    lanes: true,
+    layout: { direction: 'column', children: [lane('One', 'a'), lane('Two', 'b')] },
+    edges: [{ id: 'e', from: 'b', to: 'a' }],
+    steps: [{ label: 's', flow: ['e'] }],
+  };
+  const { figure } = mergeFigures({ ...next, layout: { direction: 'column', children: [lane('One', 'a', 'x'), lane('Two', 'b')] } }, next);
+  const at = Object.fromEntries(nodes(figure.layout).map((n) => [n.id, n.at]));
+  assert.deepEqual(at, { a: 1, b: 0, x: 2 });
+});
+
+test('a timeline diff SVG is still', () => {
+  const tl = (extra: FigNode[]): FlowProps => ({
+    timeline: true,
+    layout: {
+      direction: 'column',
+      children: [{ label: 'Product', children: [{ id: 'spec', label: 'Spec', from: '2026-10-05', to: '2026-10-16' }, ...extra] }],
+    },
+    edges: [],
+  });
+  const { figure, marks } = mergeFigures(tl([]), tl([{ id: 'b', label: 'Build', from: '2026-10-19', to: '2026-11-06' }]));
+  assert.doesNotMatch(toSvg(figure, { marks }), /@keyframes/);
+});
+
+test('an edge with no label and a new source shows orange', () => {
+  const layout = {
+    children: [
+      { id: 'a', label: 'a' },
+      { id: 'b', label: 'b' },
+    ],
+  };
+  const { figure, marks } = mergeFigures(
+    { layout, edges: [{ id: 'e', from: 'a', to: 'b' }] },
+    { layout, edges: [{ id: 'e', from: 'a', to: 'b', source: 'x.ts' }] },
+  );
+  assert.match(toSvg(figure, { marks }), new RegExp(`<path id="p-e"[^>]*stroke="${TONES.orange}"`));
 });

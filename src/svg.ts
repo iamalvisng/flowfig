@@ -303,7 +303,7 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
   const speed = (opts.speed ?? fig.speed ?? 900) / 1000 / BASE_RATE;
   const pad = opts.padding ?? 24;
   const tl = fig.timeline && isLanesLayout(fig.layout) ? timelineLayout(fig, TL_AXIS_W) : null;
-  const synthetic = tl != null && !fig.steps?.length;
+  const synthetic = tl != null && !fig.steps?.length && !opts.marks;
   const steps = synthetic ? timelineBeats(fig) : (fig.steps ?? []);
   const beats: Beat[][] = steps.map((s) => s.flow.map(toBeat));
 
@@ -733,7 +733,7 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
         : anim(on, `stroke: var(--accent); stroke-width: ${EDGE_ON}`, off, 'e'),
     );
     const em = opts.marks?.edges[r.id];
-    const line = em && em !== 'changed' ? MARK_COLOR[em] : 'var(--muted)';
+    const line = em && (em !== 'changed' || e.label == null) ? MARK_COLOR[em] : 'var(--muted)';
     const tip = edgeTip(r.id, e.source, beats.flat());
     const path0 = r.stub
       ? r.stub.parts

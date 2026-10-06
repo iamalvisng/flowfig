@@ -1,4 +1,4 @@
-import { edgeId, isGroup, nodes, str, toBeat, type FigNode, type FigEdge, type FigGroup, type FlowProps } from './model.ts';
+import { edgeId, isGroup, laneColumns, nodes, str, toBeat, type FigNode, type FigEdge, type FigGroup, type FlowProps } from './model.ts';
 
 export type Change = {
   kind: 'box' | 'edge' | 'step' | 'message' | 'rail';
@@ -100,18 +100,8 @@ export function mergeFigures(before: FlowProps, after: FlowProps): { figure: Flo
   const layout = cloneGroup(after.layout);
   const placed = new Set<Item>();
 
-  const locate = (c: Item): Spot | undefined => {
-    if (!isGroup(c)) return find(layout, (x) => !isGroup(x) && x.id === c.id);
-    const k = key(c);
-    const same = find(layout, (x) => x === c || (k != null && isGroup(x) && key(x) === k));
-    return (
-      same ??
-      (() => {
-        const id = ids(c).find((x) => now.has(x));
-        return id ? find(layout, (x) => !isGroup(x) && x.id === id) : undefined;
-      })()
-    );
-  };
+  const locate = (c: Item): Spot | undefined =>
+    find(layout, (x) => x === c || (isGroup(c) ? isGroup(x) && key(c) != null && key(x) === key(c) : !isGroup(x) && x.id === c.id));
 
   const put = (item: Item, frames: FigGroup[], sibs: Item[], at: number) => {
     const sides = [
@@ -137,7 +127,7 @@ export function mergeFigures(before: FlowProps, after: FlowProps): { figure: Flo
 
   const walk = (g: FigGroup, frames: FigGroup[]) =>
     g.children.forEach((c, i, sibs) => {
-      if (isGroup(c) && !(c.label != null && gone(c))) walk(c, [c, ...frames]);
+      if (isGroup(c) && !(c.label != null && gone(c) && !locate(c))) walk(c, [c, ...frames]);
       else if (gone(c)) put(c, frames, sibs, i);
     });
   walk(before.layout, [before.layout]);
@@ -150,12 +140,15 @@ export function mergeFigures(before: FlowProps, after: FlowProps): { figure: Flo
   }
   for (const id of was.keys()) if (!now.has(id)) marks.boxes[id] = 'removed';
 
+  const colsAfter = laneColumns(after);
+  const colsBefore = laneColumns(before);
   const paint = (g: FigGroup): FigGroup => ({
     ...g,
     children: g.children.map((c) => {
       if (isGroup(c)) return paint(c);
       const n = { ...c };
       delete n.tone;
+      if (after.lanes) n.at ??= colsAfter.get(c.id) ?? colsBefore.get(c.id);
       const old = was.get(c.id);
       if (marks.boxes[c.id] === 'changed' && old) {
         if (str(old.label) !== str(c.label)) n.sub = `was "${str(old.label)}"`;

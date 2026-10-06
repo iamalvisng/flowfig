@@ -271,7 +271,7 @@ npx flowfig diff old.svg docs/checkout.svg --svg diff.svg   # draw the change in
 ```
 
 The diff SVG is a still figure. Green marks an added box or edge, red and dashed marks a removed one, and orange marks a changed one.
-The diff SVG has no spec, so `verify` and `--spec` skip it.
+The diff SVG has no spec. The Action and `coverage` skip it. `verify` and `--spec` report that it has no spec.
 
 ## The spec
 
