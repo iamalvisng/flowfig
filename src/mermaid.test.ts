@@ -24,7 +24,10 @@ test('a flowchart keeps its shapes, edge labels and subgraph frame', () => {
     U([User]) -->|submit| api["Auth API"]:::hot
     subgraph auth [Auth service]
       api --> V{Valid #quot;pw#quot;?}
-      V -- yes --> S[(Session<br/>store)]
+      subgraph Token storage
+        S[(Session<br/>store)]
+      end
+      V -- yes --> S
     end
     V -.-> U & api
     classDef hot fill:#f00`);
@@ -40,7 +43,7 @@ test('a flowchart keeps its shapes, edge labels and subgraph frame', () => {
           children: [
             { id: 'api', label: 'Auth API' },
             { id: 'V', label: 'Valid "pw"?', shape: 'decision' },
-            { id: 'S', label: 'Session store', shape: 'store' },
+            { id: 'subgraph-2', label: 'Token storage', children: [{ id: 'S', label: 'Session store', shape: 'store' }] },
           ],
         },
       ],

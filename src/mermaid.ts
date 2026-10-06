@@ -95,11 +95,19 @@ function flowchart(body: { s: string; n: number }[], direction: 'row' | 'column'
     const s = raw.replace(/;$/, '');
     if (/^subgraph\b/.test(s)) {
       const sub = /^subgraph\s+([\p{L}\p{N}_]+)(?:\s*\[\s*(?:"([^"]*)"|([^\]"]*))\s*\])?$/u.exec(s);
-      if (!sub) {
+      const title = sub ? undefined : /^subgraph\s+(?:"([^"]*)"|([^[\]"]+))$/.exec(s);
+      if (!sub && !title) {
         open.push({ label: '', children: [], order: order++, mentions: [] });
-        throw new Error('a subgraph needs the form "subgraph id" or "subgraph id [title]"');
+        throw new Error('a subgraph needs the form "subgraph id", "subgraph id [title]" or "subgraph title"');
       }
-      const g = { id: sub[1], label: text(sub[2] ?? sub[3] ?? sub[1]), children: [], order: order++, parent: open.at(-1), mentions: [] };
+      const g = {
+        id: sub ? sub[1] : `subgraph-${groups.length + 1}`,
+        label: text(sub ? (sub[2] ?? sub[3] ?? sub[1]) : (title![1] ?? title![2])),
+        children: [],
+        order: order++,
+        parent: open.at(-1),
+        mentions: [],
+      };
       groups.push(g);
       open.push(g);
       return;

@@ -696,7 +696,7 @@ A flowchart (`flowchart` or `graph`) becomes a still map with automatic layout:
   become their characters.
 - Links: `-->`, `-.->`, `==>`, with a label as `-->|text|` or `-- text -->`. Chains (`A --> B --> C`) and `&`
   (`A & B --> C`) are read.
-- `subgraph id`, `subgraph id [title]` or `subgraph id["title"]` ... `end` becomes a group with a frame. A subgraph with no
+- `subgraph id`, `subgraph id [title]`, `subgraph id["title"]` or `subgraph title` ... `end` becomes a group with a frame. A subgraph with no
   node is dropped.
 - `classDef`, `class`, `style`, `linkStyle`, `click`, `direction`, `:::class` and `%%` comments are ignored.
 
@@ -717,7 +717,7 @@ Limits:
 - `-.->` and `==>` give a plain edge. flowfig has no dotted or thick edge.
 - A link with no arrow (`---`, `-.-`, `===`) is an error. Use `-->` to give it a direction.
 - Other node shapes, Markdown strings, `<-->`, `--o`, `--x`, `-x` and a message to the same participant are errors.
-- A subgraph title with no id, a second `alt` and an `alt` inside an `alt` are errors.
+- A second `alt` and an `alt` inside an `alt` are errors.
 
 ## MCP server
 
