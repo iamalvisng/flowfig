@@ -288,3 +288,33 @@ test('a box with a source shows it as a title', () => {
   assert.match(html, /title="src\/a\.ts#login"/);
   assert.equal(html.match(/ title="src/g)?.length, 1);
 });
+
+test('auto layout: the player puts each box in the rank and order of the SVG', () => {
+  const fig: FlowProps = {
+    layout: {
+      auto: true,
+      children: [
+        { id: 'dlq', label: 'Dead letters', shape: 'store' },
+        { id: 'done', label: 'Done', shape: 'store' },
+        { id: 'ok', label: 'Succeeded?', shape: 'decision' },
+        { id: 'w', label: 'Worker' },
+        { id: 'q', label: 'Queue' },
+      ],
+    },
+    edges: [
+      { id: 'a', from: 'q', to: 'w', label: 'pull' },
+      { id: 'b', from: 'w', to: 'ok' },
+      { id: 'c', from: 'ok', to: 'done', label: 'yes' },
+      { id: 'r', from: 'ok', to: 'q', label: 'retry' },
+      { id: 'd', from: 'ok', to: 'dlq', label: '3rd fail' },
+    ],
+    steps: [{ label: 'Run', flow: ['a', 'b', 'r', 'a', 'b', 'c'] }],
+  };
+  const drawn = [...render(fig).matchAll(/data-fig="(\w+)"/g)].map((m) => m[1]);
+  const mid = (r: { y: number; h: number }) => Math.round(r.y + r.h / 2);
+  const svg = toSvgScene(fig)
+    .scene.boxes.toSorted((p, q) => mid(p.rect) - mid(q.rect) || p.rect.x - q.rect.x)
+    .map((b) => b.id);
+  assert.deepEqual(drawn, svg);
+  assert.equal(new Set(toSvgScene(fig).scene.boxes.map((b) => mid(b.rect))).size, 4);
+});

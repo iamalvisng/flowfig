@@ -450,6 +450,24 @@ test('check --strict exits 1 for a warning that check alone passes', () => {
   assert.equal(run(['check', '-', '--strict'], warn).status, 1);
 });
 
+test('check --strict fails an auto layout that lanes ignore', () => {
+  const lanes = {
+    lanes: true,
+    layout: {
+      auto: true,
+      direction: 'column',
+      children: [
+        { label: 'Client', children: [{ id: 'a', label: 'Browser' }] },
+        { label: 'Server', children: [{ id: 'b', label: 'API' }] },
+      ],
+    },
+    edges: [{ id: 'w', from: 'a', to: 'b', label: 'call' }],
+  };
+  const r = run(['check', '-', '--strict'], JSON.stringify({ props: lanes }));
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.match(r.stdout, /auto-ignored/);
+});
+
 test('verify and diff exit 2 for bad use, and --spec exits 2 on an SVG with no spec', () => {
   const dir = mkdtempSync(join(tmpdir(), 'figure-svg-'));
   try {
