@@ -28,6 +28,8 @@ export type FigNode = {
   mark?: 'start' | 'end';
   /** Code this draws: `path` or `path#symbol` from the repo root. Checked by `flowfig verify`. */
   source?: string;
+  /** A figure with more detail: an SVG path from the repo root. */
+  detail?: string;
 };
 /** A frame that lays out its children in a row or a column. */
 export type FigGroup = {

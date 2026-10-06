@@ -267,6 +267,8 @@ export type SvgOptions = {
   minText?: number;
   /** Draws a still diff with a legend. `mergeFigures` makes the marks. */
   marks?: DiffMarks;
+  /** Links a box to an href, by box id. `flowfig atlas` sets it. */
+  links?: Record<string, string>;
 };
 
 const MARK_COLOR: Record<DiffMark, string> = { added: TONES.green, removed: TONES.red, changed: TONES.orange };
@@ -602,7 +604,11 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
       );
     }
     const diffMark = opts.marks?.boxes[item.id];
-    const tip = (inner: string) => marked(diffMark, item.source ? `<g><title>${esc(item.source)}</title>${inner}</g>` : inner);
+    const href = opts.links?.[item.id];
+    const tip = (inner: string) => {
+      const body = marked(diffMark, item.source ? `<g><title>${esc(item.source)}</title>${inner}</g>` : inner);
+      return href == null ? body : `<a href="${esc(href)}" tabindex="-1">${body}</a>`;
+    };
     const bt = diffMark ? MARK_COLOR[diffMark] : item.tone && TONES[item.tone];
     const stroke = cls(boxAnim(item.id, true, bt));
     if (p.tl) {
