@@ -79,19 +79,19 @@ test('flowfig trace exits 1 when the start symbol is not defined', () => {
   }
 });
 
-test('flowfig trace prints the edge lines first and the summary line last', () => {
+test('flowfig trace groups the edges by caller and prints a same-file callee by symbol', () => {
   const root = mkdtempSync(join(tmpdir(), 'trace-'));
   try {
     writeFileSync(join(root, 'password.ts'), 'export function verifyPassword() {}\n');
     writeFileSync(
       join(root, 'login.ts'),
-      "import { verifyPassword } from './password.ts';\nexport function login() { verifyPassword(); }\n",
+      "import { verifyPassword } from './password.ts';\nexport function login() { verifyPassword(); helper(); }\nexport function helper() { verifyPassword(); }\n",
     );
     const r = spawnSync('node', [cli, 'trace', 'login.ts#login', '--root', root], { encoding: 'utf8' });
     const lines = r.stdout.trimEnd().split('\n');
     assert.equal(r.status, 0);
-    assert.equal(lines[0], 'login.ts#login -> password.ts#verifyPassword   login.ts:2');
-    assert.match(lines.at(-1)!, /^summary: 2 symbols, 1 found, 0 unsure, 0 open, 0 calls outside the repo, \d+\.\d s$/);
+    assert.deepEqual(lines.slice(0, 4), ['login.ts#login', '  2  password.ts#verifyPassword', '  2  helper', 'login.ts#helper']);
+    assert.match(lines.at(-1)!, /^summary: 3 symbols, 3 found, 0 unsure, 0 open, 0 calls outside the repo, \d+\.\d s$/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
