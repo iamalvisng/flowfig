@@ -98,8 +98,14 @@ export const samples = (curve: [Pt, Pt, Pt, Pt]): Pt[] => {
   return Array.from({ length: n + 1 }, (_, i) => bezier(curve, i / n));
 };
 export const hit = (curve: [Pt, Pt, Pt, Pt], boxes: Rect[], m: number) => {
+  const xs = curve.map((q) => q.x),
+    ys = curve.map((q) => q.y);
+  const near = boxes.filter(
+    (r) => r.x + r.w + m > Math.min(...xs) && r.x - m < Math.max(...xs) && r.y + r.h + m > Math.min(...ys) && r.y - m < Math.max(...ys),
+  );
+  if (!near.length) return [];
   const pts = samples(curve);
-  return boxes.filter((r) => pts.some((q) => q.x > r.x - m && q.x < r.x + r.w + m && q.y > r.y - m && q.y < r.y + r.h + m));
+  return near.filter((r) => pts.some((q) => q.x > r.x - m && q.x < r.x + r.w + m && q.y > r.y - m && q.y < r.y + r.h + m));
 };
 
 /** Routes edges between measured boxes as curved SVG paths. `elbow` draws right-angle paths; `stub` splits a cross-lane edge in two. */
@@ -131,7 +137,7 @@ export function route(
     const stacked = a.x < b.x + b.w && b.x < a.x + a.w;
     const others = avoid.filter((r) => r.box && !same(r, a) && !same(r, b));
     const plain: [Side, Side] = stacked ? (a.y < b.y ? ['b', 't'] : ['t', 'b']) : a.x < b.x ? ['r', 'l'] : ['l', 'r'];
-    const past = hit(bend(sideMid(a, plain[0]), sideMid(b, plain[1]), plain[0]), others, -6);
+    const past = hit(bend(sideMid(a, plain[0]), sideMid(b, plain[1]), plain[0]), others, -2);
     const misses = (way: Around, at: number) =>
       [0.2, 0.5, 0.8].filter((f) => hit(arcLine(sideAt(a, SIDES[way][0], f), sideAt(b, SIDES[way][1], f), way, at), others, -6).length > 0)
         .length;
