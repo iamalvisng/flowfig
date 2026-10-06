@@ -133,10 +133,6 @@ const cardBody = (c: FigContent): ReactNode => {
   );
 };
 
-/**
- * The interactive player for one figure. Give it a `FlowProps` spec.
- * Use `toSvg` from `flowfig/svg` for a static animated SVG.
- */
 const HIDDEN: CSSProperties = {
   position: 'absolute',
   width: 1,
@@ -146,6 +142,10 @@ const HIDDEN: CSSProperties = {
   whiteSpace: 'pre-line',
 };
 
+/**
+ * The interactive player for one figure. Give it a `FlowProps` spec.
+ * Use `toSvg` from `flowfig/svg` for a static animated SVG.
+ */
 export function Flow({
   layout,
   edges,
