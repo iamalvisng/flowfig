@@ -96,6 +96,17 @@ test('an edge through a box it does not connect is an error; its own ends are no
   assert.deepEqual(checkScene(scene({ boxes, edges: [{ id: 'ab', from: 'a', to: 'b', curve: over }] })), []);
 });
 
+test('a long curve through a short box is an error', () => {
+  const curve: [Pt, Pt, Pt, Pt] = [
+    { x: 528, y: 132 },
+    { x: 528, y: 798 },
+    { x: 400, y: 798 },
+    { x: 400, y: 540 },
+  ];
+  const s = scene({ boxes: [box('m', 454, 248.5, 190, 53)], edges: [{ id: 'v', from: 'a', to: 'b', curve }] });
+  assert.deepEqual(rules(checkScene(s)), ['edge-crosses-box']);
+});
+
 test('an edge label outside the drawn figure area is an error', () => {
   const edge = (x: number) => ({ id: 'e', from: 'a', to: 'b', curve: line(0, 300, 10, 300), label: { x, y: 200, w: 50, h: 18 } });
   const area = { x: 0, y: 0, w: 600, h: 400 };

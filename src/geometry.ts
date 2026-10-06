@@ -92,6 +92,11 @@ const spanOf = (a: Rect, b: Rect, around: Around) => {
   return [Math.min(p, q), Math.max(p, q)];
 };
 const SIDES: Record<Around, [Side, Side]> = { above: ['t', 't'], below: ['b', 'b'], left: ['l', 'l'], right: ['r', 'r'] };
+export const samples = (curve: [Pt, Pt, Pt, Pt]): Pt[] => {
+  const hull = curve.slice(1).reduce((s, q, k) => s + Math.hypot(q.x - curve[k].x, q.y - curve[k].y), 0);
+  const n = Math.max(32, Math.ceil(hull / 4));
+  return Array.from({ length: n + 1 }, (_, i) => bezier(curve, i / n));
+};
 export const hit = (curve: [Pt, Pt, Pt, Pt], boxes: Rect[], m: number) => {
   const pts = Array.from({ length: 33 }, (_, i) => bezier(curve, i / 32));
   return boxes.filter((r) => pts.some((q) => q.x > r.x - m && q.x < r.x + r.w + m && q.y > r.y - m && q.y < r.y + r.h + m));
