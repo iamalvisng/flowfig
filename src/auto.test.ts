@@ -423,3 +423,40 @@ test('a loop back edge returns around the outer side and crosses no box', () => 
     );
   }
 });
+
+test('a long left-to-right pipeline folds into rows instead of small text', () => {
+  const ids = ['push', 'lint', 'test', 'build', 'scan', 'deploy', 'prod', 'preview'];
+  const labels = [
+    'Git push',
+    'Lint',
+    'Unit tests',
+    'Build image',
+    'Security scan',
+    'Main branch?',
+    'Deploy to production',
+    'Deploy preview',
+  ];
+  const fig: FlowProps = {
+    layout: {
+      auto: true,
+      direction: 'row',
+      children: ids.map((id, i) => ({ id, label: labels[i], ...(id === 'deploy' && { shape: 'decision' as const }) })),
+    },
+    edges: [
+      { from: 'push', to: 'lint' },
+      { from: 'push', to: 'test' },
+      { from: 'lint', to: 'build' },
+      { from: 'test', to: 'build' },
+      { from: 'build', to: 'scan' },
+      { from: 'scan', to: 'deploy' },
+      { from: 'deploy', to: 'prod', label: 'yes' },
+      { from: 'deploy', to: 'preview', label: 'no' },
+    ],
+  };
+  assert.deepEqual(
+    check(fig)
+      .filter((f) => f.rule === 'small-text' || f.rule === 'edge-crosses-box')
+      .map((f) => f.rule),
+    [],
+  );
+});

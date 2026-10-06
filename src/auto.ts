@@ -22,7 +22,8 @@ const PAGE = 830,
   SWEEPS = 8,
   TALL = 2.5,
   // A 20-box chain measures 105 px for each rank.
-  RANK_H = 105;
+  RANK_H = 105,
+  MIN_TEXT = 10;
 
 const flat = (it: Item): Item[] => (isGroup(it) && it.label == null && it.id == null ? it.children.flatMap(flat) : [it]);
 
@@ -200,6 +201,44 @@ const pruned = (g: FigGroup): FigGroup => ({
   children: g.children.map((c) => (isGroup(c) ? pruned(c) : c)).filter((c) => !isGroup(c) || c.children.length),
 });
 
+const titled = (it: Item): boolean => isGroup(it) && (it.label != null || it.children.some(titled));
+
+function smallFont(f: FlowProps, carded: Set<string>): number {
+  if (carded.size || f.edges.some((e) => e.label != null) || titled(f.layout)) return 11;
+  if ((f.steps ?? []).some((s) => s.flow.some((b) => toBeat(b).hops.some((h) => h.data != null)))) return 11.5;
+  if (nodes(f.layout).some((n) => n.sub != null)) return 12;
+  return f.steps?.length ? 13.5 : 14;
+}
+
+function fold(f: FlowProps, carded: Set<string>): FlowProps {
+  const room = (PAGE * smallFont(f, carded)) / MIN_TEXT - 2 * PAD;
+  if (itemWidth(f.layout, carded, f.edges, fitCap(f, PAGE)) <= room) return f;
+  const ranks = f.layout.children;
+  const unit = new Map(ranks.flatMap((r, k) => idsIn(r).map((id): [string, number] => [id, k])));
+  const width = (rs: Item[]) => itemWidth({ direction: 'row', children: rs }, carded, f.edges);
+  const cuts = (k: number, from = 1): number[][] =>
+    k === 0
+      ? [[]]
+      : Array.from({ length: ranks.length - from }, (_, i) => from + i).flatMap((c) => cuts(k - 1, c + 1).map((r) => [c, ...r]));
+  for (let k = 1; k < ranks.length; k++) {
+    let best: { rows: Item[][]; cost: number[] } | undefined;
+    for (const cs of cuts(k)) {
+      const rows = [0, ...cs].map((c, i) => ranks.slice(c, [...cs, ranks.length][i]));
+      if (f.edges.some((e) => e.around && [e.from, e.to].some((id) => unit.get(id)! < cs.at(-1)!))) continue;
+      const ws = rows.map(width);
+      if (ws.some((w) => w > room)) continue;
+      const crossing = f.edges.filter((e) => cs.some((c) => unit.get(e.from)! < c !== unit.get(e.to)! < c)).length;
+      const cost = [crossing, Math.max(...ws)];
+      if (!best || cost[0] < best.cost[0] || (cost[0] === best.cost[0] && cost[1] < best.cost[1])) best = { rows, cost };
+    }
+    if (best) {
+      const children = best.rows.map((rs): Item => (rs.length === 1 ? rs[0] : { direction: 'row', children: rs }));
+      return { ...f, layout: { direction: 'column', children } };
+    }
+  }
+  return f;
+}
+
 export function autoLayout(spec: FlowProps): FlowProps {
   if (spec.lanes || spec.timeline) return spec;
   const fig = { ...spec, layout: pruned(spec.layout) };
@@ -211,6 +250,7 @@ export function autoLayout(spec: FlowProps): FlowProps {
     const edges = fig.edges.map((e): FigEdge => ({ ...e, around: undefined }));
     return { ...fig, edges, layout: { direction, children: level(items, direction, { edges, at, carded }) } };
   };
+  if (fig.layout.direction === 'row') return fold(make('row'), carded);
   if (fig.layout.direction) return make(fig.layout.direction);
   const lr = make('row');
   return itemWidth(lr.layout, carded, lr.edges, fitCap(lr, PAGE)) + 2 * PAD <= PAGE ? lr : make('column');

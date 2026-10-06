@@ -151,7 +151,8 @@ export function route(
       arc = fits.find(([way, at]) => !blocked(way, at))?.[1] ?? arc;
       if (blocked(around, arc!)) around = undefined;
     }
-    if (!around && !e.sides && !e.stub && !e.elbow && past.length) {
+    if (!around && !e.sides && !e.stub && !e.elbow && past.length && b.x + b.w < a.x && b.y > a.y + a.h) elbow = true;
+    else if (!around && !e.sides && !e.stub && !e.elbow && past.length) {
       const ways = stacked ? (['left', 'right'] as const) : (['above', 'below'] as const);
       const tries: [Around, number][] = [];
       for (const share of [false, true])
