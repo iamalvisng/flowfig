@@ -338,15 +338,15 @@ and `align`. flowfig ignores `around` on the edges. A `direction` on the root fo
 
 ### Edges
 
-| Field    | Meaning                                                                        | Default    |
-| -------- | ------------------------------------------------------------------------------ | ---------- |
-| `from`   | The id of the box or group where the edge starts.                              | required   |
-| `to`     | The id of the box or group where the edge ends.                                | required   |
-| `id`     | The name that beats use.                                                       | `from->to` |
-| `label`  | The text on the edge.                                                          | none       |
-| `around` | `"above"` or `"below"` routes the edge over or under the boxes between.        | none       |
-| `quiet`  | `true` draws the edge only while a step uses it.                               | `false`    |
-| `source` | The code this edge draws: `path` or `path#symbol`. `flowfig verify` checks it. | none       |
+| Field    | Meaning                                                                                             | Default    |
+| -------- | --------------------------------------------------------------------------------------------------- | ---------- |
+| `from`   | The id of the box or group where the edge starts.                                                   | required   |
+| `to`     | The id of the box or group where the edge ends.                                                     | required   |
+| `id`     | The name that beats use.                                                                            | `from->to` |
+| `label`  | The text on the edge.                                                                               | none       |
+| `around` | `"above"`, `"below"`, `"left"` or `"right"` routes the edge around the boxes between, on that side. | none       |
+| `quiet`  | `true` draws the edge only while a step uses it.                                                    | `false`    |
+| `source` | The code this edge draws: `path` or `path#symbol`. `flowfig verify` checks it.                      | none       |
 
 ### Steps
 
