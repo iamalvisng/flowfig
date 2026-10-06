@@ -105,3 +105,61 @@ test('an arrow parameter named like a local of another function is no edge, and 
   assert.deepEqual(run(files, 'src/m.ts#toBeat').edges, [{ from: 'src/m.ts#toBeat', to: 'src/m.ts#pick', at: 'src/m.ts:2' }]);
   assert.deepEqual(run(files, 'src/m.ts#run').edges, [{ from: 'src/m.ts#run', to: 'src/m.ts#pick', at: 'src/m.ts:12' }]);
 });
+
+const targets = (files: Record<string, string>, start: string) => run(files, start, { depth: 1 }).edges.map((e) => e.to);
+
+test('a bare call to an inherited method goes to the base class, not to a nested class method of the same name', () => {
+  const java = {
+    'src/app/Base.java': 'package app;\n\npublic class Base {\n    int log() {\n        return 2;\n    }\n}\n',
+    'src/app/A.java':
+      'package app;\n\npublic class A extends Base {\n    public int run() {\n        return log();\n    }\n\n    static class B {\n        int log() {\n            return 1;\n        }\n    }\n}\n',
+  };
+  assert.deepEqual(targets(java, 'src/app/A.java#A.run'), ['src/app/Base.java#Base.log']);
+  const cs = {
+    'Base.cs': 'namespace App;\n\npublic class Base\n{\n    protected int Log()\n    {\n        return 2;\n    }\n}\n',
+    'A.cs':
+      'namespace App;\n\npublic class A : Base\n{\n    public int Run()\n    {\n        return Log();\n    }\n\n    class B\n    {\n        int Log()\n        {\n            return 1;\n        }\n    }\n}\n',
+  };
+  assert.deepEqual(targets(cs, 'A.cs#A.Run'), ['Base.cs#Base.Log']);
+});
+
+test('a bare Go or Rust call goes to a free function, not to a method of the same name', () => {
+  const files = {
+    'go.mod': 'module example.com/t3\n\ngo 1.21\n',
+    'other.go': 'package main\n\nfunc helper() int {\n\treturn 2\n}\n',
+    'm.go':
+      'package main\n\ntype B struct{}\n\nfunc (b *B) helper() int {\n\treturn 1\n}\n\ntype A struct{}\n\nfunc (a *A) Run() int {\n\treturn helper()\n}\n',
+  };
+  assert.deepEqual(targets(files, 'm.go#A.Run'), ['other.go#helper']);
+  const rs = {
+    'Cargo.toml': '[package]\nname = "t7"\nversion = "0.1.0"\n',
+    'src/lib.rs':
+      'pub struct X;\n\nimpl X {\n    fn handle(&self) -> i32 {\n        1\n    }\n}\n\npub fn run() -> i32 {\n    handle()\n}\n',
+  };
+  assert.deepEqual(targets(rs, 'src/lib.rs#run'), []);
+});
+
+test('a call of a lambda, Go function literal or $-named arrow parameter gives no edge', () => {
+  const files = {
+    'm.py': 'def handle(x):\n    return x\n\n\ndef lam(xs):\n    return list(map(lambda handle: handle(1), xs))\n',
+    'go.mod': 'module example.com/t3\n\ngo 1.21\n',
+    'm.go':
+      'package main\n\nfunc handle(x int) int {\n\treturn x\n}\n\nfunc Each(xs []int) {\n\tapply(xs, func(handle func(int) int) {\n\t\thandle(1)\n\t})\n}\n\nfunc apply(xs []int, f func(func(int) int)) {}\n',
+    'm.ts': 'export function $h(x) {\n  return x;\n}\nexport function dollar(xs) {\n  return xs.map(($h) => $h(1));\n}\n',
+  };
+  assert.deepEqual(targets(files, 'm.py#lam'), []);
+  assert.deepEqual(targets(files, 'm.go#Each'), ['m.go#apply']);
+  assert.deepEqual(targets(files, 'm.ts#dollar'), []);
+});
+
+test('a call of a nested function gives no edge to a top-level function of the same name', () => {
+  const files = {
+    'm.ts':
+      'export function render(x) {\n  return x;\n}\nexport function nested() {\n  function render(y) { return y; }\n  return render(2);\n}\n',
+    'Cargo.toml': '[package]\nname = "t5"\nversion = "0.1.0"\n',
+    'src/lib.rs':
+      'pub fn handle(x: i32) -> i32 {\n    x\n}\n\npub fn outer() -> i32 {\n    fn handle(y: i32) -> i32 {\n        y + 1\n    }\n    handle(2)\n}\n',
+  };
+  assert.deepEqual(targets(files, 'm.ts#nested'), []);
+  assert.deepEqual(targets(files, 'src/lib.rs#outer'), []);
+});
