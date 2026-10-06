@@ -1,6 +1,6 @@
 import { posix } from 'node:path';
 import { codeFile, langOf, locate, matchClose, readFile, type CodeFile, type Read } from './code.ts';
-import { EDGE_LANGS, edgeResult, paramName, params } from './edges.ts';
+import { EDGE_LANGS, edgeResult, paramName, params, shadows } from './edges.ts';
 import { OUTSIDE, importsOf, reexports, type Import } from './imports.ts';
 import { ancestors, declIn, findType, isUpper, makeCtx, receiver, receiverChain, type Ctx, type Decl } from './types.ts';
 import { goDirFiles } from './type-index.ts';
@@ -30,6 +30,18 @@ const KEYWORDS = new Set(
     ' ',
   ),
 );
+
+const innerParam = (body: string, n: string) =>
+  new RegExp(
+    `(?:\\([^()]*(?<![\\w$.])${n}(?![\\w$])[^()]*\\)|(?<![\\w$.])${n})\\s*(?::[^=)]+)?=>|function\\s*\\w*\\s*\\([^()]*(?<![\\w$.])${n}(?![\\w$])`,
+  ).test(body);
+
+const topLevel = (f: CodeFile, sym: string) => {
+  const s = locate(f, sym);
+  if (!s) return false;
+  if (f.lang !== 'ts' && f.lang !== 'py' && f.lang !== 'go') return true;
+  return !/[ \t]/.test(f.code[f.code.lastIndexOf('\n', s.start - 1) + 1]);
+};
 
 const lineOf = (code: string, pos: number) => code.slice(0, pos).split('\n').length;
 
@@ -79,7 +91,7 @@ function resolve(
     const bind = imps.find((i) => i.local === n);
     if (bind) return gone(bind.path) ? 'outside' : bind.name === '*' ? null : forward(cx, bind.path!, bind.name);
     const own = (fi.lang === 'java' || fi.lang === 'cs') && container ? [`${container}.${n}`, n] : [n];
-    const sym = own.find((s) => locate(fi, s));
+    const sym = own.find((s) => topLevel(fi, s));
     if (sym) return { to: `${fi.path}#${sym}` };
     if (fi.lang === 'go') {
       const f = goDirFiles(cx, posix.dirname(fi.path)).find((g) => locate(g, n));
@@ -143,6 +155,7 @@ function calls(cx: Ctx, caller: string, r: TraceResult): TraceEdge[] {
       r.unsure.push({ at: at(c.idx), reason: `parameter call: ${c.name}()` });
       continue;
     }
+    if (!rc && (shadows(body, c.name, fi.lang, own, false) || innerParam(body, c.name))) continue;
     const t = resolve(cx, fi, body, c.name, rc, container, decl, imps);
     if (t === 'outside') r.outside += c.call ? 1 : 0;
     else if (t && 'unsure' in t) r.unsure.push({ at: at(c.idx), reason: t.unsure });

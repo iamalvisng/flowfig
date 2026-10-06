@@ -96,3 +96,12 @@ test('flowfig trace prints the edge lines first and the summary line last', () =
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('an arrow parameter named like a local of another function is no edge, and a top-level call is', () => {
+  const files = {
+    'src/m.ts':
+      'export function toBeat(hops) {\n  return hops.map((h) => pick(h));\n}\nexport function pick(x) {\n  return x;\n}\nfunction other() {\n  const h = 1;\n  return h;\n}\nexport function run() {\n  return pick(1);\n}\n',
+  };
+  assert.deepEqual(run(files, 'src/m.ts#toBeat').edges, [{ from: 'src/m.ts#toBeat', to: 'src/m.ts#pick', at: 'src/m.ts:2' }]);
+  assert.deepEqual(run(files, 'src/m.ts#run').edges, [{ from: 'src/m.ts#run', to: 'src/m.ts#pick', at: 'src/m.ts:12' }]);
+});

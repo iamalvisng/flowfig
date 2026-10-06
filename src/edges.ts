@@ -146,7 +146,7 @@ function paramCall(body: string, lang: Lang, fromName: string | undefined): stri
     .find((n) => n && new RegExp(`(?<![\\w$.])${esc(n)}\\s*\\(`).test(rest));
 }
 
-function shadows(body: string, name: string, lang: Lang, fromName: string | undefined, whole: boolean): boolean {
+export function shadows(body: string, name: string, lang: Lang, fromName: string | undefined, whole: boolean): boolean {
   const n = esc(name);
   if (!whole) for (const p of params(body, fromName)) if (paramName(p, lang) === name) return true;
   return (
