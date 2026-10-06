@@ -56,8 +56,8 @@ export type FigEdge = {
   to: string;
   /** Text on the edge, drawn as a small pill. */
   label?: ReactNode;
-  /** Routes the edge over or under the boxes in between (loops, skip-ahead edges). */
-  around?: 'above' | 'below';
+  /** Routes the edge around the boxes in between (loops, skip-ahead edges). */
+  around?: 'above' | 'below' | 'left' | 'right';
   /** Draws the edge only while a step uses it. */
   quiet?: boolean;
   /** Code this draws: `path` or `path#symbol` from the repo root. Checked by `flowfig verify`. */

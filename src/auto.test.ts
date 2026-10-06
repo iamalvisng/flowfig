@@ -368,3 +368,17 @@ test('a 20-box chain folds into rows no taller than 2.5 page widths, with no lay
     [],
   );
 });
+
+test('an edge that skips ranks to a side box crosses no box', () => {
+  const edges = 'up-scan scan-parse parse-val val-rej up-blob parse-meta scan-audit up-meta'.split(' ').map((id) => {
+    const [from, to] = id.split('-');
+    return { id, from, to };
+  });
+  const shape = (id: string) => (id === 'val' ? 'decision' : ['blob', 'meta', 'audit'].includes(id) ? 'store' : undefined);
+  const ids = [...new Set(edges.flatMap((e) => [e.from, e.to]))];
+  const fig: FlowProps = { layout: { auto: true, children: ids.map((id) => ({ id, label: id, shape: shape(id) })) }, edges };
+  assert.deepEqual(
+    check(fig).filter((f) => f.rule === 'edge-crosses-box'),
+    [],
+  );
+});
