@@ -618,9 +618,32 @@ file that no figure covers. With no `--entries`, it prints one count line for ea
 `flowfig atlas` writes one web page for each figure, and an index page. A box can link to a more detailed figure with
 `detail`. The path starts at the repo root, as `source` does.
 
+`docs/system.svg`:
+
 ```json
-"layout": { "children": [{ "id": "web", "label": "Web app" }, { "id": "orders", "label": "Order service", "detail": "docs/flows/orders.svg" }] }
-"layout": { "children": [{ "id": "up", "label": "Whole system", "detail": "docs/system.svg" }, { "id": "db", "label": "Orders table" }] }
+{
+  "layout": {
+    "children": [
+      { "id": "up", "label": "Whole system", "detail": "docs/flows/orders.svg" },
+      { "id": "db", "label": "Orders table" }
+    ]
+  },
+  "edges": []
+}
+```
+
+`docs/flows/orders.svg`:
+
+```json
+{
+  "layout": {
+    "children": [
+      { "id": "web", "label": "Web app" },
+      { "id": "orders", "label": "Order service", "detail": "docs/system.svg" }
+    ]
+  },
+  "edges": []
+}
 ```
 
 `docs/system.svg` links down to the order flow. `docs/flows/orders.svg` links back up.

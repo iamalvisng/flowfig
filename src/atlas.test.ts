@@ -52,6 +52,8 @@ test('linked figures point at each other by relative links, and the page links b
     assert.match(site.get('docs/flows/orders.html')!, /<a href="\.\.\/system\.html">docs\/system\.svg<\/a>/);
     assert.match(site.get('index.html')!, /<a href="docs\/flows\/orders\.html">/);
     assert.match(down, /<title>[^<]*<\/title>[\s\S]*<desc[^>]*>/);
+    assert.match(down, /<meta name="generator" content="flowfig atlas">\n<style>/);
+    assert.ok(down.indexOf('flowfig atlas') < down.indexOf('<main>'));
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
