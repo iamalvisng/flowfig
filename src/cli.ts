@@ -33,7 +33,7 @@ const USAGE = `usage: flowfig <-|spec.json|figure.ts> [out.svg] [--open]   rende
        flowfig coverage [--figures <glob>] [--entries <glob>] [--root <dir>] [--strict] [--json]   list failing and stale figures, and code with no figure
        flowfig docs [topic]                               print the guide, or one topic (Markdown)
        flowfig mcp                                        serve check, render, verify, diff and docs over MCP (stdio)
-       flowfig init [dir] [--agents <ids>] [-y] [--global] [--dry-run] [--no-mcp]   write flowfig instructions for the coding agents of a repo
+       flowfig init [dir] [--agents <ids> | --all-agents | --list-agents] [-y] [--global] [--dry-run] [--no-mcp]   write flowfig instructions for the coding agents of a repo
        flowfig draw "<question>" [--out <path>] [--model <alias>] [--max-turns <n>] [--json] [--open]   ask Claude Code for a figure, then check it
        flowfig atlas [--figures <glob>] [--root <dir>] [--out <dir>] [--open]   write one linked web page for each figure, and an index
        flowfig open <figure.svg> [--html <path>]          show the figure in the default browser

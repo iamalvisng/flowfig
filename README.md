@@ -531,24 +531,40 @@ jobs:
 before it writes a figure. Then the agent reads only the lines that the trace names. Each edge passes the same check as
 `verify`.
 
+`src/login.ts`:
+
+```ts
+import { verifyPassword } from './password.ts';
+import { findUser } from './users.ts';
+
+export function login(name: string, password: string) {
+  const user = findUser(name);
+  return verifyPassword(user, password);
+}
+```
+
+`src/password.ts`:
+
+```ts
+export function verifyPassword(user: { hash: string }, password: string) {
+  return user.hash === password.split('').reverse().join('');
+}
+```
+
+`src/users.ts`:
+
+```ts
+export function findUser(name: string) {
+  return { name, hash: 'drowssap' };
+}
+```
+
 ```console
-$ npx flowfig trace src/verify.ts#verify
-src/verify.ts#verify
-  104  verifyReport
-src/verify.ts#verifyReport
-  48   emptyCoverage
-  49   src/source.ts#links
-  58   src/code.ts#outside
-  65   src/code.ts#codeFile
-  67   src/code.ts#isDefined
-  69   escape
-  70   hasHeading
-  79   src/model.ts#nodes
-  81   src/edges.ts#edgeResult
-  91   src/model.ts#edgeId
-  95   src/model.ts#toBeat
-stop    depth 2: 11 symbols not followed
-summary: 13 symbols, 12 found, 0 unsure, 0 open, 4 calls outside the repo, 0.1 s
+$ npx flowfig trace src/login.ts#login
+src/login.ts#login
+  5  src/users.ts#findUser
+  6  src/password.ts#verifyPassword
+summary: 3 symbols, 2 found, 0 unsure, 0 open, 1 call outside the repo, 0.0 s
 ```
 
 - A header line gives a caller as `file#symbol`. Each call line under it gives the line of the call, then the callee.
@@ -651,8 +667,10 @@ file that no figure covers. With no `--entries`, it prints one count line for ea
 
 ```console
 $ npx flowfig atlas
-atlas/index.html — 2 figure pages
+/path/to/repo/atlas/index.html — 2 figure pages
 ```
+
+The command prints the full path of `index.html`.
 
 | Option             | Meaning                                                       | Default            |
 | ------------------ | ------------------------------------------------------------- | ------------------ |
@@ -771,6 +789,7 @@ The player has these controls:
 - One tab for each step, with a progress line. A click on a tab starts that step.
 - A pause button, and a speed button that changes between 1× and 2×.
 - A full screen button. Esc closes full screen.
+- The step tabs take the Left, Right, Home and End keys.
 - A hover on a box highlights its edges. With the rail, a click on a row starts that message, and a hover highlights its edge.
 - A hover on a box, an edge or a rail row with a `source` shows the `source`. The SVG shows it as a tooltip too.
 
