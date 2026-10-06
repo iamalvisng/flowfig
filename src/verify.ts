@@ -38,7 +38,11 @@ export const unsureLines = (c: Coverage) => c.unsureEdges.map((e) => `unsure   e
 /** The links against the files under `root`. A path outside `root` counts as a missing file. */
 export function verifyReport(
   fig: FlowProps,
-  { root = process.cwd(), read = readFile }: { root?: string; read?: Read } = {},
+  {
+    root = process.cwd(),
+    read = readFile,
+    cache = new Map<string, CodeFile | null>(),
+  }: { root?: string; read?: Read; cache?: Map<string, CodeFile | null> } = {},
 ): { findings: Finding[]; coverage: Coverage } {
   const findings: Finding[] = [];
   const coverage = emptyCoverage();
@@ -49,7 +53,6 @@ export function verifyReport(
       coverage,
     };
   const files = new Map<string, string | null>();
-  const parsed = new Map<string, CodeFile | null>();
   for (const l of all) {
     const full = resolve(root, l.path);
     if (!files.has(full)) files.set(full, outside(root, l.path) ? null : read(full));
@@ -59,7 +62,7 @@ export function verifyReport(
       findings.push({ rule, severity: 'error', ids: [], message: `${l.owner} -> ${l.source}: ${what}` });
     if (text == null) fail('missing-file', 'file not found');
     else if (l.symbol) {
-      const code = codeFile(root, l.path, read, parsed);
+      const code = codeFile(root, l.path, read, cache);
       if (code) {
         if (!isDefined(code, l.symbol)) fail('missing-symbol', 'symbol not defined');
       } else if (
@@ -75,7 +78,7 @@ export function verifyReport(
   }
   const source = new Map(nodes(fig.layout).map((n) => [n.id, n.source]));
   const check = (who: string, id: string, caller?: string, callee?: string, via?: string) => {
-    const { result, reason } = caller ? edgeResult(root, caller, callee, via, read, parsed) : { result: 'not-checked', reason: '' };
+    const { result, reason } = caller ? edgeResult(root, caller, callee, via, read, cache) : { result: 'not-checked', reason: '' };
     if (result === 'found') coverage.found++;
     else if (result === 'not-found') {
       coverage.notFound++;
