@@ -43,7 +43,7 @@ function gitTimes(root: string): ((path: string) => number) | null {
     const memo = new Map<string, number>();
     return (path) => {
       if (dirty.has(path)) return Infinity;
-      if (!memo.has(path)) memo.set(path, Number(git('log', '-1', '--format=%ct', '--', path).trim()) || Infinity);
+      if (!memo.has(path)) memo.set(path, Number(git('log', '-1', '--format=%ct', '--', path).trim()) || 0);
       return memo.get(path)!;
     };
   } catch {
@@ -84,7 +84,7 @@ export function coverageReport({ root = process.cwd(), figures = '**/*.svg', ent
       });
       continue;
     }
-    const mine = time?.(figure) ?? Infinity;
+    const mine = time?.(figure) || Infinity;
     const newer = time && paths.find((p) => time(p) > mine);
     out.push(
       newer

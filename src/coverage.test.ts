@@ -102,3 +102,11 @@ test('a code file that no figure links shows in the --entries list', () => {
     },
   );
 });
+
+test('a linked file that git ignores does not make the figure stale', () => {
+  withRepo({ '.gitignore': 'gen/\n', 'gen/api.ts': 'export function api() {}\n', 'docs/gen.svg': figure('gen/api.ts#api') }, (root) => {
+    execFileSync('git', ['init', '-q'], { cwd: root });
+    commit(root, ['.'], '2026-09-20T10:00:00Z');
+    assert.equal(coverageReport({ root }).figures[0].state, 'ok');
+  });
+});
