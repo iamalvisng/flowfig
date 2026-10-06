@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
-import type { FigEdge, FigGroup, FigHop, FigNode, FlowProps } from './model.ts';
+import { dayOf, type FigEdge, type FigGroup, type FigHop, type FigNode, type FlowProps } from './model.ts';
 
 export type MermaidFault = { line: number; reason: string };
 type Result = { spec: FlowProps; faults: [] } | { spec?: undefined; faults: MermaidFault[] };
@@ -50,7 +50,8 @@ export function fromMermaid(text: string, first = 1): Result {
   if (flow) return flowchart(body, flow[1] === 'LR' || flow[1] === 'RL' ? 'row' : 'column');
   if (head.s === 'sequenceDiagram') return sequence(body);
   if (/^stateDiagram(?:-v2)?$/.test(head.s)) return state(body);
-  return { faults: [{ line: head.n, reason: `"${head.s}" is not a flowchart, graph, sequenceDiagram or stateDiagram` }] };
+  if (head.s === 'gantt') return gantt(body);
+  return { faults: [{ line: head.n, reason: `"${head.s}" is not a flowchart, graph, sequenceDiagram, stateDiagram or gantt` }] };
 }
 
 function flowchart(body: { s: string; n: number }[], direction: 'row' | 'column'): Result {
@@ -307,6 +308,95 @@ function state(body: { s: string; n: number }[]): Result {
   const empty = groups.find((g) => !g.children.length);
   if (empty) return { faults: [{ line: opened.get(empty.id!)!, reason: `composite state "${empty.id}" has no state` }] };
   return { spec: { layout: { auto: true, direction: 'column', children: top }, edges }, faults: [] };
+}
+
+type Task = { node: FigNode; n: number; prev?: Task; tags: string[]; start: string; end: string; span?: [number, number] };
+
+function gantt(body: { s: string; n: number }[]): Result {
+  const faults: MermaidFault[] = [];
+  const tracks: FigGroup[] = [];
+  const tasks = new Map<string, Task>();
+  const edges: FigEdge[] = [];
+  let prev: Task | undefined;
+
+  const line = (s: string, n: number) => {
+    if (/^(title|axisFormat|tickInterval|todayMarker|weekday)\b/.test(s)) return;
+    const format = /^dateFormat\s+(.*)$/.exec(s);
+    if (format) {
+      if (format[1] !== 'YYYY-MM-DD') throw new Error(`dateFormat "${format[1]}" is not read; use YYYY-MM-DD`);
+      return;
+    }
+    if (/^(excludes|weekend)\b/.test(s)) throw new Error(`"${s}" changes the task dates and is not read`);
+    const section = /^section\s+(.*)$/.exec(s);
+    if (section) return void tracks.push({ id: `section-${tracks.length + 1}`, label: clean(section[1]), children: [] });
+    const task = /^([^:]+):(.*)$/.exec(s);
+    if (!task) throw new Error(`unsupported line "${s}"`);
+    const parts = task[2].split(',').map((p) => p.trim());
+    const tags: string[] = [];
+    while (['done', 'active', 'crit', 'milestone'].includes(parts[0])) tags.push(parts.shift()!);
+    if (!parts.length || parts.length > 3 || parts.includes('')) throw new Error(`the task "${task[2].trim()}" is not read`);
+    const id = parts.length === 3 ? parts.shift()! : `task-${tasks.size + 1}`;
+    if (!/^[\p{L}\p{N}_-]+$/u.test(id)) throw new Error(`the task id "${id}" is not read`);
+    if (tasks.has(id)) throw new Error(`the task id "${id}" is used twice`);
+    const node: FigNode = { id, label: clean(task[1]), ...(tags.includes('crit') ? { tone: 'red' as const } : {}) };
+    if (!tracks.length) tracks.push({ id: 'section-1', label: '', children: [] });
+    tracks.at(-1)!.children.push(node);
+    const t: Task = { node, n, prev, tags, start: parts.length === 2 ? parts[0] : '', end: parts.at(-1)! };
+    tasks.set(id, t);
+    prev = t;
+  };
+  for (const { s, n } of body)
+    try {
+      line(s, n);
+    } catch (e) {
+      faults.push({ line: n, reason: (e as Error).message });
+    }
+  if (faults.length) return { faults };
+  if (!tasks.size) return { faults: [{ line: body[0]?.n ?? 1, reason: 'the gantt has no task' }] };
+
+  const busy = new Set<Task>();
+  const fail: (t: Task, reason: string) => never = (t, reason) => {
+    throw Object.assign(new Error(reason), { line: t.n });
+  };
+  const span = (t: Task): [number, number] => {
+    if (t.span) return t.span;
+    if (busy.has(t)) fail(t, `the task "${t.node.id}" depends on itself`);
+    busy.add(t);
+    let from: number | null;
+    const after = /^after\s+(.+)$/.exec(t.start);
+    if (!t.start) {
+      if (!t.prev) fail(t, 'the first task needs a start date');
+      from = span(t.prev)[1];
+    } else if (after) {
+      from = Math.max(
+        ...after[1].split(/\s+/).map((ref) => {
+          const source = tasks.get(ref);
+          if (!source) fail(t, `"after ${ref}" names no task`);
+          edges.push({ from: ref, to: t.node.id });
+          return span(source)[1];
+        }),
+      );
+    } else if ((from = dayOf(t.start)) == null) fail(t, `the start "${t.start}" is not a YYYY-MM-DD date or "after <id>"`);
+    const length = /^(\d+)([dw])$/.exec(t.end);
+    const end = length ? from + Number(length[1]) * (length[2] === 'w' ? 7 : 1) : dayOf(t.end);
+    if (end == null) fail(t, `the end "${t.end}" is not a YYYY-MM-DD date or a count of days (d) or weeks (w)`);
+    const milestone = t.tags.includes('milestone');
+    if (milestone && end !== from) fail(t, 'a milestone with a duration is not read; use 0d');
+    if (!milestone && end <= from) fail(t, 'the task ends before it starts');
+    const iso = (day: number) => new Date(day * 86400000).toISOString().slice(0, 10);
+    Object.assign(t.node, { from: iso(from) }, milestone ? {} : { to: iso(end - 1) });
+    busy.delete(t);
+    return (t.span = [from, end]);
+  };
+  try {
+    for (const t of tasks.values()) span(t);
+  } catch (e) {
+    return { faults: [{ line: (e as Error & { line: number }).line, reason: (e as Error).message }] };
+  }
+  return {
+    spec: { timeline: true, layout: { direction: 'column', children: tracks.filter((g) => g.children.length) }, edges },
+    faults: [],
+  };
 }
 
 function sequence(body: { s: string; n: number }[]): Result {

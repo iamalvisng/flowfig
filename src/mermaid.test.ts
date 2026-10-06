@@ -173,3 +173,50 @@ test('a state diagram marks the top-level start and end, keeps labels and draws 
     ],
   });
 });
+
+test('a gantt gives inclusive last days, resolves after and durations in days and weeks, and keeps milestones', () => {
+  const r = fromMermaid(`gantt
+    title Plan
+    dateFormat YYYY-MM-DD
+    section Build
+    Design :done, a, 2026-10-01, 2026-10-14
+    Build :crit, b, after a, 2w
+    section Ship
+    Test :after b, 3d
+    Launch :milestone, m, 2026-11-01, 0d`);
+  assert.deepEqual(r.spec, {
+    timeline: true,
+    layout: {
+      direction: 'column',
+      children: [
+        {
+          id: 'section-1',
+          label: 'Build',
+          children: [
+            { id: 'a', label: 'Design', from: '2026-10-01', to: '2026-10-13' },
+            { id: 'b', label: 'Build', tone: 'red', from: '2026-10-14', to: '2026-10-27' },
+          ],
+        },
+        {
+          id: 'section-2',
+          label: 'Ship',
+          children: [
+            { id: 'task-3', label: 'Test', from: '2026-10-28', to: '2026-10-30' },
+            { id: 'm', label: 'Launch', from: '2026-11-01' },
+          ],
+        },
+      ],
+    },
+    edges: [
+      { from: 'a', to: 'b' },
+      { from: 'b', to: 'task-3' },
+    ],
+  });
+});
+
+test('a gantt with excluded weekends or another date format is a fault on that line', () => {
+  assert.deepEqual(fromMermaid('gantt\ndateFormat DD-MM-YYYY\nexcludes weekends\nA :a, 2026-10-01, 3d').faults, [
+    { line: 2, reason: 'dateFormat "DD-MM-YYYY" is not read; use YYYY-MM-DD' },
+    { line: 3, reason: '"excludes weekends" changes the task dates and is not read' },
+  ]);
+});

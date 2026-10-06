@@ -713,7 +713,7 @@ To publish the pages on GitHub Pages, run `npx flowfig atlas --out docs/atlas` a
 
 ## Convert Mermaid
 
-`flowfig from-mermaid` turns a Mermaid flowchart, sequence diagram or state diagram into a flowfig spec. The converter uses no model.
+`flowfig from-mermaid` turns a Mermaid flowchart, sequence diagram, state diagram or `gantt` into a flowfig spec. The converter uses no model.
 Then `check` and `verify` can test the figure.
 
 ```console
@@ -784,6 +784,16 @@ A state diagram (`stateDiagram` or `stateDiagram-v2`) becomes a still map with a
 - `state A <<choice>>` becomes a decision. Its label is its id.
 - `direction`, `classDef`, `class`, `%%` comments, `note` and `hide empty description` are ignored.
 
+A `gantt` becomes a timeline (`timeline: true`):
+
+- Each `section` is a track. Each task is a box in its track. A task with no id gets the id `task-1`, `task-2` and so on.
+- A task can have a start date or `after <id>`, and an end date or a duration in days (`10d`) or weeks (`2w`).
+  A task with only a duration starts when the task above it ends.
+- Mermaid reads an end date as the start of that day. So the box `to` is the day before the end date.
+- `after a b` starts the task when the last of `a` and `b` ends. Each id gives an edge to the task.
+- `milestone` with `0d` gives a box with only `from`. `crit` gives `tone: "red"`. `done` and `active` are ignored.
+- `title`, `axisFormat`, `tickInterval`, `todayMarker` and `weekday` are ignored. The today line uses the flowfig default.
+
 Limits:
 
 - `RL` reads as `LR`, and `BT` reads as `TB`. The automatic layout sets the order of the boxes.
@@ -794,6 +804,8 @@ Limits:
 - In a state diagram, `<<fork>>`, `<<join>>`, a concurrent region (`--`), `:::class` and a transition to the same state
   are errors. A `[*]` on a composite state and a description on a composite state are errors too.
 - A state with a start and an end transition is an error, because a box has one mark.
+- In a `gantt`, a `dateFormat` other than `YYYY-MM-DD`, `excludes`, `weekend`, `inclusiveEndDates`, `until`, a duration in
+  hours and a milestone with a duration are errors. These change the dates, and the converter never guesses a date.
 
 ## MCP server
 
