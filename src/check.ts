@@ -190,7 +190,10 @@ export function checkSpec(fig: FlowProps): Finding[] {
       if (f != null && t != null && t < f) out.push(err('bad-date', [n.id], `box "${n.id}": to ${n.to} is before from ${n.from}`));
     }
     const span = new Map(
-      nodes(fig.layout).map((n) => [n.id, [n.from && dayOf(n.from), (n.to && dayOf(n.to)) ?? (n.from && dayOf(n.from))] as const]),
+      nodes(fig.layout).map((n) => {
+        const f = n.from == null ? null : dayOf(n.from);
+        return [n.id, [f, n.to ? dayOf(n.to) : f == null ? null : f - 1] as const];
+      }),
     );
     for (const e of fig.edges) {
       const start = span.get(e.to)?.[0];

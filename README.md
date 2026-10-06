@@ -411,34 +411,34 @@ The last line gives the counts of the parts of the figure. Compare the counts wi
 
 `flowfig check` has 26 rules: 11 errors and 15 warnings.
 
-| Rule                        | Severity | What it finds                                                                                       |
-| --------------------------- | -------- | --------------------------------------------------------------------------------------------------- |
-| `unknown-id`                | error    | An edge, step or beat names a box, group or edge that does not exist.                               |
-| `duplicate-id`              | error    | Two boxes, two groups or two edges have the same id.                                                |
-| `hidden-edge`               | error    | A `quiet` edge that no beat uses, so the figure never shows it.                                     |
-| `text-overflow`             | error    | Text that needs more width than its box has.                                                        |
-| `edge-crosses-box`          | error    | An edge that goes through a box that is not one of its ends.                                        |
-| `label-overlap`             | error    | Two edge labels overlap, or a label covers a box or an edge, or a stub label crosses a lane border. |
-| `low-contrast`              | error    | A text and background pair below 4.5:1, in the light, dark or custom theme, or on a tone tint.      |
-| `lanes-need-column`         | error    | The layout of a `lanes` or `timeline` figure is not a column group of labeled groups.               |
-| `bad-at`                    | error    | An `at` value that is not an integer of 0 or more.                                                  |
-| `timeline-need-from`        | error    | A box in a timeline has no `from` date.                                                             |
-| `bad-date`                  | error    | A `from`, `to` or `today` value is not a real YYYY-MM-DD date, or a `to` is before its `from`.      |
-| `empty-step`                | warning  | A step with no beats.                                                                               |
-| `small-text`                | warning  | At the page width, the smallest text is below the minimum size.                                     |
-| `bad-source`                | warning  | A `source` that is not `path` or `path#symbol`.                                                     |
-| `bad-detail`                | warning  | A `detail` that is not a relative path that ends in `.svg`.                                         |
-| `mark-count`                | warning  | A lifecycle has more than one `start` mark, or a `start` mark and no `end` mark.                    |
-| `lane-column-taken`         | warning  | Two boxes in one lane share a time column.                                                          |
-| `lane-end-block`            | warning  | In wrapped lanes, an edge ends at a lane that no block on its side shows.                           |
-| `stub-crosses-edge`         | warning  | In wrapped lanes, a stub line crosses another edge.                                                 |
-| `long-edge`                 | warning  | An edge at least 600 px long that is 1.6 times or more the straight distance between its ends.      |
-| `timeline-dependency-order` | warning  | In a timeline, an item does not start after the item that it depends on ends.                       |
-| `timeline-and-lanes`        | warning  | The figure sets `timeline` and `lanes`. The renderers draw the timeline and ignore `lanes`.         |
-| `font-estimated`            | warning  | `theme.font` is set. The SVG check estimates text width for the system font.                        |
-| `color-not-checked`         | warning  | A color that the check cannot read, so its contrast is not checked.                                 |
-| `plain-text`                | warning  | Text with a code name, a filler word, or a `say` or caption over 20 words.                          |
-| `auto-ignored`              | warning  | `auto` with `lanes` or `timeline`, `auto` on a nested group, or `around` on an edge with `auto`.    |
+| Rule                        | Severity | What it finds                                                                                                              |
+| --------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `unknown-id`                | error    | An edge, step or beat names a box, group or edge that does not exist.                                                      |
+| `duplicate-id`              | error    | Two boxes, two groups or two edges have the same id.                                                                       |
+| `hidden-edge`               | error    | A `quiet` edge that no beat uses, so the figure never shows it.                                                            |
+| `text-overflow`             | error    | Text that needs more width than its box has.                                                                               |
+| `edge-crosses-box`          | error    | An edge that goes through a box that is not one of its ends.                                                               |
+| `label-overlap`             | error    | Two edge labels overlap, or a label covers a box or an edge, or a stub label crosses a lane border.                        |
+| `low-contrast`              | error    | A text and background pair below 4.5:1, in the light, dark or custom theme, or on a tone tint.                             |
+| `lanes-need-column`         | error    | The layout of a `lanes` or `timeline` figure is not a column group of labeled groups.                                      |
+| `bad-at`                    | error    | An `at` value that is not an integer of 0 or more.                                                                         |
+| `timeline-need-from`        | error    | A box in a timeline has no `from` date.                                                                                    |
+| `bad-date`                  | error    | A `from`, `to` or `today` value is not a real YYYY-MM-DD date, or a `to` is before its `from`.                             |
+| `empty-step`                | warning  | A step with no beats.                                                                                                      |
+| `small-text`                | warning  | At the page width, the smallest text is below the minimum size.                                                            |
+| `bad-source`                | warning  | A `source` that is not `path` or `path#symbol`.                                                                            |
+| `bad-detail`                | warning  | A `detail` that is not a relative path that ends in `.svg`.                                                                |
+| `mark-count`                | warning  | A lifecycle has more than one `start` mark, or a `start` mark and no `end` mark.                                           |
+| `lane-column-taken`         | warning  | Two boxes in one lane share a time column.                                                                                 |
+| `lane-end-block`            | warning  | In wrapped lanes, an edge ends at a lane that no block on its side shows.                                                  |
+| `stub-crosses-edge`         | warning  | In wrapped lanes, a stub line crosses another edge.                                                                        |
+| `long-edge`                 | warning  | An edge at least 600 px long that is 1.6 times or more the straight distance between its ends.                             |
+| `timeline-dependency-order` | warning  | In a timeline, an item does not start after the item that it depends on ends. An item may start on the day of a milestone. |
+| `timeline-and-lanes`        | warning  | The figure sets `timeline` and `lanes`. The renderers draw the timeline and ignore `lanes`.                                |
+| `font-estimated`            | warning  | `theme.font` is set. The SVG check estimates text width for the system font.                                               |
+| `color-not-checked`         | warning  | A color that the check cannot read, so its contrast is not checked.                                                        |
+| `plain-text`                | warning  | Text with a code name, a filler word, or a `say` or caption over 20 words.                                                 |
+| `auto-ignored`              | warning  | `auto` with `lanes` or `timeline`, `auto` on a nested group, or `around` on an edge with `auto`.                           |
 
 | Option            | Effect                                                                                                     |
 | ----------------- | ---------------------------------------------------------------------------------------------------------- |
@@ -715,7 +715,7 @@ To publish the pages on GitHub Pages, run `npx flowfig atlas --out docs/atlas` a
 
 ## Convert Mermaid
 
-`flowfig from-mermaid` turns a Mermaid flowchart or sequence diagram into a flowfig spec. The converter uses no model.
+`flowfig from-mermaid` turns a Mermaid flowchart, sequence diagram, state diagram or `gantt` into a flowfig spec. The converter uses no model.
 Then `check` and `verify` can test the figure.
 
 ```console
@@ -765,6 +765,7 @@ A flowchart (`flowchart` or `graph`) becomes a still map with automatic layout:
 - `subgraph id`, `subgraph id [title]`, `subgraph id["title"]` or `subgraph title` ... `end` becomes a group with a frame. A subgraph with no
   node is dropped.
 - `classDef`, `class`, `style`, `linkStyle`, `click`, `direction`, `:::class` and `%%` comments are ignored.
+- In all four diagram types, `accTitle:`, `accDescr:` and `accDescr { ... }` are ignored.
 
 A sequence diagram becomes a rail (`rail: "only"`):
 
@@ -777,6 +778,25 @@ A sequence diagram becomes a rail (`rail: "only"`):
 - `loop`, `opt`, `par`, `and` and `rect` lines are ignored. Their messages stay in order in each step.
 - `activate`, `deactivate`, `+` and `-`, `Note` and `autonumber` are ignored.
 
+A state diagram (`stateDiagram` or `stateDiagram-v2`) becomes a still map with automatic layout:
+
+- Each state is a box. `state "Long name" as A` sets the label. `A : text` puts the text under the label, as Mermaid does.
+- `A --> B` and `A --> B : text` become an edge with a label.
+- `[*] --> A` at the top level gives A `mark: "start"`. `A --> [*]` at the top level gives A `mark: "end"`.
+- `state A { ... }` becomes a group with a frame. A `[*]` in it gives no edge and no mark.
+- `state A <<choice>>` becomes a decision. Its label is its id.
+- `direction`, `classDef`, `class`, `%%` comments, `note` and `hide empty description` are ignored.
+
+A `gantt` becomes a timeline (`timeline: true`):
+
+- Each `section` is a track. Each task is a box in its track. A task with no id gets the id `task-1`, `task-2` and so on.
+- A task can have a start date or `after <id>`, and an end date or a duration in days (`10d`) or weeks (`2w`).
+  A task with only a duration starts when the task above it ends.
+- Mermaid reads an end date as the start of that day. So the box `to` is the day before the end date.
+- `after a b` starts the task when the last of `a` and `b` ends. Each id gives an edge to the task.
+- `milestone` with `0d` gives a box with only `from`. `crit` gives `tone: "red"`. `done` and `active` are ignored.
+- `title`, `axisFormat`, `tickInterval`, `todayMarker`, `weekday` and `click` are ignored. The today line uses the flowfig default.
+
 Limits:
 
 - `RL` reads as `LR`, and `BT` reads as `TB`. The automatic layout sets the order of the boxes.
@@ -784,6 +804,11 @@ Limits:
 - A link with no arrow (`---`, `-.-`, `===`) is an error. Use `-->` to give it a direction.
 - Other node shapes, Markdown strings, `<-->`, `--o`, `--x`, `-x` and a message to the same participant are errors.
 - A second `alt` and an `alt` inside an `alt` are errors.
+- In a state diagram, `<<fork>>`, `<<join>>`, a concurrent region (`--`), `:::class` and a transition to the same state
+  are errors. A `[*]` on a composite state, a description on a composite state and a label on a `[*]` transition are errors too.
+- A state with a start and an end transition is an error, because a box has one mark.
+- In a `gantt`, a `dateFormat` other than `YYYY-MM-DD`, `excludes`, `weekend`, `inclusiveEndDates`, `until`, a duration in
+  hours and a milestone with a duration are errors. These change the dates, and the converter never guesses a date.
 
 ## MCP server
 

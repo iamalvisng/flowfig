@@ -405,6 +405,26 @@ test('timeline-dependency-order: an item that starts on or before its source end
   assert.deepEqual(checkSpec(two('2026-10-12')), []);
 });
 
+test('timeline-dependency-order: an item may start on the day of the milestone it depends on', () => {
+  const fig: FlowProps = {
+    timeline: true,
+    layout: {
+      direction: 'column',
+      children: [
+        {
+          label: 'T',
+          children: [
+            { id: 'm', label: 'Freeze', from: '2026-10-05' },
+            { id: 'b', label: 'Bug bash', from: '2026-10-05', to: '2026-10-09' },
+          ],
+        },
+      ],
+    },
+    edges: [{ from: 'm', to: 'b' }],
+  };
+  assert.deepEqual(checkSpec(fig), []);
+});
+
 test('an unknown focus id is an unknown-id error', () => {
   const f = checkSpec({ ...tlFig({}), steps: [{ label: 's', flow: [{ focus: ['nope'] }] }] });
   assert.deepEqual(rules(f), ['unknown-id']);
