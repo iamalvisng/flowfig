@@ -124,6 +124,21 @@ export function checkSpec(fig: FlowProps): Finding[] {
         if (!known.has(id)) out.push(err('unknown-id', [id], `${where}: show, light or focus names box "${id}", which does not exist`));
     }
   });
+  const form = fig.timeline ? 'timeline' : fig.lanes ? 'lanes' : null;
+  if (fig.layout.auto && form)
+    out.push(
+      warn(
+        'auto-ignored',
+        [],
+        `the figure sets ${form}; ${form === 'lanes' ? 'lanes place the boxes and ignore' : 'the timeline places the boxes and ignores'} layout.auto`,
+      ),
+    );
+  if (fig.layout.auto && !form)
+    fig.edges.forEach((e, i) => {
+      if (e.around) out.push(warn('auto-ignored', [edges[i]], `auto routes edge "${edges[i]}"; remove around`));
+    });
+  const nestedAuto = (g: FigGroup): boolean => g.children.some((c) => isGroup(c) && (c.auto || nestedAuto(c)));
+  if (nestedAuto(fig.layout)) out.push(warn('auto-ignored', [], 'auto works on the root layout only'));
   const used = new Set((fig.steps ?? []).flatMap((s) => s.flow.flatMap((b) => toBeat(b).hops.map((h) => h.edge))));
   fig.edges.forEach((e, i) => {
     if (e.quiet && !used.has(edges[i]))
@@ -228,7 +243,13 @@ export function checkScene(scene: Scene, { width = 830, minText = 10 }: CheckOpt
     const pts = path(e);
     for (const b of scene.boxes)
       if (b.id !== e.from && b.id !== e.to && pts.some((p) => inside(p, b.rect, TOUCH)))
-        out.push(err('edge-crosses-box', [e.id, b.id], `edge "${e.id}" passes through box "${b.id}"`));
+        out.push(
+          err(
+            'edge-crosses-box',
+            [e.id, b.id],
+            `edge "${e.id}" passes through box "${b.id}": move a box, or set "auto": true on the root layout`,
+          ),
+        );
   }
   for (const e of scene.edges) {
     const pts = path(e);
@@ -240,7 +261,7 @@ export function checkScene(scene: Scene, { width = 830, minText = 10 }: CheckOpt
         warn(
           'long-edge',
           [e.id],
-          `edge "${e.id}" is ${px(ratio)} times the straight distance between its ends: put its ends in one row or column, or route it with around`,
+          `edge "${e.id}" is ${px(ratio)} times the straight distance between its ends: put its ends in one row or column, route it with around, or set "auto": true on the root layout`,
         ),
       );
   }

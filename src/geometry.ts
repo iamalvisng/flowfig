@@ -98,8 +98,14 @@ export const samples = (curve: [Pt, Pt, Pt, Pt]): Pt[] => {
   return Array.from({ length: n + 1 }, (_, i) => bezier(curve, i / n));
 };
 export const hit = (curve: [Pt, Pt, Pt, Pt], boxes: Rect[], m: number) => {
-  const pts = Array.from({ length: 33 }, (_, i) => bezier(curve, i / 32));
-  return boxes.filter((r) => pts.some((q) => q.x > r.x - m && q.x < r.x + r.w + m && q.y > r.y - m && q.y < r.y + r.h + m));
+  const xs = curve.map((q) => q.x),
+    ys = curve.map((q) => q.y);
+  const near = boxes.filter(
+    (r) => r.x + r.w + m > Math.min(...xs) && r.x - m < Math.max(...xs) && r.y + r.h + m > Math.min(...ys) && r.y - m < Math.max(...ys),
+  );
+  if (!near.length) return [];
+  const pts = samples(curve);
+  return near.filter((r) => pts.some((q) => q.x > r.x - m && q.x < r.x + r.w + m && q.y > r.y - m && q.y < r.y + r.h + m));
 };
 
 /** Routes edges between measured boxes as curved SVG paths. `elbow` draws right-angle paths; `stub` splits a cross-lane edge in two. */
@@ -133,7 +139,7 @@ export function route(
     const plain: [Side, Side] = stacked ? (a.y < b.y ? ['b', 't'] : ['t', 'b']) : a.x < b.x ? ['r', 'l'] : ['l', 'r'];
     const past = hit(bend(sideMid(a, plain[0]), sideMid(b, plain[1]), plain[0]), others, -2);
     const misses = (way: Around, at: number) =>
-      [0.2, 0.5, 0.8].filter((f) => hit(arcLine(sideAt(a, SIDES[way][0], f), sideAt(b, SIDES[way][1], f), way, at), others, -2).length > 0)
+      [0.2, 0.5, 0.8].filter((f) => hit(arcLine(sideAt(a, SIDES[way][0], f), sideAt(b, SIDES[way][1], f), way, at), others, -6).length > 0)
         .length;
     const blocked = (way: Around, at: number) => misses(way, at) === 3;
     let around = e.around;
@@ -216,9 +222,9 @@ export function route(
     const [s, e] = [anchor.get(p.id + ':s'), anchor.get(p.id + ':e')];
     if (!p.around || !s || !e) continue;
     const others = avoid.filter((r) => r.box && !same(r, p.a) && !same(r, p.b));
-    if (!hit(arcLine(s, e, p.around, p.arc!), others, -2).length) continue;
+    if (!hit(arcLine(s, e, p.around, p.arc!), others, -6).length) continue;
     const [pa, pb] = p.plain;
-    const straight = hit(bend(sideMid(p.a, pa), sideMid(p.b, pb), pa), others, -2).length > 0;
+    const straight = hit(bend(sideMid(p.a, pa), sideMid(p.b, pb), pa), others, -6).length > 0;
     [p.sa, p.sb, p.around, p.arc, p.elbow, moved] = [pa, pb, undefined, undefined, p.elbow || straight, true];
   }
   if (moved) place();
@@ -252,8 +258,14 @@ export function route(
       lanes || !labelW ? outside(way, { x: at, y: at }) - 6 : outside(way, bezier(curve, 0.5)) + (upright(way) ? labelW / 2 : 9),
     );
   const one = (p: Pick): Routed => {
-    const s = anchor.get(p.id + ':s')!,
-      e = anchor.get(p.id + ':e')!;
+    const turn = !p.stub && p.elbow && p.sa === 'l';
+    const [s, e] = [anchor.get(p.id + (turn ? ':e' : ':s'))!, anchor.get(p.id + (turn ? ':s' : ':e'))!];
+    const flip = (r: Routed): Routed => {
+      if (!turn) return r;
+      const pts = [...r.elbow!].reverse();
+      const d = pts.slice(1).reduce((d, q, k) => d + (q.y === pts[k].y ? ` H ${q.x}` : ` V ${q.y}`), `M ${pts[0].x} ${pts[0].y}`);
+      return { ...r, d, curve: [...r.curve].reverse() as Routed['curve'], elbow: pts };
+    };
     if (p.stub) {
       const [ow, iw, sw] = p.stub;
       const [sb, tb] = p.bands ?? [];
@@ -405,7 +417,7 @@ export function route(
     }
     if (p.elbow) {
       if (e.x - s.x < 16 && s.y === e.y) {
-        return { id: p.id, d: `M ${s.x} ${s.y} H ${e.x}`, mid: { x: (s.x + e.x) / 2, y: s.y }, curve: [s, s, e, e], elbow: [s, e] };
+        return flip({ id: p.id, d: `M ${s.x} ${s.y} H ${e.x}`, mid: { x: (s.x + e.x) / 2, y: s.y }, curve: [s, s, e, e], elbow: [s, e] });
       }
       const own = (r: Rect) => [p.a, p.b].some((q) => same(q, r));
       const all = avoid.filter((r) => !own(r));
@@ -422,14 +434,14 @@ export function route(
           (u, w) => Math.abs(u - mid) - Math.abs(w - mid),
         );
         const my = ys.find((y) => vClear(mx, s.y, y) && hClear(y, ex, mx, all) && vClear(ex, y, e.y)) ?? mid;
-        return {
+        return flip({
           id: p.id,
           d: `M ${s.x} ${s.y} H ${mx} V ${my} H ${ex} V ${e.y} H ${e.x}`,
           mid: { x: (mx + ex) / 2, y: my },
           curve: [s, { x: mx, y: my }, { x: ex, y: my }, e],
           elbow: [s, { x: mx, y: s.y }, { x: mx, y: my }, { x: ex, y: my }, { x: ex, y: e.y }, e],
           bleed: { above: room(y0 - my), below: room(my - y1) },
-        };
+        });
       }
       const mid = (s.x + e.x) / 2;
       const gap = Array.from({ length: Math.floor((e.x - s.x - 16) / 4) + 1 }, (_, i) => s.x + 8 + i * 4).sort(
@@ -456,7 +468,7 @@ export function route(
         }
         if (best) {
           const { x, y, ex } = best;
-          return {
+          return flip({
             id: p.id,
             d: `M ${s.x} ${s.y} H ${x} V ${y} H ${ex} V ${e.y} H ${e.x}`,
             mid: { x: (x + ex) / 2, y },
@@ -468,19 +480,19 @@ export function route(
               above: room(y0 - y),
               below: room(y - y1),
             },
-          };
+          });
         }
       }
       const x = mx ?? mid;
       const c1 = { x, y: s.y },
         c2 = { x, y: e.y };
-      return {
+      return flip({
         id: p.id,
         d: `M ${s.x} ${s.y} H ${x} V ${e.y} H ${e.x}`,
         mid: { x, y: (s.y + e.y) / 2 },
         curve: [s, c1, c2, e],
         elbow: [s, c1, c2, e],
-      };
+      });
     }
     if (p.around) {
       const curve = arcLine(s, e, p.around, p.arc!);

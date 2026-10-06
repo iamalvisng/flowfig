@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { labelAlong, route, type Pt, type Routed } from './geometry.ts';
+import { labelAlong, route, samples, type Pt, type Routed } from './geometry.ts';
 
 const bezier = ([p0, p1, p2, p3]: [Pt, Pt, Pt, Pt], t: number): Pt => {
   const u = 1 - t;
@@ -285,4 +285,57 @@ test('an edge label moves off a box on the curve middle, and stays at the middle
   const q = labelAlong(r, 40, [box], []);
   assert.ok(q.x + 20 < box.x - 1 || q.x - 20 > box.x + box.w + 1 || q.y + 9 < box.y - 1 || q.y - 9 > box.y + box.h + 1);
   assert.deepEqual(labelAlong(r, 40, [{ x: -50, y: -50, w: 400, h: 100 }], []), r.mid);
+});
+
+const through = (r: Routed, box: { x: number; y: number; w: number; h: number }) => {
+  const line = r.elbow ?? [];
+  const pts = r.elbow
+    ? line.slice(1).flatMap((q, k) =>
+        Array.from({ length: 65 }, (_, i) => ({
+          x: line[k].x + ((q.x - line[k].x) * i) / 64,
+          y: line[k].y + ((q.y - line[k].y) * i) / 64,
+        })),
+      )
+    : samples(r.curve);
+  return pts.some((q) => q.x > box.x + 6 && q.x < box.x + box.w - 6 && q.y > box.y + 6 && q.y < box.y + box.h - 6);
+};
+const solid = (rs: Record<string, { x: number; y: number; w: number; h: number }>) => Object.values(rs).map((r) => ({ ...r, box: true }));
+
+test('a long arc steps over a narrow box', () => {
+  const long = { a: { x: 0, y: 0, w: 100, h: 40 }, b: { x: 1900, y: 0, w: 100, h: 40 }, c: { x: 1035, y: 57, w: 20, h: 40 } };
+  const [arc] = route([{ id: 'e', from: 'a', to: 'b', around: 'below' }], long, new Set(), solid(long));
+  assert.ok(!through(arc, long.c), `a long arc steps over a narrow box: ${arc.d}`);
+});
+
+test('an elbow to a box on the left keeps clear of boxes and points at the target', () => {
+  const back = {
+    a: { x: 300, y: 0, w: 100, h: 40 },
+    b: { x: 0, y: 200, w: 100, h: 40 },
+    c: { x: 280, y: 100, w: 140, h: 40 },
+    d: { x: 60, y: 60, w: 80, h: 100 },
+  };
+  const [elbow] = route([{ id: 'e', from: 'a', to: 'b', elbow: true }], back, new Set(), solid(back));
+  assert.ok(!through(elbow, back.c) && !through(elbow, back.d), `an elbow to a box on the left: ${elbow.d}`);
+  const line = elbow.elbow!;
+  assert.ok(line[0].x === back.a.x && line[line.length - 1].x === back.b.x + back.b.w, `the arrow points at the target: ${elbow.d}`);
+});
+
+test('a plain edge with spread anchors does not draw a curve through a box in its row', () => {
+  const grid = {
+    a: { x: 24, y: 39, w: 100, h: 90 },
+    c: { x: 456, y: 80, w: 100, h: 38 },
+    b: { x: 600, y: 74, w: 100, h: 90 },
+    f: { x: 600, y: 176, w: 100, h: 120 },
+    g: { x: 600, y: 308, w: 100, h: 120 },
+  };
+  const [e] = route(
+    [
+      { id: 'e', from: 'a', to: 'b' },
+      { id: 'e2', from: 'b', to: 'g' },
+    ],
+    grid,
+    new Set(),
+    solid(grid),
+  );
+  assert.ok(!through(e, grid.c), `a curve through a box: ${e.d}`);
 });

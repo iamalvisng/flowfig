@@ -43,6 +43,8 @@ export type FigGroup = {
   align?: 'start' | 'center' | 'end';
   /** The boxes and groups inside, in order. */
   children: (FigNode | FigGroup)[];
+  /** On the root layout: flowfig places the boxes. A labeled group is a frame. */
+  auto?: true;
 };
 /** An arrow from one box to another. */
 export type FigEdge = {
@@ -695,7 +697,7 @@ export const counts = (p: FlowProps) => {
   };
 };
 
-const idsIn = (c: FigNode | FigGroup): string[] => (isGroup(c) ? [...(c.id ? [c.id] : []), ...c.children.flatMap(idsIn)] : [c.id]);
+export const idsIn = (c: FigNode | FigGroup): string[] => (isGroup(c) ? [...(c.id ? [c.id] : []), ...c.children.flatMap(idsIn)] : [c.id]);
 
 const LINE_CLEAR = 16;
 

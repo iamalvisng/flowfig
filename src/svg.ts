@@ -4,6 +4,7 @@ import { foldedLabel, groupBox, layoutRail, railState, RAIL, type Rail } from '.
 import { textWidth, wrap } from './text.ts';
 import { checkRendered, planFor, type CheckOptions } from './check.ts';
 import type { Finding, Scene, SceneBox, SceneEdge } from './scene.ts';
+import { autoLayout } from './auto.ts';
 export type { CheckOptions } from './check.ts';
 export type { Finding, Scene } from './scene.ts';
 export type * from './model.ts';
@@ -268,7 +269,8 @@ export type SvgOptions = {
 const SYSTEM_FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
 
 /** The SVG string and the scene it drew. The scene shape may change; use `toSvg` for the SVG only. */
-export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; scene: Scene } {
+export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; scene: Scene } {
+  const fig = autoLayout(spec);
   const speed = (opts.speed ?? fig.speed ?? 900) / 1000 / BASE_RATE;
   const pad = opts.padding ?? 24;
   const tl = fig.timeline && isLanesLayout(fig.layout) ? timelineLayout(fig, TL_AXIS_W) : null;
