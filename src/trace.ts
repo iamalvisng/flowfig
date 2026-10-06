@@ -191,3 +191,18 @@ export function trace(start: string, { root = process.cwd(), depth = 2, max = 40
   r.ms = Math.round(performance.now() - t0);
   return r;
 }
+
+const count = (k: number, word: string) => `${k} ${word}${k === 1 ? '' : 's'}`;
+
+export function traceLines(r: TraceResult, depth: number, max: number): string[] {
+  const pairs = r.edges.map((e) => `${e.from} -> ${e.to}`);
+  const width = Math.max(0, ...pairs.map((p) => p.length));
+  const symbols = new Set([r.start, ...r.edges.map((e) => e.to)]).size;
+  return [
+    ...r.edges.map((e, i) => `${pairs[i].padEnd(width)}   ${e.at}`),
+    ...r.unsure.map((u) => `unsure  ${u.at}  ${u.reason}`),
+    ...r.open.map((o) => `open    ${o.at}  ${o.reason}`),
+    ...r.stops.map((s) => `stop    ${s.reason} ${s.reason === 'depth' ? depth : max}: ${count(s.count, 'symbol')} not followed`),
+    `summary: ${count(symbols, 'symbol')}, ${r.edges.length} found, ${r.unsure.length} unsure, ${r.open.length} open, ${count(r.outside, 'call')} outside the repo, ${(r.ms / 1000).toFixed(1)} s`,
+  ];
+}

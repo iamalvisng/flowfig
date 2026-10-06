@@ -1,9 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { relative, resolve } from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join, relative, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { Read } from './code.ts';
 import { trace } from './trace.ts';
 
+const cli = join(dirname(dirname(fileURLToPath(import.meta.url))), 'dist', 'cli.js');
 const ROOT = resolve('/r');
 const repo = (files: Record<string, string>): Read =>
   Object.assign((full: string) => files[relative(ROOT, full).replace(/\\/g, '/')] ?? null, { files: () => Object.keys(files) });
@@ -60,4 +65,34 @@ test('a call into a package gives no line and counts as outside the repo', () =>
   const files = { 'src/a.ts': "import axios from 'axios';\nexport function a() { axios.get('/x'); axios('/y'); }\n" };
   const r = run(files, 'src/a.ts#a');
   assert.deepEqual([r.edges, r.unsure, r.open, r.outside], [[], [], [], 2]);
+});
+
+test('flowfig trace exits 1 when the start symbol is not defined', () => {
+  const root = mkdtempSync(join(tmpdir(), 'trace-'));
+  try {
+    writeFileSync(join(root, 'a.ts'), 'export function login() {}\n');
+    const r = spawnSync('node', [cli, 'trace', 'a.ts#logout', '--root', root], { encoding: 'utf8' });
+    assert.equal(r.status, 1);
+    assert.match(r.stderr, /a\.ts#logout: symbol not defined/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('flowfig trace prints the edge lines first and the summary line last', () => {
+  const root = mkdtempSync(join(tmpdir(), 'trace-'));
+  try {
+    writeFileSync(join(root, 'password.ts'), 'export function verifyPassword() {}\n');
+    writeFileSync(
+      join(root, 'login.ts'),
+      "import { verifyPassword } from './password.ts';\nexport function login() { verifyPassword(); }\n",
+    );
+    const r = spawnSync('node', [cli, 'trace', 'login.ts#login', '--root', root], { encoding: 'utf8' });
+    const lines = r.stdout.trimEnd().split('\n');
+    assert.equal(r.status, 0);
+    assert.equal(lines[0], 'login.ts#login -> password.ts#verifyPassword   login.ts:2');
+    assert.match(lines.at(-1)!, /^summary: 2 symbols, 1 found, 0 unsure, 0 open, 0 calls outside the repo, \d+\.\d s$/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
