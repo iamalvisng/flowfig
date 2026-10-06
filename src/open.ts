@@ -27,6 +27,17 @@ export function pageName(svgPath: string): string {
 
 export const openedLine = (page: string) => `${page} — opened in the default browser`;
 
+export async function openFile(path: string): Promise<void> {
+  const o = process.env.FLOWFIG_OPENER
+    ? { cmd: process.env.FLOWFIG_OPENER, args: [path], verbatim: false }
+    : openerFor(process.platform, path);
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(o.cmd, o.args, { detached: true, windowsHide: true, stdio: 'ignore', windowsVerbatimArguments: o.verbatim });
+    child.once('spawn', () => (child.unref(), resolve()));
+    child.once('error', (e) => reject(new Error(`${e.message}. Open ${path} in a browser.`)));
+  });
+}
+
 /** Write the page to a new temp folder, then start the opener. Returns the written paths. */
 export async function openSvg(svgPath: string, html?: string): Promise<string[]> {
   const page = pageHtml(readFileSync(svgPath, 'utf8'), basename(svgPath));
@@ -36,14 +47,7 @@ export async function openSvg(svgPath: string, html?: string): Promise<string[]>
   const temp = join(dir, pageName(svgPath));
   writeFileSync(temp, page);
   if (html) writeFileSync(html, page);
-  const o = process.env.FLOWFIG_OPENER
-    ? { cmd: process.env.FLOWFIG_OPENER, args: [temp], verbatim: false }
-    : openerFor(process.platform, temp);
-  await new Promise<void>((resolve, reject) => {
-    const child = spawn(o.cmd, o.args, { detached: true, windowsHide: true, stdio: 'ignore', windowsVerbatimArguments: o.verbatim });
-    child.once('spawn', () => (child.unref(), resolve()));
-    child.once('error', (e) => reject(new Error(`${e.message}. Open ${temp} in a browser.`)));
-  });
+  await openFile(temp);
   return html ? [temp, html] : [temp];
 }
 
