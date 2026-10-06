@@ -186,6 +186,7 @@ The options are in [Open and share a figure](#open-and-share-a-figure).
 - [Trace the calls of a function](#trace-the-calls-of-a-function)
 - [Find stale figures](#find-stale-figures)
 - [One page for all figures](#one-page-for-all-figures)
+- [Convert Mermaid](#convert-mermaid)
 - [MCP server](#mcp-server)
 - [Use in React](#use-in-react)
 - [Use from Node](#use-from-node)
@@ -687,6 +688,59 @@ if you drew that SVG with `--width` or `--min-text`. A figure that you remove ke
 
 To publish the pages on GitHub Pages, run `npx flowfig atlas --out docs/atlas` and commit the result. Then set Pages to
 "Deploy from a branch" with the folder `/docs`.
+
+## Convert Mermaid
+
+`flowfig from-mermaid` turns a Mermaid flowchart or sequence diagram into a flowfig spec. The converter uses no model.
+Then `check` and `verify` can test the figure.
+
+```console
+$ cat login.mmd
+sequenceDiagram
+    participant W as Web app
+    W->>A: POST /login
+    A-->>W: 200 session cookie
+    A-)Q: user.logged_in
+$ npx flowfig from-mermaid login.mmd > login.json
+$ npx flowfig login.json login.svg
+```
+
+The input is a `.mmd` file with one diagram, or a Markdown file. In a Markdown file, each fenced block with the language
+`mermaid` is one diagram. `-` reads one diagram from stdin. With one diagram, the command prints the spec. With
+`--out <dir>`, the command writes one JSON file for each diagram, such as `docs-1.json` and `docs-2.json`.
+
+The command exits 1 if a diagram has a line that the converter does not read. It prints `<file>:<line>: <reason>` for each
+line, and writes no spec for that diagram. The command never guesses.
+
+A flowchart (`flowchart` or `graph`) becomes a still map with automatic layout:
+
+- Nodes: `A`, `A[text]`, `A(text)`, `A([text])`, `A((text))`, `A{text}` (a decision) and `A[(text)]` (a store). The text can
+  have quotes. `<br>` becomes a space. `#quot;`, `#amp;`, `#lt;`, `#gt;`, `#apos;`, `#nbsp;` and `#NN;` (a decimal code)
+  become their characters.
+- Links: `-->`, `-.->`, `==>`, with a label as `-->|text|` or `-- text -->`. Chains (`A --> B --> C`) and `&`
+  (`A & B --> C`) are read.
+- `subgraph id`, `subgraph id [title]`, `subgraph id["title"]` or `subgraph title` ... `end` becomes a group with a frame. A subgraph with no
+  node is dropped.
+- `classDef`, `class`, `style`, `linkStyle`, `click`, `direction`, `:::class` and `%%` comments are ignored.
+
+A sequence diagram becomes a rail (`rail: "only"`):
+
+- Each `participant` or `actor` is a box. A participant that first shows in a message is a box too.
+- Each pair of participants gets one edge. Each message is one hop on that edge, with its text in `data`.
+- A message in the other direction of the edge is a hop with `back: true`. `-)` gives `async: true`.
+- With no `alt`, the figure has one step with all the messages.
+- Each `alt` or `else` branch becomes one step. The step has the messages before the `alt`, the messages of that branch, and
+  the messages after the `end`. The step label is the branch condition.
+- `loop`, `opt`, `par`, `and` and `rect` lines are ignored. Their messages stay in order in each step.
+- `activate`, `deactivate`, `+` and `-`, `Note` and `autonumber` are ignored.
+
+Limits:
+
+- `RL` reads as `LR`, and `BT` reads as `TB`. The automatic layout sets the order of the boxes.
+- `-.->` and `==>` give a plain edge. flowfig has no dotted or thick edge.
+- A link with no arrow (`---`, `-.-`, `===`) is an error. Use `-->` to give it a direction.
+- Other node shapes, Markdown strings, `<-->`, `--o`, `--x`, `-x` and a message to the same participant are errors.
+- A second `alt` and an `alt` inside an `alt` are errors.
 
 ## MCP server
 

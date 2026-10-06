@@ -11,7 +11,7 @@
   },
   "overrides": [
     {
-      "files": ["src/atlas.ts", "src/cli.ts", "src/draw.ts", "src/init.ts", "src/open.ts", "scripts/**"],
+      "files": ["src/atlas.ts", "src/cli.ts", "src/draw.ts", "src/init.ts", "src/mermaid.ts", "src/open.ts", "scripts/**"],
       "rules": { "no-console": "off" }
     },
     {

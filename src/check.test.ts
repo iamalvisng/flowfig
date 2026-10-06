@@ -1,5 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { checkSpec, checkScene, checkTheme, contrast } from './check.ts';
 import { TONES, toneFill, type FlowProps } from './model.ts';
 import type { Scene, SceneBox } from './scene.ts';
@@ -596,4 +599,43 @@ test('a detail that is not a relative .svg path is a warning', () => {
   const box = (detail: string): FlowProps => ({ layout: { children: [{ id: 'a', label: 'A', detail }] }, edges: [] });
   for (const bad of ['docs/a.png', '/abs/a.svg', 'https://x.test/a.svg']) assert.deepEqual(rules(checkSpec(box(bad))), ['bad-detail'], bad);
   assert.deepEqual(checkSpec(box('docs/flows/a.svg')), []);
+});
+
+test('an empty group does not break the layout of the other boxes', () => {
+  for (const auto of [undefined, true] as const) {
+    const spec: FlowProps = {
+      layout: {
+        auto,
+        direction: 'column',
+        children: [
+          { id: 'g', label: 'Empty', children: [] },
+          { id: 'a', label: 'A' },
+          { id: 'b', label: 'B' },
+        ],
+      },
+      edges: [{ from: 'a', to: 'b' }],
+    };
+    const { svg, scene } = render(spec);
+    assert.doesNotMatch(svg, /NaN/);
+    assert.deepEqual(
+      checkScene(scene, {}).filter((f) => f.severity === 'error'),
+      [],
+    );
+  }
+});
+
+test('an edge to a group with no boxes fails check --strict', () => {
+  const spec = {
+    layout: {
+      children: [
+        { id: 'g', children: [] },
+        { id: 'a', label: 'A' },
+      ],
+    },
+    edges: [{ from: 'a', to: 'g' }],
+  };
+  const cli = join(dirname(dirname(fileURLToPath(import.meta.url))), 'scripts', 'figure-svg.mjs');
+  const r = spawnSync(process.execPath, [cli, 'check', '-', '--strict'], { input: JSON.stringify(spec), encoding: 'utf8' });
+  assert.equal(r.status, 1);
+  assert.match(r.stdout, /edge "a->g" ends at group "g", which has no boxes/);
 });

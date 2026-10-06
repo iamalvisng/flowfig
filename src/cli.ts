@@ -11,6 +11,7 @@ import { runDraw } from './draw.ts';
 import { runInit } from './init.ts';
 import { serve } from './mcp.ts';
 import { runAtlas } from './atlas.ts';
+import { runFromMermaid } from './mermaid.ts';
 import { openedLine, openSvg, runOpen } from './open.ts';
 import { pageHtml } from './page.ts';
 import { decodePng } from './png.ts';
@@ -36,6 +37,7 @@ const USAGE = `usage: flowfig <-|spec.json|figure.ts> [out.svg] [--open]   rende
        flowfig draw "<question>" [--out <path>] [--model <alias>] [--max-turns <n>] [--json] [--open]   ask Claude Code for a figure, then check it
        flowfig atlas [--figures <glob>] [--root <dir>] [--out <dir>] [--open]   write one linked web page for each figure, and an index
        flowfig open <figure.svg> [--html <path>]          show the figure in the default browser
+       flowfig from-mermaid <file.mmd|file.md|-> [--out <dir>]   convert Mermaid flowcharts and sequence diagrams to specs
        flowfig gif <figure.svg> [out.gif] [--step <n>] [--dark] [--fps <n>] [--scale <n>] [--mp4]   write an animated GIF
 flags for render and check: --strict (warnings are errors), --json, --width <px>, --min-text <px>, --no-check (render only), --no-verify (render only)`;
 function usage(message: string): never {
@@ -82,6 +84,7 @@ if (args[0] === 'init') process.exit(await runInit(args.slice(1)));
 if (args[0] === 'draw') process.exit(await runDraw(args.slice(1)));
 if (args[0] === 'atlas') process.exit(await runAtlas(args.slice(1)));
 if (args[0] === 'open') process.exit(await runOpen(args.slice(1)));
+if (args[0] === 'from-mermaid') process.exit(runFromMermaid(args.slice(1)));
 
 if (args[0] === '--spec') {
   if (!args[1]) usage('--spec needs the path of an SVG');
