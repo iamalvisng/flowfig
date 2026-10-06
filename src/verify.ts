@@ -35,6 +35,19 @@ export const coverageLine = (figure: string, c: Coverage) =>
 
 export const unsureLines = (c: Coverage) => c.unsureEdges.map((e) => `unsure   edge "${e.id}": ${e.reason}`);
 
+export const SPEC_MARK = '<metadata id="figure-spec">';
+
+export function detailFindings(fig: FlowProps, root: string, read: Read = readFile): Finding[] {
+  return nodes(fig.layout).flatMap((n) => {
+    if (typeof n.detail !== 'string') return [];
+    const text = outside(root, n.detail) ? null : read(resolve(root, n.detail));
+    const why = text == null ? 'file not found' : text.includes(SPEC_MARK) ? '' : 'no figure spec in the file';
+    return why
+      ? [{ rule: 'missing-detail', severity: 'warning' as const, ids: [n.id], message: `box "${n.id}" -> ${n.detail}: ${why}` }]
+      : [];
+  });
+}
+
 /** The links against the files under `root`. A path outside `root` counts as a missing file. */
 export function verifyReport(
   fig: FlowProps,
@@ -46,10 +59,11 @@ export function verifyReport(
 ): { findings: Finding[]; coverage: Coverage } {
   const findings: Finding[] = [];
   const coverage = emptyCoverage();
+  findings.push(...detailFindings(fig, root, read));
   const all = links(fig);
   if (!all.length)
     return {
-      findings: [{ rule: 'no-source', severity: 'warning', ids: [], message: 'no box, edge or hop has a source' }],
+      findings: [...findings, { rule: 'no-source', severity: 'warning', ids: [], message: 'no box, edge or hop has a source' }],
       coverage,
     };
   const files = new Map<string, string | null>();

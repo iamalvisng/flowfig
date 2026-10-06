@@ -234,3 +234,14 @@ test('Owner.name finds an enum member and not a name that is no member', () => {
     }
   });
 });
+
+test('missing-detail warns for a missing file, an SVG with no spec and a figure with no source', () => {
+  withRepo({ 'docs/plain.svg': '<svg/>' }, (root) => {
+    const fig = (detail: string): FlowProps => ({ layout: { children: [{ id: 'a', label: 'A', detail }] }, edges: [] });
+    for (const detail of ['docs/gone.svg', 'docs/plain.svg', '../x.svg']) {
+      const found = verifyReport(fig(detail), { root }).findings;
+      assert.deepEqual(rules(found), ['missing-detail', 'no-source'], detail);
+      assert.equal(found[0].severity, 'warning');
+    }
+  });
+});

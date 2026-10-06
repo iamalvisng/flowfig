@@ -9,7 +9,7 @@ const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const args = process.argv.slice(2);
 const at = ['check', 'verify', 'diff'].includes(args[0]) ? 1 : 0;
 
-if (args[at] && !['docs', 'init', 'draw', 'help', 'mcp', 'open', 'gif'].includes(args[at]) && /^\w[\w-]*$/.test(args[at])) {
+if (args[at] && !['docs', 'init', 'draw', 'help', 'mcp', 'open', 'gif', 'atlas'].includes(args[at]) && /^\w[\w-]*$/.test(args[at])) {
   const slug = args[at];
   args[at] = join(root, 'figures', `${slug}.ts`);
   if (!at && !(args[1] && !args[1].startsWith('--'))) args.splice(1, 0, `${slug}.svg`);

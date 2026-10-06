@@ -149,6 +149,9 @@ export function checkSpec(fig: FlowProps): Finding[] {
     if (via != null && (typeof via !== 'string' || !/^\S+$/.test(via)))
       out.push(warn('bad-source', [], `${who}: via ${JSON.stringify(via)} is not a string of one word`));
   }
+  for (const n of nodes(fig.layout))
+    if (n.detail != null && !(typeof n.detail === 'string' && n.detail.endsWith('.svg') && !/^([\\/]|[A-Za-z]+:)/.test(n.detail)))
+      out.push(warn('bad-detail', [n.id], `box "${n.id}": detail ${JSON.stringify(n.detail)} is not a relative path to an .svg file`));
   const marks = nodes(fig.layout).map((n) => n.mark);
   const starts = marks.filter((m) => m === 'start').length;
   const ends = marks.filter((m) => m === 'end').length;

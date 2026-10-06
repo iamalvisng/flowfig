@@ -591,3 +591,9 @@ test('each good plain-text example in the guide passes, and each checked bad exa
     if (!x.style) assert.equal(warns(x.field, x.bad, x.bad), true, x.bad);
   }
 });
+
+test('a detail that is not a relative .svg path is a warning', () => {
+  const box = (detail: string): FlowProps => ({ layout: { children: [{ id: 'a', label: 'A', detail }] }, edges: [] });
+  for (const bad of ['docs/a.png', '/abs/a.svg', 'https://x.test/a.svg']) assert.deepEqual(rules(checkSpec(box(bad))), ['bad-detail'], bad);
+  assert.deepEqual(checkSpec(box('docs/flows/a.svg')), []);
+});

@@ -117,7 +117,7 @@ the run.
 
 1. **The agent writes JSON, not pictures.** The agent reads the code and writes a spec of the parts, the calls and their
    order. flowfig does the layout.
-2. **flowfig checks the spec.** `flowfig check` has 25 rules. It finds ids that point nowhere, text wider than its box,
+2. **flowfig checks the spec.** `flowfig check` has 26 rules. It finds ids that point nowhere, text wider than its box,
    edges through boxes, overlapping labels and low contrast. A render runs the same check and writes nothing on an error.
    The agent reads the faults and fixes the spec.
 3. **The output is one animated SVG with no script.** The SVG plays in a GitHub README, PR or issue. It follows the light
@@ -167,7 +167,7 @@ The options are in [Open and share a figure](#open-and-share-a-figure).
 | ------------------------------ | --------------------------------- | ------------------------------------ | ---------------- |
 | Made by an agent from the code | Yes, with the `init` instructions | Yes, as Mermaid text                 | No               |
 | Linked to the code             | Yes, `verify` fails in CI         | No                                   | No               |
-| Checked for faults             | Yes, 25 rules in `flowfig check`  | Syntax errors only                   | No               |
+| Checked for faults             | Yes, 26 rules in `flowfig check`  | Syntax errors only                   | No               |
 | Animated                       | Yes, one packet per message       | No                                   | No               |
 | Shows payloads and order       | Yes, on the map and the rail      | Order and text in a sequence diagram | No               |
 | Plays in a GitHub README       | Yes, as an SVG                    | Yes, GitHub renders it               | Yes, as an image |
@@ -185,6 +185,7 @@ The options are in [Open and share a figure](#open-and-share-a-figure).
 - [Verify in CI](#verify-in-ci)
 - [Trace the calls of a function](#trace-the-calls-of-a-function)
 - [Find stale figures](#find-stale-figures)
+- [One page for all figures](#one-page-for-all-figures)
 - [MCP server](#mcp-server)
 - [Use in React](#use-in-react)
 - [Use from Node](#use-from-node)
@@ -287,6 +288,7 @@ full reference, run `npx flowfig docs`.
 | `sub`    | A smaller line under the label.                                                                           | none                                |
 | `shape`  | `"box"`, `"decision"` (a diamond) or `"store"` (a data cylinder).                                         | `"box"`                             |
 | `source` | The code this draws: `path` or `path#symbol`. `flowfig verify` checks it.                                 | none                                |
+| `detail` | A more detailed figure: the SVG path from the repo root. `flowfig atlas` links the box to it.             | none                                |
 | `lines`  | The least number of text lines that a content card keeps.                                                 | none                                |
 | `width`  | The width in px. This value replaces the width that layout picks.                                         | from layout                         |
 | `at`     | In a `lanes` figure: the time column of the box, from 0.                                                  | the order of first use in the steps |
@@ -402,7 +404,7 @@ figure: 5 boxes, 3 groups, 4 edges, 2 steps, 6 messages
 
 The last line gives the counts of the parts of the figure. Compare the counts with the parts that you planned.
 
-`flowfig check` has 25 rules: 11 errors and 14 warnings.
+`flowfig check` has 26 rules: 11 errors and 15 warnings.
 
 | Rule                        | Severity | What it finds                                                                                       |
 | --------------------------- | -------- | --------------------------------------------------------------------------------------------------- |
@@ -420,6 +422,7 @@ The last line gives the counts of the parts of the figure. Compare the counts wi
 | `empty-step`                | warning  | A step with no beats.                                                                               |
 | `small-text`                | warning  | At the page width, the smallest text is below the minimum size.                                     |
 | `bad-source`                | warning  | A `source` that is not `path` or `path#symbol`.                                                     |
+| `bad-detail`                | warning  | A `detail` that is not a relative path that ends in `.svg`.                                         |
 | `mark-count`                | warning  | A lifecycle has more than one `start` mark, or a `start` mark and no `end` mark.                    |
 | `lane-column-taken`         | warning  | Two boxes in one lane share a time column.                                                          |
 | `lane-end-block`            | warning  | In wrapped lanes, an edge ends at a lane that no block on its side shows.                           |
@@ -488,6 +491,8 @@ docs/login.svg: 7 of 7 boxes defined; edges: 9 found, 0 not found, 1 unsure, 1 n
 - not found: the caller code does not. `verify` warns, and `--strict` makes it an error.
 - unsure: `verify` cannot decide, for example when a receiver has no declared type. `verify` lists it with the reason. It never fails CI.
 - not checked: the edge has no `source`, or the language is not supported.
+
+`verify` also checks `detail`. If the file is missing or has no figure spec, `verify` warns with `missing-detail`. `--strict` makes it an error.
 
 A method source is `path#Owner.name`. An edge `source` names the function that makes the call.
 
@@ -607,6 +612,58 @@ file that no figure covers. With no `--entries`, it prints one count line for ea
 | `--json`           | Print one JSON object in place of the lines.                  | off                |
 
 `coverage` skips `node_modules`, `dist` and each folder with a name that starts with a dot.
+
+## One page for all figures
+
+`flowfig atlas` writes one web page for each figure, and an index page. A box can link to a more detailed figure with
+`detail`. The path starts at the repo root, as `source` does.
+
+```json
+"layout": { "children": [{ "id": "web", "label": "Web app" }, { "id": "orders", "label": "Order service", "detail": "docs/flows/orders.svg" }] }
+"layout": { "children": [{ "id": "up", "label": "Whole system", "detail": "docs/system.svg" }, { "id": "db", "label": "Orders table" }] }
+```
+
+`docs/system.svg` links down to the order flow. `docs/flows/orders.svg` links back up.
+
+```console
+$ npx flowfig atlas
+atlas/index.html — 2 figure pages
+```
+
+| Option             | Meaning                                                       | Default            |
+| ------------------ | ------------------------------------------------------------- | ------------------ |
+| `--figures <glob>` | The SVG files to read. Only an SVG with a figure spec counts. | `**/*.svg`         |
+| `--root <dir>`     | The repo root. `detail` paths start here.                     | the current folder |
+| `--out <dir>`      | The folder to write.                                          | `atlas`            |
+| `--open`           | Open `index.html` in the default browser.                     | off                |
+
+The command writes `index.html`, one `.html` page for each figure, and an empty `.nojekyll` file. It deletes nothing. If a file of the same name exists and the atlas did not write it, the command writes nothing and exits with 2.
+All links are relative, so the pages work from a file, a sub-path or any file host. The exit code is 0 when the site is
+written, whatever the health of the figures. It is 1 when no figure matches, and 2 for a bad flag.
+
+The index lists each figure with its health from `coverage`: `ok`, `stale`, `fail` or `none`. A figure with a bad spec
+has no page. Its row shows `fail` and the error.
+
+Each figure page has these parts, in this order:
+
+1. A link "All figures".
+2. The figure path and its health.
+3. The figure.
+4. A "Details" list with one link for each box that has `detail`.
+5. The transcript of the figure.
+
+A link works in these places:
+
+- In the README, an SVG is an image, so a box has no link. The README render does not change.
+- On an atlas page, a click on a box opens the page of its `detail` figure. The mouse is the only way to use this link.
+- The "Details" list has the same links with names. Use it with the keyboard and a screen reader.
+- If the target figure is not in the atlas, the box has no link. The list row says "not in the atlas".
+
+The atlas draws each spec with the installed flowfig and the default options. A page can differ from the committed SVG
+if you drew that SVG with `--width` or `--min-text`. A figure that you remove keeps its old page in `--out`.
+
+To publish the pages on GitHub Pages, run `npx flowfig atlas --out docs/atlas` and commit the result. Then set Pages to
+"Deploy from a branch" with the folder `/docs`.
 
 ## MCP server
 

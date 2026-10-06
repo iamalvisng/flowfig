@@ -10,6 +10,7 @@ import { GUIDE, TOPICS } from './guide.ts';
 import { runDraw } from './draw.ts';
 import { runInit } from './init.ts';
 import { serve } from './mcp.ts';
+import { runAtlas } from './atlas.ts';
 import { openedLine, openSvg, runOpen } from './open.ts';
 import { pageHtml } from './page.ts';
 import { decodePng } from './png.ts';
@@ -33,6 +34,7 @@ const USAGE = `usage: flowfig <-|spec.json|figure.ts> [out.svg] [--open]   rende
        flowfig mcp                                        serve check, render, verify, diff and docs over MCP (stdio)
        flowfig init [dir] [--agents <ids>] [-y] [--global] [--dry-run] [--no-mcp]   write flowfig instructions for the coding agents of a repo
        flowfig draw "<question>" [--out <path>] [--model <alias>] [--max-turns <n>] [--json] [--open]   ask Claude Code for a figure, then check it
+       flowfig atlas [--figures <glob>] [--root <dir>] [--out <dir>] [--open]   write one linked web page for each figure, and an index
        flowfig open <figure.svg> [--html <path>]          show the figure in the default browser
        flowfig gif <figure.svg> [out.gif] [--step <n>] [--dark] [--fps <n>] [--scale <n>] [--mp4]   write an animated GIF
 flags for render and check: --strict (warnings are errors), --json, --width <px>, --min-text <px>, --no-check (render only), --no-verify (render only)`;
@@ -78,6 +80,7 @@ if (args[0] === 'mcp') {
 
 if (args[0] === 'init') process.exit(await runInit(args.slice(1)));
 if (args[0] === 'draw') process.exit(await runDraw(args.slice(1)));
+if (args[0] === 'atlas') process.exit(await runAtlas(args.slice(1)));
 if (args[0] === 'open') process.exit(await runOpen(args.slice(1)));
 
 if (args[0] === '--spec') {

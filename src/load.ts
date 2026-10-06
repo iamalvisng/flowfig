@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { altText, counts, toBeat, type FlowProps } from './model.ts';
-import { coverageLine, owners, unsureLines, verifyReport } from './verify.ts';
+import { coverageLine, detailFindings, owners, unsureLines, verifyReport } from './verify.ts';
 import { toSvg, type Finding, type SvgOptions } from './svg.ts';
 
 const SPEC_OPEN = '<metadata id="figure-spec"><![CDATA[';
@@ -73,7 +73,9 @@ export function summaryLines(props: FlowProps): string[] {
 }
 
 export function verifyLines(props: FlowProps, figure: string, root = process.cwd()): string[] {
-  if (!owners(props).some(([, source, via]) => source != null || via != null)) return [];
+  if (!owners(props).some(([, source, via]) => source != null || via != null)) {
+    return detailFindings(props, root).map((f) => `${f.severity.padEnd(8)} ${f.rule.padEnd(18)} ${figure}: ${f.message}`);
+  }
   const { findings, coverage } = verifyReport(props, { root });
   return [
     ...findings.map((f) => `${f.severity.padEnd(8)} ${f.rule.padEnd(18)} ${figure}: ${f.message}`),

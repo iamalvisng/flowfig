@@ -1431,3 +1431,28 @@ test('a set around side that is blocked still gives a path that crosses no box',
   };
   assert.ok(!check(props).some((f) => f.rule === 'edge-crosses-box'));
 });
+
+test('a detail field changes nothing in a normal render; links wrap only the listed boxes', () => {
+  const base: FlowProps = {
+    layout: {
+      children: [
+        { id: 'a', label: 'A' },
+        { id: 'b', label: 'B' },
+      ],
+    },
+    edges: [{ from: 'a', to: 'b' }],
+  };
+  const withDetail = {
+    ...base,
+    layout: {
+      children: [
+        { id: 'a', label: 'A', detail: 'docs/a.svg' },
+        { id: 'b', label: 'B' },
+      ],
+    },
+  };
+  assert.equal(toSvg(withDetail), toSvg(base));
+  const linked = toSvg(withDetail, { links: { a: 'x"y.html' } });
+  assert.equal(linked.match(/<a /g)?.length, 1);
+  assert.match(linked, /<a href="x&quot;y\.html" tabindex="-1">/);
+});
