@@ -318,3 +318,15 @@ test('auto layout: the player puts each box in the rank and order of the SVG', (
   assert.deepEqual(drawn, svg);
   assert.equal(new Set(toSvgScene(fig).scene.boxes.map((b) => mid(b.rect))).size, 4);
 });
+
+test('only the selected tab is in the tab order, and each tab controls a tabpanel', () => {
+  const html = render(fig);
+  const tabs = [...html.matchAll(/<button[^>]*role="tab"[^>]*>/g)].map(([t]) => t);
+  const focusable = tabs.filter((t) => t.includes('tabindex="0"'));
+  assert.equal(focusable.length, 1);
+  assert.match(focusable[0]!, /aria-selected="true"/);
+  for (const t of tabs) {
+    const id = /aria-controls="([^"]+)"/.exec(t)![1];
+    assert.match(html, new RegExp(`role="tabpanel" id="${id}"`));
+  }
+});

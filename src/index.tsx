@@ -170,6 +170,7 @@ function FlowBody({
   const tl = timeline && isLanesLayout(layout);
   const alt = useMemo(() => altText({ layout, edges, steps: stepsIn }), [layout, edges, stepsIn]);
   const descId = useId();
+  const tabsId = useId();
   const synthetic = tl && !stepsIn.length;
   const steps = useMemo(
     () => (synthetic ? timelineBeats({ layout, edges, timeline, today }) : stepsIn),
@@ -1188,6 +1189,9 @@ function FlowBody({
             {/* ponytail: no stacked mobile layout; add one if narrow screens break it. */}
             <div
               ref={outer}
+              role="tabpanel"
+              id={`${tabsId}-panel`}
+              aria-labelledby={`${tabsId}-tab-${active ?? 0}`}
               style={{
                 overflow: fit.scale > 0.5 ? 'hidden' : 'auto',
                 height: fit.scale < 1 ? fit.height : undefined,
@@ -1546,6 +1550,17 @@ function FlowBody({
             {!synthetic && (
               <div
                 role="tablist"
+                onKeyDown={(e) => {
+                  const to = { ArrowRight: (active ?? 0) + 1, ArrowLeft: (active ?? 0) - 1, Home: 0, End: steps.length - 1 }[e.key];
+                  if (to === undefined) return;
+                  e.preventDefault();
+                  const n = (to + steps.length) % steps.length;
+                  clock.current.elapsed = 0;
+                  setActive(n);
+                  setPlaying(true);
+                  setBeat(0);
+                  document.getElementById(`${tabsId}-tab-${n}`)?.focus();
+                }}
                 style={{
                   display: 'inline-flex',
                   gap: 2,
@@ -1563,6 +1578,9 @@ function FlowBody({
                       type="button"
                       role="tab"
                       aria-selected={on}
+                      id={`${tabsId}-tab-${i}`}
+                      aria-controls={noMap ? undefined : `${tabsId}-panel`}
+                      tabIndex={on ? 0 : -1}
                       onClick={() => {
                         clock.current.elapsed = 0;
                         setActive(i);
