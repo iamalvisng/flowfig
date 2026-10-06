@@ -1,5 +1,14 @@
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="724.6" height="246" viewBox="0 0 724.6 246" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="724.6" height="246" viewBox="0 0 724.6 246" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" role="img" aria-labelledby="fig-title fig-desc">
 <metadata id="figure-spec"><![CDATA[{"props":{"layout":{"direction":"column","children":[{"direction":"row","children":[{"id":"new","label":"New","mark":"start"},{"id":"paid","label":"Paid"},{"id":"shipped","label":"Shipped"},{"id":"delivered","label":"Delivered","mark":"end"}]},{"direction":"row","children":[{"id":"cancelled","label":"Cancelled","tone":"gray","mark":"end"}]}]},"edges":[{"id":"pay","from":"new","to":"paid","label":"pay"},{"id":"ship","from":"paid","to":"shipped","label":"ship"},{"id":"deliver","from":"shipped","to":"delivered","label":"deliver"},{"id":"cancel-new","from":"new","to":"cancelled","label":"cancel"},{"id":"cancel-paid","from":"paid","to":"cancelled","label":"cancel"}],"steps":[{"label":"delivered","flow":[{"edges":"pay","say":"The customer pays. The order is paid."},{"edges":"ship","say":"The warehouse ships the order."},{"edges":{"edge":"deliver","tone":"green"},"say":"The carrier delivers the order. This is an end state."}]},{"label":"cancelled","flow":[{"edges":"pay","say":"The customer pays. The order is paid."},{"edges":{"edge":"cancel-paid","tone":"red"},"say":"The customer cancels before the shipment. This is an end state."}]}]}}]]></metadata>
+<title id="fig-title">delivered, cancelled</title>
+<desc id="fig-desc">The figure has these boxes: New, Paid, Shipped, Delivered, Cancelled.
+delivered.
+The customer pays. The order is paid.
+The warehouse ships the order.
+The carrier delivers the order. This is an end state.
+cancelled.
+The customer pays. The order is paid.
+The customer cancels before the shipment. This is an end state.</desc>
 <style>
 svg { --accent:#0074d9; --fg:#1c1e21; --muted:#606770; --bg:#ffffff; --surface:#f5f7fa; --border:#d0d7de; --card-on:#eef5fd; --tint:color-mix(in srgb, var(--accent) 10%, var(--surface)); }
 @media (prefers-color-scheme: dark) { svg { --accent:#1f78c8; --fg:#e3e3e3; --muted:#9aa0a6; --bg:#1b1b1d; --surface:#242526; --border:#3a3b3c; --card-on:#1d2733; --tint:color-mix(in srgb, var(--accent) 10%, var(--surface)); } }
@@ -78,6 +87,7 @@ svg { --accent:#0074d9; --fg:#1c1e21; --muted:#606770; --bg:#ffffff; --surface:#
 .a21 { animation: a21 16.1s infinite step-end; }
 @keyframes a22 { 0%,70.44% { opacity: 0 } 70.45%,99.99% { opacity: 1 } }
 .a22 { animation: a22 16.1s infinite step-end; }
+@media (prefers-reduced-motion: reduce) { * { animation-play-state: paused !important; animation-delay: -8.8s !important; } }
 </style>
 <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 1 L 9 5 L 0 9 z" fill="context-stroke"/></marker></defs>
 <rect width="100%" height="100%" fill="var(--bg)"/>

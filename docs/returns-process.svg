@@ -1,5 +1,23 @@
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="896.3" height="703" viewBox="0 0 896.3 703" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="896.3" height="703" viewBox="0 0 896.3 703" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" role="img" aria-labelledby="fig-title fig-desc">
 <metadata id="figure-spec"><![CDATA[{"props":{"lanes":true,"layout":{"direction":"column","children":[{"id":"customer","label":"Customer","children":[{"id":"open","label":"Open return","sub":"30 days","source":"docs/sop/returns.md#step-1-open-a-return"},{"id":"ship","label":"Ship item","sub":"14 days","source":"docs/sop/returns.md#step-4-ship-the-item"}]},{"id":"support","label":"Support","children":[{"id":"review","label":"Review","sub":"date, reason","source":"docs/sop/returns.md#step-2-review-the-request"},{"id":"label","label":"Send label","sub":"prepaid","source":"docs/sop/returns.md#step-3-send-the-label"},{"id":"rejected","label":"Rejected","sub":"email reason","tone":"red","at":5,"source":"docs/sop/returns.md#rejected"},{"id":"close","label":"Close","sub":"confirmation","source":"docs/sop/returns.md#step-7-close"}]},{"id":"warehouse","label":"Warehouse","children":[{"id":"inspect","label":"Inspect","sub":"2 working days","source":"docs/sop/returns.md#step-5-inspect-the-item"}]},{"id":"finance","label":"Finance","children":[{"id":"refund","label":"Refund","sub":"3 working days","source":"docs/sop/returns.md#step-6-refund"}]}]},"edges":[{"id":"request","from":"open","to":"review"},{"id":"approve","from":"review","to":"label","label":"ok"},{"id":"email","from":"label","to":"ship"},{"id":"arrive","from":"ship","to":"inspect"},{"id":"pass","from":"inspect","to":"refund","label":"passed"},{"id":"paid","from":"refund","to":"close"},{"id":"late","from":"review","to":"rejected","label":"late","around":"below"},{"id":"damaged","from":"inspect","to":"rejected","label":"damaged"}],"steps":[{"label":"returned","flow":[{"edges":"request","say":"The customer opens a return from the order page and picks a reason."},{"edges":{"edge":"approve","tone":"green"},"say":"Support checks the delivery date and the reason."},{"edges":"email","say":"Support emails a prepaid shipping label."},{"edges":"arrive","say":"The customer ships the item within 14 days."},{"edges":{"edge":"pass","tone":"green"},"say":"The warehouse inspects the item within 2 working days."},{"edges":"paid","say":"Finance refunds the original payment method. Support closes the ticket."}]},{"label":"rejected: late","flow":[{"edges":"request","say":"The customer opens a return after 30 days."},{"edges":{"edge":"late","tone":"red"},"say":"Support rejects the request and emails the reason."}]},{"label":"rejected: damaged","flow":[{"edges":"request","say":"The customer opens a return."},{"edges":"approve","say":"Support approves the request."},{"edges":"email","say":"Support emails a prepaid shipping label."},{"edges":"arrive","say":"The customer ships the item."},{"edges":{"edge":"damaged","tone":"red"},"say":"The item is damaged. Support emails the reason, and the warehouse ships the item back."}]}]}}]]></metadata>
+<title id="fig-title">returned, rejected: late, rejected: damaged</title>
+<desc id="fig-desc">The figure has these boxes: Open return, Ship item, Review, Send label, Rejected, Close, Inspect, Refund.
+returned.
+The customer opens a return from the order page and picks a reason.
+Support checks the delivery date and the reason.
+Support emails a prepaid shipping label.
+The customer ships the item within 14 days.
+The warehouse inspects the item within 2 working days.
+Finance refunds the original payment method. Support closes the ticket.
+rejected: late.
+The customer opens a return after 30 days.
+Support rejects the request and emails the reason.
+rejected: damaged.
+The customer opens a return.
+Support approves the request.
+Support emails a prepaid shipping label.
+The customer ships the item.
+The item is damaged. Support emails the reason, and the warehouse ships the item back.</desc>
 <style>
 svg { --accent:#0074d9; --fg:#1c1e21; --muted:#606770; --bg:#ffffff; --surface:#f5f7fa; --border:#d0d7de; --card-on:#eef5fd; --tint:color-mix(in srgb, var(--accent) 10%, var(--surface)); }
 @media (prefers-color-scheme: dark) { svg { --accent:#1f78c8; --fg:#e3e3e3; --muted:#9aa0a6; --bg:#1b1b1d; --surface:#242526; --border:#3a3b3c; --card-on:#1d2733; --tint:color-mix(in srgb, var(--accent) 10%, var(--surface)); } }
@@ -130,6 +148,7 @@ svg { --accent:#0074d9; --fg:#1c1e21; --muted:#606770; --bg:#ffffff; --surface:#
 .a39 { animation: a39 38.5s infinite step-end; }
 @keyframes a40 { 0%,85.64% { opacity: 0 } 85.65%,99.99% { opacity: 1 } }
 .a40 { animation: a40 38.5s infinite step-end; }
+@media (prefers-reduced-motion: reduce) { * { animation-play-state: paused !important; animation-delay: -18.1s !important; } }
 </style>
 <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 1 L 9 5 L 0 9 z" fill="context-stroke"/></marker></defs>
 <rect width="100%" height="100%" fill="var(--bg)"/>
