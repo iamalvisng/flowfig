@@ -222,3 +222,59 @@ test('a C# local function hides the base class method and a method of an earlier
   };
   assert.deepEqual(targets(files, 'A.cs#A.Run'), []);
 });
+
+test('a name with two definitions that the call can see gives an unsure line and no edge', () => {
+  const cases: [Record<string, string>, string, string][] = [
+    [
+      {
+        'Base.cs': 'namespace App;\n\npublic class Base\n{\n    protected int Log()\n    {\n        return 2;\n    }\n}\n',
+        'A.cs':
+          'namespace App;\n\npublic class A : Base\n{\n    public int Run()\n    {\n        System.Action f = () =>\n        {\n            int Log() => 5;\n        };\n        return Log();\n    }\n}\n',
+      },
+      'A.cs#A.Run',
+      'Log',
+    ],
+    [
+      {
+        'Cargo.toml': '[package]\nname = "n6"\nversion = "0.1.0"\n',
+        'src/other.rs': 'pub fn handle(x: i32) -> i32 {\n    x\n}\n',
+        'src/lib.rs':
+          'mod other;\nuse crate::other::handle;\n\npub fn outer() -> i32 {\n    {\n        fn handle(y: i32) -> i32 {\n            y + 1\n        }\n    }\n    handle(2)\n}\n',
+      },
+      'src/lib.rs#outer',
+      'handle',
+    ],
+    [
+      { 'm.py': 'def caller():\n    def inner():\n        def print(y):\n            return y\n        return 0\n    return print(2)\n' },
+      'm.py#caller',
+      'print',
+    ],
+    [
+      {
+        'm.ts': "import { helper } from './a.ts';\n\nexport function caller() {\n  return helper(2);\n}\n",
+        'a.ts':
+          "export { helper } from './b.ts';\n\nexport function other() {\n  function helper() {\n    return 1;\n  }\n  return helper();\n}\n",
+        'b.ts': 'export function helper(x) {\n  return x;\n}\n',
+      },
+      'm.ts#caller',
+      'helper',
+    ],
+    [
+      {
+        'm.py': 'from a import handle\n\n\ndef caller():\n    return handle(2)\n',
+        'a.py': 'from b import handle\n\n\ndef other():\n    def handle(y):\n        return y\n    return handle(1)\n',
+        'b.py': 'def handle(x):\n    return x\n',
+      },
+      'm.py#caller',
+      'handle',
+    ],
+  ];
+  for (const [files, start, name] of cases) {
+    const r = run(files, start, { depth: 1 });
+    assert.deepEqual(r.edges, [], start);
+    assert.ok(
+      r.unsure.some((u) => u.reason === `${name} has two definitions`),
+      start,
+    );
+  }
+});

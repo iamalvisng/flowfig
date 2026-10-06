@@ -1,5 +1,5 @@
 import { posix } from 'node:path';
-import { codeFile, depthAt, esc, langOf, locate, matchClose, readFile, type CodeFile, type Read } from './code.ts';
+import { codeFile, definitions, depthAt, esc, langOf, locate, matchClose, readFile, type CodeFile, type Read } from './code.ts';
 import { EDGE_LANGS, edgeResult, paramName, params, shadows } from './edges.ts';
 import { OUTSIDE, importsOf, reexports, type Import } from './imports.ts';
 import { ancestors, declIn, findType, isUpper, makeCtx, receiver, receiverChain, type Ctx, type Decl } from './types.ts';
@@ -26,7 +26,7 @@ const REF = /[(,]\s*([A-Za-z_$][\w$]*)\s*(?=[,)])/g;
 const ROUTE = /\(\s*(['"`])\/[^'"`]*\1\s*,\s*(['"`])([A-Za-z_$][\w$]*(?:(?:\.|@|::|#)[A-Za-z_$][\w$]*)+)\2/g;
 const DEFAULT = /\bexport\s+default\s+(?:async\s+)?(?:function\s*\*?\s*|class\s+)?([A-Za-z_$][\w$]*)/;
 const KEYWORDS = new Set(
-  'if for while switch catch return typeof await function super sizeof using lock foreach elif assert yield throw not and or in with match when'.split(
+  'if for while switch catch return typeof await function super sizeof using lock foreach elif assert yield throw not and or in with match when constructor'.split(
     ' ',
   ),
 );
@@ -43,6 +43,14 @@ const topLevel = (f: CodeFile, sym: string) => {
   if (!s) return false;
   if (f.lang === 'go') return depthAt(f.code, s.start, 0) === 0 && !/^func\s*\(/.test(f.code.slice(s.start, s.end));
   return !/[ \t]/.test(f.code[f.code.lastIndexOf('\n', s.start - 1) + 1]);
+};
+
+const defined = (cx: Ctx, from: string, to: string) => {
+  const [path, sym] = to.split('#');
+  const f = codeFile(cx.root, path, cx.read, cx.cache)!;
+  // A Java or C# constructor has the name of its type.
+  if (f.lang === 'java' || f.lang === 'cs') return 1;
+  return definitions(f, sym) + (path === from ? 0 : reexports(cx.root, f, sym, cx.read).length);
 };
 
 const lineOf = (code: string, pos: number) => code.slice(0, pos).split('\n').length;
@@ -82,8 +90,6 @@ function resolve(
   cx: Ctx,
   fi: CodeFile,
   body: string,
-  start: number,
-  idx: number,
   n: string,
   rc: { chain: string[]; complex: boolean } | null,
   container: string | null,
@@ -92,11 +98,6 @@ function resolve(
 ): Target {
   const gone = (p: string | null) => p == null || p === OUTSIDE;
   if (!rc) {
-    if (locate({ ...fi, code: body.slice(0, idx) + ' '.repeat(n.length) + body.slice(idx + n.length) }, n)) {
-      const s = locate(fi, n);
-      return s && s.start > start && s.end <= start + body.length ? { to: `${fi.path}#${n}` } : null;
-    }
-    if (locate({ ...fi, code: body }, n)) return null;
     const bind = imps.find((i) => i.local === n);
     if (bind) return gone(bind.path) ? 'outside' : bind.name === '*' ? null : forward(cx, bind.path!, bind.name);
     if (fi.lang === 'java' || fi.lang === 'cs') {
@@ -166,9 +167,14 @@ function calls(cx: Ctx, caller: string, r: TraceResult): TraceEdge[] {
       continue;
     }
     if (!rc && (shadows(body, c.name, fi.lang, own, false) || innerParam(body, c.name))) continue;
-    const t = resolve(cx, fi, body, span.start, c.idx, c.name, rc, container, decl, imps);
+    const twice = { unsure: `${c.name} has two definitions` };
+    const t =
+      !rc && definitions(fi, c.name, span.start, span.end) > (c.name === own ? 1 : 0)
+        ? twice
+        : resolve(cx, fi, body, c.name, rc, container, decl, imps);
     if (t === 'outside') r.outside += c.call ? 1 : 0;
     else if (t && 'unsure' in t) r.unsure.push({ at: at(c.idx), reason: t.unsure });
+    else if (t && !rc && defined(cx, path, t.to) > 1) r.unsure.push({ at: at(c.idx), reason: twice.unsure });
     else if (t && t.to !== caller && !targets.has(t.to)) targets.set(t.to, at(c.idx));
   }
   const found: TraceEdge[] = [];

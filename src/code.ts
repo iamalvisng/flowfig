@@ -383,11 +383,11 @@ function pyMemberIndent(code: string, lo: number, hi: number): number {
   return min;
 }
 
-function findIn(code: string, lang: Lang, name: string, lo: number, hi: number, member: number | null, receiver?: string): Extent | null {
-  if (KEYWORDS.has(name) && !/^(rs|py|go)$/.test(lang)) return null;
+function hitsIn(code: string, lang: Lang, name: string, lo: number, hi: number, member: number | null, receiver?: string) {
+  const hits: { start: number; end: number; depth: number }[] = [];
+  if (KEYWORDS.has(name) && !/^(rs|py|go)$/.test(lang)) return hits;
   const inContainer = member != null;
   const memberIndent = inContainer && lang === 'py' ? pyMemberIndent(code, lo, hi) : -1;
-  const hits: { start: number; end: number; depth: number }[] = [];
   const pats = defPatterns(lang, name, inContainer);
   for (const re of pats) {
     re.lastIndex = lo;
@@ -441,6 +441,14 @@ function findIn(code: string, lang: Lang, name: string, lo: number, hi: number, 
       hits.push({ start, end: ext[1], depth });
     }
   }
+  return hits;
+}
+
+export const definitions = (file: CodeFile, name: string, lo = 0, hi = file.code.length) =>
+  new Set(hitsIn(file.code, file.lang, name, lo, hi, null).map((h) => h.start)).size;
+
+function findIn(code: string, lang: Lang, name: string, lo: number, hi: number, member: number | null, receiver?: string): Extent | null {
+  const hits = hitsIn(code, lang, name, lo, hi, member, receiver);
   if (!hits.length) return null;
   hits.sort((a, b) => a.depth - b.depth || a.start - b.start);
   return [hits[0].start, hits[0].end];
