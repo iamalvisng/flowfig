@@ -119,7 +119,10 @@ function level(items: Item[], dir: Dir, ctx: Ctx): Item[] {
   const beside = new Map<number, number>();
   const unitOf = (k: number): Item => {
     const leaf = beside.get(k);
-    return leaf == null ? built[k] : { direction: 'row', children: [built[k], built[leaf]] };
+    if (leaf == null) return built[k];
+    const real = best.find((l) => l.includes(k))!.filter((x) => x < n);
+    const pair = [built[k], built[leaf]];
+    return { direction: 'row', children: real.indexOf(k) < (real.length - 1) / 2 ? pair.reverse() : pair };
   };
   const rankRow = (l: number[]): Item => {
     const real = l.filter((x) => x < n);

@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { isGroup, nodes, str, type FigGroup, type FlowProps } from './model.ts';
 import { check, render } from './svg.ts';
+import { samples } from './geometry.ts';
 
 const SPECS: Record<string, FlowProps> = {
   runA: {
@@ -343,4 +344,11 @@ test('an edge to the id of an unlabeled group still draws in an auto figure', ()
       .sort(),
     ['x', 'y'],
   );
+});
+
+test('run B: the edge from the decision to the voucher does not arc over the decision', () => {
+  const { boxes, edges } = render(SPECS.runB).scene;
+  const sig = boxes.find((b) => b.id === 'sig')!.rect;
+  const e8 = edges.find((e) => e.id === 'e8')!;
+  assert.ok(Math.min(...samples(e8.curve).map((p) => p.y)) >= sig.y, 'e8 rises above the decision');
 });
