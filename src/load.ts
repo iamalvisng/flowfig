@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { counts, toBeat, type FlowProps } from './model.ts';
+import { altText, counts, toBeat, type FlowProps } from './model.ts';
 import { coverageLine, owners, unsureLines, verifyReport } from './verify.ts';
 import { toSvg, type Finding, type SvgOptions } from './svg.ts';
 
@@ -69,7 +69,7 @@ export function summaryLines(props: FlowProps): string[] {
     const hops = s.flow.reduce((k, b) => k + toBeat(b).hops.length, 0);
     return `step "${text(s.label)}": ${hops} ${hops === 1 ? 'hop' : 'hops'}`;
   });
-  return [...edges, ...steps];
+  return [...edges, ...steps, `alt: ${altText(props).title}`];
 }
 
 export function verifyLines(props: FlowProps, figure: string, root = process.cwd()): string[] {

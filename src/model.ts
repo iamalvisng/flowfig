@@ -716,3 +716,32 @@ export function groupGap(g: FigGroup, edges: FigEdge[]): number {
   } else auto = Math.max(56, need);
   return Math.max(g.gap ?? 0, auto);
 }
+
+export const altText = (fig: FlowProps): { title: string; desc: string } => {
+  const names = new Map<string, string>();
+  const walk = (g: FigGroup) =>
+    g.children.forEach((c) => {
+      if (c.id) names.set(c.id, str(c.label) || c.id);
+      if (isGroup(c)) walk(c);
+    });
+  walk(fig.layout);
+  const name = (id: string) => names.get(id) ?? id;
+  const ends = new Map(fig.edges.map((e) => [edgeId(e), e]));
+  const boxes = nodes(fig.layout).map((n) => name(n.id));
+  const steps = fig.steps ?? [];
+  const lines = steps.flatMap((s) => [
+    `${str(s.label)}.`,
+    ...s.flow.map(toBeat).flatMap((b) => {
+      if (str(b.say)) return [str(b.say)];
+      return b.hops.flatMap((h) => {
+        const e = ends.get(h.edge);
+        if (!e) return [];
+        return [h.back ? `${name(e.to)} to ${name(e.from)}` : `${name(e.from)} to ${name(e.to)}`];
+      });
+    }),
+  ]);
+  return {
+    title: `Flow figure: ${boxes.join(', ')}.${steps.length ? ` Steps: ${steps.map((s) => str(s.label)).join(', ')}.` : ''}`,
+    desc: [`The figure has these boxes: ${boxes.join(', ')}.`, ...lines].join('\n'),
+  };
+};

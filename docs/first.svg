@@ -1,5 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="611.6" height="150" viewBox="0 0 611.6 150" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="611.6" height="150" viewBox="0 0 611.6 150" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" role="img">
 <metadata id="figure-spec"><![CDATA[{"props":{"layout":{"children":[{"id":"browser","label":"Browser"},{"id":"api","label":"API"},{"id":"db","label":"Database","shape":"store"}]},"edges":[{"from":"browser","to":"api","label":"GET /user"},{"from":"api","to":"db","label":"read the user"}],"steps":[{"label":"Load a user","flow":[{"edges":"browser->api","say":"The browser asks the API for the user."},{"edges":"api->db","say":"The API reads the row."},{"edges":{"edge":"api->db","back":true},"say":"The row comes back."},{"edges":{"edge":"browser->api","back":true},"say":"The API sends the user as JSON."}]}]}}]]></metadata>
+<title>Flow figure: Browser, API, Database. Steps: Load a user.</title>
+<desc>The figure has these boxes: Browser, API, Database.
+Load a user.
+The browser asks the API for the user.
+The API reads the row.
+The row comes back.
+The API sends the user as JSON.</desc>
 <style>
 svg { --accent:#0074d9; --fg:#1c1e21; --muted:#606770; --bg:#ffffff; --surface:#f5f7fa; --border:#d0d7de; --card-on:#eef5fd; --tint:color-mix(in srgb, var(--accent) 10%, var(--surface)); }
 @media (prefers-color-scheme: dark) { svg { --accent:#1f78c8; --fg:#e3e3e3; --muted:#9aa0a6; --bg:#1b1b1d; --surface:#242526; --border:#3a3b3c; --card-on:#1d2733; --tint:color-mix(in srgb, var(--accent) 10%, var(--surface)); } }
@@ -60,6 +67,7 @@ svg { --accent:#0074d9; --fg:#1c1e21; --muted:#606770; --bg:#ffffff; --surface:#
 .a13 { animation: a13 10.4s infinite step-end; }
 @keyframes a14 { 0%,61.56% { opacity: 0 } 61.57%,99.99% { opacity: 1 } }
 .a14 { animation: a14 10.4s infinite step-end; }
+@media (prefers-reduced-motion: reduce) { * { animation-play-state: paused !important; animation-delay: -10.3s !important; } }
 </style>
 <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 1 L 9 5 L 0 9 z" fill="context-stroke"/></marker></defs>
 <rect width="100%" height="100%" fill="var(--bg)"/>

@@ -1,5 +1,5 @@
 'use client';
-import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { Fragment, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { arcRoom, avoidOf, route, type Pt, type Rect, type Routed, type Side } from './geometry.ts';
 import { foldedLabel, groupBox, layoutRail, railState, RAIL } from './rail.ts';
 import { textWidth } from './text.ts';
@@ -28,6 +28,7 @@ import {
   STUB_ROOM,
   labelPillW,
   str,
+  altText,
   LANE_BLOCK_GAP,
   LANE_PAD,
   LANE_ROW_GAP,
@@ -132,6 +133,15 @@ const cardBody = (c: FigContent): ReactNode => {
   );
 };
 
+const HIDDEN: CSSProperties = {
+  position: 'absolute',
+  width: 1,
+  height: 1,
+  overflow: 'hidden',
+  clip: 'rect(0 0 0 0)',
+  whiteSpace: 'pre-line',
+};
+
 /**
  * The interactive player for one figure. Give it a `FlowProps` spec.
  * Use `toSvg` from `flowfig/svg` for a static animated SVG.
@@ -150,6 +160,8 @@ export function Flow({
   today,
 }: FlowProps) {
   const tl = timeline && isLanesLayout(layout);
+  const alt = useMemo(() => altText({ layout, edges, steps: stepsIn }), [layout, edges, stepsIn]);
+  const descId = useId();
   const synthetic = tl && !stepsIn.length;
   const steps = useMemo(
     () => (synthetic ? timelineBeats({ layout, edges, timeline, today }) : stepsIn),
@@ -1114,6 +1126,8 @@ export function Flow({
     <figure
       ref={figure}
       className="flowfig"
+      aria-label={alt.title}
+      aria-describedby={descId}
       style={{
         ...vars,
         position: full ? 'fixed' : 'relative',
@@ -1129,6 +1143,9 @@ export function Flow({
         color: v('fg'),
       }}
     >
+      <div id={descId} style={HIDDEN}>
+        {alt.desc}
+      </div>
       <button
         type="button"
         aria-label={full ? 'Close full screen' : 'Full screen'}

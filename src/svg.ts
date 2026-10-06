@@ -53,6 +53,7 @@ import {
   TL_BAR_H,
   TL_ROW_GAP,
   toBeat,
+  altText,
   beatMs,
   STEP_HOLD_MS,
   playheadItem,
@@ -961,7 +962,11 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
       })();
 
   const { font, ...t0 } = { ...LIGHT, ...fig.theme, ...opts.theme };
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${n2(W)}" height="${n2(H)}" viewBox="0 0 ${n2(W)} ${n2(H)}" font-family="${esc(font ?? SYSTEM_FONT)}">
+  const alt = altText(fig);
+  const holdAt = beats[0]?.length ? n2(segs[beats[0].length - 1].t1 - 0.1) : 0;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${n2(W)}" height="${n2(H)}" viewBox="0 0 ${n2(W)} ${n2(H)}" font-family="${esc(font ?? SYSTEM_FONT)}" role="img">
+<title>${esc(alt.title)}</title>
+<desc>${esc(alt.desc)}</desc>
 <style>
 svg { ${vars(t0, '#eef5fd')} }
 @media (prefers-color-scheme: dark) { svg { ${vars(DARK, '#1d2733')} } }
@@ -985,6 +990,7 @@ svg { ${vars(t0, '#eef5fd')} }
 .railphase.muted { fill: var(--muted); }
 .end { text-anchor: end; }
 ${css.join('\n')}
+@media (prefers-reduced-motion: reduce) { * { animation-play-state: paused !important; animation-delay: -${holdAt}s !important; } }
 </style>
 <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 1 L 9 5 L 0 9 z" fill="context-stroke"/></marker></defs>
 <rect width="100%" height="100%" fill="var(--bg)"/>
