@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { isGroup, nodes, str, type FigGroup, type FlowProps } from './model.ts';
 import { check, render } from './svg.ts';
 import { samples } from './geometry.ts';
+import { autoLayout } from './auto.ts';
 
 const SPECS: Record<string, FlowProps> = {
   runA: {
@@ -381,4 +382,44 @@ test('an edge that skips ranks to a side box crosses no box', () => {
     check(fig).filter((f) => f.rule === 'edge-crosses-box'),
     [],
   );
+});
+
+test('a loop back edge returns around the outer side and crosses no box', () => {
+  const box = (id: string, label: string, shape?: 'decision' | 'store') => ({ id, label, shape });
+  const signup: FlowProps = {
+    layout: {
+      auto: true,
+      direction: 'column',
+      children: [
+        box('V', 'Visitor'),
+        box('F', 'Sign-up form'),
+        box('C', 'Email valid?', 'decision'),
+        box('E', 'Show error'),
+        box('A', 'Create account'),
+        box('H', 'Hash password'),
+        box('U', 'Users', 'store'),
+        box('W', 'Welcome email'),
+      ],
+    },
+    edges: 'V-F F-C C-E E-F C-A A-H H-U H-W'.split(' ').map((id) => ({ id, from: id[0], to: id[2] })),
+  };
+  const review: FlowProps = {
+    layout: { auto: true, children: [box('d', 'Write draft'), box('r', 'Review', 'decision'), box('p', 'Publish')] },
+    edges: [
+      { id: 'd-r', from: 'd', to: 'r' },
+      { id: 'r-d', from: 'r', to: 'd', label: 'changes' },
+      { id: 'r-p', from: 'r', to: 'p', label: 'ok' },
+    ],
+  };
+  for (const [fig, id, side] of [
+    [signup, 'E-F', 'right'],
+    [review, 'r-d', 'below'],
+  ] as const) {
+    assert.equal(autoLayout(fig).edges.find((e) => e.id === id)!.around, side, id);
+    assert.deepEqual(
+      check(fig).filter((f) => f.rule === 'edge-crosses-box' || f.rule === 'long-edge'),
+      [],
+      id,
+    );
+  }
 });

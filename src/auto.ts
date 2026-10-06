@@ -164,7 +164,8 @@ function level(items: Item[], dir: Dir, ctx: Ctx): Item[] {
   via.forEach((vs, i) => {
     const [a, b] = dag[i];
     const stacked = [a, b].every((k) => best[rank[k]].filter((x) => x < n).length === 1);
-    const way = !vs.length || stacked ? undefined : outer([a, ...vs, b], 1) ? 1 : outer([a, ...vs, b], -1) ? -1 : undefined;
+    const way =
+      !back.has(i) && (!vs.length || stacked) ? undefined : outer([a, ...vs, b], 1) ? 1 : outer([a, ...vs, b], -1) ? -1 : undefined;
     if (way) pairs[i][2].around = dir === 'column' ? (way > 0 ? 'right' : 'left') : way > 0 ? 'below' : 'above';
   });
   const kept = best.filter((l) => l.some((x) => x < n));
