@@ -169,7 +169,7 @@ export function importsOf(root: string, file: CodeFile, read: Read): Import[] {
   return out;
 }
 
-function reexports(root: string, file: CodeFile, name: string, read: Read): [string | null, string][] {
+export function reexports(root: string, file: CodeFile, name: string, read: Read): [string | null, string][] {
   const N = esc(name);
   const out: [string | null, string][] = [];
   if (name === '*') return out;

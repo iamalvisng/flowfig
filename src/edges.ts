@@ -114,7 +114,7 @@ function typedName(body: string, n: string): boolean {
   return false;
 }
 
-function params(body: string, from: string | undefined): string[] {
+export function params(body: string, from: string | undefined): string[] {
   const open = body.indexOf('(', from ? Math.max(0, body.indexOf(from)) : 0);
   if (open < 0) return [];
   const text = body.slice(open + 1, matchClose(body, open));
@@ -132,7 +132,7 @@ function params(body: string, from: string | undefined): string[] {
   return [...parts, text.slice(last)];
 }
 
-function paramName(p: string, lang: Lang): string | undefined {
+export function paramName(p: string, lang: Lang): string | undefined {
   const tokens = (p.split('=')[0].match(/[\w$]+/g) ?? []).filter((t) => !MODIFIERS.has(t));
   return lang === 'java' || lang === 'cs' ? tokens.at(-1) : tokens[0];
 }
