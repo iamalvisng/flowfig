@@ -228,6 +228,20 @@ export function checkScene(scene: Scene, { width = 830, minText = 10 }: CheckOpt
       if (b.id !== e.from && b.id !== e.to && pts.some((p) => inside(p, b.rect, 2)))
         out.push(err('edge-crosses-box', [e.id, b.id], `edge "${e.id}" passes through box "${b.id}"`));
   }
+  for (const e of scene.edges) {
+    const pts = path(e);
+    const drawn = pts.slice(1).reduce((s, q, k) => s + Math.hypot(q.x - pts[k].x, q.y - pts[k].y), 0);
+    const ratio = drawn / Math.max(1, Math.hypot(pts.at(-1)!.x - pts[0].x, pts.at(-1)!.y - pts[0].y));
+    // The README figures have a good edge at ratio 1.77 and 425 px.
+    if (ratio >= 1.6 && drawn >= 600)
+      out.push(
+        warn(
+          'long-edge',
+          [e.id],
+          `edge "${e.id}" is ${px(ratio)} times the straight distance between its ends: put its ends in one row or column, or route it with around`,
+        ),
+      );
+  }
   const pills = scene.edges.filter((e) => e.pts && e.label);
   const under = new Set<string>();
   for (const e of scene.edges) {

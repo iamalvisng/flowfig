@@ -117,7 +117,7 @@ the run.
 
 1. **The agent writes JSON, not pictures.** The agent reads the code and writes a spec of the parts, the calls and their
    order. flowfig does the layout.
-2. **flowfig checks the spec.** `flowfig check` has 23 rules. It finds ids that point nowhere, text wider than its box,
+2. **flowfig checks the spec.** `flowfig check` has 24 rules. It finds ids that point nowhere, text wider than its box,
    edges through boxes, overlapping labels and low contrast. A render runs the same check and writes nothing on an error.
    The agent reads the faults and fixes the spec.
 3. **The output is one animated SVG with no script.** The SVG plays in a GitHub README, PR or issue. It follows the light
@@ -167,7 +167,7 @@ The options are in [Open and share a figure](#open-and-share-a-figure).
 | ------------------------------ | --------------------------------- | ------------------------------------ | ---------------- |
 | Made by an agent from the code | Yes, with the `init` instructions | Yes, as Mermaid text                 | No               |
 | Linked to the code             | Yes, `verify` fails in CI         | No                                   | No               |
-| Checked for faults             | Yes, 23 rules in `flowfig check`  | Syntax errors only                   | No               |
+| Checked for faults             | Yes, 24 rules in `flowfig check`  | Syntax errors only                   | No               |
 | Animated                       | Yes, one packet per message       | No                                   | No               |
 | Shows payloads and order       | Yes, on the map and the rail      | Order and text in a sequence diagram | No               |
 | Plays in a GitHub README       | Yes, as an SVG                    | Yes, GitHub renders it               | Yes, as an image |
@@ -370,7 +370,7 @@ figure: 5 boxes, 3 groups, 4 edges, 2 steps, 6 messages
 
 The last line gives the counts of the parts of the figure. Compare the counts with the parts that you planned.
 
-`flowfig check` has 23 rules: 11 errors and 12 warnings.
+`flowfig check` has 24 rules: 11 errors and 13 warnings.
 
 | Rule                        | Severity | What it finds                                                                                       |
 | --------------------------- | -------- | --------------------------------------------------------------------------------------------------- |
@@ -392,6 +392,7 @@ The last line gives the counts of the parts of the figure. Compare the counts wi
 | `lane-column-taken`         | warning  | Two boxes in one lane share a time column.                                                          |
 | `lane-end-block`            | warning  | In wrapped lanes, an edge ends at a lane that no block on its side shows.                           |
 | `stub-crosses-edge`         | warning  | In wrapped lanes, a stub line crosses another edge.                                                 |
+| `long-edge`                 | warning  | An edge at least 600 px long that is 1.6 times or more the straight distance between its ends.      |
 | `timeline-dependency-order` | warning  | In a timeline, an item does not start after the item that it depends on ends.                       |
 | `timeline-and-lanes`        | warning  | The figure sets `timeline` and `lanes`. The renderers draw the timeline and ignore `lanes`.         |
 | `font-estimated`            | warning  | `theme.font` is set. The SVG check estimates text width for the system font.                        |

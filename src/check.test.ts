@@ -104,7 +104,22 @@ test('a long curve through a short box is an error', () => {
     { x: 400, y: 540 },
   ];
   const s = scene({ boxes: [box('m', 454, 248.5, 190, 53)], edges: [{ id: 'v', from: 'a', to: 'b', curve }] });
-  assert.deepEqual(rules(checkScene(s)), ['edge-crosses-box']);
+  assert.deepEqual(rules(checkScene(s).filter((f) => f.severity === 'error')), ['edge-crosses-box']);
+});
+
+test('an edge that arcs far past its ends is a long-edge warning; a direct edge is not', () => {
+  const arc: [Pt, Pt, Pt, Pt] = [
+    { x: 528, y: 42 },
+    { x: 528, y: -392 },
+    { x: 96, y: -392 },
+    { x: 96, y: 559 },
+  ];
+  const found = checkScene(scene({ edges: [{ id: 'k', from: 'a', to: 'b', curve: arc }] }));
+  assert.deepEqual(
+    found.map((f) => [f.rule, f.severity, f.ids]),
+    [['long-edge', 'warning', ['k']]],
+  );
+  assert.deepEqual(checkScene(scene({ edges: [{ id: 'd', from: 'a', to: 'b', curve: line(0, 0, 0, 700) }] })), []);
 });
 
 test('an edge label outside the drawn figure area is an error', () => {
