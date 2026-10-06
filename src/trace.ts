@@ -1,8 +1,8 @@
 import { posix } from 'node:path';
-import { codeFile, definitions, depthAt, esc, langOf, locate, matchClose, readFile, type CodeFile, type Read } from './code.ts';
+import { codeFile, definitions, depthAt, esc, langOf, locate, matchClose, pyBody, readFile, type CodeFile, type Read } from './code.ts';
 import { EDGE_LANGS, edgeResult, paramName, params, shadows } from './edges.ts';
 import { OUTSIDE, importsOf, reexports, type Import } from './imports.ts';
-import { ancestors, declIn, findType, isUpper, makeCtx, receiver, receiverChain, type Ctx, type Decl } from './types.ts';
+import { ancestors, declIn, defines, findType, isUpper, makeCtx, receiver, receiverChain, type Ctx, type Decl } from './types.ts';
 import { goDirFiles } from './type-index.ts';
 import { parseSource } from './source.ts';
 
@@ -51,6 +51,34 @@ const defined = (cx: Ctx, from: string, to: string) => {
   // A Java or C# constructor has the name of its type.
   if (f.lang === 'java' || f.lang === 'cs') return 1;
   return definitions(f, sym) + (path === from ? 0 : reexports(cx.root, f, sym, cx.read).length);
+};
+
+const CONTROL = /^(?:if|for|while|switch|catch|with|foreach|else|match|elif|except|try)\b/;
+
+const enclosing = (f: CodeFile, pos: number): [number, number][] => {
+  const { code } = f;
+  const out: [number, number][] = [];
+  if (f.lang === 'py') {
+    let ind = /^[ \t]*/.exec(code.slice(code.lastIndexOf('\n', pos - 1) + 1))![0].length;
+    for (let ls = code.lastIndexOf('\n', pos - 1); ls >= 0 && ind > 0; ls = code.lastIndexOf('\n', ls - 1)) {
+      const line = code.slice(ls + 1, code.indexOf('\n', ls + 1) < 0 ? undefined : code.indexOf('\n', ls + 1));
+      const w = /^[ \t]*/.exec(line)![0].length;
+      if (!line.trim() || w >= ind) continue;
+      ind = w;
+      if (/^\s*(async\s+)?def\b/.test(line)) out.push(pyBody(code, ls + 1 + w));
+    }
+    return out;
+  }
+  if (f.lang === 'java' || f.lang === 'cs') return out;
+  for (let i = pos, d = 0; i >= 0; i--) {
+    if (code[i] === '}') d++;
+    else if (code[i] === '{' && d-- === 0) {
+      const head = code.slice(code.slice(0, i).search(/[;{}][^;{}]*$/) + 1, i).trim();
+      if (!CONTROL.test(head) && /(?:\)\s*(?::[^;{}]*)?|=>)$/.test(head)) out.push([i, matchClose(code, i)]);
+      d = 0;
+    }
+  }
+  return out;
 };
 
 const lineOf = (code: string, pos: number) => code.slice(0, pos).split('\n').length;
@@ -102,7 +130,10 @@ function resolve(
     if (bind) return gone(bind.path) ? 'outside' : bind.name === '*' ? null : forward(cx, bind.path!, bind.name);
     if (fi.lang === 'java' || fi.lang === 'cs') {
       const m = decl && method(cx, decl, n);
-      if (m) return { to: m };
+      if (m) {
+        const own = [decl!, ...ancestors(cx, decl!).flatMap((a) => (a.d ? [a.d] : []))].filter((x) => defines(cx, x, n));
+        return own.length > 1 ? { unsure: `${n} has two definitions` } : { to: m };
+      }
     } else if (topLevel(fi, n)) return { to: `${fi.path}#${n}` };
     if (fi.lang === 'go') {
       const f = goDirFiles(cx, posix.dirname(fi.path)).find((g) => topLevel(g, n));
@@ -159,6 +190,7 @@ function calls(cx: Ctx, caller: string, r: TraceResult): TraceEdge[] {
   const ps = new Set(params(body, own).map((p) => paramName(p, fi.lang)));
   const at = (i: number) => `${path}:${lineOf(fi.code, span.start + i)}`;
   for (const m of fi.keep.slice(span.start, span.end).matchAll(ROUTE)) r.open.push({ at: at(m.index), reason: `string route "${m[3]}"` });
+  const outer = enclosing(fi, span.start);
   const targets = new Map<string, string>();
   for (const c of candidates(body, own)) {
     const rc = receiverChain(body, c.idx, fi.lang);
@@ -169,7 +201,8 @@ function calls(cx: Ctx, caller: string, r: TraceResult): TraceEdge[] {
     if (!rc && (shadows(body, c.name, fi.lang, own, false) || innerParam(body, c.name))) continue;
     const twice = { unsure: `${c.name} has two definitions` };
     const t =
-      !rc && definitions(fi, c.name, span.start, span.end) > (c.name === own ? 1 : 0)
+      !rc &&
+      [[span.start, span.end] as [number, number], ...outer].some(([a, b]) => definitions(fi, c.name, a, b) > (c.name === own ? 1 : 0))
         ? twice
         : resolve(cx, fi, body, c.name, rc, container, decl, imps);
     if (t === 'outside') r.outside += c.call ? 1 : 0;

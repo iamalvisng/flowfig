@@ -516,6 +516,7 @@ summary: 13 symbols, 12 found, 0 unsure, 0 open, 4 calls outside the repo, 0.1 s
 - A call into a package or the standard library gives no line. The summary line counts these calls.
 
 A call that trace cannot see gives no line, for example a call through an interface with no known type.
+trace reads code as text. In rare cases, two names that look the same can give a wrong edge. `flowfig verify` and your review of the figure still check each edge.
 
 | Option         | Meaning                                            | Default            |
 | -------------- | -------------------------------------------------- | ------------------ |

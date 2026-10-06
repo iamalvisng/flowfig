@@ -178,9 +178,9 @@ test('a bare Go call goes to the package function, not to a const of the same na
 test('the Go package lookup skips a var of the same name inside another function', () => {
   const files = {
     ...GO_MOD,
-    'z.go': 'package main\n\nfunc helper() int {\n\treturn 2\n}\n',
     'm.go':
       'package main\n\nfunc Other() int {\n\tvar helper = func() int { return 1 }\n\treturn helper()\n}\n\nfunc Run() int {\n\treturn helper()\n}\n',
+    'z.go': 'package main\n\nfunc helper() int {\n\treturn 2\n}\n',
   };
   assert.deepEqual(targets(files, 'm.go#Run'), ['z.go#helper']);
 });
@@ -277,4 +277,38 @@ test('a name with two definitions that the call can see gives an unsure line and
       start,
     );
   }
+});
+
+test('a call of a name that an enclosing function defines gives an unsure line and no edge', () => {
+  const py = {
+    'b.py': 'def handle(x):\n    return x\n',
+    'm.py':
+      'from b import handle\n\n\ndef outer():\n    def handle(x):\n        return x + 1\n\n    def inner():\n        return handle(2)\n\n    return inner\n',
+  };
+  assert.deepEqual(targets(py, 'm.py#inner'), []);
+  assert.equal(run(py, 'm.py#inner', { depth: 1 }).unsure.length, 1);
+  const ts = {
+    'b.ts': 'export function helper(x) {\n  return x;\n}\n',
+    'm.ts':
+      "import { helper } from './b.ts';\n\nexport function outer() {\n  function helper() {\n    return 1;\n  }\n  function inner() {\n    return helper();\n  }\n  return inner;\n}\n",
+  };
+  assert.deepEqual(targets(ts, 'm.ts#outer.inner'), []);
+  assert.equal(run(ts, 'm.ts#outer.inner', { depth: 1 }).unsure.length, 1);
+});
+
+test('a bare Java or C# call of a name that the class and a base class both define gives an unsure line', () => {
+  const java = {
+    'Base.java': 'package p;\n\npublic class Base {\n    int helper() {\n        return 1;\n    }\n}\n',
+    'Main.java':
+      'package p;\n\npublic class Main extends Base {\n    int helper(int x) {\n        return x;\n    }\n\n    int run() {\n        return helper();\n    }\n}\n',
+  };
+  assert.deepEqual(targets(java, 'Main.java#Main.run'), []);
+  assert.equal(run(java, 'Main.java#Main.run', { depth: 1 }).unsure.length, 1);
+  const cs = {
+    'Base.cs': 'namespace App;\n\npublic class Base\n{\n    protected int Log()\n    {\n        return 1;\n    }\n}\n',
+    'A.cs':
+      'namespace App;\n\npublic class A : Base\n{\n    int Log(int x)\n    {\n        return x;\n    }\n\n    public int Run()\n    {\n        return Log();\n    }\n}\n',
+  };
+  assert.deepEqual(targets(cs, 'A.cs#A.Run'), []);
+  assert.equal(run(cs, 'A.cs#A.Run', { depth: 1 }).unsure.length, 1);
 });
