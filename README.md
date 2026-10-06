@@ -713,7 +713,7 @@ To publish the pages on GitHub Pages, run `npx flowfig atlas --out docs/atlas` a
 
 ## Convert Mermaid
 
-`flowfig from-mermaid` turns a Mermaid flowchart or sequence diagram into a flowfig spec. The converter uses no model.
+`flowfig from-mermaid` turns a Mermaid flowchart, sequence diagram or state diagram into a flowfig spec. The converter uses no model.
 Then `check` and `verify` can test the figure.
 
 ```console
@@ -775,6 +775,15 @@ A sequence diagram becomes a rail (`rail: "only"`):
 - `loop`, `opt`, `par`, `and` and `rect` lines are ignored. Their messages stay in order in each step.
 - `activate`, `deactivate`, `+` and `-`, `Note` and `autonumber` are ignored.
 
+A state diagram (`stateDiagram` or `stateDiagram-v2`) becomes a still map with automatic layout:
+
+- Each state is a box. `state "Long name" as A` sets the label. `A : text` puts the text under the label, as Mermaid does.
+- `A --> B` and `A --> B : text` become an edge with a label.
+- `[*] --> A` at the top level gives A `mark: "start"`. `A --> [*]` at the top level gives A `mark: "end"`.
+- `state A { ... }` becomes a group with a frame. A `[*]` in it gives no edge and no mark.
+- `state A <<choice>>` becomes a decision. Its label is its id.
+- `direction`, `classDef`, `class`, `%%` comments, `note` and `hide empty description` are ignored.
+
 Limits:
 
 - `RL` reads as `LR`, and `BT` reads as `TB`. The automatic layout sets the order of the boxes.
@@ -782,6 +791,9 @@ Limits:
 - A link with no arrow (`---`, `-.-`, `===`) is an error. Use `-->` to give it a direction.
 - Other node shapes, Markdown strings, `<-->`, `--o`, `--x`, `-x` and a message to the same participant are errors.
 - A second `alt` and an `alt` inside an `alt` are errors.
+- In a state diagram, `<<fork>>`, `<<join>>`, a concurrent region (`--`), `:::class` and a transition to the same state
+  are errors. A `[*]` on a composite state and a description on a composite state are errors too.
+- A state with a start and an end transition is an error, because a box has one mark.
 
 ## MCP server
 

@@ -37,7 +37,7 @@ const USAGE = `usage: flowfig <-|spec.json|figure.ts> [out.svg] [--open]   rende
        flowfig draw "<question>" [--out <path>] [--model <alias>] [--max-turns <n>] [--json] [--open]   ask Claude Code for a figure, then check it
        flowfig atlas [--figures <glob>] [--root <dir>] [--out <dir>] [--open]   write one linked web page for each figure, and an index
        flowfig open <figure.svg> [--html <path>]          show the figure in the default browser
-       flowfig from-mermaid <file.mmd|file.md|-> [--out <dir>]   convert Mermaid flowcharts and sequence diagrams to specs
+       flowfig from-mermaid <file.mmd|file.md|-> [--out <dir>]   convert Mermaid diagrams to specs
        flowfig gif <figure.svg> [out.gif] [--step <n>] [--dark] [--fps <n>] [--scale <n>] [--mp4]   write an animated GIF
 flags for render and check: --strict (warnings are errors), --json, --width <px>, --min-text <px>, --no-check (render only), --no-verify (render only)`;
 function usage(message: string): never {

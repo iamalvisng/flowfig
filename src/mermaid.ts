@@ -49,14 +49,15 @@ export function fromMermaid(text: string, first = 1): Result {
   const flow = /^(?:flowchart|graph)(?:\s+(TD|TB|LR|RL|BT))?\s*;?$/.exec(head.s);
   if (flow) return flowchart(body, flow[1] === 'LR' || flow[1] === 'RL' ? 'row' : 'column');
   if (head.s === 'sequenceDiagram') return sequence(body);
-  return { faults: [{ line: head.n, reason: `"${head.s}" is not a flowchart, graph or sequenceDiagram` }] };
+  if (/^stateDiagram(?:-v2)?$/.test(head.s)) return state(body);
+  return { faults: [{ line: head.n, reason: `"${head.s}" is not a flowchart, graph, sequenceDiagram or stateDiagram` }] };
 }
 
 function flowchart(body: { s: string; n: number }[], direction: 'row' | 'column'): Result {
   const faults: MermaidFault[] = [];
-  const nodes = new Map<string, FigNode & { order: number; parent?: FigGroup }>();
-  const groups: (FigGroup & { order: number; parent?: FigGroup; mentions: string[] })[] = [];
-  const open: (typeof groups)[number][] = [];
+  const nodes = new Map<string, Placed<FigNode>>();
+  const groups: Frame[] = [];
+  const open: Frame[] = [];
   const edges: FigEdge[] = [];
   const seen = new Map<string, number>();
   const edgeLines: number[] = [];
@@ -173,6 +174,20 @@ function flowchart(body: { s: string; n: number }[], direction: 'row' | 'column'
   if (open.length) faults.push({ line: body.at(-1)?.n ?? 1, reason: `subgraph "${open.at(-1)!.label}" has no "end"` });
   if (faults.length) return { faults };
 
+  const top = tree(groups, nodes);
+  const dropped = new Set(groups.filter((g) => !g.children.length).map((g) => g.id));
+  edges.forEach((e, i) => {
+    for (const end of [e.from, e.to])
+      if (dropped.has(end)) faults.push({ line: edgeLines[i], reason: `the link names subgraph "${end}", which has no node` });
+  });
+  if (faults.length) return { faults };
+  return { spec: { layout: { auto: true, direction, children: top }, edges }, faults: [] };
+}
+
+type Placed<T> = T & { order: number; parent?: FigGroup };
+type Frame = Placed<FigGroup> & { mentions: string[] };
+
+function tree(groups: Frame[], nodes: Map<string, Placed<FigNode>>): FigGroup['children'] {
   const groupIds = new Set(groups.map((g) => g.id));
   const items = [...groups, ...[...nodes.values()].filter((v) => !groupIds.has(v.id))].sort((a, b) => a.order - b.order);
   const children = (parent?: FigGroup): FigGroup['children'] =>
@@ -182,13 +197,116 @@ function flowchart(body: { s: string; n: number }[], direction: 'row' | 'column'
       .map((i) => ('mentions' in i ? (({ mentions: _m, ...g }) => g)(i) : i))
       .filter((i) => !('children' in i) || i.children.length);
   for (const g of [...groups].reverse()) g.children = children(g);
-  const dropped = new Set(groups.filter((g) => !g.children.length).map((g) => g.id));
-  edges.forEach((e, i) => {
-    for (const end of [e.from, e.to])
-      if (dropped.has(end)) faults.push({ line: edgeLines[i], reason: `the link names subgraph "${end}", which has no node` });
-  });
+  return children();
+}
+
+function state(body: { s: string; n: number }[]): Result {
+  const faults: MermaidFault[] = [];
+  const nodes = new Map<string, Placed<FigNode>>();
+  const groups: Frame[] = [];
+  const open: Frame[] = [];
+  const edges: FigEdge[] = [];
+  const seen = new Map<string, number>();
+  const marks = new Map<string, { mark: 'start' | 'end'; line: number }>();
+  const subs = new Map<string, number>();
+  const opened = new Map<string, number>();
+  let order = 0;
+  let note = false;
+
+  const meet = (id: string) => {
+    const found = nodes.get(id) ?? { id, label: id, order: order++ };
+    nodes.set(id, found);
+    for (const g of open) g.mentions.push(id);
+    return found;
+  };
+  const mark = (id: string, value: 'start' | 'end', n: number) => {
+    const had = marks.get(id);
+    if (had && had.mark !== value) throw new Error(`state "${id}" is a start and an end state; a box has one mark`);
+    marks.set(id, { mark: value, line: n });
+    meet(id).mark = value;
+  };
+  const line = (s: string, n: number) => {
+    if (note) {
+      note = s !== 'end note';
+      return;
+    }
+    if (/^note\b/.test(s)) {
+      note = !s.includes(':');
+      return;
+    }
+    if (s === 'hide empty description') return;
+    if (s === '--') throw new Error('a concurrent region (--) is not read');
+    if (s === '}') {
+      const g = open.pop();
+      if (!g) throw new Error('"}" has no composite state');
+      for (const id of g.mentions) if (!nodes.get(id)!.parent) nodes.get(id)!.parent = g;
+      return;
+    }
+    const decl = /^state\s+(?:"([^"]*)"\s+as\s+)?([\p{L}\p{N}_]+)\s*(?:<<(\w+)>>)?\s*(\{)?$/u.exec(s);
+    if (decl) {
+      const [, name, id, kind, block] = decl;
+      if (kind && kind !== 'choice') throw new Error(`a <<${kind}>> state is not read`);
+      const found = meet(id);
+      if (name !== undefined) found.label = clean(name) || id;
+      if (kind) found.shape = 'decision';
+      if (block) {
+        const g = { id, label: found.label, children: [], order: found.order, parent: open.at(-1), mentions: [] };
+        groups.push(g);
+        open.push(g);
+        opened.set(id, n);
+      }
+      return;
+    }
+    const move = /^([\p{L}\p{N}_]+|\[\*\])\s*-->\s*([\p{L}\p{N}_]+|\[\*\])\s*(?::(?!::)\s*(.*))?$/u.exec(s);
+    if (move) {
+      const [, from, to, raw] = move;
+      if (from === '[*]' && to === '[*]') throw new Error('a transition from [*] to [*] is not read');
+      if (from === '[*]' || to === '[*]') {
+        const id = from === '[*]' ? to : from;
+        if (open.length) meet(id);
+        else mark(id, from === '[*]' ? 'start' : 'end', n);
+        return;
+      }
+      if (from === to) throw new Error(`a transition from "${from}" to itself is not read`);
+      meet(from);
+      meet(to);
+      const label = clean(raw ?? '');
+      const id = `${from}->${to}`;
+      const count = (seen.get(id) ?? 0) + 1;
+      seen.set(id, count);
+      edges.push({ from, to, ...(label ? { label } : {}), ...(count > 1 ? { id: `${id}#${count}` } : {}) });
+      return;
+    }
+    const described = /^([\p{L}\p{N}_]+)\s*:(?!::)\s*(.*)$/u.exec(s);
+    if (described) {
+      const found = meet(described[1]);
+      const text = clean(described[2]);
+      if (text) found.sub = found.sub ? `${found.sub} ${text}` : text;
+      subs.set(described[1], n);
+      return;
+    }
+    if (/^[\p{L}\p{N}_]+$/u.test(s)) return void meet(s);
+    throw new Error(`unsupported line "${s}"`);
+  };
+  for (const { s, n } of body)
+    try {
+      line(s, n);
+    } catch (e) {
+      faults.push({ line: n, reason: (e as Error).message });
+    }
+  if (note) faults.push({ line: body.at(-1)!.n, reason: 'the note has no "end note"' });
+  if (open.length) faults.push({ line: body.at(-1)!.n, reason: `composite state "${open.at(-1)!.id}" has no "}"` });
+  for (const g of groups) {
+    const id = g.id!;
+    if (marks.has(id)) faults.push({ line: marks.get(id)!.line, reason: `a [*] on composite state "${id}" is not read` });
+    if (subs.has(id)) faults.push({ line: subs.get(id)!, reason: `a description on composite state "${id}" is not read` });
+  }
   if (faults.length) return { faults };
-  return { spec: { layout: { auto: true, direction, children: children() }, edges }, faults: [] };
+  if (!nodes.size) return { faults: [{ line: body[0]?.n ?? 1, reason: 'the diagram has no state' }] };
+  const top = tree(groups, nodes);
+  const empty = groups.find((g) => !g.children.length);
+  if (empty) return { faults: [{ line: opened.get(empty.id!)!, reason: `composite state "${empty.id}" has no state` }] };
+  return { spec: { layout: { auto: true, direction: 'column', children: top }, edges }, faults: [] };
 }
 
 function sequence(body: { s: string; n: number }[]): Result {

@@ -128,3 +128,48 @@ test('a Markdown file with two mermaid blocks gives two specs', () =>
     assert.deepEqual(readdirSync(out).sort(), ['doc-1.json', 'doc-2.json']);
     assert.equal(JSON.parse(readFileSync(join(out, 'doc-2.json'), 'utf8')).rail, 'only');
   }));
+
+test('a state diagram marks the top-level start and end, keeps labels and draws a composite as a frame', () => {
+  const r = fromMermaid(`stateDiagram-v2
+    [*] --> Idle
+    state "Awaiting payment" as Pay
+    Pay : cart locked
+    Idle --> Pay : checkout
+    state Ship {
+      [*] --> Pack
+      Pack --> Send
+      Send --> [*]
+    }
+    state ok <<choice>>
+    Pay --> ok
+    ok --> Ship : paid
+    Ship --> Done
+    Done --> [*]`);
+  assert.deepEqual(r.spec, {
+    layout: {
+      auto: true,
+      direction: 'column',
+      children: [
+        { id: 'Idle', label: 'Idle', mark: 'start' },
+        { id: 'Pay', label: 'Awaiting payment', sub: 'cart locked' },
+        {
+          id: 'Ship',
+          label: 'Ship',
+          children: [
+            { id: 'Pack', label: 'Pack' },
+            { id: 'Send', label: 'Send' },
+          ],
+        },
+        { id: 'ok', label: 'ok', shape: 'decision' },
+        { id: 'Done', label: 'Done', mark: 'end' },
+      ],
+    },
+    edges: [
+      { from: 'Idle', to: 'Pay', label: 'checkout' },
+      { from: 'Pack', to: 'Send' },
+      { from: 'Pay', to: 'ok' },
+      { from: 'ok', to: 'Ship', label: 'paid' },
+      { from: 'Ship', to: 'Done' },
+    ],
+  });
+});
