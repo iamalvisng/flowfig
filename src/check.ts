@@ -22,7 +22,7 @@ import {
 import type { Finding, Scene, SceneEdge } from './scene.ts';
 import { layoutRail } from './rail.ts';
 import type { SvgOptions } from './svg.ts';
-import { crosses, hit as curveHit, type Pt, type Rect } from './geometry.ts';
+import { crosses, samples, type Pt, type Rect } from './geometry.ts';
 import { textWidth } from './text.ts';
 import { owners, parseSource } from './source.ts';
 
@@ -198,17 +198,22 @@ export function checkSpec(fig: FlowProps): Finding[] {
 
 export type CheckOptions = { width?: number; minText?: number };
 
-const at = ([p0, p1, p2, p3]: [Pt, Pt, Pt, Pt], t: number): Pt => {
-  const u = 1 - t;
-  const [a, b, c, d] = [u * u * u, 3 * u * u * t, 3 * u * t * t, t * t * t];
-  return { x: a * p0.x + b * p1.x + c * p2.x + d * p3.x, y: a * p0.y + b * p1.y + c * p2.y + d * p3.y };
-};
 const lerp = (p: Pt, q: Pt, t: number): Pt => ({ x: p.x + (q.x - p.x) * t, y: p.y + (q.y - p.y) * t });
+const path = (e: SceneEdge): Pt[] => {
+  const line = e.elbow ?? e.pts;
+  if (!line) return samples(e.curve);
+  return line.slice(1).flatMap((q, k) => {
+    const n = Math.max(16, Math.ceil(Math.hypot(q.x - line[k].x, q.y - line[k].y) / 4));
+    return Array.from({ length: n + 1 }, (_, i) => lerp(line[k], q, i / n));
+  });
+};
 // Margins stop edges along a border and pills edge to edge from counting as touches.
 const inside = (p: Pt, r: Rect, pad: number) => p.x > r.x + pad && p.x < r.x + r.w - pad && p.y > r.y + pad && p.y < r.y + r.h - pad;
 const overlap = (a: Rect, b: Rect, pad: number) =>
   a.x + pad < b.x + b.w - pad && b.x + pad < a.x + a.w - pad && a.y + pad < b.y + b.h - pad && b.y + pad < a.y + a.h - pad;
 const px = (n: number) => Math.round(n * 10) / 10;
+// Measured corner touches go 3.5 px deep; real crossings go 24 px or more.
+const TOUCH = 6;
 
 export function checkScene(scene: Scene, { width = 830, minText = 10 }: CheckOptions = {}): Finding[] {
   const out: Finding[] = [];
@@ -220,29 +225,36 @@ export function checkScene(scene: Scene, { width = 830, minText = 10 }: CheckOpt
     }
   for (const e of scene.edges) {
     if (e.behind && !e.elbow) continue;
-    const line = e.elbow ?? e.pts;
-    const pts = line?.slice(1).flatMap((q, k) => Array.from({ length: 17 }, (_, i) => lerp(line[k], q, i / 16)));
+    const pts = path(e);
     for (const b of scene.boxes)
-      if (b.id !== e.from && b.id !== e.to && (pts ? pts.some((p) => inside(p, b.rect, 2)) : curveHit(e.curve, [b.rect], -2).length))
+      if (b.id !== e.from && b.id !== e.to && pts.some((p) => inside(p, b.rect, TOUCH)))
         out.push(err('edge-crosses-box', [e.id, b.id], `edge "${e.id}" passes through box "${b.id}"`));
+  }
+  for (const e of scene.edges) {
+    const pts = path(e);
+    const drawn = pts.slice(1).reduce((s, q, k) => s + Math.hypot(q.x - pts[k].x, q.y - pts[k].y), 0);
+    const ratio = drawn / Math.max(1, Math.hypot(pts.at(-1)!.x - pts[0].x, pts.at(-1)!.y - pts[0].y));
+    // The README figures have a good edge at ratio 1.77 and 425 px.
+    if (ratio >= 1.6 && drawn >= 600)
+      out.push(
+        warn(
+          'long-edge',
+          [e.id],
+          `edge "${e.id}" is ${px(ratio)} times the straight distance between its ends: put its ends in one row or column, or route it with around`,
+        ),
+      );
   }
   const pills = scene.edges.filter((e) => e.pts && e.label);
   const under = new Set<string>();
   for (const e of scene.edges) {
     if (e.behind) continue;
-    const pts = e.pts
-      ? e.pts.slice(1).flatMap((q, k) => Array.from({ length: 17 }, (_, i) => lerp(e.pts![k], q, i / 16)))
-      : Array.from({ length: 33 }, (_, i) => at(e.curve, i / 32));
+    const pts = path(e);
     for (const f of pills)
       if (f.id !== e.id && !under.has(e.id + ' ' + f.id) && pts.some((p) => inside(p, f.label!, 2))) {
         under.add(e.id + ' ' + f.id);
         out.push(err('label-overlap', [e.id, f.id], `edge "${e.id}" passes under the pill of edge "${f.id}"`));
       }
   }
-  const path = (e: SceneEdge) =>
-    e.pts
-      ? e.pts.slice(1).flatMap((q, k) => Array.from({ length: 17 }, (_, i) => lerp(e.pts![k], q, i / 16)))
-      : Array.from({ length: 33 }, (_, i) => at(e.curve, i / 32));
   const stubs = scene.edges.filter((e) => e.pts && e.pts.length > 1);
   const hit = new Set<string>();
   for (const f of stubs)
