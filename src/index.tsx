@@ -150,7 +150,7 @@ const HIDDEN: CSSProperties = {
 export function Flow(props: FlowProps) {
   const { layout, edges, steps, lanes, timeline } = props;
   const placed = useMemo(() => autoLayout({ layout, edges, steps, lanes, timeline }), [layout, edges, steps, lanes, timeline]);
-  return <FlowBody {...props} layout={placed.layout} edges={placed.edges} />;
+  return <FlowBody {...props} layout={placed.layout} edges={placed.edges} written={props} />;
 }
 
 function FlowBody({
@@ -165,7 +165,8 @@ function FlowBody({
   lanes,
   timeline,
   today,
-}: FlowProps) {
+  written,
+}: FlowProps & { written: FlowProps }) {
   const tl = timeline && isLanesLayout(layout);
   const alt = useMemo(() => altText({ layout, edges, steps: stepsIn }), [layout, edges, stepsIn]);
   const descId = useId();
@@ -470,18 +471,14 @@ function FlowBody({
       ],
       minFont: Math.min(...fonts),
     };
-    for (const f of [
-      ...checkSpec({ layout, edges, steps }),
-      ...checkScene(scene, { width: (box ?? fig).clientWidth }),
-      ...checkTheme(theme),
-    ]) {
+    for (const f of [...checkSpec(written), ...checkScene(scene, { width: (box ?? fig).clientWidth }), ...checkTheme(theme)]) {
       const key = f.rule + ':' + f.ids.join() + ':' + f.message;
       if (reported.current.has(key)) continue;
       reported.current.add(key);
       // oxlint-disable-next-line no-console
       console.warn(`flowfig check: ${f.severity} ${f.rule}: ${f.message}`);
     }
-  }, [check, routed, layout, edges, steps, ids, theme, rail, noMap, lanePlan]);
+  }, [check, routed, written, layout, edges, steps, ids, theme, rail, noMap, lanePlan]);
 
   useEffect(() => {
     const gs = dots.current,
