@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="560" height="685" viewBox="0 0 560 685" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" role="img">
+<metadata id="figure-spec"><![CDATA[{"props":{"layout":{"auto":true,"direction":"column","children":[{"id":"A","label":"Visitor"},{"id":"B","label":"Sign-up form"},{"id":"C","label":"Email valid?","shape":"decision"},{"id":"X","label":"Show error"},{"id":"auth","label":"Account service","children":[{"id":"D","label":"Create account"},{"id":"E","label":"Hash password"}]},{"id":"F","label":"Users","shape":"store"},{"id":"G","label":"Welcome email"}]},"edges":[{"from":"A","to":"B"},{"from":"B","to":"C"},{"from":"C","to":"X","label":"no"},{"from":"C","to":"D","label":"yes"},{"from":"D","to":"E"},{"from":"E","to":"F"},{"from":"E","to":"G"}]}}]]></metadata>
+<title>Flow figure: Visitor, Sign-up form, Email valid?, Show error, Create account, Hash password, Users, Welcome email.</title>
+<desc>The figure has these boxes: Visitor, Sign-up form, Email valid?, Show error, Create account, Hash password, Users, Welcome email.</desc>
+<style>
+svg { --accent:#0074d9; --fg:#1c1e21; --muted:#606770; --bg:#ffffff; --surface:#f5f7fa; --border:#d0d7de; --card-on:#eef5fd; --tint:color-mix(in srgb, var(--accent) 10%, var(--surface)); }
+@media (prefers-color-scheme: dark) { svg { --accent:#1f78c8; --fg:#e3e3e3; --muted:#9aa0a6; --bg:#1b1b1d; --surface:#242526; --border:#3a3b3c; --card-on:#1d2733; --tint:color-mix(in srgb, var(--accent) 10%, var(--surface)); } }
+.label { fill: var(--fg); font-size: 14px; font-weight: 500; text-anchor: middle; }
+.sub { fill: var(--muted); font-size: 12px; text-anchor: middle; }
+.frame { fill: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: .04em; }
+.edgelabel { fill: var(--muted); font-size: 11px; text-anchor: middle; font-family: ui-monospace, Menlo, monospace; }
+.row { fill: var(--fg); font-size: 11px; }
+.row.mono { font-size: 10.5px; font-family: ui-monospace, Menlo, monospace; }
+.muted { fill: var(--muted); }
+.bar { fill: var(--fg); font-size: 13px; font-weight: 500; }
+.tick { fill: var(--muted); font-size: 11px; }
+.today { fill: var(--accent); font-size: 11px; font-weight: 600; }
+.tag { font-size: 9px; font-weight: 600; letter-spacing: .03em; text-anchor: middle; }
+.mark { fill: var(--accent); font-size: 11px; font-weight: 600; text-anchor: end; }
+.chip { fill: #ffffff; font-size: 11.5px; text-anchor: middle; }
+.steplabel { fill: var(--fg); font-size: 13px; font-weight: 600; text-anchor: middle; font-family: ui-monospace, Menlo, monospace; }
+.caption { fill: var(--muted); font-size: 13.5px; text-anchor: middle; }
+.railcol { fill: var(--fg); font-size: 12px; font-weight: 500; text-anchor: middle; }
+.railphase { fill: var(--fg); font-size: 13px; font-weight: 600; font-family: ui-monospace, Menlo, monospace; }
+.railphase.muted { fill: var(--muted); }
+.end { text-anchor: end; }
+
+@media (prefers-reduced-motion: reduce) { * { animation-play-state: paused !important; animation-delay: -0s !important; } }
+</style>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 1 L 9 5 L 0 9 z" fill="context-stroke"/></marker></defs>
+<rect width="100%" height="100%" fill="var(--bg)"/>
+<g transform="translate(96 0)">
+
+
+
+<rect x="134" y="24" width="100" height="38" rx="10" fill="var(--bg)" stroke="var(--border)"/><text x="184" y="48" class="label">Visitor</text>
+<rect x="126.9" y="134" width="114.2" height="38" rx="10" fill="var(--bg)" stroke="var(--border)"/><text x="184" y="158" class="label">Sign-up form</text>
+<polygon points="184,244 275.3,275 184,306 92.8,275" fill="var(--bg)" stroke="var(--border)"/><text x="184" y="280" class="label">Email valid?</text>
+<rect x="24" y="438.5" width="100" height="38" rx="10" fill="var(--bg)" stroke="var(--border)"/><text x="74" y="462.5" class="label">Show error</text>
+<rect x="180" y="378" width="164" height="159" rx="14" fill="var(--surface)" stroke="var(--border)"/><text x="198" y="398" class="frame">ACCOUNT SERVICE</text>
+<rect x="199.8" y="415" width="124.5" height="38" rx="10" fill="var(--bg)" stroke="var(--border)"/><text x="262" y="439" class="label">Create account</text>
+<rect x="198" y="481" width="128" height="38" rx="10" fill="var(--bg)" stroke="var(--border)"/><text x="262" y="505" class="label">Hash password</text>
+<path d="M41.5 621 a 50 12 0 0 1 100 0 v 28 a 50 12 0 0 1 -100 0 z" fill="var(--bg)" stroke="var(--border)"/><path d="M41.5 621 a 50 12 0 0 0 100 0" fill="none" stroke="var(--border)"/><text x="91.5" y="646" class="label">Users</text>
+<rect x="197.5" y="616" width="129" height="38" rx="10" fill="var(--bg)" stroke="var(--border)"/><text x="262" y="640" class="label">Welcome email</text>
+<path id="p-A-&gt;B" d="M 184.02 62 C 184.02 98, 184.02 98, 184.02 134" fill="none" stroke="var(--muted)" stroke-width="1.25" marker-end="url(#arrow)"/>
+<path id="p-B-&gt;C" d="M 184.02 172 C 184.02 208, 184.02 208, 184.02 244" fill="none" stroke="var(--muted)" stroke-width="1.25" marker-end="url(#arrow)"/>
+<path id="p-C-&gt;X" d="M 184.02 306 C 184.02 372.25, 74 372.25, 74 438.5" fill="none" stroke="var(--muted)" stroke-width="1.25" marker-end="url(#arrow)"/><rect x="115.4" y="363.3" width="27.2" height="18" rx="9" fill="var(--bg)" stroke="var(--border)"/><text x="129" y="376.3" class="edgelabel">no</text>
+<path id="p-C-&gt;D" d="M 184.02 306 C 184.02 360.5, 262.02 360.5, 262.02 415" fill="none" stroke="var(--muted)" stroke-width="1.25" marker-end="url(#arrow)"/><rect x="206.1" y="351.5" width="33.8" height="18" rx="9" fill="var(--bg)" stroke="var(--border)"/><text x="223" y="364.5" class="edgelabel">yes</text>
+<path id="p-D-&gt;E" d="M 262.02 453 C 262.02 467, 262.02 467, 262.02 481" fill="none" stroke="var(--muted)" stroke-width="1.25" marker-end="url(#arrow)"/>
+<path id="p-E-&gt;F" d="M 198 500 C 169.755 500, 169.755 635, 141.51000000000002 635" fill="none" stroke="var(--muted)" stroke-width="1.25" marker-end="url(#arrow)"/>
+<path id="p-E-&gt;G" d="M 262.02 519 C 262.02 567.5, 262.02 567.5, 262.02 616" fill="none" stroke="var(--muted)" stroke-width="1.25" marker-end="url(#arrow)"/>
+
+
+</g>
+
+
+
+</svg>
