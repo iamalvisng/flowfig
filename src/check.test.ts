@@ -107,6 +107,14 @@ test('a long curve through a short box is an error', () => {
   assert.deepEqual(rules(checkScene(s).filter((f) => f.severity === 'error')), ['edge-crosses-box']);
 });
 
+test('an edge that touches a box corner by 3 px is not an error; an edge through the middle is', () => {
+  const boxes = [box('m', 200, 0)];
+  const corner = scene({ boxes, edges: [{ id: 'e', from: 'a', to: 'b', curve: line(150, 43, 203, 37) }] });
+  assert.deepEqual(checkScene(corner), []);
+  const middle = scene({ boxes, edges: [{ id: 'e', from: 'a', to: 'b', curve: line(150, 20, 350, 20) }] });
+  assert.deepEqual(rules(checkScene(middle)), ['edge-crosses-box']);
+});
+
 test('an edge that arcs far past its ends is a long-edge warning; a direct edge is not', () => {
   const arc: [Pt, Pt, Pt, Pt] = [
     { x: 528, y: 42 },

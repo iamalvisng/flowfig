@@ -212,6 +212,8 @@ const inside = (p: Pt, r: Rect, pad: number) => p.x > r.x + pad && p.x < r.x + r
 const overlap = (a: Rect, b: Rect, pad: number) =>
   a.x + pad < b.x + b.w - pad && b.x + pad < a.x + a.w - pad && a.y + pad < b.y + b.h - pad && b.y + pad < a.y + a.h - pad;
 const px = (n: number) => Math.round(n * 10) / 10;
+// Measured corner touches go 3.5 px deep; real crossings go 24 px or more.
+const TOUCH = 6;
 
 export function checkScene(scene: Scene, { width = 830, minText = 10 }: CheckOptions = {}): Finding[] {
   const out: Finding[] = [];
@@ -225,7 +227,7 @@ export function checkScene(scene: Scene, { width = 830, minText = 10 }: CheckOpt
     if (e.behind && !e.elbow) continue;
     const pts = path(e);
     for (const b of scene.boxes)
-      if (b.id !== e.from && b.id !== e.to && pts.some((p) => inside(p, b.rect, 2)))
+      if (b.id !== e.from && b.id !== e.to && pts.some((p) => inside(p, b.rect, TOUCH)))
         out.push(err('edge-crosses-box', [e.id, b.id], `edge "${e.id}" passes through box "${b.id}"`));
   }
   for (const e of scene.edges) {
