@@ -355,7 +355,7 @@ function defPatterns(lang: Lang, name: string, inContainer: boolean): RegExp[] {
 
 const KEYWORDS = new Set(['if', 'for', 'while', 'switch', 'catch', 'return', 'new', 'await', 'typeof', 'else', 'do', 'throw']);
 
-function depthAt(code: string, pos: number, lo: number): number {
+export function depthAt(code: string, pos: number, lo: number): number {
   let d = 0;
   for (let i = lo; i < pos; i++) {
     if (code[i] === '{') d++;

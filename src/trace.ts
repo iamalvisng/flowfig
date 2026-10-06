@@ -1,5 +1,5 @@
 import { posix } from 'node:path';
-import { codeFile, esc, langOf, locate, matchClose, readFile, type CodeFile, type Read } from './code.ts';
+import { codeFile, depthAt, esc, langOf, locate, matchClose, readFile, type CodeFile, type Read } from './code.ts';
 import { EDGE_LANGS, edgeResult, paramName, params, shadows } from './edges.ts';
 import { OUTSIDE, importsOf, reexports, type Import } from './imports.ts';
 import { ancestors, declIn, findType, isUpper, makeCtx, receiver, receiverChain, type Ctx, type Decl } from './types.ts';
@@ -41,7 +41,7 @@ const innerParam = (body: string, n: string) => {
 const topLevel = (f: CodeFile, sym: string) => {
   const s = locate(f, sym);
   if (!s) return false;
-  if (f.lang === 'go') return !/^func\s*\(/.test(f.code.slice(s.start, s.end));
+  if (f.lang === 'go') return depthAt(f.code, s.start, 0) === 0 && !/^func\s*\(/.test(f.code.slice(s.start, s.end));
   return !/[ \t]/.test(f.code[f.code.lastIndexOf('\n', s.start - 1) + 1]);
 };
 
@@ -49,7 +49,7 @@ const lineOf = (code: string, pos: number) => code.slice(0, pos).split('\n').len
 
 function forward(cx: Ctx, path: string, name: string, depth = 0): Target {
   if (langOf(path) == null) {
-    const f = goDirFiles(cx, path).find((g) => locate(g, name));
+    const f = goDirFiles(cx, path).find((g) => topLevel(g, name));
     return f ? { to: `${f.path}#${name}` } : null;
   }
   const f = codeFile(cx.root, path, cx.read, cx.cache);
@@ -83,6 +83,7 @@ function resolve(
   fi: CodeFile,
   body: string,
   start: number,
+  idx: number,
   n: string,
   rc: { chain: string[]; complex: boolean } | null,
   container: string | null,
@@ -91,13 +92,13 @@ function resolve(
 ): Target {
   const gone = (p: string | null) => p == null || p === OUTSIDE;
   if (!rc) {
+    if (locate({ ...fi, code: body.slice(0, idx) + ' '.repeat(n.length) + body.slice(idx + n.length) }, n)) {
+      const s = locate(fi, n);
+      return s && s.start > start && s.end <= start + body.length ? { to: `${fi.path}#${n}` } : null;
+    }
+    if (locate({ ...fi, code: body }, n)) return null;
     const bind = imps.find((i) => i.local === n);
     if (bind) return gone(bind.path) ? 'outside' : bind.name === '*' ? null : forward(cx, bind.path!, bind.name);
-    const s = locate(fi, n);
-    const inside = s != null && s.start > start && s.end <= start + body.length;
-    if (new RegExp(`\\n[ \\t]+(?:async\\s+)?(?:function|def|fn)\\s+${esc(n)}(?![\\w$])`).test(body))
-      return inside ? { to: `${fi.path}#${n}` } : null;
-    if (fi.lang === 'cs' && container && inside) return { to: `${fi.path}#${n}` };
     if (fi.lang === 'java' || fi.lang === 'cs') {
       const m = decl && method(cx, decl, n);
       if (m) return { to: m };
@@ -165,7 +166,7 @@ function calls(cx: Ctx, caller: string, r: TraceResult): TraceEdge[] {
       continue;
     }
     if (!rc && (shadows(body, c.name, fi.lang, own, false) || innerParam(body, c.name))) continue;
-    const t = resolve(cx, fi, body, span.start, c.name, rc, container, decl, imps);
+    const t = resolve(cx, fi, body, span.start, c.idx, c.name, rc, container, decl, imps);
     if (t === 'outside') r.outside += c.call ? 1 : 0;
     else if (t && 'unsure' in t) r.unsure.push({ at: at(c.idx), reason: t.unsure });
     else if (t && t.to !== caller && !targets.has(t.to)) targets.set(t.to, at(c.idx));

@@ -163,3 +163,62 @@ test('a call of a nested function gives no edge to a top-level function of the s
   assert.deepEqual(targets(files, 'm.ts#nested'), []);
   assert.deepEqual(targets(files, 'src/lib.rs#outer'), []);
 });
+
+const GO_MOD = { 'go.mod': 'module example.com/g\n\ngo 1.21\n' };
+
+test('a bare Go call goes to the package function, not to a const of the same name inside another function', () => {
+  const files = {
+    ...GO_MOD,
+    'a.go': 'package main\n\nfunc helper() int {\n\treturn 2\n}\n',
+    'm.go': 'package main\n\nfunc Other() int {\n\tconst helper = 3\n\treturn helper\n}\n\nfunc Run() int {\n\treturn helper()\n}\n',
+  };
+  assert.deepEqual(targets(files, 'm.go#Run'), ['a.go#helper']);
+});
+
+test('the Go package lookup skips a var of the same name inside another function', () => {
+  const files = {
+    ...GO_MOD,
+    'z.go': 'package main\n\nfunc helper() int {\n\treturn 2\n}\n',
+    'm.go':
+      'package main\n\nfunc Other() int {\n\tvar helper = func() int { return 1 }\n\treturn helper()\n}\n\nfunc Run() int {\n\treturn helper()\n}\n',
+  };
+  assert.deepEqual(targets(files, 'm.go#Run'), ['z.go#helper']);
+});
+
+test('a call of a nested Rust const fn gives no edge to a top-level fn of the same name', () => {
+  const files = {
+    'Cargo.toml': '[package]\nname = "r"\nversion = "0.1.0"\n',
+    'src/lib.rs':
+      'pub fn handle(x: i32) -> i32 {\n    x\n}\n\npub fn outer() -> i32 {\n    const fn handle(y: i32) -> i32 {\n        y + 1\n    }\n    handle(2)\n}\n',
+  };
+  assert.deepEqual(targets(files, 'src/lib.rs#outer'), []);
+});
+
+test('a call of a nested generator function gives no edge to a top-level function of the same name', () => {
+  const files = {
+    'm.ts':
+      'export function gen() {\n  function* stepTo(y) {\n    yield y;\n  }\n  return stepTo(2);\n}\nexport function stepTo(x) {\n  return x;\n}\n',
+  };
+  assert.deepEqual(targets(files, 'm.ts#gen'), []);
+});
+
+test('a nested function with the name of an import hides the import', () => {
+  const files = {
+    'other.py': 'def handle(x):\n    return x\n',
+    'm.py': 'from other import handle\n\n\ndef caller():\n    def handle(y):\n        return y\n    return handle(2)\n',
+    'a.ts': 'export function render(x) {\n  return x;\n}\n',
+    'm.ts':
+      "import { render } from './a.ts';\n\nexport function nested() {\n  function render(y) {\n    return y;\n  }\n  return render(2);\n}\n",
+  };
+  assert.deepEqual(targets(files, 'm.py#caller'), []);
+  assert.deepEqual(targets(files, 'm.ts#nested'), []);
+});
+
+test('a C# local function hides the base class method and a method of an earlier class', () => {
+  const files = {
+    'Base.cs': 'namespace App;\n\npublic class Base\n{\n    protected int Log()\n    {\n        return 2;\n    }\n}\n',
+    'A.cs':
+      'namespace App;\n\npublic class B\n{\n    int Log()\n    {\n        return 1;\n    }\n}\n\npublic class A : Base\n{\n    public int Run()\n    {\n        int Log() => 5;\n        return Log();\n    }\n}\n',
+  };
+  assert.deepEqual(targets(files, 'A.cs#A.Run'), []);
+});
