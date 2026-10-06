@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -64,6 +64,36 @@ test('atlas exits 1 when no figure matches and 2 for an unknown flag', () => {
     assert.equal(run(), 1);
     assert.equal(run('--nope'), 2);
     assert.equal(existsSync(join(dir, 'o')), false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('atlas refuses to overwrite a file it did not write, and a rerun into its own output works', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'atlas-'));
+  try {
+    write(dir, 'Order service');
+    const run = () => spawnSync(process.execPath, [cli, 'atlas', '--root', dir, '--out', dir]).status;
+    writeFileSync(join(dir, 'index.html'), 'MINE');
+    assert.equal(run(), 2);
+    assert.equal(readFileSync(join(dir, 'index.html'), 'utf8'), 'MINE');
+    assert.equal(existsSync(join(dir, 'docs/system.html')), false);
+    rmSync(join(dir, 'index.html'));
+    assert.equal(run(), 0);
+    assert.equal(run(), 0);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a figure path with a space, # or ? gives a working relative link', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'atlas-'));
+  try {
+    mkdirSync(join(dir, 'docs'), { recursive: true });
+    writeFileSync(join(dir, 'docs/a b#c.svg'), svgWithSpec(fig('x', 'X', 'docs/a b#c.svg')));
+    const site = atlasFiles({ root: dir });
+    assert.match(site.get('index.html')!, /<a href="docs\/a%20b%23c\.html">docs\/a b#c\.svg<\/a>/);
+    assert.match(site.get('docs/a b#c.html')!, /<a href="a%20b%23c\.html" tabindex="-1">/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

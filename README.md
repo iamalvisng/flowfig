@@ -619,8 +619,8 @@ file that no figure covers. With no `--entries`, it prints one count line for ea
 `detail`. The path starts at the repo root, as `source` does.
 
 ```json
-"row": [{ "id": "web", "label": "Web app" }, { "id": "orders", "label": "Order service", "detail": "docs/flows/orders.svg" }]
-"row": [{ "id": "up", "label": "Whole system", "detail": "docs/system.svg" }, { "id": "db", "label": "Orders table" }]
+"layout": { "children": [{ "id": "web", "label": "Web app" }, { "id": "orders", "label": "Order service", "detail": "docs/flows/orders.svg" }] }
+"layout": { "children": [{ "id": "up", "label": "Whole system", "detail": "docs/system.svg" }, { "id": "db", "label": "Orders table" }] }
 ```
 
 `docs/system.svg` links down to the order flow. `docs/flows/orders.svg` links back up.
@@ -637,7 +637,7 @@ atlas/index.html — 2 figure pages
 | `--out <dir>`      | The folder to write.                                          | `atlas`            |
 | `--open`           | Open `index.html` in the default browser.                     | off                |
 
-The command writes `index.html`, one `.html` page for each figure, and an empty `.nojekyll` file. It deletes nothing.
+The command writes `index.html`, one `.html` page for each figure, and an empty `.nojekyll` file. It deletes nothing. If a file of the same name exists and the atlas did not write it, the command writes nothing and exits with 2.
 All links are relative, so the pages work from a file, a sub-path or any file host. The exit code is 0 when the site is
 written, whatever the health of the figures. It is 1 when no figure matches, and 2 for a bad flag.
 

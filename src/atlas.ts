@@ -27,7 +27,11 @@ const pageOf = (figure: string) => {
   return page === 'index.html' ? 'index.figure.html' : page;
 };
 
-const hrefTo = (from: string, to: string) => posix.relative(posix.dirname(from), to);
+const MARK = '<meta name="generator" content="flowfig atlas">';
+
+const url = (path: string) => path.split('/').map(encodeURIComponent).join('/');
+
+const hrefTo = (from: string, to: string) => url(posix.relative(posix.dirname(from), to));
 
 export function atlasFiles({ root = process.cwd(), figures }: AtlasOptions = {}): Map<string, string> {
   const report = coverageReport({ root, figures });
@@ -41,7 +45,7 @@ export function atlasFiles({ root = process.cwd(), figures }: AtlasOptions = {})
   }
   const files = new Map<string, string>();
   const shell = (title: string, body: string) =>
-    `<!doctype html>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>${esc(title)}</title>\n<style>\n:root { color-scheme: light dark }\n${CSS}\n</style>\n${body}\n`;
+    `<!doctype html>\n<meta charset="utf-8">\n${MARK}\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>${esc(title)}</title>\n<style>\n:root { color-scheme: light dark }\n${CSS}\n</style>\n${body}\n`;
   for (const f of rows) {
     const spec = specs.get(f.figure);
     if (!spec) continue;
@@ -61,7 +65,7 @@ export function atlasFiles({ root = process.cwd(), figures }: AtlasOptions = {})
       });
     const { title, desc } = altText(spec);
     const before =
-      `<style>\n${CSS}\n</style>\n<main>\n<p><a href="${esc(hrefTo(page, 'index.html'))}">All figures</a></p>\n` +
+      `${MARK}\n<style>\n${CSS}\n</style>\n<main>\n<p><a href="${esc(hrefTo(page, 'index.html'))}">All figures</a></p>\n` +
       `<h1>${esc(f.figure)}</h1>\n<p>${badge(f)} ${esc(f.detail)}</p>\n`;
     const after =
       (details.length ? `\n<h2>Details</h2>\n<ul>\n${details.join('\n')}\n</ul>` : '') +
@@ -71,7 +75,7 @@ export function atlasFiles({ root = process.cwd(), figures }: AtlasOptions = {})
   const body = rows
     .map((f) => {
       const spec = specs.get(f.figure);
-      const name = spec ? `<a href="${esc(pageOf(f.figure))}">${esc(f.figure)}</a>` : esc(f.figure);
+      const name = spec ? `<a href="${esc(url(pageOf(f.figure)))}">${esc(f.figure)}</a>` : esc(f.figure);
       return `<tr><td>${name}</td><td>${badge(f)}</td><td>${esc(f.detail)}</td><td>${spec ? esc(altText(spec).title) : ''}</td></tr>`;
     })
     .join('\n');
@@ -105,7 +109,11 @@ export async function runAtlas(argv: string[]): Promise<number> {
   const files = atlasFiles({ root, figures: opts['--figures'] });
   if (!files.size) return fail('no figure SVG matches', 1);
   const out = resolve(opts['--out'] ?? 'atlas');
+  const mine = [...files.keys()].filter((p) => p !== '.nojekyll');
+  const foreign = mine.find((p) => existsSync(join(out, p)) && !readFileSync(join(out, p), 'utf8').includes(MARK));
+  if (foreign) return fail(`${join(out, foreign)}: the file exists and flowfig atlas did not write it; nothing was written`, 2);
   for (const [path, text] of files) {
+    if (!text && existsSync(join(out, path))) continue;
     mkdirSync(dirname(join(out, path)), { recursive: true });
     writeFileSync(join(out, path), text);
   }
