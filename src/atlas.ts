@@ -65,12 +65,12 @@ export function atlasFiles({ root = process.cwd(), figures }: AtlasOptions = {})
       });
     const { title, desc } = altText(spec);
     const before =
-      `${MARK}\n<style>\n${CSS}\n</style>\n<main>\n<p><a href="${esc(hrefTo(page, 'index.html'))}">All figures</a></p>\n` +
+      `<style>\n${CSS}\n</style>\n<main>\n<p><a href="${esc(hrefTo(page, 'index.html'))}">All figures</a></p>\n` +
       `<h1>${esc(f.figure)}</h1>\n<p>${badge(f)} ${esc(f.detail)}</p>\n`;
     const after =
       (details.length ? `\n<h2>Details</h2>\n<ul>\n${details.join('\n')}\n</ul>` : '') +
       `\n<details><summary>Transcript</summary><pre style="white-space: pre-wrap">${esc(desc)}</pre></details>\n</main>`;
-    files.set(page, pageHtml(svg, `${title} (${f.figure})`, before, after));
+    files.set(page, pageHtml(svg, `${title} (${f.figure})`, before, after, `${MARK}\n`));
   }
   const body = rows
     .map((f) => {
@@ -118,7 +118,7 @@ export async function runAtlas(argv: string[]): Promise<number> {
     writeFileSync(join(out, path), text);
   }
   const index = join(out, 'index.html');
-  console.log(`${index} — ${files.size - 2} figure pages`);
+  console.log(`${index} — ${files.size - 2} figure page${files.size === 3 ? '' : 's'}`);
   if (open) {
     try {
       await openFile(index);
