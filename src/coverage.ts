@@ -23,6 +23,9 @@ const globRe = (glob: string) =>
       .replace(/\*\*\/|\*\*|\*|\?/g, (t) => (t === '**/' ? '(?:.*/)?' : t === '**' ? '.*' : t === '*' ? '[^/]*' : '[^/]'))}$`,
   );
 
+const isTest = (p: string) =>
+  /(^|\/)(__tests__|tests|src\/test)\//.test(p) || /\.(test|spec)\.[^/]+$|(^|\/)test_[^/]*\.py$|_test\.(py|go)$|Tests?\.(java|cs)$/.test(p);
+
 const day = (t: number) => (t === Infinity ? 'now' : new Date(t * 1000).toISOString().slice(0, 10));
 
 const count = (k: number, word: string) => `${k} ${word}${k === 1 ? '' : 's'}`;
@@ -92,11 +95,12 @@ export function coverageReport({ root = process.cwd(), figures = '**/*.svg', ent
         : { figure, state: 'ok', detail: `${coverage.boxesDefined} of ${coverage.boxes} boxes defined${lostText}` },
     );
   }
-  const code = all.filter((p) => langOf(p) != null);
+  const code = all.filter((p) => langOf(p) != null && !isTest(p));
   const report: CoverageReport = { figures: out, git: time != null };
   if (entries) {
     const re = globRe(entries);
-    const matched = code.filter((p) => re.test(p));
+    const named = entries.replace(/^\.\//, '');
+    const matched = all.filter((p) => langOf(p) != null && re.test(p) && (p === named || !isTest(p)));
     report.entries = { glob: entries, total: matched.length, uncovered: matched.filter((p) => !covered.has(p)) };
   } else {
     const by = new Map<string, { folder: string; covered: number; total: number }>();

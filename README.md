@@ -623,6 +623,8 @@ prints one line that says so.
 
 A figure covers a code file if one of its links names that file. With `--entries`, `coverage` lists each matched code
 file that no figure covers. With no `--entries`, it prints one count line for each top folder.
+`coverage` does not count test files as code: `*.test.*`, `*.spec.*`, `__tests__/`, `test_*.py`, `*_test.py`, `*_test.go`,
+`*Test.java`, `*Tests.java`, `*Test.cs`, `*Tests.cs`, and files under `tests/` or `src/test/`. An entry that `--entries` names in full still counts.
 
 | Option             | Meaning                                                       | Default            |
 | ------------------ | ------------------------------------------------------------- | ------------------ |
