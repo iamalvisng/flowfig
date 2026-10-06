@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { isGroup, nodes, str, type FigGroup, type FlowProps } from './model.ts';
 import { check, render } from './svg.ts';
+import { samples } from './geometry.ts';
 
 const SPECS: Record<string, FlowProps> = {
   runA: {
@@ -342,5 +343,28 @@ test('an edge to the id of an unlabeled group still draws in an auto figure', ()
       .scene.edges.map((e) => e.id)
       .sort(),
     ['x', 'y'],
+  );
+});
+
+test('run B: the edge from the decision to the voucher does not arc over the decision', () => {
+  const { boxes, edges } = render(SPECS.runB).scene;
+  const sig = boxes.find((b) => b.id === 'sig')!.rect;
+  const e8 = edges.find((e) => e.id === 'e8')!;
+  assert.ok(Math.min(...samples(e8.curve).map((p) => p.y)) >= sig.y, 'e8 rises above the decision');
+});
+
+test('a 20-box chain folds into rows no taller than 2.5 page widths, with no layout finding', () => {
+  const ids = Array.from({ length: 20 }, (_, i) => `s${i}`);
+  const fig: FlowProps = {
+    layout: { auto: true, children: ids.map((id) => ({ id, label: `Stage ${id}`, sub: 'one step' })) },
+    edges: ids.slice(1).map((id, i) => ({ id, from: ids[i], to: id, label: 'next' })),
+    steps: [{ label: 'Run', flow: ids.slice(1) }],
+  };
+  const { svg } = render(fig);
+  const h = Number(svg.match(/viewBox="[\d.]+ [\d.]+ [\d.]+ ([\d.]+)"/)![1]);
+  assert.ok(h <= 2.5 * 830, `height ${h}`);
+  assert.deepEqual(
+    check(fig).filter((f) => LAYOUT_RULES.includes(f.rule)),
+    [],
   );
 });
