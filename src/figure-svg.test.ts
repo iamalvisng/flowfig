@@ -472,6 +472,22 @@ test('check --strict fails an auto layout that lanes ignore', () => {
   const r = run(['check', '-', '--strict'], JSON.stringify({ props: lanes }));
   assert.equal(r.status, 1, r.stdout + r.stderr);
   assert.match(r.stdout, /auto-ignored/);
+  const flat = {
+    layout: {
+      auto: true,
+      children: [
+        { id: 'a', label: 'A' },
+        { id: 'b', label: 'B' },
+      ],
+    },
+  };
+  const around = { ...flat, edges: [{ id: 'w', from: 'a', to: 'b', around: 'below' }] };
+  const nested = { layout: { children: [{ auto: true, children: flat.layout.children }] }, edges: [] };
+  for (const props of [around, nested]) {
+    const x = run(['check', '-', '--strict'], JSON.stringify({ props }));
+    assert.equal(x.status, 1, x.stdout + x.stderr);
+    assert.match(x.stdout, /auto-ignored/);
+  }
 });
 
 test('verify and diff exit 2 for bad use, and --spec exits 2 on an SVG with no spec', () => {

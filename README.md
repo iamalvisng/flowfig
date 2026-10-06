@@ -242,7 +242,8 @@ figure: 3 boxes, 0 groups, 2 edges, 1 step, 4 messages
 browser -> api: GET /user
 api -> db: read the user
 step "Load a user": 4 hops
-first.svg — 9.7 kB
+alt: Flow figure: Browser, API, Database. Steps: Load a user.
+first.svg — 10.1 kB
 ```
 
 The render prints the check result, the counts, one line per edge and one line per step. Read these lines to check the figure
@@ -329,7 +330,7 @@ Use it when you do not want to plan rows and columns, or when `check` reports an
 }
 ```
 
-A group with a `label` stays together as one frame. flowfig removes a group with no label, with its `direction`, `gap`
+A group with a `label` or an `id` stays together as one frame. flowfig removes a group with neither, with its `direction`, `gap`
 and `align`. flowfig ignores `around` on the edges. A `direction` on the root forces `"row"` or `"column"`. `lanes` and
 `timeline` figures ignore `auto`.
 

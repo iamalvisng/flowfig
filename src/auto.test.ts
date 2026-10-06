@@ -316,3 +316,31 @@ test('a labeled frame holds its own boxes and no other box', () => {
     }
   }
 });
+
+test('an edge to the id of an unlabeled group still draws in an auto figure', () => {
+  const fig: FlowProps = {
+    layout: {
+      auto: true,
+      children: [
+        { id: 'api', label: 'API' },
+        {
+          id: 'g',
+          children: [
+            { id: 'h', label: 'H' },
+            { id: 'db', label: 'DB' },
+          ],
+        },
+      ],
+    },
+    edges: [
+      { id: 'x', from: 'api', to: 'g' },
+      { id: 'y', from: 'h', to: 'db' },
+    ],
+  };
+  assert.deepEqual(
+    render(fig)
+      .scene.edges.map((e) => e.id)
+      .sort(),
+    ['x', 'y'],
+  );
+});

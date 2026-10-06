@@ -21,7 +21,7 @@ const PAGE = 830,
   PAD = 24,
   SWEEPS = 8;
 
-const flat = (it: Item): Item[] => (isGroup(it) && it.label == null ? it.children.flatMap(flat) : [it]);
+const flat = (it: Item): Item[] => (isGroup(it) && it.label == null && it.id == null ? it.children.flatMap(flat) : [it]);
 
 function seenOrder(fig: FlowProps): Map<string, number> {
   const at = new Map<string, number>();
@@ -150,7 +150,6 @@ function level(items: Item[], dir: Dir, ctx: Ctx): Item[] {
   return best.filter((l) => l.some((x) => x < n)).map(rankRow);
 }
 
-/** The spec with an explicit layout tree, if the root layout sets `auto`. Otherwise the spec as is. */
 export function autoLayout(fig: FlowProps): FlowProps {
   if (!fig.layout.auto || fig.lanes || fig.timeline) return fig;
   const edges = fig.edges.map((e) => ({ ...e, around: undefined }));
