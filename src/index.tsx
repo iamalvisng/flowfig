@@ -1126,7 +1126,6 @@ export function Flow({
     <figure
       ref={figure}
       className="flowfig"
-      role="figure"
       aria-label={alt.title}
       aria-describedby={descId}
       style={{

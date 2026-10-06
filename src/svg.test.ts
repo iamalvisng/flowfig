@@ -1370,7 +1370,7 @@ test('a box and an edge with a source show it as a title, and others show none',
   const svg = toSvg(props);
   assert.match(svg, /<g><title>src\/a\.ts#login<\/title>/);
   assert.match(svg, /<title>src\/q\.ts\nsrc\/h\.ts<\/title>/);
-  assert.equal(svg.match(/<title>/g)?.length, 2);
+  assert.equal(svg.match(/<title>/g)?.length, 3);
 });
 
 test('a rail-only figure shows the edge source as a title on its rail row', () => {

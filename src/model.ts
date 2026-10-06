@@ -741,7 +741,7 @@ export const altText = (fig: FlowProps): { title: string; desc: string } => {
     }),
   ]);
   return {
-    title: steps.length ? steps.map((s) => str(s.label)).join(', ') : `Flow figure: ${boxes.join(', ')}`,
+    title: `Flow figure: ${boxes.join(', ')}.${steps.length ? ` Steps: ${steps.map((s) => str(s.label)).join(', ')}.` : ''}`,
     desc: [`The figure has these boxes: ${boxes.join(', ')}.`, ...lines].join('\n'),
   };
 };

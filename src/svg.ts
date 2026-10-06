@@ -964,9 +964,9 @@ export function render(fig: FlowProps, opts: SvgOptions = {}): { svg: string; sc
   const { font, ...t0 } = { ...LIGHT, ...fig.theme, ...opts.theme };
   const alt = altText(fig);
   const holdAt = beats[0]?.length ? n2(segs[beats[0].length - 1].t1 - 0.1) : 0;
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${n2(W)}" height="${n2(H)}" viewBox="0 0 ${n2(W)} ${n2(H)}" font-family="${esc(font ?? SYSTEM_FONT)}" role="img" aria-labelledby="fig-title fig-desc">
-<title id="fig-title">${esc(alt.title)}</title>
-<desc id="fig-desc">${esc(alt.desc)}</desc>
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${n2(W)}" height="${n2(H)}" viewBox="0 0 ${n2(W)} ${n2(H)}" font-family="${esc(font ?? SYSTEM_FONT)}" role="img">
+<title>${esc(alt.title)}</title>
+<desc>${esc(alt.desc)}</desc>
 <style>
 svg { ${vars(t0, '#eef5fd')} }
 @media (prefers-color-scheme: dark) { svg { ${vars(DARK, '#1d2733')} } }

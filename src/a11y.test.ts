@@ -53,21 +53,21 @@ test('the transcript lists each say line in step order and names a silent hop by
 
 test('the SVG escapes the title and transcript and stays valid XML text', () => {
   const svg = toSvg(fig);
-  const title = /<title id="fig-title">([^<]*)<\/title>/.exec(svg)?.[1];
-  const desc = /<desc id="fig-desc">([^<]*)<\/desc>/.exec(svg)?.[1];
+  const title = /<title>([^<]*)<\/title>/.exec(svg)?.[1];
+  const desc = /<desc>([^<]*)<\/desc>/.exec(svg)?.[1];
   assert.ok(title && desc, 'title and desc hold no raw markup');
-  assert.equal(text(title), 'Miss & fill, Hit');
+  assert.equal(text(title), 'Flow figure: Browser, Cache <hot> & "warm", Database. Steps: Miss & fill, Hit.');
   assert.match(desc, /Cache &lt;hot&gt; &amp; &quot;warm&quot;/);
-  assert.match(svg, /^<svg [^>]*role="img" aria-labelledby="fig-title fig-desc"/);
+  assert.match(svg, /^<svg [^>]*role="img">\n<title>/);
 });
 
 test('the player and the SVG give the same title and transcript', () => {
   const html = renderToString(createElement(Flow, fig));
   const svg = toSvg(fig);
   const { title, desc } = altText(fig);
-  assert.equal(text(/<title id="fig-title">([^<]*)/.exec(svg)![1]), title);
-  assert.equal(text(/<desc id="fig-desc">([^<]*)/.exec(svg)![1]), desc);
-  assert.equal(text(/role="figure" aria-label="([^"]*)"/.exec(html)![1]), title);
+  assert.equal(text(/<title>([^<]*)/.exec(svg)![1]), title);
+  assert.equal(text(/<desc>([^<]*)/.exec(svg)![1]), desc);
+  assert.equal(text(/<figure[^>]*aria-label="([^"]*)"/.exec(html)![1]), title);
   assert.equal(text(/<div id="[^"]*" style="[^"]*">([^<]*)<\/div>/.exec(html)![1]), desc);
 });
 

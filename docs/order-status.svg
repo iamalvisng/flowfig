@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="724.6" height="246" viewBox="0 0 724.6 246" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" role="img" aria-labelledby="fig-title fig-desc">
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="724.6" height="246" viewBox="0 0 724.6 246" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" role="img">
 <metadata id="figure-spec"><![CDATA[{"props":{"layout":{"direction":"column","children":[{"direction":"row","children":[{"id":"new","label":"New","mark":"start"},{"id":"paid","label":"Paid"},{"id":"shipped","label":"Shipped"},{"id":"delivered","label":"Delivered","mark":"end"}]},{"direction":"row","children":[{"id":"cancelled","label":"Cancelled","tone":"gray","mark":"end"}]}]},"edges":[{"id":"pay","from":"new","to":"paid","label":"pay"},{"id":"ship","from":"paid","to":"shipped","label":"ship"},{"id":"deliver","from":"shipped","to":"delivered","label":"deliver"},{"id":"cancel-new","from":"new","to":"cancelled","label":"cancel"},{"id":"cancel-paid","from":"paid","to":"cancelled","label":"cancel"}],"steps":[{"label":"delivered","flow":[{"edges":"pay","say":"The customer pays. The order is paid."},{"edges":"ship","say":"The warehouse ships the order."},{"edges":{"edge":"deliver","tone":"green"},"say":"The carrier delivers the order. This is an end state."}]},{"label":"cancelled","flow":[{"edges":"pay","say":"The customer pays. The order is paid."},{"edges":{"edge":"cancel-paid","tone":"red"},"say":"The customer cancels before the shipment. This is an end state."}]}]}}]]></metadata>
-<title id="fig-title">delivered, cancelled</title>
-<desc id="fig-desc">The figure has these boxes: New, Paid, Shipped, Delivered, Cancelled.
+<title>Flow figure: New, Paid, Shipped, Delivered, Cancelled. Steps: delivered, cancelled.</title>
+<desc>The figure has these boxes: New, Paid, Shipped, Delivered, Cancelled.
 delivered.
 The customer pays. The order is paid.
 The warehouse ships the order.
