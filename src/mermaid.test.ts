@@ -131,6 +131,9 @@ test('a Markdown file with two mermaid blocks gives two specs', () =>
 
 test('a state diagram marks the top-level start and end, keeps labels and draws a composite as a frame', () => {
   const r = fromMermaid(`stateDiagram-v2
+    accDescr {
+      The checkout states
+    }
     [*] --> Idle
     state "Awaiting payment" as Pay
     Pay : cart locked
@@ -177,12 +180,14 @@ test('a state diagram marks the top-level start and end, keeps labels and draws 
 test('a gantt gives inclusive last days, resolves after and durations in days and weeks, and keeps milestones', () => {
   const r = fromMermaid(`gantt
     title Plan
+    accTitle: Release plan
     dateFormat YYYY-MM-DD
     section Build
     Design :done, a, 2026-10-01, 2026-10-14
     Build :crit, b, after a, 2w
     section Ship
     Test :after b, 3d
+    class prep :c, after a b, 2d
     Launch :milestone, m, 2026-11-01, 0d`);
   assert.deepEqual(r.spec, {
     timeline: true,
@@ -202,6 +207,7 @@ test('a gantt gives inclusive last days, resolves after and durations in days an
           label: 'Ship',
           children: [
             { id: 'task-3', label: 'Test', from: '2026-10-28', to: '2026-10-30' },
+            { id: 'c', label: 'class prep', from: '2026-10-28', to: '2026-10-29' },
             { id: 'm', label: 'Launch', from: '2026-11-01' },
           ],
         },
@@ -210,6 +216,8 @@ test('a gantt gives inclusive last days, resolves after and durations in days an
     edges: [
       { from: 'a', to: 'b' },
       { from: 'b', to: 'task-3' },
+      { from: 'a', to: 'c' },
+      { from: 'b', to: 'c' },
     ],
   });
 });

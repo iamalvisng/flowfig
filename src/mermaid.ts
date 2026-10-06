@@ -42,7 +42,14 @@ function sticky(re: RegExp, s: string, at: number) {
 }
 
 export function fromMermaid(text: string, first = 1): Result {
-  const lines = text.split(/\r?\n/).map((raw, i) => ({ s: raw.trim(), n: first + i }));
+  let acc = false;
+  const lines = text
+    .split(/\r?\n/)
+    .map((raw, i) => ({ s: raw.trim(), n: first + i }))
+    .filter(({ s }) => {
+      if (acc || /^accDescr\s*\{/.test(s)) return ((acc = !s.endsWith('}')), false);
+      return !/^acc(Title|Descr)\s*:/.test(s);
+    });
   const body = lines.filter(({ s }) => s && !IGNORED.test(s));
   const head = body.shift();
   if (!head) return { faults: [{ line: first, reason: 'the diagram is empty' }] };
@@ -50,7 +57,7 @@ export function fromMermaid(text: string, first = 1): Result {
   if (flow) return flowchart(body, flow[1] === 'LR' || flow[1] === 'RL' ? 'row' : 'column');
   if (head.s === 'sequenceDiagram') return sequence(body);
   if (/^stateDiagram(?:-v2)?$/.test(head.s)) return state(body);
-  if (head.s === 'gantt') return gantt(body);
+  if (head.s === 'gantt') return gantt(lines.filter(({ s, n }) => s && n > head.n && !s.startsWith('%%')));
   return { faults: [{ line: head.n, reason: `"${head.s}" is not a flowchart, graph, sequenceDiagram, stateDiagram or gantt` }] };
 }
 
@@ -263,6 +270,7 @@ function state(body: { s: string; n: number }[]): Result {
       const [, from, to, raw] = move;
       if (from === '[*]' && to === '[*]') throw new Error('a transition from [*] to [*] is not read');
       if (from === '[*]' || to === '[*]') {
+        if (raw?.trim()) throw new Error('a label on a [*] transition is not read');
         const id = from === '[*]' ? to : from;
         if (open.length) meet(id);
         else mark(id, from === '[*]' ? 'start' : 'end', n);
@@ -320,7 +328,7 @@ function gantt(body: { s: string; n: number }[]): Result {
   let prev: Task | undefined;
 
   const line = (s: string, n: number) => {
-    if (/^(title|axisFormat|tickInterval|todayMarker|weekday)\b/.test(s)) return;
+    if (/^(title|axisFormat|tickInterval|todayMarker|weekday)\b|^click\s+\S+\s+(href|call)\b/.test(s)) return;
     const format = /^dateFormat\s+(.*)$/.exec(s);
     if (format) {
       if (format[1] !== 'YYYY-MM-DD') throw new Error(`dateFormat "${format[1]}" is not read; use YYYY-MM-DD`);
@@ -369,7 +377,7 @@ function gantt(body: { s: string; n: number }[]): Result {
       from = span(t.prev)[1];
     } else if (after) {
       from = Math.max(
-        ...after[1].split(/\s+/).map((ref) => {
+        ...[...new Set(after[1].split(/\s+/))].map((ref) => {
           const source = tasks.get(ref);
           if (!source) fail(t, `"after ${ref}" names no task`);
           edges.push({ from: ref, to: t.node.id });
