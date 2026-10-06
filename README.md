@@ -65,7 +65,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - uses: iamalvisng/flowfig@v0.8.4
+      - uses: iamalvisng/flowfig@v0.9.0
         with:
           figures: 'docs/**/*.svg' # default **/*.svg
 ```
@@ -480,15 +480,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - uses: iamalvisng/flowfig@v0.8.4
+      - uses: iamalvisng/flowfig@v0.9.0
         with:
           figures: 'docs/**/*.svg' # default **/*.svg
 ```
 
 ## Trace the calls of a function
 
-`flowfig trace` lists the calls that one function makes, and the calls that those calls make. Your coding agent runs it
-before it writes a figure, and then reads only the lines that the trace names. Each edge passes the same check as
+`flowfig trace` lists the calls that one function makes, and the calls that those calls make. Ask your coding agent to run it
+before it writes a figure. Then the agent reads only the lines that the trace names. Each edge passes the same check as
 `verify`.
 
 ```console

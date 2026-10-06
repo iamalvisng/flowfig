@@ -1,6 +1,6 @@
 {
   "name": "flowfig",
-  "version": "0.8.4",
+  "version": "0.9.0",
   "description": "Your coding agent draws animated diagrams from your code, and flowfig checks each box and arrow against that code. CI fails when a diagram drifts from the code. The output is one animated SVG with no script, for a README, PR or issue. Works with Claude Code, Cursor, GitHub Copilot, Codex, Gemini CLI, Windsurf and Kiro.",
   "license": "MIT",
   "repository": {
