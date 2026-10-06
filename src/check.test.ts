@@ -597,3 +597,26 @@ test('a detail that is not a relative .svg path is a warning', () => {
   for (const bad of ['docs/a.png', '/abs/a.svg', 'https://x.test/a.svg']) assert.deepEqual(rules(checkSpec(box(bad))), ['bad-detail'], bad);
   assert.deepEqual(checkSpec(box('docs/flows/a.svg')), []);
 });
+
+test('an empty group does not break the layout of the other boxes', () => {
+  for (const auto of [undefined, true] as const) {
+    const spec: FlowProps = {
+      layout: {
+        auto,
+        direction: 'column',
+        children: [
+          { id: 'g', label: 'Empty', children: [] },
+          { id: 'a', label: 'A' },
+          { id: 'b', label: 'B' },
+        ],
+      },
+      edges: [{ from: 'a', to: 'b' }],
+    };
+    const { svg, scene } = render(spec);
+    assert.doesNotMatch(svg, /NaN/);
+    assert.deepEqual(
+      checkScene(scene, {}).filter((f) => f.severity === 'error'),
+      [],
+    );
+  }
+});

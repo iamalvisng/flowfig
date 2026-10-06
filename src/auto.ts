@@ -194,8 +194,15 @@ function level(items: Item[], dir: Dir, ctx: Ctx): Item[] {
   return out;
 }
 
-export function autoLayout(fig: FlowProps): FlowProps {
-  if (!fig.layout.auto || fig.lanes || fig.timeline) return fig;
+const pruned = (g: FigGroup): FigGroup => ({
+  ...g,
+  children: g.children.map((c) => (isGroup(c) ? pruned(c) : c)).filter((c) => !isGroup(c) || c.children.length),
+});
+
+export function autoLayout(spec: FlowProps): FlowProps {
+  if (spec.lanes || spec.timeline) return spec;
+  const fig = { ...spec, layout: pruned(spec.layout) };
+  if (!fig.layout.auto) return fig;
   const carded = new Set((fig.steps ?? []).flatMap((s) => s.flow.flatMap((b) => Object.keys(toBeat(b).show ?? {}))));
   const at = seenOrder(fig);
   const items = fig.layout.children.flatMap(flat);
