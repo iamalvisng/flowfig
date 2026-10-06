@@ -175,7 +175,7 @@ test('check and render print the figure counts, and a render prints the error co
     const out = join(dir, 'out.svg');
     const rr = run(['-', out], JSON.stringify(spec));
     assert.ok(rr.stderr.split('\n').includes(line), rr.stderr);
-    assert.match(rr.stderr, /^0 errors, 0 warnings\nfigure: .*\na -> b\nb -> c\nstep "one": 2 hops\nstep "two": 1 hop\n$/m);
+    assert.match(rr.stderr, /^0 errors, 0 warnings\nfigure: .*\na -> b\nb -> c\nstep "one": 2 hops\nstep "two": 1 hop\nalt: one, two\n$/m);
     assert.doesNotMatch(rr.stderr, /boxes defined/);
     assert.doesNotMatch(rr.stdout, /figure:/);
   } finally {
@@ -529,7 +529,7 @@ test('a render prints the edge summary and the verify counts; --no-verify drops 
     assert.equal(r.status, 0, r.stderr);
     assert.match(
       r.stderr,
-      /^figure: .*\na -> b: write\nstep "write": 1 hop\nerror {4}missing-file {7}out\.svg: box "b" -> gone\.ts: file not found\nout\.svg: 1 of 2 boxes defined; edges: .*\n$/m,
+      /^figure: .*\na -> b: write\nstep "write": 1 hop\nalt: write\nerror {4}missing-file {7}out\.svg: box "b" -> gone\.ts: file not found\nout\.svg: 1 of 2 boxes defined; edges: .*\n$/m,
     );
     assert.doesNotMatch(go('--no-verify').stderr, /boxes defined/);
   } finally {
