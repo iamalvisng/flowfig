@@ -19,7 +19,10 @@ type Ctx = { edges: FigEdge[]; at: Map<string, number>; carded: Set<string> };
 
 const PAGE = 830,
   PAD = 24,
-  SWEEPS = 8;
+  SWEEPS = 8,
+  TALL = 2.5,
+  // A 20-box chain measures 105 px for each rank.
+  RANK_H = 105;
 
 const flat = (it: Item): Item[] => (isGroup(it) && it.label == null && it.id == null ? it.children.flatMap(flat) : [it]);
 
@@ -150,7 +153,31 @@ function level(items: Item[], dir: Dir, ctx: Ctx): Item[] {
       }
     }
   }
-  return best.filter((l) => l.some((x) => x < n)).map(rankRow);
+  const kept = best.filter((l) => l.some((x) => x < n));
+  const rows = kept.map(rankRow);
+  if (dir === 'row' || kept.length * RANK_H <= TALL * PAGE) return rows;
+  const out: Item[] = [];
+  let run: Item[] = [];
+  const lines = (per: number): Item[] => {
+    const k = Math.ceil(run.length / per),
+      q = Math.ceil(run.length / k);
+    return Array.from({ length: k }, (_, i) => ({ direction: 'row', children: run.slice(i * q, (i + 1) * q) }));
+  };
+  const flush = () => {
+    const folded =
+      run.length < 4 ? undefined : [4, 3].map(lines).find((ls) => ls.every((l) => itemWidth(l, ctx.carded, ctx.edges) <= PAGE - 2 * PAD));
+    out.push(...(folded ?? run));
+    run = [];
+  };
+  rows.forEach((r, i) => {
+    if (kept[i].length === 1 && !isGroup(r)) run.push(r);
+    else {
+      flush();
+      out.push(r);
+    }
+  });
+  flush();
+  return out;
 }
 
 export function autoLayout(fig: FlowProps): FlowProps {
