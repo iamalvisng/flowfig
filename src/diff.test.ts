@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { diff, formatDiff, mergeFigures } from './diff.ts';
 import { checkSpec } from './check.ts';
 import { nodes, TONES, type FigNode, type FlowProps } from './model.ts';
-import { toSvg } from './svg.ts';
+import { check, toSvg } from './svg.ts';
 
 const base: FlowProps = {
   layout: {
@@ -233,4 +233,41 @@ test('an edge with no label and a new source shows orange', () => {
     { layout, edges: [{ id: 'e', from: 'a', to: 'b', source: 'x.ts' }] },
   );
   assert.match(toSvg(figure, { marks }), new RegExp(`<path id="p-e"[^>]*stroke="${TONES.orange}"`));
+});
+
+const laneFig = (...ids: string[]): FlowProps => ({
+  lanes: true,
+  layout: { direction: 'column', children: [{ label: 'L', children: ids.map((id) => ({ id, label: id })) }] },
+  edges: [],
+});
+
+test('a lanes diff gives each removed box its own column between its old neighbors', () => {
+  const { figure } = mergeFigures(laneFig('a', 'x', 'y'), laneFig('a', 'y'));
+  assert.deepEqual(Object.fromEntries(nodes(figure.layout).map((n) => [n.id, n.at])), { a: 0, y: 2, x: 1 });
+  assert.equal(
+    check(figure).some((f) => f.rule === 'lane-column-taken'),
+    false,
+  );
+});
+
+test('a surviving labeled frame whose old boxes are all removed stays one frame', () => {
+  const frame = (...ids: string[]) => ({ id: 'f', label: 'Finance', children: ids.map((id) => ({ id, label: id })) });
+  const { figure } = mergeFigures(
+    { layout: { children: [{ id: 'a', label: 'a' }, frame('x')] }, edges: [] },
+    { layout: { children: [{ id: 'a', label: 'a' }, frame('y')] }, edges: [] },
+  );
+  assert.deepEqual(labels(figure.layout), ['a', '[y x]']);
+  assert.equal(
+    checkSpec(figure).some((f) => f.rule === 'duplicate-id'),
+    false,
+  );
+});
+
+test('a removed box inside an unlabeled row does not throw', () => {
+  const box = (id: string) => ({ id, label: id });
+  const { figure } = mergeFigures(
+    { layout: { children: [box('a'), { direction: 'row', children: [box('x')] }] }, edges: [] },
+    { layout: { children: [box('a')] }, edges: [] },
+  );
+  assert.deepEqual(labels(figure.layout), ['a', 'x']);
 });

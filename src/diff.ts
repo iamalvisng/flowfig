@@ -140,15 +140,34 @@ export function mergeFigures(before: FlowProps, after: FlowProps): { figure: Flo
   }
   for (const id of was.keys()) if (!now.has(id)) marks.boxes[id] = 'removed';
 
-  const colsAfter = laneColumns(after);
-  const colsBefore = laneColumns(before);
+  const colAt = new Map<string, number>();
+  if (after.lanes) {
+    const colsAfter = laneColumns(after);
+    const colsBefore = laneColumns(before);
+    const kept = [...now.keys()].filter((id) => was.has(id));
+    const slots = new Map<string, { p: number; old: number }>();
+    for (const id of was.keys()) {
+      if (now.has(id)) continue;
+      const old = colsBefore.get(id)!;
+      const prev = kept
+        .filter((k) => colsBefore.get(k)! < old)
+        .sort((a, b) => colsBefore.get(b)! - colsBefore.get(a)! || colsAfter.get(b)! - colsAfter.get(a)!);
+      slots.set(id, { p: prev.length ? colsAfter.get(prev[0])! : -1, old });
+    }
+    const groups = [...new Map([...slots.values()].map((v) => [`${v.p}:${v.old}`, v])).values()].sort((a, b) => a.p - b.p || a.old - b.old);
+    for (const id of now.keys()) colAt.set(id, colsAfter.get(id)! + groups.filter((g) => g.p < colsAfter.get(id)!).length);
+    for (const [id, v] of slots) {
+      const i = groups.findIndex((g) => g.p === v.p && g.old === v.old);
+      colAt.set(id, v.p + 1 + groups.filter((g) => g.p < v.p).length + groups.slice(0, i).filter((g) => g.p === v.p).length);
+    }
+  }
   const paint = (g: FigGroup): FigGroup => ({
     ...g,
     children: g.children.map((c) => {
       if (isGroup(c)) return paint(c);
       const n = { ...c };
       delete n.tone;
-      if (after.lanes) n.at ??= colsAfter.get(c.id) ?? colsBefore.get(c.id);
+      if (after.lanes) n.at = colAt.get(c.id);
       const old = was.get(c.id);
       if (marks.boxes[c.id] === 'changed' && old) {
         if (str(old.label) !== str(c.label)) n.sub = `was "${str(old.label)}"`;
