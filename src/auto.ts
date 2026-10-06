@@ -3,6 +3,7 @@ import {
   fitCap,
   idsIn,
   isGroup,
+  isRows,
   itemWidth,
   nodes,
   toBeat,
@@ -22,7 +23,8 @@ const PAGE = 830,
   SWEEPS = 8,
   TALL = 2.5,
   // A 20-box chain measures 105 px for each rank.
-  RANK_H = 105;
+  RANK_H = 105,
+  MIN_TEXT = 10;
 
 const flat = (it: Item): Item[] => (isGroup(it) && it.label == null && it.id == null ? it.children.flatMap(flat) : [it]);
 
@@ -200,6 +202,49 @@ const pruned = (g: FigGroup): FigGroup => ({
   children: g.children.map((c) => (isGroup(c) ? pruned(c) : c)).filter((c) => !isGroup(c) || c.children.length),
 });
 
+const titled = (it: Item): boolean => isGroup(it) && (it.label != null || it.children.some(titled));
+
+function smallFont(f: FlowProps, carded: Set<string>): number {
+  const shown = (f.steps ?? []).flatMap((s) => s.flow.flatMap((b) => Object.values(toBeat(b).show ?? {})));
+  if (shown.some((c) => isRows(c) && c.some((r) => r.mono))) return 10.5;
+  if (carded.size || f.edges.some((e) => e.label != null) || titled(f.layout)) return 11;
+  if ((f.steps ?? []).some((s) => s.flow.some((b) => toBeat(b).hops.some((h) => h.data != null)))) return 11.5;
+  if (nodes(f.layout).some((n) => n.sub != null)) return 12;
+  return f.steps?.length ? 13.5 : 14;
+}
+
+export const rowBreaks = new WeakSet<FigEdge>();
+
+function fold(f: FlowProps, carded: Set<string>): FlowProps {
+  const room = (PAGE * smallFont(f, carded)) / MIN_TEXT - 2 * PAD;
+  if (f.rail || itemWidth(f.layout, carded, f.edges, fitCap(f, PAGE)) <= room) return f;
+  const ranks = f.layout.children;
+  const n = ranks.length;
+  const unit = new Map(ranks.flatMap((r, k) => idsIn(r).map((id): [string, number] => [id, k])));
+  const ends = f.edges.filter((e) => unit.has(e.from) && unit.has(e.to)).map((e): [number, number] => [unit.get(e.from)!, unit.get(e.to)!]);
+  const across = (c: number) => ends.filter(([a, b]) => a < c !== b < c).length;
+  const last = Math.min(n - 1, ...f.edges.filter((e) => e.around).flatMap((e) => [e.from, e.to].map((id) => unit.get(id) ?? n)));
+  type Plan = { cost: [number, number, number]; from: number };
+  const better = (p: Plan['cost'], q: Plan['cost']) => p[0] - q[0] || p[1] - q[1] || p[2] - q[2];
+  const plans: (Plan | undefined)[] = [{ cost: [0, 0, 0], from: -1 }];
+  for (let j = 1; j <= n; j++)
+    for (let i = j - 1; i >= 0; i--) {
+      const w = itemWidth({ direction: 'row', children: ranks.slice(i, j) }, carded, f.edges);
+      if (w > room) break;
+      const prev = plans[i];
+      if (!prev || (j === n && i > last)) continue;
+      const cost: Plan['cost'] = [prev.cost[0] + 1, prev.cost[1] + (i ? across(i) : 0), Math.max(prev.cost[2], w)];
+      if (!plans[j] || better(cost, plans[j]!.cost) < 0) plans[j] = { cost, from: i };
+    }
+  if (!plans[n] || plans[n]!.cost[0] < 2) return f;
+  const cuts: number[] = [];
+  for (let j = n; j > 0; j = plans[j]!.from) cuts.unshift(plans[j]!.from);
+  const rows = cuts.map((c, k) => ranks.slice(c, cuts[k + 1] ?? n));
+  for (const e of f.edges) if (cuts.some((c) => c && unit.get(e.from)! < c && unit.get(e.to)! >= c)) rowBreaks.add(e);
+  const children = rows.map((rs): Item => (rs.length === 1 ? rs[0] : { direction: 'row', children: rs }));
+  return { ...f, layout: { direction: 'column', children } };
+}
+
 export function autoLayout(spec: FlowProps): FlowProps {
   if (spec.lanes || spec.timeline) return spec;
   const fig = { ...spec, layout: pruned(spec.layout) };
@@ -211,6 +256,7 @@ export function autoLayout(spec: FlowProps): FlowProps {
     const edges = fig.edges.map((e): FigEdge => ({ ...e, around: undefined }));
     return { ...fig, edges, layout: { direction, children: level(items, direction, { edges, at, carded }) } };
   };
+  if (fig.layout.direction === 'row') return fold(make('row'), carded);
   if (fig.layout.direction) return make(fig.layout.direction);
   const lr = make('row');
   return itemWidth(lr.layout, carded, lr.edges, fitCap(lr, PAGE)) + 2 * PAD <= PAGE ? lr : make('column');

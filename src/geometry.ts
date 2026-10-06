@@ -117,6 +117,7 @@ export function route(
     around?: Around;
     sides?: [Side, Side];
     elbow?: boolean;
+    drop?: boolean;
     stub?: number[];
     bands?: [Rect | undefined, Rect | undefined];
     labelW?: number;
@@ -151,7 +152,9 @@ export function route(
       arc = fits.find(([way, at]) => !blocked(way, at))?.[1] ?? arc;
       if (blocked(around, arc!)) around = undefined;
     }
-    if (!around && !e.sides && !e.stub && !e.elbow && past.length) {
+    const down = e.drop && !hit(bend(sideMid(a, 'b'), sideMid(b, 't'), 'b'), others, -2).length;
+    if (e.drop && !around) elbow = !down;
+    else if (!around && !e.sides && !e.stub && !e.elbow && past.length) {
       const ways = stacked ? (['left', 'right'] as const) : (['above', 'below'] as const);
       const tries: [Around, number][] = [];
       for (const share of [false, true])
@@ -177,7 +180,7 @@ export function route(
       const [lo, hi] = spanOf(a, b, around);
       arcs.push({ way: around, lo, hi, at: arc! });
     }
-    const [sa, sb] = e.sides ?? (e.stub ? ['r', 'l'] : around ? SIDES[around] : plain);
+    const [sa, sb] = e.sides ?? (e.stub ? ['r', 'l'] : down ? ['b', 't'] : around ? SIDES[around] : plain);
     picks.push({ ...e, plain, a, b, sa, sb, around, arc, elbow });
   }
 
