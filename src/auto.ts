@@ -44,10 +44,10 @@ function level(items: Item[], dir: Dir, ctx: Ctx): Item[] {
   const unit = new Map<string, number>();
   items.forEach((it, k) => idsIn(it).forEach((id) => unit.set(id, k)));
   const first = items.map((it) => Math.min(...idsIn(it).map((id) => ctx.at.get(id) ?? Infinity)));
-  const pairs = ctx.edges.flatMap((e): [number, number][] => {
+  const pairs = ctx.edges.flatMap((e): [number, number, FigEdge][] => {
     const a = unit.get(e.from),
       b = unit.get(e.to);
-    return a == null || b == null || a === b ? [] : [[a, b]];
+    return a == null || b == null || a === b ? [] : [[a, b, e]];
   });
   const keys = [...items.keys()].sort((p, q) => first[p] - first[q]);
 
@@ -74,12 +74,14 @@ function level(items: Item[], dir: Dir, ctx: Ctx): Item[] {
   const layerOf = [...rank];
   for (const k of keys) layers[rank[k]].push(k);
   const links: [number, number][] = [];
-  for (const [a, b] of dag) {
+  const via = dag.map((): number[] => []);
+  for (const [i, [a, b]] of dag.entries()) {
     let prev = a;
     for (let r = rank[a] + 1; r < rank[b]; r++) {
       const v = layerOf.length;
       layerOf.push(r);
       layers[r].push(v);
+      via[i].push(v);
       links.push([prev, v]);
       prev = v;
     }
@@ -153,6 +155,18 @@ function level(items: Item[], dir: Dir, ctx: Ctx): Item[] {
       }
     }
   }
+  const outer = (vs: number[], side: 1 | -1) =>
+    vs.every((v) => {
+      const l = best[layerOf[v]];
+      const k = l.indexOf(v);
+      return (side > 0 ? l.slice(k + 1) : l.slice(0, k)).every((x) => x >= n);
+    });
+  via.forEach((vs, i) => {
+    const [a, b] = dag[i];
+    const stacked = [a, b].every((k) => best[rank[k]].filter((x) => x < n).length === 1);
+    const way = !vs.length || stacked ? undefined : outer([a, ...vs, b], 1) ? 1 : outer([a, ...vs, b], -1) ? -1 : undefined;
+    if (way) pairs[i][2].around = dir === 'column' ? (way > 0 ? 'right' : 'left') : way > 0 ? 'below' : 'above';
+  });
   const kept = best.filter((l) => l.some((x) => x < n));
   const rows = kept.map(rankRow);
   if (dir === 'row' || kept.length * RANK_H <= TALL * PAGE) return rows;
@@ -182,12 +196,14 @@ function level(items: Item[], dir: Dir, ctx: Ctx): Item[] {
 
 export function autoLayout(fig: FlowProps): FlowProps {
   if (!fig.layout.auto || fig.lanes || fig.timeline) return fig;
-  const edges = fig.edges.map((e) => ({ ...e, around: undefined }));
   const carded = new Set((fig.steps ?? []).flatMap((s) => s.flow.flatMap((b) => Object.keys(toBeat(b).show ?? {}))));
-  const ctx: Ctx = { edges, at: seenOrder(fig), carded };
+  const at = seenOrder(fig);
   const items = fig.layout.children.flatMap(flat);
-  const make = (direction: Dir): FlowProps => ({ ...fig, edges, layout: { direction, children: level(items, direction, ctx) } });
+  const make = (direction: Dir): FlowProps => {
+    const edges = fig.edges.map((e): FigEdge => ({ ...e, around: undefined }));
+    return { ...fig, edges, layout: { direction, children: level(items, direction, { edges, at, carded }) } };
+  };
   if (fig.layout.direction) return make(fig.layout.direction);
   const lr = make('row');
-  return itemWidth(lr.layout, carded, edges, fitCap(lr, PAGE)) + 2 * PAD <= PAGE ? lr : make('column');
+  return itemWidth(lr.layout, carded, lr.edges, fitCap(lr, PAGE)) + 2 * PAD <= PAGE ? lr : make('column');
 }
