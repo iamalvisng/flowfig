@@ -183,6 +183,8 @@ The options are in [Open and share a figure](#open-and-share-a-figure).
 - [Check a figure](#check-a-figure)
 - [Open and share a figure](#open-and-share-a-figure)
 - [Verify in CI](#verify-in-ci)
+- [Trace the calls of a function](#trace-the-calls-of-a-function)
+- [Find stale figures](#find-stale-figures)
 - [MCP server](#mcp-server)
 - [Use in React](#use-in-react)
 - [Use from Node](#use-from-node)
@@ -482,6 +484,91 @@ jobs:
         with:
           figures: 'docs/**/*.svg' # default **/*.svg
 ```
+
+## Trace the calls of a function
+
+`flowfig trace` lists the calls that one function makes, and the calls that those calls make. Your coding agent runs it
+before it writes a figure, and then reads only the lines that the trace names. Each edge passes the same check as
+`verify`.
+
+```console
+$ npx flowfig trace src/verify.ts#verify
+src/verify.ts#verify -> src/verify.ts#verifyReport          src/verify.ts:104
+src/verify.ts#verifyReport -> src/verify.ts#emptyCoverage   src/verify.ts:48
+src/verify.ts#verifyReport -> src/source.ts#links           src/verify.ts:49
+src/verify.ts#verifyReport -> src/code.ts#outside           src/verify.ts:58
+src/verify.ts#verifyReport -> src/code.ts#codeFile          src/verify.ts:65
+src/verify.ts#verifyReport -> src/code.ts#isDefined         src/verify.ts:67
+src/verify.ts#verifyReport -> src/verify.ts#escape          src/verify.ts:69
+src/verify.ts#verifyReport -> src/verify.ts#hasHeading      src/verify.ts:70
+src/verify.ts#verifyReport -> src/model.ts#nodes            src/verify.ts:79
+src/verify.ts#verifyReport -> src/edges.ts#edgeResult       src/verify.ts:81
+src/verify.ts#verifyReport -> src/model.ts#edgeId           src/verify.ts:91
+src/verify.ts#verifyReport -> src/model.ts#toBeat           src/verify.ts:95
+stop    depth 2: 11 symbols not followed
+summary: 13 symbols, 12 found, 0 unsure, 0 open, 4 calls outside the repo, 0.1 s
+```
+
+- An edge line gives the caller, the callee, and the file and line of the call.
+- `unsure`: trace cannot name the target. An example is a call of a parameter.
+- `open`: the target is a name in a string, for example a route table entry. Read that line yourself.
+- `stop`: the trace reached `--depth` or `--max`. The line gives the number of functions that it did not follow.
+- A call into a package or the standard library gives no line. The summary line counts these calls.
+
+A call that trace cannot see gives no line, for example a call through an interface with no known type.
+
+| Option         | Meaning                                            | Default            |
+| -------------- | -------------------------------------------------- | ------------------ |
+| `--depth <n>`  | The number of call levels to follow.               | 2                  |
+| `--max <n>`    | The largest number of edges. Then the trace stops. | 40                 |
+| `--root <dir>` | The repo root. The file path is relative to it.    | the current folder |
+| `--json`       | Print one JSON object in place of the lines.       | off                |
+
+The exit code is 1 if the file or the function is not found. It is also 1 if the language is not TypeScript,
+JavaScript, Python, Go, Java, C# or Rust.
+
+## Find stale figures
+
+`flowfig coverage` reads each figure in the repo and gives it one state. It also shows the code that has no figure. Run
+it each week, or in CI.
+
+```console
+$ npx flowfig coverage --entries 'src/geometry.ts'
+docs/cached-request.svg        ok      3 of 3 boxes defined
+docs/checkout-rail-only.svg    ok      4 of 4 boxes defined
+docs/checkout.svg              ok      4 of 4 boxes defined
+docs/first.svg                 none    no source links
+docs/hero.svg                  none    no source links
+docs/order-status.svg          none    no source links
+docs/refund-process.svg        ok      6 of 6 boxes defined
+docs/returns-process.svg       ok      8 of 8 boxes defined
+docs/roadmap.svg               ok      8 of 8 boxes defined
+uncovered src/geometry.ts: 1 of 1 files have no figure
+  src/geometry.ts
+summary: 9 figures: 6 ok, 0 stale, 0 fail, 3 none
+```
+
+- `fail`: `verify` finds an error, for example a symbol that is gone.
+- `stale`: `verify` finds no error, but a linked file changed in a commit after the last commit of the SVG. A linked file
+  with changes that are not committed counts as changed now.
+- `ok`: `verify` finds no error, and no linked file changed after the SVG.
+- `none`: the figure has no `source` link.
+
+`coverage` reads the commit dates from git. If the folder is not in a git repo, `coverage` does not check `stale`. It
+prints one line that says so.
+
+A figure covers a code file if one of its links names that file. With `--entries`, `coverage` lists each matched code
+file that no figure covers. With no `--entries`, it prints one count line for each top folder.
+
+| Option             | Meaning                                                       | Default            |
+| ------------------ | ------------------------------------------------------------- | ------------------ |
+| `--figures <glob>` | The SVG files to read. Only an SVG with a figure spec counts. | `**/*.svg`         |
+| `--entries <glob>` | The code files that must have a figure.                       | none               |
+| `--root <dir>`     | The repo root.                                                | the current folder |
+| `--strict`         | Exit 1 if a figure is `fail` or `stale`.                      | off                |
+| `--json`           | Print one JSON object in place of the lines.                  | off                |
+
+`coverage` skips `node_modules`, `dist` and each folder with a name that starts with a dot.
 
 ## MCP server
 
