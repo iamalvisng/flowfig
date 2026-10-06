@@ -18,13 +18,17 @@ import { loadSpec, reportLines, sortFindings, specOf, summaryLines, svgWithSpec,
 import type { FlowProps } from './model.ts';
 import { check, render, toSvg, type Finding } from './svg.ts';
 import { checkRendered } from './check.ts';
-import { coverageLine, links, unsureLines, verifyReport, type Coverage, type Link } from './verify.ts';
+import { coverageLine, links, parseSource, unsureLines, verifyReport, type Coverage, type Link } from './verify.ts';
+import { trace, traceLines } from './trace.ts';
+import { coverageLines, coverageReport } from './coverage.ts';
 
 const USAGE = `usage: flowfig <-|spec.json|figure.ts> [out.svg] [--open]   render a figure; a spec on stdin with -
        flowfig check <-|spec.json|figure.ts|figure.svg>   list the faults; the input can be an SVG this wrote
        flowfig --spec figure.svg                          print the spec the SVG carries
        flowfig verify <input>... [--root <dir>] [--json] [--strict]   check the code links of one or more figures
        flowfig diff <old> <new> [--json|--md]   list the spec changes between two figures
+       flowfig trace <file#symbol> [--depth <n>] [--max <n>] [--root <dir>] [--json]   list the calls under a symbol, each one checked
+       flowfig coverage [--figures <glob>] [--entries <glob>] [--root <dir>] [--strict] [--json]   list failing and stale figures, and code with no figure
        flowfig docs [topic]                               print the guide, or one topic (Markdown)
        flowfig mcp                                        serve check, render, verify, diff and docs over MCP (stdio)
        flowfig init [dir] [--agents <ids>] [-y] [--global] [--dry-run] [--no-mcp]   write flowfig instructions for the coding agents of a repo
@@ -46,6 +50,10 @@ const value = (name: string) => {
   if (i === -1) return undefined;
   const n = Number(args.splice(i, 2)[1] || NaN);
   return n > 0 && Number.isFinite(n) ? n : usage(`${name} needs a positive number`);
+};
+const option = (name: string) => {
+  const i = args.indexOf(name);
+  return i === -1 ? undefined : (args.splice(i, 2)[1] ?? usage(`${name} needs a value`));
 };
 
 if (!args[0] || ['help', '--help', '-h'].includes(args[0])) {
@@ -131,6 +139,43 @@ if (args[0] === 'verify') {
     }
   }
   process.exit(errors ? 1 : 0);
+}
+
+if (args[0] === 'trace') {
+  args.shift();
+  const json = flag('--json');
+  const depth = value('--depth') ?? 2,
+    max = value('--max') ?? 40;
+  if (!Number.isInteger(depth) || !Number.isInteger(max)) usage('--depth and --max need a whole number');
+  const root = resolve(option('--root') ?? '.');
+  const unknown = args.find((a) => a.startsWith('-'));
+  if (unknown) usage(`unknown flag ${unknown}`);
+  if (args.length !== 1 || !parseSource(args[0])?.symbol)
+    usage('usage: flowfig trace <file#symbol> [--depth <n>] [--max <n>] [--root <dir>] [--json]');
+  try {
+    const r = trace(args[0], { root, depth, max });
+    console.log(json ? JSON.stringify(r, null, 2) : traceLines(r, depth, max).join('\n'));
+  } catch (e) {
+    console.error(`trace: ${(e as Error).message}`);
+    process.exit(1);
+  }
+  process.exit(0);
+}
+
+if (args[0] === 'coverage') {
+  args.shift();
+  const json = flag('--json'),
+    strict = flag('--strict');
+  const root = resolve(option('--root') ?? '.');
+  const figures = option('--figures'),
+    entries = option('--entries');
+  const unknown = args.find((a) => a.startsWith('-'));
+  if (unknown) usage(`unknown flag ${unknown}`);
+  if (args.length) usage('usage: flowfig coverage [--figures <glob>] [--entries <glob>] [--root <dir>] [--strict] [--json]');
+  if (!existsSync(root)) usage(`${root}: the folder does not exist`);
+  const r = coverageReport({ root, figures, entries });
+  console.log(json ? JSON.stringify(r, null, 2) : coverageLines(r).join('\n'));
+  process.exit(strict && r.figures.some((f) => f.state === 'fail' || f.state === 'stale') ? 1 : 0);
 }
 
 if (args[0] === 'diff') {
