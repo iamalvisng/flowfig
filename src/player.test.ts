@@ -319,17 +319,25 @@ test('auto layout: the player puts each box in the rank and order of the SVG', (
   assert.equal(new Set(toSvgScene(fig).scene.boxes.map((b) => mid(b.rect))).size, 4);
 });
 
-test('narrow mode: the player draws the column layout of the SVG, one box for each row', async () => {
-  const { default: demo } = await import('../figures/checkout.ts');
-  const fig: FlowProps = { ...demo.props, rail: false, layout: { ...demo.props.layout, auto: true, direction: 'column' } };
-  const drawn = [...render(fig).matchAll(/data-fig="(\w+)"/g)].map((m) => m[1]);
-  const boxes = toSvgScene(fig).scene.boxes.toSorted((p, q) => p.rect.y - q.rect.y);
-  assert.deepEqual(drawn, ['browser', 'gateway', 'orders', 'db', 'payments']);
-  assert.deepEqual(
-    boxes.map((b) => b.id),
-    drawn,
-  );
-  assert.ok(boxes.every((b, i) => !i || b.rect.y >= boxes[i - 1].rect.y + boxes[i - 1].rect.h));
+test('a column group centers a narrow box under a wide box, as the SVG does', () => {
+  const fig: FlowProps = {
+    layout: {
+      children: [
+        {
+          label: 'Order service',
+          direction: 'column',
+          children: [
+            { id: 'orders', label: 'Orders', width: 160 },
+            { id: 'audit', label: 'Audit' },
+          ],
+        },
+      ],
+    },
+    edges: [],
+  };
+  const [wide, narrow] = toSvgScene(fig).scene.boxes.map((b) => b.rect);
+  assert.equal(narrow.x + narrow.w / 2, wide.x + wide.w / 2);
+  assert.match(render(fig), /flex-direction:column;[^"]*align-items:center/);
 });
 
 test('only the selected tab is in the tab order, and each tab controls a tabpanel', () => {

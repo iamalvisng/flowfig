@@ -1380,173 +1380,175 @@ function FlowBody({
         </>
       )}
       {rail && (
-        <svg
-          viewBox={`0 0 ${rail.width} ${rail.height}`}
-          style={{
-            display: 'block',
-            width: '100%',
-            maxWidth: rail.width,
-            height: 'auto',
-            margin: `${noMap ? 0 : RAIL.gap}px auto 0`,
-            overflow: 'visible',
-            fontFamily: v('font'),
-          }}
-        >
-          {rail.bands.map((b) => (
-            <g key={b.id}>
-              <rect x={b.rect.x} y={b.rect.y} width={b.rect.w} height={b.rect.h} rx={10} fill={v('surface')} stroke={v('border')} />
-              <text x={b.rect.x + 10} y={b.rect.y + 14} fill={v('muted')} fontSize={11} fontWeight={600} letterSpacing=".04em">
-                {b.label.toUpperCase()}
+        <div style={{ overflowX: wide ? 'auto' : undefined }}>
+          <svg
+            viewBox={`0 0 ${rail.width} ${rail.height}`}
+            style={{
+              display: 'block',
+              width: wide ? rail.width : '100%',
+              maxWidth: rail.width,
+              height: 'auto',
+              margin: `${noMap ? 0 : RAIL.gap}px auto 0`,
+              overflow: 'visible',
+              fontFamily: v('font'),
+            }}
+          >
+            {rail.bands.map((b) => (
+              <g key={b.id}>
+                <rect x={b.rect.x} y={b.rect.y} width={b.rect.w} height={b.rect.h} rx={10} fill={v('surface')} stroke={v('border')} />
+                <text x={b.rect.x + 10} y={b.rect.y + 14} fill={v('muted')} fontSize={11} fontWeight={600} letterSpacing=".04em">
+                  {b.label.toUpperCase()}
+                </text>
+              </g>
+            ))}
+            {rail.columns.map((c) => (
+              <text key={c.id} x={c.x} y={rail.head - RAIL.cols / 2 + 4} fill={v('fg')} fontSize={12} fontWeight={500} textAnchor="middle">
+                {c.label}
               </text>
-            </g>
-          ))}
-          {rail.columns.map((c) => (
-            <text key={c.id} x={c.x} y={rail.head - RAIL.cols / 2 + 4} fill={v('fg')} fontSize={12} fontWeight={500} textAnchor="middle">
-              {c.label}
-            </text>
-          ))}
-          {(() => {
-            const st = railState(rail, active ?? 0);
-            const lines = rail.rows.flatMap((row, i) =>
-              row.kind === 'message' && st[i].shown ? rail.columns.map((c) => `M ${c.x} ${st[i].y} V ${st[i].y + RAIL.row}`) : [],
-            );
-            return <path d={lines.join(' ')} stroke={v('border')} strokeDasharray="2 3" />;
-          })()}
-          {(() => {
-            const st = railState(rail, active ?? 0);
-            return rail.rows.map((row, i) => {
-              if (!st[i].shown) return null;
-              const y = st[i].y;
-              if (row.kind === 'phase') {
-                const open = !rail.folds || row.step === active;
-                const playing =
-                  row.step === active ? rail.rows.find((r) => r.kind === 'message' && r.step === active && r.beat === beat) : undefined;
-                return (
-                  <g key={`p${i}`} style={{ cursor: open ? undefined : 'pointer' }} onClick={open ? undefined : () => goTo(row.step, 0)}>
-                    <text x={RAIL.pad} y={y + 19} fill={open ? v('fg') : v('muted')} fontSize={13} fontWeight={600} fontFamily={MONO}>
-                      {open ? row.label : foldedLabel(row)}
-                    </text>
-                    <path d={`M ${open ? row.line.open : row.line.folded} ${y + 15} H ${row.line.end}`} stroke={v('border')} />
-                    {playing?.kind === 'message' && (
-                      <text x={rail.width - RAIL.pad} y={y + 19} fill={v('muted')} fontSize={11} fontWeight={600} textAnchor="end">
-                        {still ? rail.total : playing.n} of {rail.total}
+            ))}
+            {(() => {
+              const st = railState(rail, active ?? 0);
+              const lines = rail.rows.flatMap((row, i) =>
+                row.kind === 'message' && st[i].shown ? rail.columns.map((c) => `M ${c.x} ${st[i].y} V ${st[i].y + RAIL.row}`) : [],
+              );
+              return <path d={lines.join(' ')} stroke={v('border')} strokeDasharray="2 3" />;
+            })()}
+            {(() => {
+              const st = railState(rail, active ?? 0);
+              return rail.rows.map((row, i) => {
+                if (!st[i].shown) return null;
+                const y = st[i].y;
+                if (row.kind === 'phase') {
+                  const open = !rail.folds || row.step === active;
+                  const playing =
+                    row.step === active ? rail.rows.find((r) => r.kind === 'message' && r.step === active && r.beat === beat) : undefined;
+                  return (
+                    <g key={`p${i}`} style={{ cursor: open ? undefined : 'pointer' }} onClick={open ? undefined : () => goTo(row.step, 0)}>
+                      <text x={RAIL.pad} y={y + 19} fill={open ? v('fg') : v('muted')} fontSize={13} fontWeight={600} fontFamily={MONO}>
+                        {open ? row.label : foldedLabel(row)}
                       </text>
+                      <path d={`M ${open ? row.line.open : row.line.folded} ${y + 15} H ${row.line.end}`} stroke={v('border')} />
+                      {playing?.kind === 'message' && (
+                        <text x={rail.width - RAIL.pad} y={y + 19} fill={v('muted')} fontSize={11} fontWeight={600} textAnchor="end">
+                          {still ? rail.total : playing.n} of {rail.total}
+                        </text>
+                      )}
+                    </g>
+                  );
+                }
+                const state = still
+                  ? 'done'
+                  : active == null || row.step > active || (row.step === active && row.beat > beat)
+                    ? 'next'
+                    : row.step === active && row.beat === beat
+                      ? 'now'
+                      : 'done';
+                const on =
+                  state === 'now' ||
+                  hoverEdge === row.edge ||
+                  (hover != null && [rail.columns[row.from].id, rail.columns[row.to].id].includes(hover));
+                const [x1, x2] = [rail.columns[row.from].x, rail.columns[row.to].x];
+                const ly = y + RAIL.row / 2;
+                const tone = state === 'now' && row.tone ? TONES[row.tone] : undefined;
+                const g = row.group != null ? rail.groups[row.group] : null;
+                const tip = edgeTip(row.edge, edges[ids.indexOf(row.edge)].source, allBeats);
+                return (
+                  <g
+                    key={`m${i}`}
+                    data-rail-row={row.n}
+                    data-state={state}
+                    opacity={state === 'next' && !on ? 0.45 : 1}
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => goTo(row.step, row.beat)}
+                    onMouseEnter={() => setHoverEdge(row.edge)}
+                    onMouseLeave={() => setHoverEdge(null)}
+                  >
+                    {tip && <title>{tip}</title>}
+                    {g && g.rows[0] === i && (
+                      <rect
+                        x={groupBox(rail, g).x}
+                        y={y + groupBox(rail, g).y}
+                        width={groupBox(rail, g).w}
+                        height={groupBox(rail, g).h}
+                        rx={6}
+                        fill={`color-mix(in srgb, ${v('accent')} 8%, ${v('bg')})`}
+                        stroke={v('accent')}
+                        strokeDasharray="3 3"
+                      />
+                    )}
+                    <path
+                      d={`M ${x1} ${ly} H ${x2}`}
+                      fill="none"
+                      stroke={on ? (tone ?? v('accent')) : v('muted')}
+                      strokeWidth={on ? EDGE_ON : EDGE_OFF}
+                      strokeDasharray={row.async ? '4 3' : undefined}
+                      markerEnd="url(#flowfig-rail-arrow)"
+                    />
+                    {row.async &&
+                      (() => {
+                        const tagW = ASYNC_TAG_W;
+                        const tx = !row.pill ? (x1 + x2) / 2 - tagW / 2 : x2 > x1 ? row.pill.x - tagW - 4 : row.pill.x + row.pill.w + 4;
+                        return (
+                          <>
+                            <rect x={tx} y={ly - 6} width={tagW} height={12} rx={4} fill={v('bg')} />
+                            <rect x={tx} y={ly - 6} width={tagW} height={12} rx={4} fill={TONES.gray} fillOpacity={0.15} />
+                            <text
+                              x={tx + tagW / 2}
+                              y={ly + 3}
+                              fill={TONES.gray}
+                              fontSize={9}
+                              fontWeight={600}
+                              letterSpacing=".03em"
+                              textAnchor="middle"
+                              data-fig-tag
+                            >
+                              ASYNC
+                            </text>
+                          </>
+                        );
+                      })()}
+                    {row.pill && (
+                      <g data-fig-label={`rail:${row.n}`}>
+                        <rect
+                          x={row.pill.x}
+                          y={ly - 9}
+                          width={row.pill.w}
+                          height={18}
+                          rx={9}
+                          fill={on ? (tone ? toneFill(tone) : v('accent')) : v('bg')}
+                          stroke={on ? (tone ?? v('accent')) : v('border')}
+                        />
+                        <text
+                          x={row.pill.x + row.pill.w / 2}
+                          y={ly + 4}
+                          fill={on ? ON_ACCENT : v('muted')}
+                          fontSize={11}
+                          fontFamily={MONO}
+                          textAnchor="middle"
+                        >
+                          {row.text}
+                        </text>
+                      </g>
                     )}
                   </g>
                 );
-              }
-              const state = still
-                ? 'done'
-                : active == null || row.step > active || (row.step === active && row.beat > beat)
-                  ? 'next'
-                  : row.step === active && row.beat === beat
-                    ? 'now'
-                    : 'done';
-              const on =
-                state === 'now' ||
-                hoverEdge === row.edge ||
-                (hover != null && [rail.columns[row.from].id, rail.columns[row.to].id].includes(hover));
-              const [x1, x2] = [rail.columns[row.from].x, rail.columns[row.to].x];
-              const ly = y + RAIL.row / 2;
-              const tone = state === 'now' && row.tone ? TONES[row.tone] : undefined;
-              const g = row.group != null ? rail.groups[row.group] : null;
-              const tip = edgeTip(row.edge, edges[ids.indexOf(row.edge)].source, allBeats);
-              return (
-                <g
-                  key={`m${i}`}
-                  data-rail-row={row.n}
-                  data-state={state}
-                  opacity={state === 'next' && !on ? 0.45 : 1}
-                  style={{ cursor: 'pointer' }}
-                  onClick={() => goTo(row.step, row.beat)}
-                  onMouseEnter={() => setHoverEdge(row.edge)}
-                  onMouseLeave={() => setHoverEdge(null)}
-                >
-                  {tip && <title>{tip}</title>}
-                  {g && g.rows[0] === i && (
-                    <rect
-                      x={groupBox(rail, g).x}
-                      y={y + groupBox(rail, g).y}
-                      width={groupBox(rail, g).w}
-                      height={groupBox(rail, g).h}
-                      rx={6}
-                      fill={`color-mix(in srgb, ${v('accent')} 8%, ${v('bg')})`}
-                      stroke={v('accent')}
-                      strokeDasharray="3 3"
-                    />
-                  )}
-                  <path
-                    d={`M ${x1} ${ly} H ${x2}`}
-                    fill="none"
-                    stroke={on ? (tone ?? v('accent')) : v('muted')}
-                    strokeWidth={on ? EDGE_ON : EDGE_OFF}
-                    strokeDasharray={row.async ? '4 3' : undefined}
-                    markerEnd="url(#flowfig-rail-arrow)"
-                  />
-                  {row.async &&
-                    (() => {
-                      const tagW = ASYNC_TAG_W;
-                      const tx = !row.pill ? (x1 + x2) / 2 - tagW / 2 : x2 > x1 ? row.pill.x - tagW - 4 : row.pill.x + row.pill.w + 4;
-                      return (
-                        <>
-                          <rect x={tx} y={ly - 6} width={tagW} height={12} rx={4} fill={v('bg')} />
-                          <rect x={tx} y={ly - 6} width={tagW} height={12} rx={4} fill={TONES.gray} fillOpacity={0.15} />
-                          <text
-                            x={tx + tagW / 2}
-                            y={ly + 3}
-                            fill={TONES.gray}
-                            fontSize={9}
-                            fontWeight={600}
-                            letterSpacing=".03em"
-                            textAnchor="middle"
-                            data-fig-tag
-                          >
-                            ASYNC
-                          </text>
-                        </>
-                      );
-                    })()}
-                  {row.pill && (
-                    <g data-fig-label={`rail:${row.n}`}>
-                      <rect
-                        x={row.pill.x}
-                        y={ly - 9}
-                        width={row.pill.w}
-                        height={18}
-                        rx={9}
-                        fill={on ? (tone ? toneFill(tone) : v('accent')) : v('bg')}
-                        stroke={on ? (tone ?? v('accent')) : v('border')}
-                      />
-                      <text
-                        x={row.pill.x + row.pill.w / 2}
-                        y={ly + 4}
-                        fill={on ? ON_ACCENT : v('muted')}
-                        fontSize={11}
-                        fontFamily={MONO}
-                        textAnchor="middle"
-                      >
-                        {row.text}
-                      </text>
-                    </g>
-                  )}
-                </g>
-              );
-            });
-          })()}
-          <defs>
-            <marker
-              id="flowfig-rail-arrow"
-              viewBox="0 0 10 10"
-              refX="9"
-              refY="5"
-              markerWidth="7"
-              markerHeight="7"
-              orient="auto-start-reverse"
-            >
-              <path d="M 0 1 L 9 5 L 0 9 z" fill={v('muted')} />
-            </marker>
-          </defs>
-        </svg>
+              });
+            })()}
+            <defs>
+              <marker
+                id="flowfig-rail-arrow"
+                viewBox="0 0 10 10"
+                refX="9"
+                refY="5"
+                markerWidth="7"
+                markerHeight="7"
+                orient="auto-start-reverse"
+              >
+                <path d="M 0 1 L 9 5 L 0 9 z" fill={v('muted')} />
+              </marker>
+            </defs>
+          </svg>
+        </div>
       )}
       {steps.length > 0 && (
         <figcaption style={{ marginTop: 14, textAlign: 'center' }}>
