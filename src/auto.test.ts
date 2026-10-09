@@ -480,3 +480,40 @@ test('a 40-box left-to-right chain lays out in under 1 s', () => {
   autoLayout(fig);
   assert.ok(performance.now() - t < 1000);
 });
+
+test('a loop and a skip edge that would arc on the same side do not cross', () => {
+  const fig: FlowProps = {
+    layout: {
+      auto: true,
+      children: [
+        { id: 'v', label: 'Visitor' },
+        { id: 'm', label: 'Admin' },
+        { id: 'f', label: 'Form' },
+        { id: 'c', label: 'Valid?', shape: 'decision' },
+        { id: 'x', label: 'Show error' },
+        { id: 'k', label: 'Save' },
+        { id: 'l', label: 'Log' },
+      ],
+    },
+    edges: [
+      { from: 'v', to: 'f' },
+      { from: 'm', to: 'f' },
+      { from: 'f', to: 'c' },
+      { from: 'c', to: 'x', label: 'no' },
+      { id: 'fix', from: 'x', to: 'f', label: 'fix' },
+      { from: 'c', to: 'k', label: 'yes' },
+      { from: 'k', to: 'l' },
+      { id: 'audit', from: 'm', to: 'l', label: 'audit' },
+    ],
+  };
+  const { edges } = render(fig).scene;
+  const [p, q] = ['fix', 'audit'].map((id) => samples(edges.find((e) => e.id === id)!.curve));
+  const side = (o: { x: number; y: number }, u: typeof o, w: typeof o) => Math.sign((u.x - o.x) * (w.y - o.y) - (u.y - o.y) * (w.x - o.x));
+  for (let i = 1; i < p.length; i++)
+    for (let j = 1; j < q.length; j++)
+      assert.ok(
+        side(p[i - 1], p[i], q[j - 1]) * side(p[i - 1], p[i], q[j]) >= 0 ||
+          side(q[j - 1], q[j], p[i - 1]) * side(q[j - 1], q[j], p[i]) >= 0,
+        'the fix loop crosses the audit edge',
+      );
+});

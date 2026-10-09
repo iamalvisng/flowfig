@@ -91,9 +91,9 @@ function level(items: Item[], dir: Dir, ctx: Ctx): Item[] {
   }
 
   const pos: number[] = [];
-  const index = () => layers.forEach((l) => l.forEach((x, i) => (pos[x] = i)));
-  const crossings = () => {
-    index();
+  const index = (ls = layers) => ls.forEach((l) => l.forEach((x, i) => (pos[x] = i)));
+  const crossings = (ls = layers) => {
+    index(ls);
     let c = 0;
     for (let i = 0; i < links.length; i++)
       for (let j = i + 1; j < links.length; j++) {
@@ -163,11 +163,39 @@ function level(items: Item[], dir: Dir, ctx: Ctx): Item[] {
       const k = l.indexOf(v);
       return (side > 0 ? l.slice(k + 1) : l.slice(0, k)).every((x) => x >= n);
     });
-  via.forEach((vs, i) => {
-    const [a, b] = dag[i];
-    const stacked = [a, b].every((k) => best[rank[k]].filter((x) => x < n).length === 1);
-    const way =
-      !back.has(i) && (!vs.length || stacked) ? undefined : outer([a, ...vs, b], 1) ? 1 : outer([a, ...vs, b], -1) ? -1 : undefined;
+  const hints = () =>
+    via.map((vs, i) => {
+      const [a, b] = dag[i];
+      const stacked = [a, b].every((k) => best[rank[k]].filter((x) => x < n).length === 1);
+      return !back.has(i) && (!vs.length || stacked) ? 0 : outer([a, ...vs, b], 1) ? 1 : outer([a, ...vs, b], -1) ? -1 : 0;
+    });
+  let ways = hints();
+  for (const i of ways.keys())
+    for (const j of ways.keys()) {
+      const wi = ways[i];
+      const [ai, bi] = dag[i],
+        [aj, bj] = dag[j];
+      if (j <= i || !wi || wi !== ways[j] || rank[ai] >= rank[bj] || rank[aj] >= rank[bi]) continue;
+      for (const k of via[i].length <= via[j].length ? [i, j] : [j, i]) {
+        const units = [dag[k][0], ...via[k], dag[k][1]];
+        if (units.some((v) => !best[layerOf[v]].includes(v))) continue;
+        const kept = best.map((l) => [...l]);
+        const was = crossings(best);
+        for (const v of units) {
+          const l = best[layerOf[v]];
+          l.splice(l.indexOf(v), 1);
+          if (wi > 0) l.unshift(v);
+          else l.push(v);
+        }
+        const now = hints();
+        if (now[k] === -wi && now[i + j - k] === wi && crossings(best) <= was) {
+          ways = now;
+          break;
+        }
+        best = kept;
+      }
+    }
+  ways.forEach((way, i) => {
     if (way) pairs[i][2].around = dir === 'column' ? (way > 0 ? 'right' : 'left') : way > 0 ? 'below' : 'above';
   });
   const kept = best.filter((l) => l.some((x) => x < n));
