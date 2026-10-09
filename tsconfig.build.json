@@ -9,5 +9,5 @@
     "types": ["node"]
   },
   "include": ["src"],
-  "exclude": ["src/*.test.ts", "src/node-figures.ts"]
+  "exclude": ["src/*.test.ts", "src/node-figures.ts", "src/react-page.ts"]
 }
