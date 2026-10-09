@@ -310,6 +310,7 @@ function FlowBody({
     if (!el || !box) return;
     let last = '';
     const measure = () => {
+      if (!el.offsetWidth) return;
       const goal = nextWide(wide, box.clientWidth, el.offsetWidth);
       if (setWide && goal !== wide) return setWide(goal);
       const scale = fitScale(wide, box.clientWidth, el.offsetWidth);
@@ -435,7 +436,7 @@ function FlowBody({
     const el = root.current,
       box = outer.current;
     const fig = figure.current;
-    if (!check || !fig || (!noMap && (!el || !box))) return;
+    if (!check || !fig || (!noMap && (!el || !box || !el.offsetWidth))) return;
     if (setWide && el && box && nextWide(wide, box.clientWidth, el.offsetWidth) !== wide) return;
     const base = (el ?? fig).getBoundingClientRect();
     const k = el ? base.width / el.offsetWidth : 1;
