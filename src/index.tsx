@@ -1,5 +1,5 @@
 'use client';
-import { Fragment, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { arcRoom, avoidOf, markSide, route, type Pt, type Rect, type Routed, type Side } from './geometry.ts';
 import { foldedLabel, groupBox, layoutRail, railState, RAIL } from './rail.ts';
 import { textWidth } from './text.ts';
@@ -60,6 +60,9 @@ import {
   type FigTheme,
   type FlowProps,
   edgeTip,
+  fitScale,
+  specKey,
+  nextWide,
 } from './model.ts';
 
 export type * from './model.ts';
@@ -149,9 +152,22 @@ const HIDDEN: CSSProperties = {
  */
 export function Flow(props: FlowProps) {
   const { layout, edges, steps, lanes, timeline } = props;
-  const placed = useMemo(() => autoLayout({ layout, edges, steps, lanes, timeline }), [layout, edges, steps, lanes, timeline]);
-  return <FlowBody {...props} layout={placed.layout} edges={placed.edges} written={props} />;
+  const key = useMemo(() => specKey(layout, edges, steps), [layout, edges, steps]);
+  const [narrow, setNarrow] = useState({ wide: 0, key: '' });
+  const fold = !lanes && !timeline && props.rail !== 'only';
+  const wide = fold && narrow.key === key ? narrow.wide : 0;
+  const setWide = useCallback((w: number) => setNarrow({ wide: w, key }), [key]);
+  const placed = useMemo(
+    () => autoLayout({ layout: wide ? { ...layout, auto: true, direction: 'column' } : layout, edges, steps, lanes, timeline }),
+    [wide, layout, edges, steps, lanes, timeline],
+  );
+  return (
+    <FlowBody {...props} layout={placed.layout} edges={placed.edges} written={props} wide={wide} setWide={fold ? setWide : undefined} />
+  );
 }
+
+// The ASYNC tag is 9 px; phone text needs 11 px.
+const RAIL_ZOOM = 11 / 9;
 
 function FlowBody({
   layout,
@@ -166,7 +182,9 @@ function FlowBody({
   timeline,
   today,
   written,
-}: FlowProps & { written: FlowProps }) {
+  wide,
+  setWide,
+}: FlowProps & { written: FlowProps; wide: number; setWide?: (w: number) => void }) {
   const tl = timeline && isLanesLayout(layout);
   const alt = useMemo(() => altText({ layout, edges, steps: stepsIn }), [layout, edges, stepsIn]);
   const descId = useId();
@@ -263,6 +281,11 @@ function FlowBody({
     [withRail, railOnly, layout, edges, steps, mapW],
   );
   const noMap = railOnly && rail != null;
+  const railPane = useRef<HTMLDivElement>(null);
+  const follow = useRef(true);
+  const user = useRef(false);
+  const left = useRef(0);
+  const busy = useRef(0);
   const jump = useRef<number | null>(null);
   const [hoverEdge, setHoverEdge] = useState<string | null>(null);
   const [still, setStill] = useState(false);
@@ -287,7 +310,9 @@ function FlowBody({
     if (!el || !box) return;
     let last = '';
     const measure = () => {
-      const scale = Math.max(0.5, Math.min(1, box.clientWidth / el.offsetWidth));
+      const goal = nextWide(wide, box.clientWidth, el.offsetWidth);
+      if (setWide && goal !== wide) return setWide(goal);
+      const scale = fitScale(wide, box.clientWidth, el.offsetWidth);
       setFit({ scale, height: el.offsetHeight * scale });
       setMapW(el.offsetWidth);
       if (area.current) setAxisW(area.current.offsetWidth);
@@ -383,7 +408,19 @@ function FlowBody({
     ro.observe(box);
     el.querySelectorAll('[data-fig]').forEach((n) => ro.observe(n));
     return () => ro.disconnect();
-  }, [edges, ids, layout, tips, noMap, lanes, tl, axisW, lanePlan, extraTall]);
+  }, [edges, ids, layout, tips, noMap, lanes, tl, axisW, lanePlan, extraTall, wide, setWide]);
+
+  useEffect(() => {
+    const pane = railPane.current;
+    const n = rail?.rows.flatMap((r) => (r.kind === 'message' && r.step === active && r.beat === beat ? [r.n] : []))[0];
+    const now = wide && follow.current && n != null ? pane?.querySelector(`[data-rail-row="${n}"] path`) : null;
+    if (!pane || !now) return;
+    const [p, r] = [pane.getBoundingClientRect(), now.getBoundingClientRect()];
+    user.current = false;
+    // Some browsers fire no scrollend event.
+    busy.current = performance.now() + 1000;
+    pane.scrollTo({ left: pane.scrollLeft + (r.left + r.right) / 2 - p.left - pane.clientWidth / 2, behavior: still ? 'auto' : 'smooth' });
+  }, [wide, active, beat, still, rail]);
 
   const reported = useRef(new Set<string>());
   useEffect(() => {
@@ -391,6 +428,7 @@ function FlowBody({
       box = outer.current;
     const fig = figure.current;
     if (!check || !fig || (!noMap && (!el || !box))) return;
+    if (setWide && el && box && nextWide(wide, box.clientWidth, el.offsetWidth) !== wide) return;
     const base = (el ?? fig).getBoundingClientRect();
     const k = el ? base.width / el.offsetWidth : 1;
     const rel = (n: Element): Rect => {
@@ -431,11 +469,15 @@ function FlowBody({
           (t instanceof SVGElement || (t as HTMLElement).clientWidth > 0) &&
           !t.closest('[data-fig-tag],[aria-hidden]'),
       )
-      .map((t) => parseFloat(getComputedStyle(t).fontSize));
+      .map((t) => {
+        const svg = railPane.current?.firstElementChild;
+        const at = el?.contains(t) ? k : svg?.contains(t) && rail ? svg.getBoundingClientRect().width / rail.width : 1;
+        return parseFloat(getComputedStyle(t).fontSize) * at;
+      });
     const labels = Object.fromEntries([...fig.querySelectorAll<HTMLElement>('[data-fig-label]')].map((n) => [n.dataset.figLabel!, rel(n)]));
     const lanesIn = el ? [...el.querySelectorAll<HTMLElement>('[data-fig-band]')] : [];
     const scene: Scene = {
-      width: Math.max(el?.offsetWidth ?? 0, rail?.width ?? 0),
+      width: (box ?? fig).clientWidth,
       boxes,
       ...(lanePlan?.stubs.size && {
         lanes: lanesIn.map((n) => ({
@@ -485,7 +527,7 @@ function FlowBody({
       // oxlint-disable-next-line no-console
       console.warn(`flowfig check: ${f.severity} ${f.rule}: ${f.message}`);
     }
-  }, [check, routed, written, layout, edges, steps, ids, theme, rail, noMap, lanePlan]);
+  }, [check, routed, written, layout, edges, steps, ids, theme, rail, noMap, lanePlan, wide, setWide]);
 
   useEffect(() => {
     const gs = dots.current,
@@ -599,6 +641,7 @@ function FlowBody({
     return t && TONES[t];
   };
   const goTo = (step: number, b: number) => {
+    follow.current = true;
     setPlaying(true);
     if (step === active) {
       clock.current.elapsed = beats.slice(0, b).reduce((t, x) => t + beatMs(x, speed), 0);
@@ -919,7 +962,7 @@ function FlowBody({
       const framed = item.label != null;
       return (
         <div
-          key={item.id ?? depth + String(item.label)}
+          key={item.id ?? `group:${nodes(item)[0]?.id}`}
           data-fig={item.id}
           style={{
             ...(framed && {
@@ -1184,14 +1227,13 @@ function FlowBody({
               backgroundSize: '14px 14px',
             }}
           >
-            {/* ponytail: no stacked mobile layout; add one if narrow screens break it. */}
             <div
               ref={outer}
               role="tabpanel"
               id={`${tabsId}-panel`}
               aria-labelledby={`${tabsId}-tab-${active ?? 0}`}
               style={{
-                overflow: fit.scale > 0.5 ? 'hidden' : 'auto',
+                overflow: wide || fit.scale <= 0.5 ? 'auto' : 'hidden',
                 height: fit.scale < 1 ? fit.height : undefined,
               }}
             >
@@ -1365,173 +1407,187 @@ function FlowBody({
         </>
       )}
       {rail && (
-        <svg
-          viewBox={`0 0 ${rail.width} ${rail.height}`}
-          style={{
-            display: 'block',
-            width: '100%',
-            maxWidth: rail.width,
-            height: 'auto',
-            margin: `${noMap ? 0 : RAIL.gap}px auto 0`,
-            overflow: 'visible',
-            fontFamily: v('font'),
+        <div
+          ref={railPane}
+          onWheel={() => (user.current = true)}
+          onPointerDown={() => (user.current = true)}
+          onTouchStart={() => (user.current = true)}
+          onScroll={(e) => {
+            const x = e.currentTarget.scrollLeft;
+            if (user.current && x !== left.current && performance.now() > busy.current) follow.current = false;
+            left.current = x;
           }}
+          onScrollEnd={() => (busy.current = 0)}
+          style={{ overflowX: wide ? 'auto' : undefined }}
         >
-          {rail.bands.map((b) => (
-            <g key={b.id}>
-              <rect x={b.rect.x} y={b.rect.y} width={b.rect.w} height={b.rect.h} rx={10} fill={v('surface')} stroke={v('border')} />
-              <text x={b.rect.x + 10} y={b.rect.y + 14} fill={v('muted')} fontSize={11} fontWeight={600} letterSpacing=".04em">
-                {b.label.toUpperCase()}
+          <svg
+            viewBox={`0 0 ${rail.width} ${rail.height}`}
+            style={{
+              display: 'block',
+              width: wide ? rail.width * RAIL_ZOOM : '100%',
+              maxWidth: wide ? undefined : rail.width,
+              height: 'auto',
+              margin: `${noMap ? 0 : RAIL.gap}px auto 0`,
+              overflow: 'visible',
+              fontFamily: v('font'),
+            }}
+          >
+            {rail.bands.map((b) => (
+              <g key={b.id}>
+                <rect x={b.rect.x} y={b.rect.y} width={b.rect.w} height={b.rect.h} rx={10} fill={v('surface')} stroke={v('border')} />
+                <text x={b.rect.x + 10} y={b.rect.y + 14} fill={v('muted')} fontSize={11} fontWeight={600} letterSpacing=".04em">
+                  {b.label.toUpperCase()}
+                </text>
+              </g>
+            ))}
+            {rail.columns.map((c) => (
+              <text key={c.id} x={c.x} y={rail.head - RAIL.cols / 2 + 4} fill={v('fg')} fontSize={12} fontWeight={500} textAnchor="middle">
+                {c.label}
               </text>
-            </g>
-          ))}
-          {rail.columns.map((c) => (
-            <text key={c.id} x={c.x} y={rail.head - RAIL.cols / 2 + 4} fill={v('fg')} fontSize={12} fontWeight={500} textAnchor="middle">
-              {c.label}
-            </text>
-          ))}
-          {(() => {
-            const st = railState(rail, active ?? 0);
-            const lines = rail.rows.flatMap((row, i) =>
-              row.kind === 'message' && st[i].shown ? rail.columns.map((c) => `M ${c.x} ${st[i].y} V ${st[i].y + RAIL.row}`) : [],
-            );
-            return <path d={lines.join(' ')} stroke={v('border')} strokeDasharray="2 3" />;
-          })()}
-          {(() => {
-            const st = railState(rail, active ?? 0);
-            return rail.rows.map((row, i) => {
-              if (!st[i].shown) return null;
-              const y = st[i].y;
-              if (row.kind === 'phase') {
-                const open = !rail.folds || row.step === active;
-                const playing =
-                  row.step === active ? rail.rows.find((r) => r.kind === 'message' && r.step === active && r.beat === beat) : undefined;
-                return (
-                  <g key={`p${i}`} style={{ cursor: open ? undefined : 'pointer' }} onClick={open ? undefined : () => goTo(row.step, 0)}>
-                    <text x={RAIL.pad} y={y + 19} fill={open ? v('fg') : v('muted')} fontSize={13} fontWeight={600} fontFamily={MONO}>
-                      {open ? row.label : foldedLabel(row)}
-                    </text>
-                    <path d={`M ${open ? row.line.open : row.line.folded} ${y + 15} H ${row.line.end}`} stroke={v('border')} />
-                    {playing?.kind === 'message' && (
-                      <text x={rail.width - RAIL.pad} y={y + 19} fill={v('muted')} fontSize={11} fontWeight={600} textAnchor="end">
-                        {still ? rail.total : playing.n} of {rail.total}
+            ))}
+            {(() => {
+              const st = railState(rail, active ?? 0);
+              const lines = rail.rows.flatMap((row, i) =>
+                row.kind === 'message' && st[i].shown ? rail.columns.map((c) => `M ${c.x} ${st[i].y} V ${st[i].y + RAIL.row}`) : [],
+              );
+              return <path d={lines.join(' ')} stroke={v('border')} strokeDasharray="2 3" />;
+            })()}
+            {(() => {
+              const st = railState(rail, active ?? 0);
+              return rail.rows.map((row, i) => {
+                if (!st[i].shown) return null;
+                const y = st[i].y;
+                if (row.kind === 'phase') {
+                  const open = !rail.folds || row.step === active;
+                  const playing =
+                    row.step === active ? rail.rows.find((r) => r.kind === 'message' && r.step === active && r.beat === beat) : undefined;
+                  return (
+                    <g key={`p${i}`} style={{ cursor: open ? undefined : 'pointer' }} onClick={open ? undefined : () => goTo(row.step, 0)}>
+                      <text x={RAIL.pad} y={y + 19} fill={open ? v('fg') : v('muted')} fontSize={13} fontWeight={600} fontFamily={MONO}>
+                        {open ? row.label : foldedLabel(row)}
                       </text>
+                      <path d={`M ${open ? row.line.open : row.line.folded} ${y + 15} H ${row.line.end}`} stroke={v('border')} />
+                      {playing?.kind === 'message' && (
+                        <text x={rail.width - RAIL.pad} y={y + 19} fill={v('muted')} fontSize={11} fontWeight={600} textAnchor="end">
+                          {still ? rail.total : playing.n} of {rail.total}
+                        </text>
+                      )}
+                    </g>
+                  );
+                }
+                const state = still
+                  ? 'done'
+                  : active == null || row.step > active || (row.step === active && row.beat > beat)
+                    ? 'next'
+                    : row.step === active && row.beat === beat
+                      ? 'now'
+                      : 'done';
+                const on =
+                  state === 'now' ||
+                  hoverEdge === row.edge ||
+                  (hover != null && [rail.columns[row.from].id, rail.columns[row.to].id].includes(hover));
+                const [x1, x2] = [rail.columns[row.from].x, rail.columns[row.to].x];
+                const ly = y + RAIL.row / 2;
+                const tone = state === 'now' && row.tone ? TONES[row.tone] : undefined;
+                const g = row.group != null ? rail.groups[row.group] : null;
+                const tip = edgeTip(row.edge, edges[ids.indexOf(row.edge)].source, allBeats);
+                return (
+                  <g
+                    key={`m${i}`}
+                    data-rail-row={row.n}
+                    data-state={state}
+                    opacity={state === 'next' && !on ? 0.45 : 1}
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => goTo(row.step, row.beat)}
+                    onMouseEnter={() => setHoverEdge(row.edge)}
+                    onMouseLeave={() => setHoverEdge(null)}
+                  >
+                    {tip && <title>{tip}</title>}
+                    {g && g.rows[0] === i && (
+                      <rect
+                        x={groupBox(rail, g).x}
+                        y={y + groupBox(rail, g).y}
+                        width={groupBox(rail, g).w}
+                        height={groupBox(rail, g).h}
+                        rx={6}
+                        fill={`color-mix(in srgb, ${v('accent')} 8%, ${v('bg')})`}
+                        stroke={v('accent')}
+                        strokeDasharray="3 3"
+                      />
+                    )}
+                    <path
+                      d={`M ${x1} ${ly} H ${x2}`}
+                      fill="none"
+                      stroke={on ? (tone ?? v('accent')) : v('muted')}
+                      strokeWidth={on ? EDGE_ON : EDGE_OFF}
+                      strokeDasharray={row.async ? '4 3' : undefined}
+                      markerEnd="url(#flowfig-rail-arrow)"
+                    />
+                    {row.async &&
+                      (() => {
+                        const tagW = ASYNC_TAG_W;
+                        const tx = !row.pill ? (x1 + x2) / 2 - tagW / 2 : x2 > x1 ? row.pill.x - tagW - 4 : row.pill.x + row.pill.w + 4;
+                        return (
+                          <>
+                            <rect x={tx} y={ly - 6} width={tagW} height={12} rx={4} fill={v('bg')} />
+                            <rect x={tx} y={ly - 6} width={tagW} height={12} rx={4} fill={TONES.gray} fillOpacity={0.15} />
+                            <text
+                              x={tx + tagW / 2}
+                              y={ly + 3}
+                              fill={TONES.gray}
+                              fontSize={9}
+                              fontWeight={600}
+                              letterSpacing=".03em"
+                              textAnchor="middle"
+                              data-fig-tag
+                            >
+                              ASYNC
+                            </text>
+                          </>
+                        );
+                      })()}
+                    {row.pill && (
+                      <g data-fig-label={`rail:${row.n}`}>
+                        <rect
+                          x={row.pill.x}
+                          y={ly - 9}
+                          width={row.pill.w}
+                          height={18}
+                          rx={9}
+                          fill={on ? (tone ? toneFill(tone) : v('accent')) : v('bg')}
+                          stroke={on ? (tone ?? v('accent')) : v('border')}
+                        />
+                        <text
+                          x={row.pill.x + row.pill.w / 2}
+                          y={ly + 4}
+                          fill={on ? ON_ACCENT : v('muted')}
+                          fontSize={11}
+                          fontFamily={MONO}
+                          textAnchor="middle"
+                        >
+                          {row.text}
+                        </text>
+                      </g>
                     )}
                   </g>
                 );
-              }
-              const state = still
-                ? 'done'
-                : active == null || row.step > active || (row.step === active && row.beat > beat)
-                  ? 'next'
-                  : row.step === active && row.beat === beat
-                    ? 'now'
-                    : 'done';
-              const on =
-                state === 'now' ||
-                hoverEdge === row.edge ||
-                (hover != null && [rail.columns[row.from].id, rail.columns[row.to].id].includes(hover));
-              const [x1, x2] = [rail.columns[row.from].x, rail.columns[row.to].x];
-              const ly = y + RAIL.row / 2;
-              const tone = state === 'now' && row.tone ? TONES[row.tone] : undefined;
-              const g = row.group != null ? rail.groups[row.group] : null;
-              const tip = edgeTip(row.edge, edges[ids.indexOf(row.edge)].source, allBeats);
-              return (
-                <g
-                  key={`m${i}`}
-                  data-rail-row={row.n}
-                  data-state={state}
-                  opacity={state === 'next' && !on ? 0.45 : 1}
-                  style={{ cursor: 'pointer' }}
-                  onClick={() => goTo(row.step, row.beat)}
-                  onMouseEnter={() => setHoverEdge(row.edge)}
-                  onMouseLeave={() => setHoverEdge(null)}
-                >
-                  {tip && <title>{tip}</title>}
-                  {g && g.rows[0] === i && (
-                    <rect
-                      x={groupBox(rail, g).x}
-                      y={y + groupBox(rail, g).y}
-                      width={groupBox(rail, g).w}
-                      height={groupBox(rail, g).h}
-                      rx={6}
-                      fill={`color-mix(in srgb, ${v('accent')} 8%, ${v('bg')})`}
-                      stroke={v('accent')}
-                      strokeDasharray="3 3"
-                    />
-                  )}
-                  <path
-                    d={`M ${x1} ${ly} H ${x2}`}
-                    fill="none"
-                    stroke={on ? (tone ?? v('accent')) : v('muted')}
-                    strokeWidth={on ? EDGE_ON : EDGE_OFF}
-                    strokeDasharray={row.async ? '4 3' : undefined}
-                    markerEnd="url(#flowfig-rail-arrow)"
-                  />
-                  {row.async &&
-                    (() => {
-                      const tagW = ASYNC_TAG_W;
-                      const tx = !row.pill ? (x1 + x2) / 2 - tagW / 2 : x2 > x1 ? row.pill.x - tagW - 4 : row.pill.x + row.pill.w + 4;
-                      return (
-                        <>
-                          <rect x={tx} y={ly - 6} width={tagW} height={12} rx={4} fill={v('bg')} />
-                          <rect x={tx} y={ly - 6} width={tagW} height={12} rx={4} fill={TONES.gray} fillOpacity={0.15} />
-                          <text
-                            x={tx + tagW / 2}
-                            y={ly + 3}
-                            fill={TONES.gray}
-                            fontSize={9}
-                            fontWeight={600}
-                            letterSpacing=".03em"
-                            textAnchor="middle"
-                            data-fig-tag
-                          >
-                            ASYNC
-                          </text>
-                        </>
-                      );
-                    })()}
-                  {row.pill && (
-                    <g data-fig-label={`rail:${row.n}`}>
-                      <rect
-                        x={row.pill.x}
-                        y={ly - 9}
-                        width={row.pill.w}
-                        height={18}
-                        rx={9}
-                        fill={on ? (tone ? toneFill(tone) : v('accent')) : v('bg')}
-                        stroke={on ? (tone ?? v('accent')) : v('border')}
-                      />
-                      <text
-                        x={row.pill.x + row.pill.w / 2}
-                        y={ly + 4}
-                        fill={on ? ON_ACCENT : v('muted')}
-                        fontSize={11}
-                        fontFamily={MONO}
-                        textAnchor="middle"
-                      >
-                        {row.text}
-                      </text>
-                    </g>
-                  )}
-                </g>
-              );
-            });
-          })()}
-          <defs>
-            <marker
-              id="flowfig-rail-arrow"
-              viewBox="0 0 10 10"
-              refX="9"
-              refY="5"
-              markerWidth="7"
-              markerHeight="7"
-              orient="auto-start-reverse"
-            >
-              <path d="M 0 1 L 9 5 L 0 9 z" fill={v('muted')} />
-            </marker>
-          </defs>
-        </svg>
+              });
+            })()}
+            <defs>
+              <marker
+                id="flowfig-rail-arrow"
+                viewBox="0 0 10 10"
+                refX="9"
+                refY="5"
+                markerWidth="7"
+                markerHeight="7"
+                orient="auto-start-reverse"
+              >
+                <path d="M 0 1 L 9 5 L 0 9 z" fill={v('muted')} />
+              </marker>
+            </defs>
+          </svg>
+        </div>
       )}
       {steps.length > 0 && (
         <figcaption style={{ marginTop: 14, textAlign: 'center' }}>
@@ -1541,7 +1597,10 @@ function FlowBody({
               aria-label={playing ? 'Pause' : 'Play'}
               title={playing ? 'Pause' : 'Play'}
               style={iconBtn}
-              onClick={() => setPlaying((p) => !p)}
+              onClick={() => {
+                follow.current ||= !playing;
+                setPlaying((p) => !p);
+              }}
             >
               <Icon d={playing ? 'M5.5 4v8M10.5 4v8' : 'M5 3.5v9l7.5-4.5z'} fill={!playing} />
             </button>
@@ -1554,6 +1613,7 @@ function FlowBody({
                   e.preventDefault();
                   const n = (to + steps.length) % steps.length;
                   clock.current.elapsed = 0;
+                  follow.current = true;
                   setActive(n);
                   setPlaying(true);
                   setBeat(0);
@@ -1581,6 +1641,7 @@ function FlowBody({
                       tabIndex={on ? 0 : -1}
                       onClick={() => {
                         clock.current.elapsed = 0;
+                        follow.current = true;
                         setActive(i);
                         setPlaying(true);
                         setBeat(0);

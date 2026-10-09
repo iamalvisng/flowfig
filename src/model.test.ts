@@ -1,7 +1,11 @@
+import { createElement } from 'react';
 import { textWidth } from './text.ts';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  fitScale,
+  specKey,
+  nextWide,
   dayOf,
   timelineLayout,
   timelineBeats,
@@ -367,4 +371,68 @@ test('timeline: the loop starts with the playhead at the first beat item, not at
   assert.equal(first.id, 'invoice');
   assert.notEqual(first.x, lay.last);
   assert.equal(loopStartItem(lay.items, []), undefined, 'no step: the playhead stays at the range end');
+});
+
+test('narrow mode: the fold rule, the hysteresis, the full-size fold and the reset on a changed spec', () => {
+  type Spec = { row: number; col: number };
+  const run = (events: [number, Spec][]) => {
+    let state = { wide: 0, key: '' };
+    return events.map(([box, spec]) => {
+      const key = specKey(spec);
+      for (let i = 0; i < 3; i++) {
+        const wide = state.key === key ? state.wide : 0;
+        const map = wide ? spec.col : spec.row;
+        const goal = nextWide(wide, box, map);
+        if (goal === wide) return `${map} at ${fitScale(wide, box, map).toFixed(2)}${i ? ' after a switch' : ''}`;
+        state = { wide: goal, key };
+      }
+      assert.fail(`the layout toggles at ${box} px`);
+    });
+  };
+  const a = { row: 1200, col: 264 },
+    b = { row: 600, col: 250 };
+  assert.deepEqual(run([1100, 254, 700, 560, 420, 1100, 324].map((w) => [w, a])), [
+    '1200 at 0.92',
+    '264 at 1.00 after a switch',
+    '1200 at 0.58 after a switch',
+    '264 at 1.00 after a switch',
+    '264 at 1.00',
+    '1200 at 0.92 after a switch',
+    '264 at 1.00 after a switch',
+  ]);
+  assert.deepEqual(
+    run([
+      [324, a],
+      [324, { ...a }],
+      [500, b],
+    ]),
+    ['264 at 1.00 after a switch', '264 at 1.00', '600 at 0.83'],
+  );
+  assert.deepEqual(run([500, 356, 490, 470, 470].map((w) => [w, b])), [
+    '600 at 0.83',
+    '250 at 1.00 after a switch',
+    '600 at 0.82 after a switch',
+    '250 at 1.00 after a switch',
+    '250 at 1.00',
+  ]);
+});
+
+test('the narrow-mode spec key does not throw on a circular label or a ref to a mounted node, and equal content gives an equal key', () => {
+  const spec = (label: unknown) => [{ children: [{ id: 'a', label }] }, [], []];
+  const circular = (text: string) => {
+    const o: Record<string, unknown> = { text };
+    o.self = o;
+    return o;
+  };
+  const span = (text: string) => {
+    const node: Record<string, unknown> = { tag: 'span' };
+    node.fiber = { node };
+    return createElement('span', { ref: { current: node } }, text);
+  };
+  assert.equal(specKey(...spec(circular('Pay'))), specKey(...spec(circular('Pay'))));
+  assert.notEqual(specKey(...spec(circular('Pay'))), specKey(...spec(circular('Ship'))));
+  assert.equal(specKey(...spec(span('Pay'))), specKey(...spec(span('Pay'))));
+  assert.notEqual(specKey(...spec(span('Pay'))), specKey(...spec(span('Ship'))));
+  assert.notEqual(specKey(...spec(10n)), specKey(...spec('10')));
+  assert.equal(specKey(...spec(createElement('b', null, 10n))), specKey(...spec(createElement('b', null, 10n))));
 });
