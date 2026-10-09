@@ -245,3 +245,35 @@ test('missing-detail warns for a missing file, an SVG with no spec and a figure 
     }
   });
 });
+
+test('a box symbol that its file re-exports counts as defined', () => {
+  const forms: Record<string, string> = {
+    named: "export { getUser } from './user';",
+    star: "export * from './user';",
+    default: "export { default as getUser } from './user';",
+    renamed: "export { fetchUser as getUser } from './user';",
+    local: "import { getUser } from './user';\nexport { getUser };",
+  };
+  const user = 'export function getUser() {}\nexport function fetchUser() {}\nexport default function loadUser() {}';
+  withRepo({ 'src/user.ts': user, ...Object.fromEntries(Object.entries(forms).map(([k, v]) => [`src/${k}.ts`, v])) }, (root) => {
+    for (const k of Object.keys(forms)) {
+      const r = verifyReport(figWith(`src/${k}.ts#getUser`), { root });
+      assert.deepEqual([rules(r.findings), r.coverage.boxesDefined], [[], 1], k);
+    }
+  });
+});
+
+test('a re-export gives missing-symbol if no target defines the name, and no error if a target is a package', () => {
+  withRepo(
+    {
+      'src/user.ts': 'export function fetchUser() {}',
+      'src/a.ts': "export * from './user';",
+      'src/b.ts': "export { getUser } from 'some-pkg';",
+    },
+    (root) => {
+      assert.deepEqual(rules(verify(figWith('src/a.ts#getUser'), { root })), ['missing-symbol']);
+      const r = verifyReport(figWith('src/b.ts#getUser'), { root });
+      assert.deepEqual([rules(r.findings), r.coverage.boxesDefined], [[], 0]);
+    },
+  );
+});
