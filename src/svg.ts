@@ -1,5 +1,5 @@
 // Wrapping is approximate: text is measured by character class, not by a browser.
-import { arcRoom, avoidOf, route, type Pt, type Rect, type Side } from './geometry.ts';
+import { arcRoom, avoidOf, markSide, route, type Pt, type Rect, type Side } from './geometry.ts';
 import { foldedLabel, groupBox, layoutRail, railState, RAIL, type Rail } from './rail.ts';
 import { textWidth, wrap } from './text.ts';
 import { checkRendered, planFor, type CheckOptions } from './check.ts';
@@ -651,12 +651,14 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
         ? `<text x="${n2(cx)}" y="${n2(firstY + extra + SUB_LINE)}" class="sub">${esc(str(item.sub))}</text>`
         : '';
     const dot = bt ?? 'var(--accent)';
-    const my = n2(p.y + p.h / 2);
+    const side = item.mark && markSide(item.id, item.mark, routed);
+    const mx = n2(side === 'l' ? p.x - 12 : side === 'r' ? p.x + p.w + 12 : cx);
+    const my = n2(side === 't' ? p.y - 12 : side === 'b' ? p.y + p.h + 12 : p.y + p.h / 2);
     const mark =
       item.mark === 'start'
-        ? `<circle cx="${n2(p.x - 12)}" cy="${my}" r="5" fill="${dot}"/>`
+        ? `<circle cx="${mx}" cy="${my}" r="5" fill="${dot}"/>`
         : item.mark === 'end'
-          ? `<circle cx="${n2(p.x + p.w + 12)}" cy="${my}" r="6.25" fill="none" stroke="${dot}" stroke-width="1.5"/><circle cx="${n2(p.x + p.w + 12)}" cy="${my}" r="4" fill="${dot}"/>`
+          ? `<circle cx="${mx}" cy="${my}" r="6.25" fill="none" stroke="${dot}" stroke-width="1.5"/><circle cx="${mx}" cy="${my}" r="4" fill="${dot}"/>`
           : '';
     return tip(shape + label + sub + mark + (contents ? card(p as Rect & { item: FigNode }, cardTop, contents) : ''));
   });

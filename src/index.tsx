@@ -1,6 +1,6 @@
 'use client';
 import { Fragment, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { arcRoom, avoidOf, route, type Pt, type Rect, type Routed, type Side } from './geometry.ts';
+import { arcRoom, avoidOf, markSide, route, type Pt, type Rect, type Routed, type Side } from './geometry.ts';
 import { foldedLabel, groupBox, layoutRail, railState, RAIL } from './rail.ts';
 import { textWidth } from './text.ts';
 import { checkScene, checkSpec, checkTheme } from './check.ts';
@@ -197,6 +197,7 @@ function FlowBody({
   const firstLabel = useRef<string | null>('');
   const paths = useRef<Record<string, SVGPathElement | null>>({});
   const [routed, setRouted] = useState<Routed[]>([]);
+  const markSides = new Set(nodes(layout).flatMap((n) => (n.mark ? [markSide(n.id, n.mark, routed)] : [])));
   const [extraTall, setExtraTall] = useState<ReadonlySet<string>>(new Set());
   const lanePlan = useMemo(
     () =>
@@ -1053,14 +1054,12 @@ function FlowBody({
             aria-hidden
             style={{
               position: 'absolute',
-              top: '50%',
-              transform: 'translateY(-50%)',
+              ...markAt(markSide(item.id, item.mark, routed), item.mark === 'start' ? -18 : -20),
               boxSizing: 'border-box',
               borderRadius: '50%',
               ...(item.mark === 'start'
-                ? { left: -18, width: 10, height: 10, background: bt ?? v('accent') }
+                ? { width: 10, height: 10, background: bt ?? v('accent') }
                 : {
-                    right: -20,
                     width: 14,
                     height: 14,
                     border: `1.5px solid ${bt ?? v('accent')}`,
@@ -1210,8 +1209,8 @@ function FlowBody({
                   margin: '0 auto',
                   transform: fit.scale < 1 ? `scale(${fit.scale})` : undefined,
                   transformOrigin: 'top left',
-                  paddingTop: arcRoom(routed, 'above') || 4,
-                  paddingBottom: arcRoom(routed, 'below') || 4,
+                  paddingTop: arcRoom(routed, 'above') || (markSides.has('t') ? 20 : 4),
+                  paddingBottom: arcRoom(routed, 'below') || (markSides.has('b') ? 20 : 4),
                   paddingLeft: arcRoom(routed, 'left') || 4,
                   paddingRight: arcRoom(routed, 'right') || 4,
                 }}
@@ -1671,6 +1670,11 @@ function FlowBody({
     </figure>
   );
 }
+
+const markAt = (side: Side, off: number): CSSProperties =>
+  side === 'l' || side === 'r'
+    ? { [side === 'l' ? 'left' : 'right']: off, top: '50%', transform: 'translateY(-50%)' }
+    : { [side === 't' ? 'top' : 'bottom']: off, left: '50%', transform: 'translateX(-50%)' };
 
 function Icon({ d, fill = false }: { d: string; fill?: boolean }) {
   return (
