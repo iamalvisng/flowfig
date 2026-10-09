@@ -967,7 +967,7 @@ function FlowBody({
               display: 'flex',
               flexDirection: item.direction ?? 'row',
               gap: groupGap(item, edges),
-              alignItems: item.align && item.align !== 'center' ? 'flex-' + item.align : 'center',
+              alignItems: !item.align || item.align === 'center' ? 'center' : 'flex-' + item.align,
               justifyContent: 'center',
             }}
           >

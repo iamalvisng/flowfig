@@ -480,3 +480,63 @@ test('a 40-box left-to-right chain lays out in under 1 s', () => {
   autoLayout(fig);
   assert.ok(performance.now() - t < 1000);
 });
+
+type P = { x: number; y: number };
+const turn = (o: P, u: P, w: P) => Math.sign((u.x - o.x) * (w.y - o.y) - (u.y - o.y) * (w.x - o.x));
+const crossed = (fig: FlowProps) => {
+  const edges = render(fig).scene.edges.map((e) => ({ ...e, s: samples(e.curve) }));
+  const hit = (p: P[], q: P[]) =>
+    p.some(
+      (_, i) =>
+        i &&
+        q.some(
+          (_, j) =>
+            j &&
+            turn(p[i - 1], p[i], q[j - 1]) * turn(p[i - 1], p[i], q[j]) < 0 &&
+            turn(q[j - 1], q[j], p[i - 1]) * turn(q[j - 1], q[j], p[i]) < 0,
+        ),
+    );
+  return edges.flatMap((e, i) =>
+    edges
+      .slice(i + 1)
+      .filter((f) => ![e.from, e.to].some((id) => id === f.from || id === f.to) && hit(e.s, f.s))
+      .map((f) => `${e.id} x ${f.id}`),
+  );
+};
+
+test('a loop and a skip edge that would arc on the same side do not cross', () => {
+  const fig: FlowProps = {
+    layout: {
+      auto: true,
+      children: [
+        { id: 'v', label: 'Visitor' },
+        { id: 'm', label: 'Admin' },
+        { id: 'f', label: 'Form' },
+        { id: 'c', label: 'Valid?', shape: 'decision' },
+        { id: 'x', label: 'Show error' },
+        { id: 'k', label: 'Save' },
+        { id: 'l', label: 'Log' },
+      ],
+    },
+    edges: [
+      { from: 'v', to: 'f' },
+      { from: 'm', to: 'f' },
+      { from: 'f', to: 'c' },
+      { from: 'c', to: 'x', label: 'no' },
+      { id: 'fix', from: 'x', to: 'f', label: 'fix' },
+      { from: 'c', to: 'k', label: 'yes' },
+      { from: 'k', to: 'l' },
+      { id: 'audit', from: 'm', to: 'l', label: 'audit' },
+    ],
+  };
+  assert.deepEqual(crossed(fig), []);
+});
+
+test('moving an arc to the other side adds no crossing to the straight edges', () => {
+  const pairs = ['0-1', '1-2', '0-3', '1-4', '2-5', '5-3', '2-4', '3-2', '3-1'];
+  const fig: FlowProps = {
+    layout: { auto: true, direction: 'row', children: [0, 1, 2, 3, 4, 5].map((i) => ({ id: `n${i}`, label: `Box ${i}` })) },
+    edges: pairs.map((p) => ({ from: `n${p[0]}`, to: `n${p[2]}` })),
+  };
+  assert.deepEqual(crossed(fig), []);
+});

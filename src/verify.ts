@@ -4,10 +4,30 @@ import { headingSlug, links } from './source.ts';
 import type { Finding } from './scene.ts';
 import { codeFile, isDefined, outside, readFile, type CodeFile, type Read } from './code.ts';
 import { edgeResult } from './edges.ts';
+import { reexports } from './imports.ts';
 
 export { parseSource, headingSlug, owners, links, type Link } from './source.ts';
 
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const defines = (
+  root: string,
+  file: CodeFile | null,
+  symbol: string,
+  read: Read,
+  cache: Map<string, CodeFile | null>,
+  depth = 0,
+): boolean | null => {
+  if (!file || depth > 5) return null;
+  if (isDefined(file, symbol)) return true;
+  let doubt = false;
+  for (const [path, inner] of reexports(root, file, symbol, read)) {
+    const r = path == null || inner === '?' ? null : defines(root, codeFile(root, path, read, cache), inner, read, cache, depth + 1);
+    if (r) return true;
+    if (r == null) doubt = true;
+  }
+  return doubt ? null : false;
+};
 
 const hasHeading = (text: string, slug: string) =>
   text.split('\n').some((line) => {
@@ -72,13 +92,16 @@ export function verifyReport(
     if (!files.has(full)) files.set(full, outside(root, l.path) ? null : read(full));
     const text = files.get(full);
     const before = findings.length;
+    let doubt = false;
     const fail = (rule: string, what: string) =>
       findings.push({ rule, severity: 'error', ids: [], message: `${l.owner} -> ${l.source}: ${what}` });
     if (text == null) fail('missing-file', 'file not found');
     else if (l.symbol) {
       const code = codeFile(root, l.path, read, cache);
       if (code) {
-        if (!isDefined(code, l.symbol)) fail('missing-symbol', 'symbol not defined');
+        const r = defines(root, code, l.symbol, read, cache);
+        if (r === false) fail('missing-symbol', 'symbol not defined');
+        doubt = r == null;
       } else if (
         !new RegExp(`(^|[^\\w$])${escape(l.symbol)}(?![\\w$])`).test(text) &&
         !(/\.(md|markdown)$/i.test(l.path) && hasHeading(text, l.symbol))
@@ -87,7 +110,7 @@ export function verifyReport(
     }
     if (l.owner.startsWith('box "')) {
       coverage.boxes++;
-      if (findings.length === before) coverage.boxesDefined++;
+      if (findings.length === before && !doubt) coverage.boxesDefined++;
     }
   }
   const source = new Map(nodes(fig.layout).map((n) => [n.id, n.source]));

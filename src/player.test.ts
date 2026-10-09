@@ -319,24 +319,23 @@ test('auto layout: the player puts each box in the rank and order of the SVG', (
   assert.equal(new Set(toSvgScene(fig).scene.boxes.map((b) => mid(b.rect))).size, 4);
 });
 
-test('a column group centers a narrow box under a wide box, as the SVG does', () => {
+test('auto layout: the player centers a narrow box in a column, as the SVG does', () => {
   const fig: FlowProps = {
     layout: {
+      auto: true,
       children: [
-        {
-          label: 'Order service',
-          direction: 'column',
-          children: [
-            { id: 'orders', label: 'Orders', width: 160 },
-            { id: 'audit', label: 'Audit' },
-          ],
-        },
+        { id: 'v', label: 'Visitor' },
+        { id: 'm', label: 'Admin console' },
+        { id: 'f', label: 'Form' },
       ],
     },
-    edges: [],
+    edges: [
+      { id: 'a', from: 'v', to: 'f' },
+      { id: 'b', from: 'm', to: 'f' },
+    ],
   };
-  const [wide, narrow] = toSvgScene(fig).scene.boxes.map((b) => b.rect);
-  assert.equal(narrow.x + narrow.w / 2, wide.x + wide.w / 2);
+  const box = Object.fromEntries(toSvgScene(fig).scene.boxes.map((b) => [b.id, b.rect]));
+  assert.equal(box.v.x + box.v.w / 2, box.m.x + box.m.w / 2);
   assert.match(render(fig), /flex-direction:column;[^"]*align-items:center/);
 });
 
