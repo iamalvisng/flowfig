@@ -1,5 +1,5 @@
 'use client';
-import { Fragment, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { arcRoom, avoidOf, markSide, route, type Pt, type Rect, type Routed, type Side } from './geometry.ts';
 import { foldedLabel, groupBox, layoutRail, railState, RAIL } from './rail.ts';
 import { textWidth } from './text.ts';
@@ -60,6 +60,8 @@ import {
   type FigTheme,
   type FlowProps,
   edgeTip,
+  narrowOf,
+  nextWide,
 } from './model.ts';
 
 export type * from './model.ts';
@@ -149,22 +151,21 @@ const HIDDEN: CSSProperties = {
  */
 export function Flow(props: FlowProps) {
   const { layout, edges, steps, lanes, timeline } = props;
-  const [wide, setWide] = useState(0);
+  const [narrow, setNarrow] = useState<{ wide: number; of: unknown[] }>({ wide: 0, of: [] });
+  const fold = !lanes && !timeline && props.rail !== 'only';
+  const wide = fold ? narrowOf(narrow.wide, narrow.of, [layout, edges, steps]) : 0;
+  const setWide = useCallback((w: number) => setNarrow({ wide: w, of: [layout, edges, steps] }), [layout, edges, steps]);
   const placed = useMemo(
     () => autoLayout({ layout: wide ? { ...layout, auto: true, direction: 'column' } : layout, edges, steps, lanes, timeline }),
     [wide, layout, edges, steps, lanes, timeline],
   );
   return (
-    <FlowBody
-      {...props}
-      layout={placed.layout}
-      edges={placed.edges}
-      written={props}
-      wide={wide}
-      setWide={lanes || timeline || props.rail === 'only' ? undefined : setWide}
-    />
+    <FlowBody {...props} layout={placed.layout} edges={placed.edges} written={props} wide={wide} setWide={fold ? setWide : undefined} />
   );
 }
+
+// The ASYNC tag is 9 px; phone text needs 11 px.
+const RAIL_ZOOM = 11 / 9;
 
 function FlowBody({
   layout,
@@ -278,6 +279,7 @@ function FlowBody({
     [withRail, railOnly, layout, edges, steps, mapW],
   );
   const noMap = railOnly && rail != null;
+  const railPane = useRef<HTMLDivElement>(null);
   const jump = useRef<number | null>(null);
   const [hoverEdge, setHoverEdge] = useState<string | null>(null);
   const [still, setStill] = useState(false);
@@ -302,7 +304,8 @@ function FlowBody({
     if (!el || !box) return;
     let last = '';
     const measure = () => {
-      if (setWide && (wide ? box.clientWidth >= wide / 2 : box.clientWidth < el.offsetWidth / 2)) return setWide(wide ? 0 : el.offsetWidth);
+      const goal = nextWide(wide, box.clientWidth, el.offsetWidth);
+      if (setWide && goal !== wide) return setWide(goal);
       const scale = Math.max(0.5, Math.min(1, box.clientWidth / el.offsetWidth));
       setFit({ scale, height: el.offsetHeight * scale });
       setMapW(el.offsetWidth);
@@ -401,12 +404,21 @@ function FlowBody({
     return () => ro.disconnect();
   }, [edges, ids, layout, tips, noMap, lanes, tl, axisW, lanePlan, extraTall, wide, setWide]);
 
+  useEffect(() => {
+    const pane = railPane.current;
+    const now = wide ? pane?.querySelector('[data-state="now"] path') : null;
+    if (!pane || !now) return;
+    const [p, r] = [pane.getBoundingClientRect(), now.getBoundingClientRect()];
+    pane.scrollTo({ left: pane.scrollLeft + (r.left + r.right) / 2 - p.left - pane.clientWidth / 2, behavior: still ? 'auto' : 'smooth' });
+  }, [wide, active, beat, still]);
+
   const reported = useRef(new Set<string>());
   useEffect(() => {
     const el = root.current,
       box = outer.current;
     const fig = figure.current;
     if (!check || !fig || (!noMap && (!el || !box))) return;
+    if (setWide && el && box && nextWide(wide, box.clientWidth, el.offsetWidth) !== wide) return;
     const base = (el ?? fig).getBoundingClientRect();
     const k = el ? base.width / el.offsetWidth : 1;
     const rel = (n: Element): Rect => {
@@ -447,11 +459,15 @@ function FlowBody({
           (t instanceof SVGElement || (t as HTMLElement).clientWidth > 0) &&
           !t.closest('[data-fig-tag],[aria-hidden]'),
       )
-      .map((t) => parseFloat(getComputedStyle(t).fontSize));
+      .map((t) => {
+        const svg = railPane.current?.firstElementChild;
+        const at = el?.contains(t) ? k : svg?.contains(t) && rail ? svg.getBoundingClientRect().width / rail.width : 1;
+        return parseFloat(getComputedStyle(t).fontSize) * at;
+      });
     const labels = Object.fromEntries([...fig.querySelectorAll<HTMLElement>('[data-fig-label]')].map((n) => [n.dataset.figLabel!, rel(n)]));
     const lanesIn = el ? [...el.querySelectorAll<HTMLElement>('[data-fig-band]')] : [];
     const scene: Scene = {
-      width: Math.max(el?.offsetWidth ?? 0, rail?.width ?? 0),
+      width: (box ?? fig).clientWidth,
       boxes,
       ...(lanePlan?.stubs.size && {
         lanes: lanesIn.map((n) => ({
@@ -501,7 +517,7 @@ function FlowBody({
       // oxlint-disable-next-line no-console
       console.warn(`flowfig check: ${f.severity} ${f.rule}: ${f.message}`);
     }
-  }, [check, routed, written, layout, edges, steps, ids, theme, rail, noMap, lanePlan]);
+  }, [check, routed, written, layout, edges, steps, ids, theme, rail, noMap, lanePlan, wide, setWide]);
 
   useEffect(() => {
     const gs = dots.current,
@@ -1380,13 +1396,13 @@ function FlowBody({
         </>
       )}
       {rail && (
-        <div style={{ overflowX: wide ? 'auto' : undefined }}>
+        <div ref={railPane} style={{ overflowX: wide ? 'auto' : undefined }}>
           <svg
             viewBox={`0 0 ${rail.width} ${rail.height}`}
             style={{
               display: 'block',
-              width: wide ? rail.width : '100%',
-              maxWidth: rail.width,
+              width: wide ? rail.width * RAIL_ZOOM : '100%',
+              maxWidth: wide ? undefined : rail.width,
               height: 'auto',
               margin: `${noMap ? 0 : RAIL.gap}px auto 0`,
               overflow: 'visible',
