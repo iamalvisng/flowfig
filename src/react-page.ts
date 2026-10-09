@@ -20,10 +20,18 @@ export async function withReactPage(entry: string, run: (page: Page) => Promise<
     configFile: false,
     root: fileURLToPath(new URL('..', import.meta.url)),
     logLevel: 'silent',
+    define: { 'process.env.NODE_ENV': '"development"' },
     plugins: [{ name: 'entry', resolveId: (id) => (id === 'entry' ? id : null), load: (id) => (id === 'entry' ? entry : null) }],
     build: { write: false, rollupOptions: { input: 'entry', output: { format: 'iife' } } },
   })) as Rolldown.RolldownOutput;
-  const html = `<!doctype html><body style="margin:0"><div id="root"></div><script>${out.output[0].code}</script></body>`;
+  const capture = `window.pageErrors = [];
+addEventListener('error', (e) => pageErrors.push('error: ' + e.message));
+addEventListener('unhandledrejection', (e) => pageErrors.push('rejection: ' + e.reason));
+for (const m of ['error', 'warn']) {
+  const f = console[m];
+  console[m] = (...a) => (pageErrors.push('console.' + m + ': ' + a.join(' ')), f(...a));
+}`;
+  const html = `<!doctype html><body style="margin:0"><div id="root"></div><script>${capture}</script><script>${out.output[0].code}</script></body>`;
   const dir = mkdtempSync(join(tmpdir(), 'react-page-'));
   const { cdp, close } = await launch(browser.path!, join(dir, 'profile'), 120_000);
   try {
@@ -34,12 +42,15 @@ export async function withReactPage(entry: string, run: (page: Page) => Promise<
     const until = async (e: string, what: string) => {
       for (let t = Date.now(); !(await ev(e)); await new Promise((r) => setTimeout(r, 50))) assert.ok(Date.now() - t < 4000, what);
     };
+    const noErrors = async () => assert.deepEqual((await ev('window.pageErrors')) ?? [], [], 'the page logged errors');
     const load = async (width: number) => {
+      await noErrors();
       await send('Emulation.setDeviceMetricsOverride', { width, height: 844, deviceScaleFactor: 1, mobile: false });
       const { frameTree } = await send('Page.getFrameTree');
       await send('Page.setDocumentContent', { frameId: frameTree.frame.id, html });
     };
     await run({ send, ev, until, load });
+    await noErrors();
   } finally {
     await close();
     rmSync(dir, { recursive: true, force: true });
