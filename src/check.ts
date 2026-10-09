@@ -228,7 +228,7 @@ export function checkSpec(fig: FlowProps): Finding[] {
   return out;
 }
 
-export type CheckOptions = { width?: number; minText?: number };
+export type CheckOptions = { width?: number; minText?: number; auto?: boolean };
 
 const lerp = (p: Pt, q: Pt, t: number): Pt => ({ x: p.x + (q.x - p.x) * t, y: p.y + (q.y - p.y) * t });
 const path = (e: SceneEdge): Pt[] => {
@@ -247,7 +247,7 @@ const px = (n: number) => Math.round(n * 10) / 10;
 // Measured corner touches go 3.5 px deep; real crossings go 24 px or more.
 const TOUCH = 6;
 
-export function checkScene(scene: Scene, { width = 830, minText = 10 }: CheckOptions = {}): Finding[] {
+export function checkScene(scene: Scene, { width = 830, minText = 10, auto }: CheckOptions = {}): Finding[] {
   const out: Finding[] = [];
   for (const b of scene.boxes)
     for (const t of b.texts) {
@@ -264,7 +264,7 @@ export function checkScene(scene: Scene, { width = 830, minText = 10 }: CheckOpt
           err(
             'edge-crosses-box',
             [e.id, b.id],
-            `edge "${e.id}" passes through box "${b.id}": move a box, or set "auto": true on the root layout`,
+            `edge "${e.id}" passes through box "${b.id}": move a box${auto ? '' : ', or set "auto": true on the root layout'}`,
           ),
         );
   }
@@ -278,7 +278,7 @@ export function checkScene(scene: Scene, { width = 830, minText = 10 }: CheckOpt
         warn(
           'long-edge',
           [e.id],
-          `edge "${e.id}" is ${px(ratio)} times the straight distance between its ends: put its ends in one row or column, route it with around, or set "auto": true on the root layout`,
+          `edge "${e.id}" is ${px(ratio)} times the straight distance between its ends: put its ends in one row or column${auto ? ', or route it with around' : ', route it with around, or set "auto": true on the root layout'}`,
         ),
       );
   }
@@ -433,5 +433,10 @@ export function checkRendered(fig: FlowProps, opts: SvgOptions & CheckOptions, s
     ids: [id],
     message: `edge "${id}" ends at a lane that no block on its side shows; the edge uses the nearest block`,
   }));
-  return [...checkSpec(fig), ...checkScene(scene, opts), ...lost, ...checkTheme({ ...fig.theme, ...opts.theme })];
+  return [
+    ...checkSpec(fig),
+    ...checkScene(scene, { ...opts, auto: fig.layout.auto }),
+    ...lost,
+    ...checkTheme({ ...fig.theme, ...opts.theme }),
+  ];
 }

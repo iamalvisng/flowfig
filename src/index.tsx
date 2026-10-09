@@ -216,6 +216,7 @@ function FlowBody({
   const firstLabel = useRef<string | null>('');
   const paths = useRef<Record<string, SVGPathElement | null>>({});
   const [routed, setRouted] = useState<Routed[]>([]);
+  const routedOn = useRef<Record<string, Rect>>({});
   const markSides = new Set(nodes(layout).flatMap((n) => (n.mark ? [markSide(n.id, n.mark, routed)] : [])));
   const [extraTall, setExtraTall] = useState<ReadonlySet<string>>(new Set());
   const lanePlan = useMemo(
@@ -398,6 +399,7 @@ function FlowBody({
         pillArea,
         lanePlan ? { bands: Object.values(laneBands), boxes: nodes(layout).flatMap((n) => (rects[n.id] ? [rects[n.id]] : [])) } : undefined,
       );
+      routedOn.current = rects;
       setRouted(next);
       if (lanePlan) {
         const more = [...tightCopies(layout.children as FigGroup[], lanePlan.ends, edges, next)].filter(
@@ -476,6 +478,11 @@ function FlowBody({
             }),
         };
       });
+    const moved = (b: (typeof boxes)[number]) => {
+      const r = routedOn.current[b.id];
+      return !r || Math.abs(r.x - b.rect.x) > 1 || Math.abs(r.y - b.rect.y) > 1;
+    };
+    if (el && boxes.some(moved)) return;
     const fonts = [...fig.querySelectorAll<Element>('*')]
       .filter(
         (t) =>
@@ -538,7 +545,7 @@ function FlowBody({
     };
     for (const f of [
       ...checkSpec(written),
-      ...checkScene(scene, { width: (box ?? fig).clientWidth, minText: textFloor((box ?? fig).clientWidth) }),
+      ...checkScene(scene, { width: (box ?? fig).clientWidth, minText: textFloor((box ?? fig).clientWidth), auto: written.layout.auto }),
       ...checkTheme(theme),
     ]) {
       const key = f.rule + ':' + f.ids.join() + ':' + f.message;
