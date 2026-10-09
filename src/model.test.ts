@@ -373,7 +373,7 @@ test('timeline: the loop starts with the playhead at the first beat item, not at
   assert.equal(loopStartItem(lay.items, []), undefined, 'no step: the playhead stays at the range end');
 });
 
-test('narrow mode: the fold rule, the hysteresis, the full-size fold and the reset on a changed spec', () => {
+test('narrow mode: a map that does not fit folds to a full-size column, keeps the fold until the row fits, and resets on a changed spec', () => {
   type Spec = { row: number; col: number };
   const run = (events: [number, Spec][]) => {
     let state = { wide: 0, key: '' };
@@ -381,7 +381,7 @@ test('narrow mode: the fold rule, the hysteresis, the full-size fold and the res
       const key = specKey(spec);
       for (let i = 0; i < 3; i++) {
         const wide = state.key === key ? state.wide : 0;
-        const map = wide ? spec.col : spec.row;
+        const map = wide > 0 ? spec.col : spec.row;
         const goal = nextWide(wide, box, map);
         if (goal === wide) return `${map} at ${fitScale(wide, box, map).toFixed(2)}${i ? ' after a switch' : ''}`;
         state = { wide: goal, key };
@@ -390,31 +390,24 @@ test('narrow mode: the fold rule, the hysteresis, the full-size fold and the res
     });
   };
   const a = { row: 1200, col: 264 },
-    b = { row: 600, col: 250 };
-  assert.deepEqual(run([1100, 254, 700, 560, 420, 1100, 324].map((w) => [w, a])), [
-    '1200 at 0.92',
-    '264 at 1.00 after a switch',
-    '1200 at 0.58 after a switch',
+    b = { row: 600, col: 250 },
+    c = { row: 300, col: 320 };
+  assert.deepEqual(run([1300, 1100, 1199, 254, 1200].map((w) => [w, a])), [
+    '1200 at 1.00',
     '264 at 1.00 after a switch',
     '264 at 1.00',
-    '1200 at 0.92 after a switch',
-    '264 at 1.00 after a switch',
+    '264 at 1.00',
+    '1200 at 1.00 after a switch',
   ]);
   assert.deepEqual(
     run([
       [324, a],
       [324, { ...a }],
-      [500, b],
+      [700, b],
     ]),
-    ['264 at 1.00 after a switch', '264 at 1.00', '600 at 0.83'],
+    ['264 at 1.00 after a switch', '264 at 1.00', '600 at 1.00'],
   );
-  assert.deepEqual(run([500, 356, 490, 470, 470].map((w) => [w, b])), [
-    '600 at 0.83',
-    '250 at 1.00 after a switch',
-    '600 at 0.82 after a switch',
-    '250 at 1.00 after a switch',
-    '250 at 1.00',
-  ]);
+  assert.deepEqual(run([280, 290, 300].map((w) => [w, c])), ['300 at 1.00 after a switch', '300 at 1.00', '300 at 1.00 after a switch']);
 });
 
 test('the narrow-mode spec key does not throw on a circular label or a ref to a mounted node, and equal content gives an equal key', () => {
