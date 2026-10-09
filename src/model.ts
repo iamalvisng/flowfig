@@ -41,7 +41,7 @@ export type FigGroup = {
   direction?: 'row' | 'column';
   /** Space between children in px. Default: 28 for a column, fitted for a row. */
   gap?: number;
-  /** Where children line up across the group's direction. Default: center (columns stretch). */
+  /** Where children line up across the group's direction. Default: `center`, also for a column. */
   align?: 'start' | 'center' | 'end';
   /** The boxes and groups inside, in order. */
   children: (FigNode | FigGroup)[];
