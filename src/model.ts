@@ -765,6 +765,9 @@ const keyOf = (v: unknown, path: object[]): unknown => {
 };
 export const specKey = (...parts: unknown[]) => JSON.stringify(keyOf(parts, []));
 export const fitScale = (wide: number, box: number, map: number) => Math.max(wide ? 1 : 0.5, Math.min(1, box / map));
-const PHONE = 480;
-const folds = (box: number, map: number) => box < map / 2 || (box < PHONE && box < map);
-export const nextWide = (wide: number, box: number, map: number) => (folds(box, wide || map) ? wide || map : 0);
+// Reader text is 11 px or more, so a scale below 1 shows small text.
+export const nextWide = (wide: number, box: number, map: number) => {
+  const row = Math.abs(wide) || map;
+  if (box >= row) return 0;
+  return wide > 0 && map >= wide ? -wide : wide || map;
+};

@@ -158,7 +158,7 @@ export function Flow(props: FlowProps) {
   const wide = fold && narrow.key === key ? narrow.wide : 0;
   const setWide = useCallback((w: number) => setNarrow({ wide: w, key }), [key]);
   const placed = useMemo(
-    () => autoLayout({ layout: wide ? { ...layout, auto: true, direction: 'column' } : layout, edges, steps, lanes, timeline }),
+    () => autoLayout({ layout: wide > 0 ? { ...layout, auto: true, direction: 'column' } : layout, edges, steps, lanes, timeline }),
     [wide, layout, edges, steps, lanes, timeline],
   );
   return (
