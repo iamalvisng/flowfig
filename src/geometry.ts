@@ -17,6 +17,7 @@ export type Routed = {
   room?: number;
   /** The px an elbow detour goes outside the boxes, for each side. */
   bleed?: Partial<Record<Around, number>>;
+  ends?: [string, string];
 };
 /** A rect that a route keeps clear of. `box` marks a box. */
 export type Avoid = Rect & { box?: boolean };
@@ -550,8 +551,14 @@ export function route(
     track(Array.from({ length: 33 }, (_, i) => bezier(r.curve, i / 32)));
   }
   for (const p of picks) if (p.stub) done.set(p, one(p));
-  return picks.map((p) => done.get(p)!);
+  return picks.map((p) => ({ ...done.get(p)!, ends: [`${p.from}:${p.sa}`, `${p.to}:${p.sb}`] }));
 }
+
+export const markSide = (id: string, mark: 'start' | 'end', routed: Routed[]): Side => {
+  const used = new Set(routed.flatMap((r) => r.ends ?? []));
+  const order: Side[] = mark === 'start' ? ['l', 't', 'b', 'r'] : ['r', 'b', 't', 'l'];
+  return order.find((s) => !used.has(`${id}:${s}`)) ?? order[0];
+};
 
 export const arcRoom = (routed: Routed[], way: Around) =>
   Math.max(0, ...routed.map((r) => (r.around === way ? r.room! : (r.bleed?.[way] ?? 0))));

@@ -177,8 +177,8 @@ test('marks: the server markup has a start dot and an end ring', () => {
       ],
     },
   });
-  assert.ok(html.includes('left:-18px;width:10px;height:10px'));
-  assert.ok(html.includes('right:-20px;width:14px;height:14px'));
+  assert.ok(/left:-18px;[^"]*width:10px;height:10px/.test(html));
+  assert.ok(/right:-20px;[^"]*width:14px;height:14px/.test(html));
   assert.ok(!render(fig).includes('width:14px;height:14px'));
 });
 

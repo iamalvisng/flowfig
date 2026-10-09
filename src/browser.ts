@@ -54,6 +54,9 @@ export type Cdp = {
 
 type Waiter = { resolve: (v: any) => void; reject: (e: Error) => void };
 
+// Measured: 2 parallel starts on a loaded 4-CPU Linux runner took over 30 s.
+const START_MS = 120_000;
+
 export function launch(path: string, profile: string, timeoutMs = 30_000): Promise<{ cdp: Cdp; close: () => Promise<void> }> {
   const args = [
     '--headless=new',
@@ -169,7 +172,7 @@ export function launch(path: string, profile: string, timeoutMs = 30_000): Promi
     killGroup();
     await closed;
   };
-  return cdp.send('Browser.getVersion').then(
+  return cdp.send('Browser.getVersion', {}, undefined, START_MS).then(
     () => ({ cdp, close }),
     async (e) => {
       await close();

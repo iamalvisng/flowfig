@@ -674,6 +674,33 @@ test('marks: a start dot and an end ring sit in the gap, and the scene is unchan
   assert.ok(!b.svg.includes('r="6.25"'));
 });
 
+test('marks: a dot moves off a side that an edge uses, so no arrow touches the dot', () => {
+  const { svg } = render({
+    layout: {
+      direction: 'row',
+      children: [
+        { id: 'a', label: 'Alpha' },
+        { id: 'b', label: 'Beta', mark: 'start' },
+        { id: 'c', label: 'Gamma', mark: 'end' },
+        { id: 'd', label: 'Delta' },
+      ],
+    },
+    edges: [
+      { from: 'a', to: 'b' },
+      { from: 'b', to: 'c' },
+      { from: 'c', to: 'd' },
+    ],
+  });
+  const dots = [...svg.matchAll(/<circle cx="([\d.]+)" cy="([\d.]+)" r="(5|6\.25)"/g)].map((m) => [+m[1], +m[2], +m[3]]);
+  const ends = [...svg.matchAll(/<path id="p-[^"]*" d="M ([\d.]+) ([\d.]+) C [^"]*?([\d.]+) ([\d.]+)"/g)].flatMap((m) => [
+    [+m[1], +m[2]],
+    [+m[3], +m[4]],
+  ]);
+  assert.equal(dots.length, 2);
+  assert.equal(ends.length, 6);
+  for (const [cx, cy, r] of dots) for (const [x, y] of ends) assert.ok(Math.hypot(x - cx, y - cy) > r + 9, `${x},${y}`);
+});
+
 const tlFig: FlowProps = {
   timeline: true,
   today: '2026-10-14',
