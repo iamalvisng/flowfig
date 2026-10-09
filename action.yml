@@ -14,7 +14,7 @@ runs:
   using: composite
   steps:
     - shell: bash
-      run: if [ ! -x node_modules/.bin/flowfig ]; then npm i --no-save flowfig@0.9.0; fi
+      run: if [ ! -x node_modules/.bin/flowfig ]; then npm i --no-save flowfig@0.10.0; fi
       working-directory: ${{ github.workspace }}
     - shell: bash
       env:
