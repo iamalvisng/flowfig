@@ -216,7 +216,7 @@ function FlowBody({
   const firstLabel = useRef<string | null>('');
   const paths = useRef<Record<string, SVGPathElement | null>>({});
   const [routed, setRouted] = useState<Routed[]>([]);
-  const routedOn = useRef<Record<string, Rect>>({});
+  const routedOn = useRef(new WeakMap<Routed[], Record<string, Rect>>());
   const markSides = new Set(nodes(layout).flatMap((n) => (n.mark ? [markSide(n.id, n.mark, routed)] : [])));
   const [extraTall, setExtraTall] = useState<ReadonlySet<string>>(new Set());
   const lanePlan = useMemo(
@@ -399,7 +399,7 @@ function FlowBody({
         pillArea,
         lanePlan ? { bands: Object.values(laneBands), boxes: nodes(layout).flatMap((n) => (rects[n.id] ? [rects[n.id]] : [])) } : undefined,
       );
-      routedOn.current = rects;
+      routedOn.current.set(next, rects);
       setRouted(next);
       if (lanePlan) {
         const more = [...tightCopies(layout.children as FigGroup[], lanePlan.ends, edges, next)].filter(
@@ -479,7 +479,7 @@ function FlowBody({
         };
       });
     const moved = (b: (typeof boxes)[number]) => {
-      const r = routedOn.current[b.id];
+      const r = routedOn.current.get(routed)?.[b.id];
       return !r || Math.abs(r.x - b.rect.x) > 1 || Math.abs(r.y - b.rect.y) > 1;
     };
     if (el && boxes.some(moved)) return;
