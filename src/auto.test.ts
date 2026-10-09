@@ -481,6 +481,29 @@ test('a 40-box left-to-right chain lays out in under 1 s', () => {
   assert.ok(performance.now() - t < 1000);
 });
 
+type P = { x: number; y: number };
+const turn = (o: P, u: P, w: P) => Math.sign((u.x - o.x) * (w.y - o.y) - (u.y - o.y) * (w.x - o.x));
+const crossed = (fig: FlowProps) => {
+  const edges = render(fig).scene.edges.map((e) => ({ ...e, s: samples(e.curve) }));
+  const hit = (p: P[], q: P[]) =>
+    p.some(
+      (_, i) =>
+        i &&
+        q.some(
+          (_, j) =>
+            j &&
+            turn(p[i - 1], p[i], q[j - 1]) * turn(p[i - 1], p[i], q[j]) < 0 &&
+            turn(q[j - 1], q[j], p[i - 1]) * turn(q[j - 1], q[j], p[i]) < 0,
+        ),
+    );
+  return edges.flatMap((e, i) =>
+    edges
+      .slice(i + 1)
+      .filter((f) => ![e.from, e.to].some((id) => id === f.from || id === f.to) && hit(e.s, f.s))
+      .map((f) => `${e.id} x ${f.id}`),
+  );
+};
+
 test('a loop and a skip edge that would arc on the same side do not cross', () => {
   const fig: FlowProps = {
     layout: {
@@ -506,14 +529,14 @@ test('a loop and a skip edge that would arc on the same side do not cross', () =
       { id: 'audit', from: 'm', to: 'l', label: 'audit' },
     ],
   };
-  const { edges } = render(fig).scene;
-  const [p, q] = ['fix', 'audit'].map((id) => samples(edges.find((e) => e.id === id)!.curve));
-  const side = (o: { x: number; y: number }, u: typeof o, w: typeof o) => Math.sign((u.x - o.x) * (w.y - o.y) - (u.y - o.y) * (w.x - o.x));
-  for (let i = 1; i < p.length; i++)
-    for (let j = 1; j < q.length; j++)
-      assert.ok(
-        side(p[i - 1], p[i], q[j - 1]) * side(p[i - 1], p[i], q[j]) >= 0 ||
-          side(q[j - 1], q[j], p[i - 1]) * side(q[j - 1], q[j], p[i]) >= 0,
-        'the fix loop crosses the audit edge',
-      );
+  assert.deepEqual(crossed(fig), []);
+});
+
+test('moving an arc to the other side adds no crossing to the straight edges', () => {
+  const pairs = ['0-1', '1-2', '0-3', '1-4', '2-5', '5-3', '2-4', '3-2', '3-1'];
+  const fig: FlowProps = {
+    layout: { auto: true, direction: 'row', children: [0, 1, 2, 3, 4, 5].map((i) => ({ id: `n${i}`, label: `Box ${i}` })) },
+    edges: pairs.map((p) => ({ from: `n${p[0]}`, to: `n${p[2]}` })),
+  };
+  assert.deepEqual(crossed(fig), []);
 });
