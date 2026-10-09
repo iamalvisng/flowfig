@@ -462,7 +462,8 @@ function FlowBody({
             .filter((t) => !t.children.length && t.textContent?.trim() && t.clientWidth > 0 && !t.closest('[aria-hidden]'))
             .map((t) => {
               const fontSize = parseFloat(getComputedStyle(t).fontSize);
-              if (!n.dataset.diamond) return { text: t.textContent!, fontSize, room: t.clientWidth, need: t.scrollWidth };
+              if (!n.dataset.diamond || t.closest('[data-fig-outside]'))
+                return { text: t.textContent!, fontSize, room: t.clientWidth, need: t.scrollWidth };
               const [r, range] = [rel(t), document.createRange()];
               range.selectNodeContents(t);
               const far = Math.max(Math.abs(r.y - rect.y - rect.h / 2), Math.abs(r.y + r.h - rect.y - rect.h / 2));
