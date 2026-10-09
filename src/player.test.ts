@@ -319,6 +319,19 @@ test('auto layout: the player puts each box in the rank and order of the SVG', (
   assert.equal(new Set(toSvgScene(fig).scene.boxes.map((b) => mid(b.rect))).size, 4);
 });
 
+test('narrow mode: the player draws the column layout of the SVG, one box for each row', async () => {
+  const { default: demo } = await import('../figures/checkout.ts');
+  const fig: FlowProps = { ...demo.props, rail: false, layout: { ...demo.props.layout, auto: true, direction: 'column' } };
+  const drawn = [...render(fig).matchAll(/data-fig="(\w+)"/g)].map((m) => m[1]);
+  const boxes = toSvgScene(fig).scene.boxes.toSorted((p, q) => p.rect.y - q.rect.y);
+  assert.deepEqual(drawn, ['browser', 'gateway', 'orders', 'db', 'payments']);
+  assert.deepEqual(
+    boxes.map((b) => b.id),
+    drawn,
+  );
+  assert.ok(boxes.every((b, i) => !i || b.rect.y >= boxes[i - 1].rect.y + boxes[i - 1].rect.h));
+});
+
 test('only the selected tab is in the tab order, and each tab controls a tabpanel', () => {
   const html = render(fig);
   const tabs = [...html.matchAll(/<button[^>]*role="tab"[^>]*>/g)].map(([t]) => t);

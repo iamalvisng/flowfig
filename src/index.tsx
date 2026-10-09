@@ -149,8 +149,21 @@ const HIDDEN: CSSProperties = {
  */
 export function Flow(props: FlowProps) {
   const { layout, edges, steps, lanes, timeline } = props;
-  const placed = useMemo(() => autoLayout({ layout, edges, steps, lanes, timeline }), [layout, edges, steps, lanes, timeline]);
-  return <FlowBody {...props} layout={placed.layout} edges={placed.edges} written={props} />;
+  const [wide, setWide] = useState(0);
+  const placed = useMemo(
+    () => autoLayout({ layout: wide ? { ...layout, auto: true, direction: 'column' } : layout, edges, steps, lanes, timeline }),
+    [wide, layout, edges, steps, lanes, timeline],
+  );
+  return (
+    <FlowBody
+      {...props}
+      layout={placed.layout}
+      edges={placed.edges}
+      written={props}
+      wide={wide}
+      setWide={lanes || timeline || props.rail === 'only' ? undefined : setWide}
+    />
+  );
 }
 
 function FlowBody({
@@ -166,7 +179,9 @@ function FlowBody({
   timeline,
   today,
   written,
-}: FlowProps & { written: FlowProps }) {
+  wide,
+  setWide,
+}: FlowProps & { written: FlowProps; wide: number; setWide?: (w: number) => void }) {
   const tl = timeline && isLanesLayout(layout);
   const alt = useMemo(() => altText({ layout, edges, steps: stepsIn }), [layout, edges, stepsIn]);
   const descId = useId();
@@ -287,6 +302,7 @@ function FlowBody({
     if (!el || !box) return;
     let last = '';
     const measure = () => {
+      if (setWide && (wide ? box.clientWidth >= wide / 2 : box.clientWidth < el.offsetWidth / 2)) return setWide(wide ? 0 : el.offsetWidth);
       const scale = Math.max(0.5, Math.min(1, box.clientWidth / el.offsetWidth));
       setFit({ scale, height: el.offsetHeight * scale });
       setMapW(el.offsetWidth);
@@ -379,11 +395,11 @@ function FlowBody({
     };
     measure();
     const ro = new ResizeObserver(measure);
-    ro.observe(el);
+    ro.observe(el, { box: 'border-box' });
     ro.observe(box);
     el.querySelectorAll('[data-fig]').forEach((n) => ro.observe(n));
     return () => ro.disconnect();
-  }, [edges, ids, layout, tips, noMap, lanes, tl, axisW, lanePlan, extraTall]);
+  }, [edges, ids, layout, tips, noMap, lanes, tl, axisW, lanePlan, extraTall, wide, setWide]);
 
   const reported = useRef(new Set<string>());
   useEffect(() => {
@@ -951,13 +967,7 @@ function FlowBody({
               display: 'flex',
               flexDirection: item.direction ?? 'row',
               gap: groupGap(item, edges),
-              alignItems: item.align
-                ? item.align === 'center'
-                  ? 'center'
-                  : 'flex-' + item.align
-                : item.direction === 'column'
-                  ? 'stretch'
-                  : 'center',
+              alignItems: item.align && item.align !== 'center' ? 'flex-' + item.align : 'center',
               justifyContent: 'center',
             }}
           >
@@ -1190,7 +1200,6 @@ function FlowBody({
               backgroundSize: '14px 14px',
             }}
           >
-            {/* ponytail: no stacked mobile layout; add one if narrow screens break it. */}
             <div
               ref={outer}
               role="tabpanel"
