@@ -284,10 +284,13 @@ function legendOf(m: DiffMarks): { color: string; text: string }[] {
   return items.length ? items : [{ color: 'none', text: 'no change in boxes and edges' }];
 }
 
+const legendWidths = (items: { color: string; text: string }[]) => items.map((i) => textWidth(i.text, 12) + (i.color === 'none' ? 0 : 16));
+const legendWidth = (items: { color: string; text: string }[]) => legendWidths(items).reduce((a, b) => a + b + 20, -20);
+
 function legendSvg(items: { color: string; text: string }[], W: number, H: number): string {
   if (!items.length) return '';
-  const widths = items.map((i) => textWidth(i.text, 12) + (i.color === 'none' ? 0 : 16));
-  let x = (W - widths.reduce((a, b) => a + b, 0) - 20 * (items.length - 1)) / 2;
+  const widths = legendWidths(items);
+  let x = (W - legendWidth(items)) / 2;
   return items
     .map((i, k) => {
       const sq = i.color === 'none' ? '' : `<rect x="${n2(x)}" y="${n2(H - 24)}" width="10" height="10" rx="2" fill="${i.color}"/>`;
@@ -889,16 +892,19 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
 
   const bounds = placed[0];
   const [arcT, arcB, arcL, arcR] = (['above', 'below', 'left', 'right'] as const).map((w) => arcRoom(routed, w));
-  const capLines = [...new Set(captions)].flatMap((c) => wrap(c, Math.max(MIN_W, bounds.w), 13.5).length);
-  const mapW = Math.max(bounds.w + pad * 2 + arcL + arcR, MIN_W);
+  const legend = opts.marks ? legendOf(opts.marks) : [];
+  const stepLabels = fig.rail || synthetic ? [] : steps.map((s) => textWidth(str(s.label), 13, true));
+  const floor = Math.max(MIN_W, ...[...stepLabels, legend.length ? legendWidth(legend) : 0].map((w) => w + 16));
+  const mapW = Math.max(bounds.w + pad * 2 + arcL + arcR, floor);
   const rail: Rail | null = fig.rail ? layoutRail(fig, fig.rail === 'only' ? 560 : mapW) : null;
   const only = fig.rail === 'only' && rail != null;
+  const wrapW = Math.max(only ? 560 : MIN_W, bounds.w);
+  const capLines = [...new Set(captions)].flatMap((c) => wrap(c, wrapW, 13.5).length);
   const capTop = rail ? 20 : 26;
   const capH = steps.length ? capTop + 4 + Math.max(0, ...capLines) * 20 : 0;
-  const W = only ? Math.max(560, rail.width) : Math.max(mapW, rail?.width ?? 0);
+  const W = only ? Math.max(560, floor, rail.width) : Math.max(mapW, rail?.width ?? 0);
   const mapH = only ? 0 : bounds.h + pad * 2 + arcT + arcB;
   const top = only ? pad : mapH + RAIL.gap;
-  const legend = opts.marks ? legendOf(opts.marks) : [];
   const legendH = opts.marks ? 34 : 0;
   const H = (only ? pad + rail.height + capH : mapH + (rail ? RAIL.gap + rail.height : 0) + capH) + legendH;
   const shift = (W - (bounds.w + pad * 2 + arcL + arcR)) / 2 + arcL;
@@ -913,7 +919,7 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
         });
   const said = [...new Set(captions)].map((text) => {
     const on = captions.map((c) => c === text);
-    const lines = wrap(text, Math.max(MIN_W, bounds.w), 13.5);
+    const lines = wrap(text, wrapW, 13.5);
     return (
       `<g opacity="0"${cls(anim(on, 'opacity: 1', 'opacity: 0', 'y'))}>` +
       lines.map((l, li) => `<text x="${n2(W / 2)}" y="${n2(H - capH + capTop + 16 + li * 20)}" class="caption">${esc(l)}</text>`).join('') +

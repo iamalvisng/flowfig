@@ -1531,3 +1531,26 @@ test('a straight edge label wider than its box column stays inside the figure', 
     [],
   );
 });
+
+test('a long step label and a diff legend stay inside a narrow figure', () => {
+  const label = 'Step 1: the client sends the login request';
+  const fig: FlowProps = {
+    layout: {
+      direction: 'column',
+      children: [
+        { id: 'a', label: 'A' },
+        { id: 'b', label: 'B' },
+      ],
+    },
+    edges: [{ id: 'ab', from: 'a', to: 'b' }],
+    steps: [{ label, flow: [{ edges: 'ab' }] }],
+  };
+  assert.ok(render(fig).scene.width >= textWidth(label, 13, true));
+  const marks = { boxes: { a: 'added', b: 'removed' }, edges: { ab: 'changed' }, steps: 1 } as const;
+  const xs = [
+    ...toSvg({ ...fig, steps: [{ label: 'one', flow: [{ edges: 'ab' }] }] }, { marks }).matchAll(
+      /<rect x="([\d.-]+)" y="[\d.]+" width="10"/g,
+    ),
+  ];
+  assert.ok(xs.length === 3 && Number(xs[0][1]) >= 0);
+});
