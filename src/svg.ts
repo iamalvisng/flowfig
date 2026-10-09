@@ -80,6 +80,7 @@ const LINE = CARD_LINE,
   CARD_SIDE = 8,
   ROW_GAP = 4;
 const SUB_LINE = 15;
+const MIN_W = 320;
 const FRAME_TOP = 37,
   FRAME_BOTTOM = 18;
 
@@ -886,8 +887,8 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
 
   const bounds = placed[0];
   const [arcT, arcB, arcL, arcR] = (['above', 'below', 'left', 'right'] as const).map((w) => arcRoom(routed, w));
-  const capLines = [...new Set(captions)].flatMap((c) => wrap(c, Math.max(560, bounds.w), 13.5).length);
-  const mapW = Math.max(bounds.w + pad * 2 + arcL + arcR, 560);
+  const capLines = [...new Set(captions)].flatMap((c) => wrap(c, Math.max(MIN_W, bounds.w), 13.5).length);
+  const mapW = Math.max(bounds.w + pad * 2 + arcL + arcR, MIN_W);
   const rail: Rail | null = fig.rail ? layoutRail(fig, fig.rail === 'only' ? 560 : mapW) : null;
   const only = fig.rail === 'only' && rail != null;
   const capTop = rail ? 20 : 26;
@@ -910,7 +911,7 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
         });
   const said = [...new Set(captions)].map((text) => {
     const on = captions.map((c) => c === text);
-    const lines = wrap(text, Math.max(560, bounds.w), 13.5);
+    const lines = wrap(text, Math.max(MIN_W, bounds.w), 13.5);
     return (
       `<g opacity="0"${cls(anim(on, 'opacity: 1', 'opacity: 0', 'y'))}>` +
       lines.map((l, li) => `<text x="${n2(W / 2)}" y="${n2(H - capH + capTop + 16 + li * 20)}" class="caption">${esc(l)}</text>`).join('') +

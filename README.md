@@ -399,6 +399,9 @@ required. The tones are `blue` (the default), `purple`, `green`, `orange` and `g
 | `autoplay` | Start to play when the figure mounts. Only the React player reads it.                | `true`   |
 | `check`    | Run the check rules in the browser. Only the React player reads it.                  | `false`  |
 
+A figure is as wide as its boxes need, and at least 320 px. The step captions wrap at the figure
+width, so a narrow figure fits a phone screen at full size. A rail-only figure is at least 560 px.
+
 ## Check a figure
 
 `flowfig check` reads a spec and lists the faults. The input is `-` (stdin), a `.json` file, a `.ts` module or an SVG from the

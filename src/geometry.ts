@@ -542,7 +542,11 @@ export function route(
   pills.push(...use.out);
   let k = 0;
   for (const [p, r] of done) {
-    if (p.labelW) r.mid = use.mids[k++];
+    if (p.labelW) {
+      r.mid = use.mids[k++];
+      const [l, rt] = [x0 - r.mid.x + p.labelW / 2, r.mid.x + p.labelW / 2 - x1];
+      r.bleed = { ...r.bleed, left: Math.max(r.bleed?.left ?? 0, l, 0), right: Math.max(r.bleed?.right ?? 0, rt, 0) };
+    }
     track(Array.from({ length: 33 }, (_, i) => bezier(r.curve, i / 32)));
   }
   for (const p of picks) if (p.stub) done.set(p, one(p));

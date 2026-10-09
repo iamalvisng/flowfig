@@ -1105,7 +1105,7 @@ test('lanes wrap: a lanes figure with no box draws at the base width with no NaN
   };
   const { svg, scene } = render(empty);
   assert.ok(!svg.includes('NaN'));
-  assert.equal(scene.width, 560);
+  assert.equal(scene.width, 320);
 });
 
 test('lanes wrap: a block with no box is not drawn', async () => {
@@ -1455,4 +1455,52 @@ test('a detail field changes nothing in a normal render; links wrap only the lis
   const linked = toSvg(withDetail, { links: { a: 'x"y.html' } });
   assert.equal(linked.match(/<a /g)?.length, 1);
   assert.match(linked, /<a href="x&quot;y\.html" tabindex="-1">/);
+});
+
+test('a narrow figure keeps its own width above the 320 px floor', () => {
+  const small: FlowProps = {
+    layout: {
+      direction: 'column',
+      children: [
+        { id: 'a', label: 'A' },
+        { id: 'b', label: 'B' },
+      ],
+    },
+    edges: [{ id: 'ab', from: 'a', to: 'b' }],
+    steps: [
+      {
+        label: 'one',
+        flow: [{ edges: 'ab', say: 'A long caption wraps at the figure width, not at a wider floor of five hundred and sixty pixels.' }],
+      },
+    ],
+  };
+  const { scene, svg } = render(small);
+  assert.ok(scene.width >= 320 && scene.width < 400, `width ${scene.width}`);
+  assert.ok((svg.match(/class="caption"/g) ?? []).length >= 2, 'the caption wraps at the figure width');
+});
+
+test('a straight edge label wider than its box column stays inside the figure', () => {
+  const fig: FlowProps = {
+    layout: {
+      direction: 'row',
+      children: [
+        {
+          direction: 'column',
+          children: [
+            { id: 'a', label: 'A' },
+            { id: 'a2', label: 'A2' },
+          ],
+        },
+        { id: 'b', label: 'Bravo service' },
+        { id: 'c', label: 'Charlie service' },
+        { id: 'd', label: 'Delta service' },
+      ],
+    },
+    edges: [{ id: 'aa', from: 'a', to: 'a2', label: 'a longer left edge label' }],
+    steps: [{ label: 'one', flow: [{ edges: 'aa' }] }],
+  };
+  assert.deepEqual(
+    checkScene(render(fig).scene).filter((f) => f.rule === 'label-overlap'),
+    [],
+  );
 });
