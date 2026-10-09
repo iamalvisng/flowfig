@@ -163,11 +163,54 @@ function level(items: Item[], dir: Dir, ctx: Ctx): Item[] {
       const k = l.indexOf(v);
       return (side > 0 ? l.slice(k + 1) : l.slice(0, k)).every((x) => x >= n);
     });
-  via.forEach((vs, i) => {
-    const [a, b] = dag[i];
-    const stacked = [a, b].every((k) => best[rank[k]].filter((x) => x < n).length === 1);
-    const way =
-      !back.has(i) && (!vs.length || stacked) ? undefined : outer([a, ...vs, b], 1) ? 1 : outer([a, ...vs, b], -1) ? -1 : undefined;
+  const hints = () =>
+    via.map((vs, i) => {
+      const [a, b] = dag[i];
+      const stacked = [a, b].every((k) => best[rank[k]].filter((x) => x < n).length === 1);
+      return !back.has(i) && (!vs.length || stacked) ? 0 : outer([a, ...vs, b], 1) ? 1 : outer([a, ...vs, b], -1) ? -1 : 0;
+    });
+  const turn = (o: number[], u: number[], w: number[]) => Math.sign((u[0] - o[0]) * (w[1] - o[1]) - (u[1] - o[1]) * (w[0] - o[0]));
+  const drawn = (ws: number[]) => {
+    const at: number[][] = [];
+    best.forEach((l, r) => l.filter((x) => x < n).forEach((x, i, real) => (at[x] = [r, i - (real.length - 1) / 2])));
+    let c = 0;
+    for (let i = 0; i < dag.length; i++)
+      for (let j = i + 1; j < dag.length; j++) {
+        const [a, b] = dag[i],
+          [p, q] = dag[j];
+        if (a === p || a === q || b === p || b === q || ![a, b, p, q].every((x) => at[x])) continue;
+        if (ws[i] || ws[j]) c += +(ws[i] === ws[j] && rank[a] < rank[q] && rank[p] < rank[b]);
+        else c += +(turn(at[a], at[b], at[p]) * turn(at[a], at[b], at[q]) < 0 && turn(at[p], at[q], at[a]) * turn(at[p], at[q], at[b]) < 0);
+      }
+    return c;
+  };
+  let ways = hints();
+  for (const i of ways.keys())
+    for (const j of ways.keys()) {
+      const wi = ways[i];
+      const [ai, bi] = dag[i],
+        [aj, bj] = dag[j];
+      if (j <= i || !wi || wi !== ways[j] || rank[ai] >= rank[bj] || rank[aj] >= rank[bi]) continue;
+      for (const k of via[i].length <= via[j].length ? [i, j] : [j, i]) {
+        const units = [dag[k][0], ...via[k], dag[k][1]];
+        if (units.some((v) => !best[layerOf[v]].includes(v))) continue;
+        const kept = best.map((l) => [...l]);
+        const was = drawn(ways);
+        for (const v of units) {
+          const l = best[layerOf[v]];
+          l.splice(l.indexOf(v), 1);
+          if (wi > 0) l.unshift(v);
+          else l.push(v);
+        }
+        const now = hints();
+        if (now[k] === -wi && now[i + j - k] === wi && drawn(now) < was) {
+          ways = now;
+          break;
+        }
+        best = kept;
+      }
+    }
+  ways.forEach((way, i) => {
     if (way) pairs[i][2].around = dir === 'column' ? (way > 0 ? 'right' : 'left') : way > 0 ? 'below' : 'above';
   });
   const kept = best.filter((l) => l.some((x) => x < n));
