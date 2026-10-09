@@ -21,6 +21,7 @@ import type { FlowProps } from './model.ts';
 import { check, render, toSvg, type Finding } from './svg.ts';
 import { checkRendered } from './check.ts';
 import { coverageLine, links, parseSource, unsureLines, verifyReport, type Coverage, type Link } from './verify.ts';
+import { VERSION } from './version.ts';
 import { trace, traceLines } from './trace.ts';
 import { coverageLines, coverageReport } from './coverage.ts';
 
@@ -39,7 +40,8 @@ const USAGE = `usage: flowfig <-|spec.json|figure.ts> [out.svg] [--open]   rende
        flowfig open <figure.svg> [--html <path>]          show the figure in the default browser
        flowfig from-mermaid <file.mmd|file.md|-> [--out <dir>]   convert Mermaid diagrams to specs
        flowfig gif <figure.svg> [out.gif] [--step <n>] [--dark] [--fps <n>] [--scale <n>] [--mp4]   write an animated GIF
-flags for render and check: --strict (warnings are errors), --json, --width <px>, --min-text <px>, --no-check (render only), --no-verify (render only)`;
+flags for render and check: --strict (warnings are errors), --json, --width <px>, --min-text <px>, --no-check (render only), --no-verify (render only)
+flowfig --version, -v                               print the version`;
 function usage(message: string): never {
   console.error(message);
   process.exit(2);
@@ -63,6 +65,11 @@ const option = (name: string) => {
 if (!args[0] || ['help', '--help', '-h'].includes(args[0])) {
   if (args[0]) console.log(USAGE);
   else usage(USAGE);
+  process.exit(0);
+}
+
+if (['--version', '-v'].includes(args[0])) {
+  console.log(VERSION);
   process.exit(0);
 }
 
