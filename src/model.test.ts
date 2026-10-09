@@ -1,3 +1,4 @@
+import { createElement } from 'react';
 import { textWidth } from './text.ts';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -414,4 +415,22 @@ test('narrow mode: the fold rule, the hysteresis, the full-size fold and the res
     '250 at 1.00 after a switch',
     '250 at 1.00',
   ]);
+});
+
+test('the narrow-mode spec key does not throw on a circular label or a ref to a mounted node, and equal content gives an equal key', () => {
+  const spec = (label: unknown) => [{ children: [{ id: 'a', label }] }, [], []];
+  const circular = (text: string) => {
+    const o: Record<string, unknown> = { text };
+    o.self = o;
+    return o;
+  };
+  const span = (text: string) => {
+    const node: Record<string, unknown> = { tag: 'span' };
+    node.fiber = { node };
+    return createElement('span', { ref: { current: node } }, text);
+  };
+  assert.equal(specKey(...spec(circular('Pay'))), specKey(...spec(circular('Pay'))));
+  assert.notEqual(specKey(...spec(circular('Pay'))), specKey(...spec(circular('Ship'))));
+  assert.equal(specKey(...spec(span('Pay'))), specKey(...spec(span('Pay'))));
+  assert.notEqual(specKey(...spec(span('Pay'))), specKey(...spec(span('Ship'))));
 });

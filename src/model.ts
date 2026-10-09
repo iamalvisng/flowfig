@@ -750,8 +750,19 @@ export const altText = (fig: FlowProps): { title: string; desc: string } => {
   };
 };
 
-export const specKey = (...parts: unknown[]) =>
-  JSON.stringify(parts, (_k, v) => (v?.$$typeof ? [String(v.type?.name ?? v.type), v.key, v.props] : v));
+const keyOf = (v: unknown, path: object[]): unknown => {
+  if (typeof v === 'function' || typeof v === 'symbol') return undefined;
+  if (typeof v !== 'object' || v === null) return v;
+  if (path.includes(v)) return '[cycle]';
+  const at = [...path, v];
+  if (Array.isArray(v)) return v.map((x) => keyOf(x, at));
+  const el = v as { $$typeof?: unknown; type?: { name?: string } | string; key?: unknown; props?: unknown };
+  const proto = Object.getPrototypeOf(v);
+  if (!el.$$typeof && proto !== Object.prototype && proto !== null) return '[object]';
+  const src = el.$$typeof ? { type: typeof el.type === 'string' ? el.type : el.type?.name, key: el.key, props: el.props } : v;
+  return Object.fromEntries(Object.entries(src).flatMap(([k, x]) => (k === 'ref' || k.startsWith('_') ? [] : [[k, keyOf(x, at)]])));
+};
+export const specKey = (...parts: unknown[]) => JSON.stringify(keyOf(parts, []));
 export const fitScale = (wide: number, box: number, map: number) => Math.max(wide ? 1 : 0.5, Math.min(1, box / map));
 const PHONE = 480;
 const folds = (box: number, map: number) => box < map / 2 || (box < PHONE && box < map);

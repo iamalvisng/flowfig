@@ -283,6 +283,8 @@ function FlowBody({
   const noMap = railOnly && rail != null;
   const railPane = useRef<HTMLDivElement>(null);
   const follow = useRef(true);
+  const user = useRef(false);
+  const left = useRef(0);
   const jump = useRef<number | null>(null);
   const [hoverEdge, setHoverEdge] = useState<string | null>(null);
   const [still, setStill] = useState(false);
@@ -413,6 +415,7 @@ function FlowBody({
     const now = wide && follow.current && n != null ? pane?.querySelector(`[data-rail-row="${n}"] path`) : null;
     if (!pane || !now) return;
     const [p, r] = [pane.getBoundingClientRect(), now.getBoundingClientRect()];
+    user.current = false;
     pane.scrollTo({ left: pane.scrollLeft + (r.left + r.right) / 2 - p.left - pane.clientWidth / 2, behavior: still ? 'auto' : 'smooth' });
   }, [wide, active, beat, still, rail]);
 
@@ -1403,8 +1406,13 @@ function FlowBody({
       {rail && (
         <div
           ref={railPane}
-          onWheel={() => (follow.current = false)}
-          onTouchStart={() => (follow.current = false)}
+          onWheel={() => (user.current = true)}
+          onPointerDown={() => (user.current = true)}
+          onTouchStart={() => (user.current = true)}
+          onScroll={(e) => {
+            if (user.current && e.currentTarget.scrollLeft !== left.current) follow.current = false;
+            left.current = e.currentTarget.scrollLeft;
+          }}
           style={{ overflowX: wide ? 'auto' : undefined }}
         >
           <svg
