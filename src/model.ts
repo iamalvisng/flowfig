@@ -752,6 +752,7 @@ export const altText = (fig: FlowProps): { title: string; desc: string } => {
 
 const keyOf = (v: unknown, path: object[]): unknown => {
   if (typeof v === 'function' || typeof v === 'symbol') return undefined;
+  if (typeof v === 'bigint') return `${v}n`;
   if (typeof v !== 'object' || v === null) return v;
   if (path.includes(v)) return '[cycle]';
   const at = [...path, v];

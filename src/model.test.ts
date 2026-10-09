@@ -433,4 +433,6 @@ test('the narrow-mode spec key does not throw on a circular label or a ref to a 
   assert.notEqual(specKey(...spec(circular('Pay'))), specKey(...spec(circular('Ship'))));
   assert.equal(specKey(...spec(span('Pay'))), specKey(...spec(span('Pay'))));
   assert.notEqual(specKey(...spec(span('Pay'))), specKey(...spec(span('Ship'))));
+  assert.notEqual(specKey(...spec(10n)), specKey(...spec('10')));
+  assert.equal(specKey(...spec(createElement('b', null, 10n))), specKey(...spec(createElement('b', null, 10n))));
 });

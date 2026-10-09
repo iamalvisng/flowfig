@@ -285,6 +285,7 @@ function FlowBody({
   const follow = useRef(true);
   const user = useRef(false);
   const left = useRef(0);
+  const busy = useRef(0);
   const jump = useRef<number | null>(null);
   const [hoverEdge, setHoverEdge] = useState<string | null>(null);
   const [still, setStill] = useState(false);
@@ -416,6 +417,8 @@ function FlowBody({
     if (!pane || !now) return;
     const [p, r] = [pane.getBoundingClientRect(), now.getBoundingClientRect()];
     user.current = false;
+    // Some browsers fire no scrollend event.
+    busy.current = performance.now() + 1000;
     pane.scrollTo({ left: pane.scrollLeft + (r.left + r.right) / 2 - p.left - pane.clientWidth / 2, behavior: still ? 'auto' : 'smooth' });
   }, [wide, active, beat, still, rail]);
 
@@ -1410,9 +1413,11 @@ function FlowBody({
           onPointerDown={() => (user.current = true)}
           onTouchStart={() => (user.current = true)}
           onScroll={(e) => {
-            if (user.current && e.currentTarget.scrollLeft !== left.current) follow.current = false;
-            left.current = e.currentTarget.scrollLeft;
+            const x = e.currentTarget.scrollLeft;
+            if (user.current && x !== left.current && performance.now() > busy.current) follow.current = false;
+            left.current = x;
           }}
+          onScrollEnd={() => (busy.current = 0)}
           style={{ overflowX: wide ? 'auto' : undefined }}
         >
           <svg
