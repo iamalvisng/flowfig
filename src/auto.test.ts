@@ -540,3 +540,17 @@ test('moving an arc to the other side adds no crossing to the straight edges', (
   };
   assert.deepEqual(crossed(fig), []);
 });
+
+test('a 20-box chain with a retry loop folds into rows and draws no crossing', () => {
+  const ids = Array.from({ length: 20 }, (_, i) => `s${i}`);
+  const fig: FlowProps = {
+    layout: { auto: true, children: ids.map((id) => ({ id, label: `Stage ${id}`, sub: 'one step' })) },
+    edges: [
+      ...ids.slice(1).map((id, i) => ({ id, from: ids[i], to: id, label: 'next' })),
+      { id: 'retry', from: 's15', to: 's3', label: 'retry' },
+    ],
+  };
+  const h = Number(render(fig).svg.match(/viewBox="[\d.]+ [\d.]+ [\d.]+ ([\d.]+)"/)![1]);
+  assert.ok(h < 830, `height ${h}`);
+  assert.deepEqual(crossed(fig), []);
+});
