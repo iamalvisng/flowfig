@@ -373,7 +373,7 @@ test('timeline: the loop starts with the playhead at the first beat item, not at
   assert.equal(loopStartItem(lay.items, []), undefined, 'no step: the playhead stays at the range end');
 });
 
-test('narrow mode: a map that does not fit folds to a full-size column, keeps the fold until the row fits, and resets on a changed spec', () => {
+test('narrow mode: a map folds to a full-size column under 11 px text in a phone box or 9 px in a desktop box, keeps the fold until the row reads, and resets on a changed spec', () => {
   type Spec = { row: number; col: number };
   const run = (events: [number, Spec][]) => {
     let state = { wide: 0, key: '' };
@@ -391,13 +391,22 @@ test('narrow mode: a map that does not fit folds to a full-size column, keeps th
   };
   const a = { row: 1200, col: 264 },
     b = { row: 600, col: 250 },
-    c = { row: 300, col: 320 };
-  assert.deepEqual(run([1300, 1100, 1199, 254, 1200].map((w) => [w, a])), [
+    c = { row: 300, col: 320 },
+    d = { row: 700, col: 250 };
+  assert.deepEqual(run([1300, 1000, 950, 981, 254, 982].map((w) => [w, a])), [
     '1200 at 1.00',
+    '1200 at 0.83',
     '264 at 1.00 after a switch',
     '264 at 1.00',
     '264 at 1.00',
-    '1200 at 1.00 after a switch',
+    '1200 at 0.82 after a switch',
+  ]);
+  assert.deepEqual(run([650, 600, 599, 600, 599].map((w) => [w, d])), [
+    '700 at 0.93',
+    '700 at 0.86',
+    '250 at 1.00 after a switch',
+    '700 at 0.86 after a switch',
+    '250 at 1.00 after a switch',
   ]);
   assert.deepEqual(
     run([
