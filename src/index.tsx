@@ -935,7 +935,7 @@ function FlowBody({
       const framed = item.label != null;
       return (
         <div
-          key={item.id ?? depth + String(item.label)}
+          key={item.id ?? `group:${nodes(item)[0]?.id}`}
           data-fig={item.id}
           style={{
             ...(framed && {
