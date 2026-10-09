@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   fitScale,
-  narrowOf,
+  specKey,
   nextWide,
   dayOf,
   timelineLayout,
@@ -372,37 +372,46 @@ test('timeline: the loop starts with the playhead at the first beat item, not at
   assert.equal(loopStartItem(lay.items, []), undefined, 'no step: the playhead stays at the range end');
 });
 
-test('narrow mode: the player folds below half scale, keeps the fold until the box holds half the wide map, draws the fold at full size, and resets on a new spec', () => {
-  const run = (events: [number, { row: number; col: number }][]) => {
-    let state = { wide: 0, of: [] as unknown[] };
+test('narrow mode: the fold rule, the hysteresis, the full-size fold and the reset on a changed spec', () => {
+  type Spec = { row: number; col: number };
+  const run = (events: [number, Spec][]) => {
+    let state = { wide: 0, key: '' };
     return events.map(([box, spec]) => {
+      const key = specKey(spec);
       for (let i = 0; i < 3; i++) {
-        const wide = narrowOf(state.wide, state.of, [spec]);
-        const goal = nextWide(wide, box, wide ? spec.col : spec.row);
+        const wide = state.key === key ? state.wide : 0;
         const map = wide ? spec.col : spec.row;
-        if (goal === wide) return `${map} at ${fitScale(wide, box, map).toFixed(2)}`;
-        state = { wide: goal, of: [spec] };
+        const goal = nextWide(wide, box, map);
+        if (goal === wide) return `${map} at ${fitScale(wide, box, map).toFixed(2)}${i ? ' after a switch' : ''}`;
+        state = { wide: goal, key };
       }
       assert.fail(`the layout toggles at ${box} px`);
     });
   };
   const a = { row: 1200, col: 264 },
     b = { row: 600, col: 250 };
-  const boxes = [1100, 254, 700, 560, 420, 1100, 324];
-  assert.deepEqual(run(boxes.map((w) => [w, a])), [
+  assert.deepEqual(run([1100, 254, 700, 560, 420, 1100, 324].map((w) => [w, a])), [
     '1200 at 0.92',
+    '264 at 1.00 after a switch',
+    '1200 at 0.58 after a switch',
+    '264 at 1.00 after a switch',
     '264 at 1.00',
-    '1200 at 0.58',
-    '264 at 1.00',
-    '264 at 1.00',
-    '1200 at 0.92',
-    '264 at 1.00',
+    '1200 at 0.92 after a switch',
+    '264 at 1.00 after a switch',
   ]);
   assert.deepEqual(
     run([
       [324, a],
+      [324, { ...a }],
       [500, b],
     ]),
-    ['264 at 1.00', '600 at 0.83'],
+    ['264 at 1.00 after a switch', '264 at 1.00', '600 at 0.83'],
   );
+  assert.deepEqual(run([500, 356, 490, 470, 470].map((w) => [w, b])), [
+    '600 at 0.83',
+    '250 at 1.00 after a switch',
+    '600 at 0.82 after a switch',
+    '250 at 1.00 after a switch',
+    '250 at 1.00',
+  ]);
 });

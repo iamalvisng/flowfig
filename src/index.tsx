@@ -61,7 +61,7 @@ import {
   type FlowProps,
   edgeTip,
   fitScale,
-  narrowOf,
+  specKey,
   nextWide,
 } from './model.ts';
 
@@ -152,10 +152,11 @@ const HIDDEN: CSSProperties = {
  */
 export function Flow(props: FlowProps) {
   const { layout, edges, steps, lanes, timeline } = props;
-  const [narrow, setNarrow] = useState<{ wide: number; of: unknown[] }>({ wide: 0, of: [] });
+  const key = useMemo(() => specKey(layout, edges, steps), [layout, edges, steps]);
+  const [narrow, setNarrow] = useState({ wide: 0, key: '' });
   const fold = !lanes && !timeline && props.rail !== 'only';
-  const wide = fold ? narrowOf(narrow.wide, narrow.of, [layout, edges, steps]) : 0;
-  const setWide = useCallback((w: number) => setNarrow({ wide: w, of: [layout, edges, steps] }), [layout, edges, steps]);
+  const wide = fold && narrow.key === key ? narrow.wide : 0;
+  const setWide = useCallback((w: number) => setNarrow({ wide: w, key }), [key]);
   const placed = useMemo(
     () => autoLayout({ layout: wide ? { ...layout, auto: true, direction: 'column' } : layout, edges, steps, lanes, timeline }),
     [wide, layout, edges, steps, lanes, timeline],
@@ -281,6 +282,7 @@ function FlowBody({
   );
   const noMap = railOnly && rail != null;
   const railPane = useRef<HTMLDivElement>(null);
+  const follow = useRef(true);
   const jump = useRef<number | null>(null);
   const [hoverEdge, setHoverEdge] = useState<string | null>(null);
   const [still, setStill] = useState(false);
@@ -407,11 +409,12 @@ function FlowBody({
 
   useEffect(() => {
     const pane = railPane.current;
-    const now = wide ? pane?.querySelector('[data-state="now"] path') : null;
+    const n = rail?.rows.flatMap((r) => (r.kind === 'message' && r.step === active && r.beat === beat ? [r.n] : []))[0];
+    const now = wide && follow.current && n != null ? pane?.querySelector(`[data-rail-row="${n}"] path`) : null;
     if (!pane || !now) return;
     const [p, r] = [pane.getBoundingClientRect(), now.getBoundingClientRect()];
     pane.scrollTo({ left: pane.scrollLeft + (r.left + r.right) / 2 - p.left - pane.clientWidth / 2, behavior: still ? 'auto' : 'smooth' });
-  }, [wide, active, beat, still]);
+  }, [wide, active, beat, still, rail]);
 
   const reported = useRef(new Set<string>());
   useEffect(() => {
@@ -632,6 +635,7 @@ function FlowBody({
     return t && TONES[t];
   };
   const goTo = (step: number, b: number) => {
+    follow.current = true;
     setPlaying(true);
     if (step === active) {
       clock.current.elapsed = beats.slice(0, b).reduce((t, x) => t + beatMs(x, speed), 0);
@@ -1397,7 +1401,12 @@ function FlowBody({
         </>
       )}
       {rail && (
-        <div ref={railPane} style={{ overflowX: wide ? 'auto' : undefined }}>
+        <div
+          ref={railPane}
+          onWheel={() => (follow.current = false)}
+          onTouchStart={() => (follow.current = false)}
+          style={{ overflowX: wide ? 'auto' : undefined }}
+        >
           <svg
             viewBox={`0 0 ${rail.width} ${rail.height}`}
             style={{
@@ -1575,7 +1584,10 @@ function FlowBody({
               aria-label={playing ? 'Pause' : 'Play'}
               title={playing ? 'Pause' : 'Play'}
               style={iconBtn}
-              onClick={() => setPlaying((p) => !p)}
+              onClick={() => {
+                follow.current ||= !playing;
+                setPlaying((p) => !p);
+              }}
             >
               <Icon d={playing ? 'M5.5 4v8M10.5 4v8' : 'M5 3.5v9l7.5-4.5z'} fill={!playing} />
             </button>
@@ -1588,6 +1600,7 @@ function FlowBody({
                   e.preventDefault();
                   const n = (to + steps.length) % steps.length;
                   clock.current.elapsed = 0;
+                  follow.current = true;
                   setActive(n);
                   setPlaying(true);
                   setBeat(0);
@@ -1615,6 +1628,7 @@ function FlowBody({
                       tabIndex={on ? 0 : -1}
                       onClick={() => {
                         clock.current.elapsed = 0;
+                        follow.current = true;
                         setActive(i);
                         setPlaying(true);
                         setBeat(0);
