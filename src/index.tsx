@@ -61,6 +61,7 @@ import {
   type FlowProps,
   edgeTip,
   fitScale,
+  textFloor,
   specKey,
   nextWide,
 } from './model.ts';
@@ -198,7 +199,7 @@ function FlowBody({
   const area = useRef<HTMLDivElement>(null);
   const root = useRef<HTMLDivElement>(null);
   const outer = useRef<HTMLDivElement>(null);
-  const [fit, setFit] = useState({ scale: 1, height: 0 });
+  const [fit, setFit] = useState({ scale: 1, height: 0, scroll: false });
   const [full, setFull] = useState(false);
   useEffect(() => {
     if (!full) return;
@@ -313,7 +314,7 @@ function FlowBody({
       const goal = nextWide(wide, box.clientWidth, el.offsetWidth);
       if (setWide && goal !== wide) return setWide(goal);
       const scale = fitScale(wide, box.clientWidth, el.offsetWidth);
-      setFit({ scale, height: el.offsetHeight * scale });
+      setFit({ scale, height: el.offsetHeight * scale, scroll: scale > box.clientWidth / el.offsetWidth });
       setMapW(el.offsetWidth);
       if (area.current) setAxisW(area.current.offsetWidth);
       const base = el.getBoundingClientRect();
@@ -438,7 +439,8 @@ function FlowBody({
     if (!check || !fig || (!noMap && (!el || !box))) return;
     if (setWide && el && box && nextWide(wide, box.clientWidth, el.offsetWidth) !== wide) return;
     const base = (el ?? fig).getBoundingClientRect();
-    const k = el ? base.width / el.offsetWidth : 1;
+    // offsetWidth is rounded, so a rect ratio reads scale 1 as 0.999.
+    const k = el ? new DOMMatrix(getComputedStyle(el).transform).a : 1;
     const rel = (n: Element): Rect => {
       const r = n.getBoundingClientRect();
       return { x: (r.left - base.left) / k, y: (r.top - base.top) / k, w: r.width / k, h: r.height / k };
@@ -528,7 +530,11 @@ function FlowBody({
       ],
       minFont: Math.min(...fonts),
     };
-    for (const f of [...checkSpec(written), ...checkScene(scene, { width: (box ?? fig).clientWidth }), ...checkTheme(theme)]) {
+    for (const f of [
+      ...checkSpec(written),
+      ...checkScene(scene, { width: (box ?? fig).clientWidth, minText: textFloor((box ?? fig).clientWidth) }),
+      ...checkTheme(theme),
+    ]) {
       const key = f.rule + ':' + f.ids.join() + ':' + f.message;
       if (reported.current.has(key)) continue;
       reported.current.add(key);
@@ -1241,7 +1247,7 @@ function FlowBody({
               id={`${tabsId}-panel`}
               aria-labelledby={`${tabsId}-tab-${active ?? 0}`}
               style={{
-                overflow: wide || fit.scale <= 0.5 ? 'auto' : 'hidden',
+                overflow: wide || fit.scroll ? 'auto' : 'hidden',
                 height: fit.scale < 1 ? fit.height : undefined,
               }}
             >
