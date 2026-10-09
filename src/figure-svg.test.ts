@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { GUIDE, TOPICS } from './guide.ts';
+import { VERSION } from './version.ts';
 
 const cli = join(dirname(dirname(fileURLToPath(import.meta.url))), 'scripts', 'figure-svg.mjs');
 const SPEC = {
@@ -206,6 +207,12 @@ test('help, --help and -h print the usage and exit 0; no argument prints it and 
   const r = run([]);
   assert.equal(r.status, 2);
   assert.match(r.stderr, /usage: flowfig/);
+});
+
+test('--version prints the version and exits 0', () => {
+  const r = run(['--version']);
+  assert.equal(r.status, 0);
+  assert.equal(r.stdout.trim(), VERSION);
 });
 
 test('--spec on a missing file exits 2 with a message, not a stack trace', () => {
