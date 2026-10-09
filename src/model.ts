@@ -765,9 +765,13 @@ const keyOf = (v: unknown, path: object[]): unknown => {
 };
 export const specKey = (...parts: unknown[]) => JSON.stringify(keyOf(parts, []));
 export const fitScale = (wide: number, box: number, map: number) => Math.max(wide ? 1 : 0.5, Math.min(1, box / map));
-// Reader text is 11 px or more, so a scale below 1 shows small text.
+// Edge labels are 11 px, the smallest reader text at scale 1.
+const READER_PX = 11;
+const DESKTOP_PX = 9;
+const DESKTOP_BOX = 600;
+const folds = (box: number, row: number) => box * READER_PX < row * (box < DESKTOP_BOX ? READER_PX : DESKTOP_PX);
 export const nextWide = (wide: number, box: number, map: number) => {
   const row = Math.abs(wide) || map;
-  if (box >= row) return 0;
+  if (!folds(box, row)) return 0;
   return wide > 0 && map >= wide ? -wide : wide || map;
 };
