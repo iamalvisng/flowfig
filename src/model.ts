@@ -752,4 +752,5 @@ export const altText = (fig: FlowProps): { title: string; desc: string } => {
 
 export const narrowOf = (wide: number, was: readonly unknown[], of: readonly unknown[]) =>
   was.length === of.length && was.every((x, i) => x === of[i]) ? wide : 0;
+export const fitScale = (wide: number, box: number, map: number) => Math.max(wide ? 1 : 0.5, Math.min(1, box / map));
 export const nextWide = (wide: number, box: number, map: number) => (wide ? (box >= wide / 2 ? 0 : wide) : box < map / 2 ? map : 0);

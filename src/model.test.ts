@@ -2,6 +2,7 @@ import { textWidth } from './text.ts';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  fitScale,
   narrowOf,
   nextWide,
   dayOf,
@@ -371,14 +372,15 @@ test('timeline: the loop starts with the playhead at the first beat item, not at
   assert.equal(loopStartItem(lay.items, []), undefined, 'no step: the playhead stays at the range end');
 });
 
-test('narrow mode: the player folds below half scale, keeps the fold until the box holds half the wide map, and resets on a new spec', () => {
+test('narrow mode: the player folds below half scale, keeps the fold until the box holds half the wide map, draws the fold at full size, and resets on a new spec', () => {
   const run = (events: [number, { row: number; col: number }][]) => {
     let state = { wide: 0, of: [] as unknown[] };
     return events.map(([box, spec]) => {
       for (let i = 0; i < 3; i++) {
         const wide = narrowOf(state.wide, state.of, [spec]);
         const goal = nextWide(wide, box, wide ? spec.col : spec.row);
-        if (goal === wide) return wide ? spec.col : spec.row;
+        const map = wide ? spec.col : spec.row;
+        if (goal === wide) return `${map} at ${fitScale(wide, box, map).toFixed(2)}`;
         state = { wide: goal, of: [spec] };
       }
       assert.fail(`the layout toggles at ${box} px`);
@@ -387,12 +389,20 @@ test('narrow mode: the player folds below half scale, keeps the fold until the b
   const a = { row: 1200, col: 264 },
     b = { row: 600, col: 250 };
   const boxes = [1100, 254, 700, 560, 420, 1100, 324];
-  assert.deepEqual(run(boxes.map((w) => [w, a])), [1200, 264, 1200, 264, 264, 1200, 264]);
+  assert.deepEqual(run(boxes.map((w) => [w, a])), [
+    '1200 at 0.92',
+    '264 at 1.00',
+    '1200 at 0.58',
+    '264 at 1.00',
+    '264 at 1.00',
+    '1200 at 0.92',
+    '264 at 1.00',
+  ]);
   assert.deepEqual(
     run([
       [324, a],
       [500, b],
     ]),
-    [264, 600],
+    ['264 at 1.00', '600 at 0.83'],
   );
 });

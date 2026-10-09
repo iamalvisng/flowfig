@@ -60,6 +60,7 @@ import {
   type FigTheme,
   type FlowProps,
   edgeTip,
+  fitScale,
   narrowOf,
   nextWide,
 } from './model.ts';
@@ -306,7 +307,7 @@ function FlowBody({
     const measure = () => {
       const goal = nextWide(wide, box.clientWidth, el.offsetWidth);
       if (setWide && goal !== wide) return setWide(goal);
-      const scale = Math.max(0.5, Math.min(1, box.clientWidth / el.offsetWidth));
+      const scale = fitScale(wide, box.clientWidth, el.offsetWidth);
       setFit({ scale, height: el.offsetHeight * scale });
       setMapW(el.offsetWidth);
       if (area.current) setAxisW(area.current.offsetWidth);
@@ -1222,7 +1223,7 @@ function FlowBody({
               id={`${tabsId}-panel`}
               aria-labelledby={`${tabsId}-tab-${active ?? 0}`}
               style={{
-                overflow: fit.scale > 0.5 ? 'hidden' : 'auto',
+                overflow: wide || fit.scale <= 0.5 ? 'auto' : 'hidden',
                 height: fit.scale < 1 ? fit.height : undefined,
               }}
             >
