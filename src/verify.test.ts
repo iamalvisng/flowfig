@@ -250,6 +250,7 @@ test('a box symbol that its file re-exports counts as defined', () => {
   const forms: Record<string, string> = {
     named: "export { getUser } from './user';",
     star: "export * from './user';",
+    namespace: "export * as getUser from './user';",
     default: "export { default as getUser } from './user';",
     renamed: "export { fetchUser as getUser } from './user';",
     local: "import { getUser } from './user';\nexport { getUser };",
@@ -269,11 +270,14 @@ test('a re-export gives missing-symbol if no target defines the name, and no err
       'src/user.ts': 'export function fetchUser() {}',
       'src/a.ts': "export * from './user';",
       'src/b.ts': "export { getUser } from 'some-pkg';",
+      'src/c.ts': "export * as getUser from './gone';",
     },
     (root) => {
       assert.deepEqual(rules(verify(figWith('src/a.ts#getUser'), { root })), ['missing-symbol']);
       const r = verifyReport(figWith('src/b.ts#getUser'), { root });
       assert.deepEqual([rules(r.findings), r.coverage.boxesDefined], [[], 0]);
+      const gone = verifyReport(figWith('src/c.ts#getUser'), { root });
+      assert.deepEqual([rules(gone.findings), gone.coverage.boxesDefined], [[], 0]);
     },
   );
 });
