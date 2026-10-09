@@ -379,7 +379,7 @@ function FlowBody({
     };
     measure();
     const ro = new ResizeObserver(measure);
-    ro.observe(el);
+    ro.observe(el, { box: 'border-box' });
     ro.observe(box);
     el.querySelectorAll('[data-fig]').forEach((n) => ro.observe(n));
     return () => ro.disconnect();
@@ -951,13 +951,7 @@ function FlowBody({
               display: 'flex',
               flexDirection: item.direction ?? 'row',
               gap: groupGap(item, edges),
-              alignItems: item.align
-                ? item.align === 'center'
-                  ? 'center'
-                  : 'flex-' + item.align
-                : item.direction === 'column'
-                  ? 'stretch'
-                  : 'center',
+              alignItems: !item.align || item.align === 'center' ? 'center' : 'flex-' + item.align,
               justifyContent: 'center',
             }}
           >
