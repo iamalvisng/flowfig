@@ -22,7 +22,8 @@ const defines = (
   if (isDefined(file, symbol)) return true;
   let doubt = false;
   for (const [path, inner] of reexports(root, file, symbol, read)) {
-    const r = path == null || inner === '?' ? null : defines(root, codeFile(root, path, read, cache), inner, read, cache, depth + 1);
+    const target = path == null || inner === '?' ? null : codeFile(root, path, read, cache);
+    const r = inner === '*' ? (target ? true : null) : defines(root, target, inner, read, cache, depth + 1);
     if (r) return true;
     if (r == null) doubt = true;
   }

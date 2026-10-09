@@ -422,6 +422,14 @@ function FlowBody({
     pane.scrollTo({ left: pane.scrollLeft + (r.left + r.right) / 2 - p.left - pane.clientWidth / 2, behavior: still ? 'auto' : 'smooth' });
   }, [wide, active, beat, still, rail]);
 
+  useEffect(() => {
+    const pane = railPane.current;
+    if (!pane) return;
+    const end = () => (busy.current = 0);
+    pane.addEventListener('scrollend', end);
+    return () => pane.removeEventListener('scrollend', end);
+  }, [rail]);
+
   const reported = useRef(new Set<string>());
   useEffect(() => {
     const el = root.current,
@@ -1417,7 +1425,6 @@ function FlowBody({
             if (user.current && x !== left.current && performance.now() > busy.current) follow.current = false;
             left.current = x;
           }}
-          onScrollEnd={() => (busy.current = 0)}
           style={{ overflowX: wide ? 'auto' : undefined }}
         >
           <svg
