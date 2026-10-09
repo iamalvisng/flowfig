@@ -218,20 +218,104 @@ function level(items: Item[], dir: Dir, ctx: Ctx): Item[] {
   if (dir === 'row' || kept.length * RANK_H <= TALL * PAGE) return rows;
   const out: Item[] = [];
   let run: Item[] = [];
-  const lines = (per: number): Item[] => {
-    const k = Math.ceil(run.length / per),
-      q = Math.ceil(run.length / k);
-    return Array.from({ length: k }, (_, i) => ({ direction: 'row', children: run.slice(i * q, (i + 1) * q) }));
+  let runAt: number[] = [];
+  const owner = new Map(via.flatMap((vs, i) => vs.map((v): [number, FigEdge] => [v, pairs[i][2]])));
+  const lines = (part: Item[], per: number): Item[] => {
+    const k = Math.ceil(part.length / per),
+      q = Math.ceil(part.length / k);
+    return Array.from({ length: k }, (_, i) => ({ direction: 'row', children: part.slice(i * q, (i + 1) * q) }));
+  };
+  const plain = (part: Item[]) => {
+    const folded =
+      part.length < 4
+        ? undefined
+        : [4, 3].map((per) => lines(part, per)).find((ls) => ls.every((l) => itemWidth(l, ctx.carded, ctx.edges) <= PAGE - 2 * PAD));
+    out.push(...(folded ?? part));
+  };
+  const less = (p: number[], q: number[]) => {
+    const k = p.findIndex((v, i) => v !== q[i]);
+    return k >= 0 && p[k] < q[k];
+  };
+  const arcFold = (long: FigEdge[], pos: Map<string, number>): Item[] | undefined => {
+    const m = run.length;
+    const spans = long.map((e) => [pos.get(e.from)!, pos.get(e.to)!].sort((p, q) => p - q));
+    const wide = new Map<number, number>();
+    const width = (i: number, j: number) =>
+      wide.get(i * m + j) ??
+      wide.set(i * m + j, itemWidth({ direction: 'row', children: run.slice(i, j) }, ctx.carded, ctx.edges)).get(i * m + j)!;
+    let pick: { cost: number[]; cuts: number[]; sides: number[] } | undefined;
+    for (let code = 0; long.length <= 6 && code < 3 ** long.length; code++) {
+      const sides = spans.map((_, k) => Math.floor(code / 3 ** k) % 3);
+      const need = new Set<number>(),
+        full = new Set<number>(),
+        ban = new Set<number>();
+      spans.forEach(([a, b], k) => {
+        if (!sides[k]) for (let c = a + 1; c <= b; c++) ban.add(c);
+        else
+          for (const c of sides[k] === 1 ? [a + 1, b + 1] : [a, b]) {
+            need.add(c);
+            if (sides[k] === 1) full.add(c);
+          }
+      });
+      const plans: ({ cost: [number, number]; from: number } | undefined)[] = [{ cost: [0, 0], from: -1 }];
+      for (let j = 1; j <= m; j++)
+        for (let i = j - 1; i >= Math.max(0, j - 4); i--) {
+          if ((i < j - 1 && need.has(i + 1)) || width(i, j) > PAGE - 2 * PAD) break;
+          const prev = plans[i];
+          if (!prev || (i && ban.has(i)) || (full.has(j) && j - i < 4)) continue;
+          const cost: [number, number] = [prev.cost[0] + 1, Math.max(prev.cost[1], width(i, j))];
+          if (!plans[j] || less(cost, plans[j]!.cost)) plans[j] = { cost, from: i };
+        }
+      if (!plans[m] || (pick && !less(plans[m]!.cost, pick.cost))) continue;
+      const cuts: number[] = [];
+      for (let j = m; j > 0; j = plans[j]!.from) cuts.unshift(plans[j]!.from);
+      const line = (k: number) => cuts.findLastIndex((c) => c <= k);
+      const rowW = (r: number) => width(cuts[r], cuts[r + 1] ?? m);
+      const clash = spans.some(([a, b], k) => {
+        const [ra, rb] = [line(a), line(b)];
+        const inner = Array.from({ length: rb - ra + 1 }, (_, r) => rowW(ra + r));
+        return (
+          (!sides[k] && ra > 0 && ra < cuts.length - 1) ||
+          (sides[k] === 1 && Math.min(rowW(ra), rowW(rb)) < Math.max(...inner)) ||
+          spans.some(([p, q], l) => l > k && sides[k] && sides[k] === sides[l] && a < q && p < b)
+        );
+      });
+      if (!clash) pick = { cost: plans[m]!.cost, cuts, sides };
+    }
+    if (!pick) return undefined;
+    const top = pick.cuts[1] ?? m;
+    long.forEach((e, k) => (e.around = ([pos.get(e.from)! < top ? 'above' : 'below', 'right', 'left'] as const)[pick!.sides[k]]));
+    return pick.cuts.map((c, k) => ({ direction: 'row', children: run.slice(c, pick!.cuts[k + 1] ?? m) }));
   };
   const flush = () => {
-    const folded =
-      run.length < 4 ? undefined : [4, 3].map(lines).find((ls) => ls.every((l) => itemWidth(l, ctx.carded, ctx.edges) <= PAGE - 2 * PAD));
-    out.push(...(folded ?? run));
+    const pos = new Map(run.map((r, k) => [(r as FigNode).id, k]));
+    const long = ctx.edges.filter((e) => pos.has(e.from) && pos.has(e.to) && Math.abs(pos.get(e.from)! - pos.get(e.to)!) > 1);
+    const local = runAt.every((i) => kept[i].every((x) => x < n || long.includes(owner.get(x)!)));
+    const folded = run.length >= 4 && long.length && local ? arcFold(long, pos) : undefined;
+    if (folded) {
+      const line = (id: string) => folded.findIndex((l) => idsIn(l).includes(id));
+      for (const e of ctx.edges) if (!long.includes(e) && line(e.from) >= 0 && line(e.from) < line(e.to)) rowBreaks.add(e);
+      out.push({ direction: 'column', align: 'start', children: folded });
+    } else {
+      let part: Item[] = [];
+      run.forEach((r, k) => {
+        if (kept[runAt[k]].length === 1) part.push(r);
+        else {
+          plain(part);
+          part = [];
+          out.push(r);
+        }
+      });
+      plain(part);
+    }
     run = [];
+    runAt = [];
   };
   rows.forEach((r, i) => {
-    if (kept[i].length === 1 && !isGroup(r)) run.push(r);
-    else {
+    if (kept[i].filter((x) => x < n).length === 1 && !isGroup(r)) {
+      run.push(r);
+      runAt.push(i);
+    } else {
       flush();
       out.push(r);
     }
