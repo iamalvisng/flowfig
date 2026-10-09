@@ -167,8 +167,8 @@ export function Flow(props: FlowProps) {
   );
 }
 
-// The ASYNC tag is 9 px; phone text needs 11 px.
-const RAIL_ZOOM = 11 / 9;
+// The ASYNC tag is 9 px.
+const RAIL_TEXT = 9;
 
 function FlowBody({
   layout,
@@ -283,6 +283,8 @@ function FlowBody({
   );
   const noMap = railOnly && rail != null;
   const railPane = useRef<HTMLDivElement>(null);
+  const [railBox, setRailBox] = useState(0);
+  const zoom = wide ? 11 / RAIL_TEXT : noMap && railBox ? textFloor(railBox) / RAIL_TEXT : 0;
   const follow = useRef(true);
   const user = useRef(false);
   const left = useRef(0);
@@ -415,29 +417,31 @@ function FlowBody({
   useEffect(() => {
     const pane = railPane.current;
     const n = rail?.rows.flatMap((r) => (r.kind === 'message' && r.step === active && r.beat === beat ? [r.n] : []))[0];
-    const now = wide && follow.current && n != null ? pane?.querySelector(`[data-rail-row="${n}"] path`) : null;
+    const now = zoom && follow.current && n != null ? pane?.querySelector(`[data-rail-row="${n}"] path`) : null;
     if (!pane || !now) return;
     const [p, r] = [pane.getBoundingClientRect(), now.getBoundingClientRect()];
     user.current = false;
     // Some browsers fire no scrollend event.
     busy.current = performance.now() + 1000;
     pane.scrollTo({ left: pane.scrollLeft + (r.left + r.right) / 2 - p.left - pane.clientWidth / 2, behavior: still ? 'auto' : 'smooth' });
-  }, [wide, active, beat, still, rail]);
+  }, [zoom, active, beat, still, rail]);
 
   useEffect(() => {
     const pane = railPane.current;
     if (!pane) return;
     const end = () => (busy.current = 0);
     pane.addEventListener('scrollend', end);
-    return () => pane.removeEventListener('scrollend', end);
-  }, [rail]);
+    const ro = new ResizeObserver(() => setRailBox(pane.clientWidth));
+    if (noMap) ro.observe(pane);
+    return () => (pane.removeEventListener('scrollend', end), ro.disconnect());
+  }, [rail, noMap]);
 
   const reported = useRef(new Set<string>());
   useEffect(() => {
     const el = root.current,
       box = outer.current;
     const fig = figure.current;
-    if (!check || !fig || (!noMap && (!el || !box || !el.offsetWidth))) return;
+    if (!check || !fig || (noMap ? !railBox : !el || !box || !el.offsetWidth)) return;
     if (setWide && el && box && nextWide(wide, box.clientWidth, el.offsetWidth) !== wide) return;
     const base = (el ?? fig).getBoundingClientRect();
     // offsetWidth is rounded, so a rect ratio reads scale 1 as 0.999.
@@ -542,7 +546,7 @@ function FlowBody({
       // oxlint-disable-next-line no-console
       console.warn(`flowfig check: ${f.severity} ${f.rule}: ${f.message}`);
     }
-  }, [check, routed, written, layout, edges, steps, ids, theme, rail, noMap, lanePlan, wide, setWide]);
+  }, [check, routed, written, layout, edges, steps, ids, theme, rail, noMap, railBox, lanePlan, wide, setWide]);
 
   useEffect(() => {
     const gs = dots.current,
@@ -1432,14 +1436,14 @@ function FlowBody({
             if (user.current && x !== left.current && performance.now() > busy.current) follow.current = false;
             left.current = x;
           }}
-          style={{ overflowX: wide ? 'auto' : undefined }}
+          style={{ overflowX: zoom ? 'auto' : undefined }}
         >
           <svg
             viewBox={`0 0 ${rail.width} ${rail.height}`}
             style={{
               display: 'block',
-              width: wide ? rail.width * RAIL_ZOOM : '100%',
-              maxWidth: wide ? undefined : rail.width,
+              width: zoom ? rail.width * zoom : '100%',
+              maxWidth: zoom ? undefined : rail.width,
               height: 'auto',
               margin: `${noMap ? 0 : RAIL.gap}px auto 0`,
               overflow: 'visible',
