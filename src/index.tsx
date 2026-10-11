@@ -61,6 +61,7 @@ import {
   type FlowProps,
   edgeTip,
   fitScale,
+  shownFont,
   textFloor,
   specKey,
   nextWide,
@@ -494,8 +495,9 @@ function FlowBody({
       )
       .map((t) => {
         const svg = railPane.current?.firstElementChild;
-        const at = el?.contains(t) ? k : svg?.contains(t) && rail ? svg.getBoundingClientRect().width / rail.width : 1;
-        return parseFloat(getComputedStyle(t).fontSize) * at;
+        const place = el?.contains(t) ? 'map' : svg?.contains(t) && rail ? 'rail' : 'plain';
+        const railScale = svg && rail ? svg.getBoundingClientRect().width / rail.width : 1;
+        return shownFont(parseFloat(getComputedStyle(t).fontSize), place, { map: k, rail: railScale });
       });
     const labels = Object.fromEntries([...fig.querySelectorAll<HTMLElement>('[data-fig-label]')].map((n) => [n.dataset.figLabel!, rel(n)]));
     const lanesIn = el ? [...el.querySelectorAll<HTMLElement>('[data-fig-band]')] : [];
