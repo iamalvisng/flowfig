@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { checkSpec, checkScene, checkTheme, contrast } from './check.ts';
+import { checkRendered, checkSpec, checkScene, checkTheme, contrast } from './check.ts';
 import { TONES, toneFill, type FlowProps } from './model.ts';
 import type { Scene, SceneBox } from './scene.ts';
 import type { Pt } from './geometry.ts';
@@ -77,6 +77,19 @@ test('text that fits its box passes, text that does not is an error', () => {
   assert.deepEqual(checkScene(ok), []);
   const long = scene({ boxes: [box('a', 0, 0, 100, 40, [{ text: 'a much longer label', fontSize: 14, room: 84 }])] });
   assert.deepEqual(rules(checkScene(long)), ['text-overflow']);
+});
+
+test('the auto option of check drops the "set auto" hint, as layout.auto does', () => {
+  const s = scene({
+    boxes: [box('a', 0, 0), box('m', 200, 0), box('b', 400, 0)],
+    edges: [{ id: 'ab', from: 'a', to: 'b', curve: line(100, 20, 400, 20) }],
+  });
+  const hint = (opts: { auto?: boolean }) =>
+    checkRendered(fig, opts, s)
+      .find((f) => f.rule === 'edge-crosses-box')!
+      .message.includes('"auto": true');
+  assert.equal(hint({}), true);
+  assert.equal(hint({ auto: true }), false);
 });
 
 test('a measured width wins over the estimate', () => {

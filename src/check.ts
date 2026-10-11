@@ -435,7 +435,7 @@ export function checkRendered(fig: FlowProps, opts: SvgOptions & CheckOptions, s
   }));
   return [
     ...checkSpec(fig),
-    ...checkScene(scene, { ...opts, auto: fig.layout.auto }),
+    ...checkScene(scene, { ...opts, auto: opts.auto ?? fig.layout.auto }),
     ...lost,
     ...checkTheme({ ...fig.theme, ...opts.theme }),
   ];
