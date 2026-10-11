@@ -170,6 +170,12 @@ export function Flow(props: FlowProps) {
 
 // The ASYNC tag is 9 px.
 const RAIL_TEXT = 9;
+// offsetWidth is rounded, so a rect ratio reads scale 1 as 0.999.
+const shownScale = (el: Element) => {
+  let k = 1;
+  for (let n: Element | null = el; n; n = n.parentElement) k *= new DOMMatrix(getComputedStyle(n).transform).a;
+  return k;
+};
 
 function FlowBody({
   layout,
@@ -323,8 +329,7 @@ function FlowBody({
       setMapW(el.offsetWidth);
       if (area.current) setAxisW(area.current.offsetWidth);
       const base = el.getBoundingClientRect();
-      // Rects are measured unscaled: k is the scale on screen.
-      const k = base.width / el.offsetWidth;
+      const k = shownScale(el);
       const rects: Record<string, Rect> = {};
       el.querySelectorAll<HTMLElement>('[data-fig]').forEach((n) => {
         const r = n.getBoundingClientRect();
@@ -447,8 +452,7 @@ function FlowBody({
     if (!check || !fig || (noMap ? !railBox : !el || !box || !el.offsetWidth)) return;
     if (setWide && el && box && nextWide(wide, box.clientWidth, el.offsetWidth) !== wide) return;
     const base = (el ?? fig).getBoundingClientRect();
-    // offsetWidth is rounded, so a rect ratio reads scale 1 as 0.999.
-    const k = el ? new DOMMatrix(getComputedStyle(el).transform).a : 1;
+    const k = el ? shownScale(el) : 1;
     const rel = (n: Element): Rect => {
       const r = n.getBoundingClientRect();
       return { x: (r.left - base.left) / k, y: (r.top - base.top) / k, w: r.width / k, h: r.height / k };

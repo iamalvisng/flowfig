@@ -1,6 +1,19 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { browser, withReactPage } from './react-page.ts';
+import { check } from './svg.ts';
+import type { FlowProps } from './model.ts';
+
+const long: FlowProps = {
+  layout: {
+    children: [
+      { id: 'a', label: 'Supercalifragilisticexpialidocious', width: 80 },
+      { id: 'b', label: 'B' },
+    ],
+  },
+  edges: [{ id: 'ab', from: 'a', to: 'b' }],
+  steps: [{ label: 'go', flow: ['ab'] }],
+};
 
 const entry = `
 import { createElement } from 'react';
@@ -13,6 +26,10 @@ const figs = { checkout, lanes, status };
 window.warns = [];
 console.warn = (m) => window.warns.push(String(m));
 window.show = (fig) => createRoot(document.getElementById('root')).render(createElement(Flow, { ...figs[fig].props, check: true }));
+window.showScaled = () =>
+  createRoot(document.getElementById('root')).render(
+    createElement('div', { style: { transform: 'scale(.5)', transformOrigin: 'top left' } }, createElement(Flow, { ...${JSON.stringify(long)}, check: true })),
+  );
 `;
 
 test(
@@ -51,3 +68,19 @@ test(
     });
   },
 );
+
+test('the player check inside a scaled parent reports the text overflow that the SVG check reports', { skip: !browser.path }, async () => {
+  assert.ok(check(long).some((f) => f.rule === 'text-overflow'));
+  await withReactPage(entry, async ({ ev, until, load }) => {
+    await load(800);
+    await until('!!window.showScaled', 'the page loads');
+    await ev('showScaled()');
+    await until(`!!document.querySelector('[data-fig]')`, 'the figure renders');
+    await new Promise((r) => setTimeout(r, 500));
+    const warns = (await ev('window.warns')) as string[];
+    assert.ok(
+      warns.some((w) => w.includes('text-overflow')),
+      `the player reports text-overflow: ${JSON.stringify(warns)}`,
+    );
+  });
+});
