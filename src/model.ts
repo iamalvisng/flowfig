@@ -776,9 +776,7 @@ const DESKTOP_PX = 9;
 const DESKTOP_BOX = 600;
 export const textFloor = (box: number) => (box < DESKTOP_BOX ? READER_PX : DESKTOP_PX);
 export const fitScale = (wide: number, box: number, map: number) => Math.max(wide ? 1 : textFloor(box) / READER_PX, Math.min(1, box / map));
-// Each place that draws text has its own scale.
-export type TextPlace = 'map' | 'rail' | 'plain';
-export const shownFont = (size: number, place: TextPlace, scale: { map: number; rail: number }) =>
+export const shownFont = (size: number, place: 'map' | 'rail' | 'plain', scale: { map: number; rail: number }) =>
   size * (place === 'map' ? scale.map : place === 'rail' ? scale.rail : 1);
 const folds = (box: number, row: number) => box * READER_PX < row * textFloor(box);
 export const nextWide = (wide: number, box: number, map: number) => {

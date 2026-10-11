@@ -541,6 +541,23 @@ test('moving an arc to the other side adds no crossing to the straight edges', (
   assert.deepEqual(crossed(fig), []);
 });
 
+test('a skip edge beside a long branch edge adds one crossing at most', () => {
+  const ids = Array.from({ length: 22 }, (_, i) => `s${i}`);
+  const fig: FlowProps = {
+    layout: {
+      auto: true,
+      children: [...ids.map((id) => ({ id, label: `Stage ${id}`, sub: 'one step' })), { id: 'b', label: 'Branch' }],
+    },
+    edges: [
+      ...ids.slice(1).map((id, i) => ({ from: ids[i], to: id, label: 'next' })),
+      { from: 's0', to: 'b' },
+      { from: 'b', to: 's12' },
+      { from: 's3', to: 's8' },
+    ],
+  };
+  assert.ok(crossed(fig).length <= 1, crossed(fig).join(', '));
+});
+
 test('a 20-box chain with a retry loop folds into rows with no crossing or small text, in both directions', () => {
   const ids = Array.from({ length: 20 }, (_, i) => `s${i}`);
   for (const direction of [undefined, 'row'] as const) {

@@ -850,8 +850,10 @@ The player has these controls:
 - A hover on a box, an edge or a rail row with a `source` shows the `source`. The SVG shows it as a tooltip too.
 
 The player props are the spec fields. `theme` sets the colors, `speed` sets the packet time, and `autoplay={false}` stops the
-auto start. `check` runs the check rules. If a figure is wider than its container, the player shrinks the figure to half size at
-most, then scrolls. If the reader asks for reduced motion, the player shows the last beat and does not move packets.
+auto start. `check` runs the check rules. If a figure is wider than its container, the player changes the figure to fit.
+In a box under 600 px, the player keeps reader text at 11 px or more. If the map does not fit, the player draws the map as a column.
+In a box of 600 px or more, the player folds the map only when text would fall under 9 px.
+A lanes map or a timeline map stops at that size and scrolls sideways in its pane. If the reader asks for reduced motion, the player shows the last beat and does not move packets.
 
 The player has no dark theme of its own. For dark mode, set the `--fig-*` CSS variables on `.flowfig`:
 
