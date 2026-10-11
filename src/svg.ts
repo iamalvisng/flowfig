@@ -420,10 +420,10 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
     const dl = dia ? diamondLines(p.item as FigNode, p.w) : null;
     const room = (far: number) => diamondRoom(p.w, p.h, far);
     const flat = (p.item.shape === 'decision' ? p.w - 70 : p.w) - 16;
-    const texts: SceneBox['texts'] = labelLines(p.item as FigNode, p.w).map((text) => ({
+    const texts: SceneBox['texts'] = labelLines(p.item as FigNode, p.w).map((text, i) => ({
       text,
       fontSize: 14,
-      room: dl ? room(dl.label.far) : flat,
+      room: dl ? room(dl.label[i].far) : flat,
     }));
     if (dl) for (const l of dl.subs) texts.push({ text: l.text, fontSize: 12, room: room(l.far) });
     else if (p.item.sub) texts.push({ text: str(p.item.sub), fontSize: 12, room: flat });
@@ -637,7 +637,7 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
     const cardTop = p.y + p.h - 10 - (contents ? cardH.get(item.id)! : 0);
     const dl = item.shape === 'decision' && !contents ? diamondLines(item, p.w) : null;
     const labelY =
-      item.shape === 'store' ? p.y + 24 + 13 : contents ? p.y + 10 + 13 : p.y + p.h / 2 + (dl ? dl.label.dy : item.sub ? -2 : 5);
+      item.shape === 'store' ? p.y + 24 + 13 : contents ? p.y + 10 + 13 : p.y + p.h / 2 + (dl ? dl.label[0].dy : item.sub ? -2 : 5);
     const shape =
       item.shape === 'decision'
         ? `<polygon points="${n2(cx)},${n2(p.y)} ${n2(p.x + p.w)},${n2(p.y + p.h / 2)} ${n2(cx)},${n2(p.y + p.h)} ${n2(p.x)},${n2(p.y + p.h / 2)}" fill="${fill0}" stroke="${stroke0}"${stroke}/>`
@@ -647,7 +647,7 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
           : `<rect x="${n2(p.x)}" y="${n2(p.y)}" width="${n2(p.w)}" height="${n2(p.h)}" rx="10" fill="${fill0}" stroke="${stroke0}"${stroke}/>`;
     const lines = labelLines(item, p.w);
     const extra = (lines.length - 1) * LABEL_LINE;
-    const firstY = item.shape === 'store' || contents ? labelY : labelY - extra / 2;
+    const firstY = item.shape === 'store' || contents || dl ? labelY : labelY - extra / 2;
     const label = lines.map((l, i) => `<text x="${n2(cx)}" y="${n2(firstY + i * LABEL_LINE)}" class="label">${esc(l)}</text>`).join('');
     const sub = dl
       ? dl.subs.map((l) => `<text x="${n2(cx)}" y="${n2(p.y + p.h / 2 + l.dy)}" class="sub">${esc(l.text)}</text>`).join('')
