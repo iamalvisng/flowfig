@@ -275,7 +275,8 @@ export function laneColumns(fig: FlowProps): Map<string, number> {
 export const LABEL_LINE = 18;
 export const FRAME_SIDE = 18,
   NODE_MIN_W = 100,
-  NODE_MAX_W = 190;
+  NODE_MAX_W = 190,
+  DIAMOND_MAX_W = 170;
 export const LANE_BLOCK_GAP = 40;
 export const STUB = 12,
   STUB_CLEAR = 8,
@@ -287,14 +288,15 @@ export function nodeWidth(item: FigNode, carded: boolean, cap = NODE_MAX_W): num
   if (carded) return CARD_WIDTH;
   const label = textWidth(str(item.label), 14) + 32;
   const sub = textWidth(str(item.sub), 12) + 32;
-  return Math.min(item.shape === 'decision' ? NODE_MAX_W : cap, Math.max(NODE_MIN_W, label, sub));
+  return Math.min(item.shape === 'decision' ? DIAMOND_MAX_W : cap, Math.max(NODE_MIN_W, label, sub));
 }
 
 export function labelLines(item: FigNode, w: number): string[] {
   const label = str(item.label);
-  if (item.shape === 'decision' || textWidth(label, 14) <= w - 32 + 0.5) return [label];
+  if (item.shape === 'decision') return wrap(label, w - 102 + 0.5, 14);
+  if (textWidth(label, 14) <= w - 32 + 0.5) return [label];
   const lines = wrap(label, w - 32, 14);
-  return lines.length === 2 && lines.every((l) => textWidth(l, 14) <= w - 32) ? lines : [label];
+  return lines.every((l) => textWidth(l, 14) <= w - 32) ? lines : [label];
 }
 
 export function itemWidth(item: FigNode | FigGroup, carded: { has(id: string): boolean }, edges: FigEdge[], cap = NODE_MAX_W): number {
@@ -319,24 +321,28 @@ export function fitCap(fig: FlowProps, width: number, padding = 24): number {
 }
 
 export const diamondRoom = (w: number, h: number, far: number) => w * Math.max(0, 1 - far / (h / 2)) - 8;
-/** The lines of a diamond with no card. The diamond grows 15 px for each sub line that wraps. */
 export function diamondLines(
   item: FigNode,
   w: number,
-): { h: number; label: { dy: number; far: number }; subs: { text: string; dy: number; far: number }[] } {
+): { h: number; label: { text: string; dy: number; far: number }[]; subs: { text: string; dy: number; far: number }[] } {
   const sub = item.sub ? str(item.sub) : '';
-  for (let n = sub ? 1 : 0; ; n++) {
-    const h = 62 + 15 * n;
-    const dy0 = n ? -2 - 7.5 * (n - 1) : 5;
-    const at = (dy: number, size: number) => Math.max(Math.abs(dy - 0.75 * size), dy + 0.25 * size);
-    const last = n ? at(dy0 + 15 * n, 12) : 0;
+  const label = labelLines(item, w);
+  const k = label.length - 1;
+  const at = (dy: number, size: number) => Math.max(Math.abs(dy - 0.75 * size), dy + 0.25 * size);
+  for (let n = sub ? 1 : 0, h = 0; ;) {
+    h = Math.max(h, 62 + 15 * n + LABEL_LINE * k);
+    const dy0 = (n ? 5.5 : 5) - 7.5 * n - (LABEL_LINE / 2) * k;
+    const last = n ? at(dy0 + LABEL_LINE * k + 15 * n, 12) : 0;
     const lines = n ? wrap(sub, diamondRoom(w, h, last), 12) : [];
-    if (lines.length <= n || n >= 6)
-      return {
-        h,
-        label: { dy: dy0, far: at(dy0, 14) },
-        subs: lines.map((text, k) => ({ text, dy: dy0 + 15 * (k + 1), far: at(dy0 + 15 * (k + 1), 12) })),
-      };
+    const labels = label.map((text, i) => ({ text, dy: dy0 + LABEL_LINE * i, far: at(dy0 + LABEL_LINE * i, 14) }));
+    const subs = lines.map((text, j) => ({
+      text,
+      dy: dy0 + LABEL_LINE * k + 15 * (j + 1),
+      far: at(dy0 + LABEL_LINE * k + 15 * (j + 1), 12),
+    }));
+    if (lines.length > n && n < 6) n++;
+    else if (h < w && labels.some((l) => textWidth(l.text, 14) > diamondRoom(w, h, l.far))) h += 4;
+    else return { h, label: labels, subs };
   }
 }
 

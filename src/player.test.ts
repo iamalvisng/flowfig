@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { nodeWidth, type FlowProps } from './model.ts';
-import { render as toSvgScene } from './svg.ts';
+import { check, render as toSvgScene } from './svg.ts';
 
 // Server markup shows the first frame only; clicks and the clock need a DOM.
 const { Flow } = await import(new URL('../dist/index.js', import.meta.url).href);
@@ -273,6 +273,39 @@ test('a long box label draws two lines in the player, and the box has the SVG wi
   assert.deepEqual(lines, [18, 18]);
   const pads = [...box[1].match(/padding:([^;]*)/)![1].matchAll(/calc\((\d+)px/g)].map((m) => Number(m[1]));
   assert.equal(pads[0] + lines[0] + lines[1] + pads[2], toSvgScene(fig2).scene.boxes[0].rect.h);
+});
+
+const longLabel = 'Has the customer already paid for this order today';
+const shapeBox = (shape: 'store' | 'decision') => {
+  const fig2: FlowProps = { layout: { children: [{ id: 'a', label: longLabel, shape }] }, edges: [] };
+  const box = render(fig2).match(/data-fig="a"[^>]*style="([^"]*)"[^>]*>([\s\S]*?)<\/div><\/div>/)!;
+  const svg = toSvgScene(fig2).scene.boxes[0];
+  return {
+    style: box[1],
+    player: [...box[2].matchAll(/white-space:nowrap;line-height:18px">([^<]*)/g)].map((m) => m[1]),
+    svg: svg.texts.filter((t) => t.fontSize === 14).map((t) => t.text),
+    rect: svg.rect,
+    findings: check(fig2).map((f) => f.rule),
+  };
+};
+
+test('a long store label wraps to every word in both renderers, and the cylinder grows to hold the lines', () => {
+  const b = shapeBox('store');
+  assert.equal(b.svg.join(' '), longLabel);
+  assert.ok(b.svg.length > 2);
+  assert.deepEqual(b.player, b.svg);
+  assert.equal(b.rect.h, 24 + 18 * b.svg.length + 10);
+  assert.deepEqual(b.findings, []);
+});
+
+test('a long decision label wraps in both renderers, and the diamond grows taller, not wider', () => {
+  const b = shapeBox('decision');
+  assert.equal(b.svg.join(' '), longLabel);
+  assert.ok(b.svg.length > 1);
+  assert.deepEqual(b.player, b.svg);
+  assert.ok(b.rect.w <= 240, `width ${b.rect.w}`);
+  assert.match(b.style, new RegExp(`min-height:${b.rect.h}px`));
+  assert.deepEqual(b.findings, []);
 });
 
 test('a box with a source shows it as a title', () => {

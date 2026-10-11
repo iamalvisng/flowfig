@@ -77,7 +77,7 @@ test('the sub of a diamond wraps inside the outline, and check finds no overflow
   const w = 100 + 70;
   const d = diamondLines(fig.layout.children[0] as never, w);
   assert.ok(d.subs.length >= 2, 'the sub wraps');
-  for (const l of [d.label, ...d.subs]) assert.ok(d.subs.length && true && l.far < d.h / 2);
+  for (const l of [...d.label, ...d.subs]) assert.ok(d.subs.length && true && l.far < d.h / 2);
   for (const l of d.subs) assert.ok(textWidth(l.text, 12) <= diamondRoom(w, d.h, l.far) + 0.5, l.text);
   assert.ok(textWidth('Checks delivery date and reason', 12) > diamondRoom(w, 77, 16));
 });

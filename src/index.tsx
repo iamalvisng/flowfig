@@ -1038,7 +1038,7 @@ function FlowBody({
     const card = carded.has(item.id);
     const dl = diamond && !card ? diamondLines(item, nodeWidth(item, false) + 70) : null;
     const w = diamond || card || item.width != null || str(item.label) ? nodeWidth(item, card, cap) + (diamond ? 70 : 0) : undefined;
-    const lines = w != null && !diamond && str(item.label) ? labelLines(item, w) : null;
+    const lines = w != null && str(item.label) ? labelLines(item, w) : null;
     const bt = item.tone && TONES[item.tone];
     return (
       <div
