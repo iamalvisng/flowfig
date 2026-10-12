@@ -336,6 +336,25 @@ test('a standalone SVG made with --script: a click opens "Orders", the tour stop
   }
 });
 
+test('with reduced motion, a standalone SVG shows the hold frame of the loop at the root', { skip }, async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'inside-'));
+  try {
+    writeFileSync(join(dir, 'still.html'), `<body style="margin:0">${toSvg(shopFig, { script: true })}</body>`);
+    await withReactPage('', async (page) => {
+      await page.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
+      await page.open(pathToFileURL(join(dir, 'still.html')).href, 1600);
+      await sleep(300);
+      const hold = await page.ev(`+document.querySelector('.scene').dataset.loop.split(' ')[0].split(',')[1] * 1e3`);
+      const times = await page.ev(
+        `[...new Set(document.getAnimations().map((a) => Math.round(a.currentTime - a.effect.getTiming().delay)))]`,
+      );
+      assert.deepEqual(times, [Math.round(hold)]);
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('two figures on one page: a click opens a box in that figure only', { skip }, async () => {
   const dir = mkdtempSync(join(tmpdir(), 'inside-'));
   try {

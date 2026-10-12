@@ -1154,7 +1154,7 @@ export type Level = { line: string; props: FlowProps; scene: Scene };
 const SCRIPT = `(()=>{const s=document.currentScript.closest('svg'),G=[...s.querySelectorAll('.scene')],S=[G[0]],R=matchMedia('(prefers-reduced-motion: reduce)').matches,
 W=(g,k)=>g.dataset[k].split(' ').map(p=>p.split(',').map(Number));let q=[],L=W(G[0],'loop'),w=[0,-1],o,t=0,p=performance.now();
 const seek=t=>{s.pauseAnimations();s.setCurrentTime(t);for(const a of s.getAnimations({subtree:true}))a.pause(),a.currentTime=t*1e3+a.effect.getTiming().delay},
-tick=n=>{if(t>=w[1]){o=q.length>0;if(!o)q=L.slice();w=q.shift();t=w[0]}seek(R&&o?w[1]:Math.min(t,w[1]));t+=R?(o?1e9:0):(n-p)/1e3;p=n;requestAnimationFrame(tick)},
+tick=n=>{if(t>=w[1]){o=q.length>0;if(!o)q=L.slice();w=q.shift();t=w[0]}seek(R?w[1]:Math.min(t,w[1]));t+=R?(o?1e9:0):(n-p)/1e3;p=n;requestAnimationFrame(tick)},
 show=()=>{const c=S.at(-1);for(const g of G){g.style.pointerEvents=g==c?'':'none';for(const x of g.querySelectorAll('.hit,.back'))x.setAttribute('role','button'),x.setAttribute('tabindex',g==c?0:-1)}},
 go=(a,b)=>{q=a;L=b;w=[0,-1];t=0;show()},
 back=()=>{if(S.length>1){const g=S.pop();go(W(g,'back'),W(S.at(-1),'loop'))}},
