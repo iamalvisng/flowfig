@@ -919,8 +919,7 @@ The element has three forms:
 
 - `diagram` shows the figure that `toSvg` draws, with the step tabs of the player.
 - `guide` shows one moment at a time. The cast comes from the lanes. Else it comes from the labeled top-level groups.
-  Else it comes from the boxes that the steps visit, at most 6. A figure with a store box gets one more actor, "Records". The
-  cap of 6 counts the visited boxes only. The actor that acts is outlined. "Next:" names the next different actor. In a figure
+  Else it comes from the boxes that the steps visit. The cast holds at most 6 actors. When the figure has a store box, "Records" takes one of the 6 places. The actor that acts is outlined. "Next:" names the next different actor. In a figure
   without lanes, a decision box is not an actor.
 - `change` shows the older and the newer spec side by side, with the differences marked. Below the diagrams, an outcome row
   compares Before and After: red for an end box with the tone `red` or `gray`, green for the tone `green`. A step that only one
@@ -948,7 +947,7 @@ The `theme` key of the spec colors the SVG in the diagram and change forms. It a
 
 The element has a shadow root. The CSS of the host page does not reach inside it. To change the look, set the `--flowfig-*` tokens
 on the element: `--flowfig-bg`, `--flowfig-surface`, `--flowfig-border`, `--flowfig-ink`, `--flowfig-muted`, `--flowfig-accent`,
-`--flowfig-on-accent`, `--flowfig-good`, `--flowfig-bad`, `--flowfig-paper`, `--flowfig-paper-ink`, `--flowfig-play` and `--flowfig-font`. Only these tokens change the look.
+`--flowfig-on-accent`, `--flowfig-good`, `--flowfig-bad`, `--flowfig-paper`, `--flowfig-paper-ink`, `--flowfig-play`, `--flowfig-font`, and the picture colors `--flowfig-pic-b1`, `--flowfig-pic-b2`, `--flowfig-pic-b3`, `--flowfig-pic-t1`, `--flowfig-pic-t2`, `--flowfig-pic-t3`, `--flowfig-pic-dk`, `--flowfig-pic-sk`, `--flowfig-pic-hr`, `--flowfig-pic-pa` and `--flowfig-pic-sh`. Only these tokens change the look.
 
 ```css
 flowfig-explain {
