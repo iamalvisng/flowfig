@@ -57,6 +57,7 @@ import {
   toBeat,
   altText,
   beatTimes,
+  n2,
   STEP_HOLD_MS,
   playheadItem,
   loopStartItem,
@@ -96,7 +97,6 @@ const vars = (t: Palette, cardOn: string) =>
 
 const content = (c: FigContent): FigRow[] | string => (isRows(c) ? c : str(c));
 const esc = (s: string) => s.replace(/[<>&"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' })[c]!);
-const n2 = (v: number) => Math.round(v * 10) / 10;
 // Four decimals: one decimal rounds a 0.7 s hop away and the packet jumps.
 const n4 = (v: number) => Math.round(v * 10000) / 10000;
 const pct = (v: number) => Math.round(v * 10000) / 100 + '%';

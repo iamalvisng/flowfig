@@ -243,6 +243,7 @@ export const dateLabelRaised = (x: number, today: number | null | undefined, w: 
   today != null && x + 3 < today - 3 && x + 3 + w > today - 3 - todayW;
 
 export const STEP_HOLD_MS = 2000;
+export const n2 = (v: number) => Math.round(v * 10) / 10;
 export const beatTimes = (beats: Beat[][], speedMs: number) => {
   const travel = speedMs / 1000 / BASE_RATE,
     hold = STEP_HOLD_MS / 1000 / BASE_RATE;

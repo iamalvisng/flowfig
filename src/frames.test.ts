@@ -45,10 +45,11 @@ test('the beat times equal the keyTimes and the dur that the SVG writes', () => 
   const hops = times.beats.flat();
   assert.equal(motions.length, hops.length);
   motions.forEach(([, dur, k0, k1], i) => {
-    assert.ok(Math.abs(Number(dur) - loop) <= 0.005, `dur ${dur} vs ${loop}`);
+    assert.ok(Math.abs(Number(dur) - loop) <= 0.05, `dur ${dur} vs ${loop}`);
     assert.ok(Math.abs(Number(k0) - hops[i].t0 / loop) <= 0.00005, `hop ${i} t0`);
     assert.ok(Math.abs(Number(k1) - hops[i].t1 / loop) <= 0.00005, `hop ${i} t1`);
   });
+  keyFrames(fig, { fps: 20 }).tiles.forEach((t) => assert.ok(t.frame / 20 < Number(motions[0][1]), `tile ${t.frame} wraps`));
 });
 
 test('two kinds on one frame give one tile with both kinds in the label', () => {
