@@ -74,14 +74,13 @@ const CSS = [
   'button:disabled{cursor:default;opacity:.5}',
   '.ff-pane{overflow-x:auto}',
   '.ff-pane>svg{display:block;width:100%;height:auto;min-width:var(--ff-min);max-width:var(--ff-max);margin:0 auto}',
-  '.ff-live{margin:0;min-height:1.5em}',
+  '.ff-live{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}',
   '.ff-alert{margin:0;color:var(--flowfig-bad)}',
   '.ff-g{position:relative;box-sizing:border-box;width:100%;height:100%;aspect-ratio:16/10;min-height:520px;display:flex;flex-direction:column;gap:0;padding:0;overflow:hidden}',
   '.ff-g>.ff-title{margin:16px 3% 0}',
   '.ff-g>.ff-row{padding:12px 3% 0}',
   '.ff-row:empty{display:none}',
   '.ff-g>.ff-view{flex:1;min-height:0;container-type:size}',
-  '.ff-g>.ff-live{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}',
   '.ff-guide{height:100%;display:grid;grid-template-rows:minmax(19cqh,auto) minmax(0,1fr) minmax(23cqh,auto)}',
   '.ff-top{display:flex;gap:20px;align-items:flex-start;padding:2.6cqh 3cqw 0}',
   '.ff-text{flex:1;min-width:0}',
@@ -175,7 +174,7 @@ const CSS = [
   '.ff-sides:not(.ff-big) .ff-pane>svg{min-width:0}',
   '.ff-big .ff-pane{max-height:80vh;overflow:auto}',
   '.ff-side svg[role=img]{--accent:var(--flowfig-play)!important}',
-  '[data-diff] :is(rect,path,polygon){stroke:var(--flowfig-accent)!important;filter:none!important}',
+  '[data-diff] :is(rect,path:not([stroke=none]),polygon){stroke:var(--flowfig-accent)!important;filter:none!important}',
   '[data-diff] :is(rect,polygon,path:not([fill=none])){fill:color-mix(in srgb,var(--flowfig-accent) 8%,var(--bg))!important}',
   'rect[data-diff]{fill:var(--flowfig-accent)}',
   '[data-diff] text{fill:var(--fg)!important}',
@@ -199,12 +198,22 @@ const clock = (spec: FlowProps, label: string) => {
   return [start, 0];
 };
 
+// The SVG fades the last step out in its final 400 ms.
+const endOf = (spec: FlowProps, label: string) => {
+  const [start, ms] = clock(spec, label);
+  return start + ms + STEP_HOLD_MS / 2;
+};
+
+const still = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+
 const seek = (svg: SVGSVGElement, ms: number, run = false) => {
   const t = ms / BASE_RATE;
   if (run) svg.unpauseAnimations();
   else svg.pauseAnimations();
   svg.setCurrentTime(t / 1000);
   for (const a of svg.getAnimations({ subtree: true })) {
+    // The reduced-motion rule of the SVG sets a negative animation-delay.
+    a.effect?.updateTiming({ delay: 0 });
     if (run) a.play();
     else a.pause();
     a.currentTime = t;
@@ -265,7 +274,7 @@ export class FlowfigExplain extends Base {
   #name = 'spec';
   #all: Spot[] = [];
   #at = 0;
-  #loads = 0;
+  #loads = { src: 0, before: 0 };
   #timer?: ReturnType<typeof setTimeout>;
   #shown?: Form;
   #seeked?: string;
@@ -317,7 +326,7 @@ export class FlowfigExplain extends Base {
 
   attributeChangedCallback(name: string, old: string | null, value: string | null) {
     if (old === value) return;
-    if (name === 'src' || name === 'before') void this.#load();
+    if (name === 'src' || name === 'before') void this.#load(name);
     else if (name === 'step') {
       if (value) this.show(value);
     } else if (name === 'code' && this.#g) {
@@ -330,7 +339,7 @@ export class FlowfigExplain extends Base {
     return this.#spec;
   }
   set spec(v: FlowProps | undefined) {
-    this.#loads++;
+    this.#loads.src++;
     this.#spec = v;
     this.#title = '';
     this.#name = 'spec';
@@ -341,7 +350,7 @@ export class FlowfigExplain extends Base {
     return this.#before;
   }
   set beforeSpec(v: FlowProps | undefined) {
-    this.#loads++;
+    this.#loads.before++;
     this.#before = v;
     this.#draw();
   }
@@ -405,26 +414,25 @@ export class FlowfigExplain extends Base {
     this.#ends.forEach(clearTimeout);
     this.#played = label;
     for (const t of this.#tabs) t.setAttribute('aria-pressed', String(t.textContent === label));
-    const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const calm = still();
     this.#ends = (this.#sides ?? []).map((s) => {
       const step = s.spec.steps?.find((x) => str(x.label) === label);
       s.out.textContent = step ? '' : `This step is not in ${s.name}`;
       s.tile.className = `ff-tile ${step ? 'ff-wait' : 'ff-none'}`;
       if (!step) return void seek(s.svg, 0);
-      const [start, ms] = clock(s.spec, label);
-      // The last step fades out in its final 400 ms, so stop inside the hold.
-      const end = start + ms + STEP_HOLD_MS / 2;
-      const hop = step.flow.length ? toBeat(step.flow.at(-1)!).hops.at(-1) : undefined;
+      const start = clock(s.spec, label)[0];
+      const end = endOf(s.spec, label);
+      const hop = step.flow.flatMap((b) => toBeat(b).hops).at(-1);
       const edge = s.spec.edges.find((e) => edgeId(e) === hop?.edge);
       const tone = nodes(s.spec.layout).find((n) => n.id === (hop?.back ? edge?.from : edge?.to))?.tone;
-      seek(s.svg, still ? end : start, !still);
+      seek(s.svg, calm ? end : start, !calm);
       return setTimeout(
         () => {
           seek(s.svg, end);
           s.out.textContent = moments(s.spec, label).at(-1)?.summary?.outcome ?? '';
           s.tile.className = `ff-tile${tone === 'red' || tone === 'gray' ? ' ff-bad' : tone === 'green' ? ' ff-good' : ''}`;
         },
-        still ? 0 : (end - start) / BASE_RATE,
+        calm ? 0 : (end - start) / BASE_RATE,
       );
     });
   }
@@ -459,21 +467,23 @@ export class FlowfigExplain extends Base {
     e.preventDefault();
   };
 
-  async #load() {
-    const n = ++this.#loads;
-    const src = this.getAttribute('src');
-    const before = this.getAttribute('before');
+  async #load(key: 'src' | 'before') {
+    const n = ++this.#loads[key];
+    const url = this.getAttribute(key);
+    if (!url) return;
     try {
-      const [a, b] = await Promise.all([src ? read(src) : undefined, before ? read(before) : undefined]);
-      if (n !== this.#loads) return;
-      if (b) this.#before = b.props;
-      if (!a) return this.#draw();
-      this.#spec = a.props;
-      this.#title = a.title;
-      this.#name = src!;
+      const { props, title } = await read(url);
+      if (n !== this.#loads[key]) return;
+      if (key === 'before') {
+        this.#before = props;
+        return this.#draw();
+      }
+      this.#spec = props;
+      this.#title = title;
+      this.#name = url;
       this.#draw(true);
     } catch (e) {
-      if (n === this.#loads) this.#fault((e as Error).message);
+      if (n === this.#loads[key]) this.#fault((e as Error).message);
     }
   }
 
@@ -524,7 +534,7 @@ export class FlowfigExplain extends Base {
       const listed = this.getAttribute('forms')?.split(/\s+/);
       const forms = listed ? allowed.filter((f) => listed.includes(f)) : allowed;
       const asked = this.getAttribute('form') as Form | null;
-      const form = asked && FORMS.includes(asked) ? asked : forms.includes('guide') ? 'guide' : (forms[0] ?? 'diagram');
+      const form = asked && forms.includes(asked) ? asked : forms.includes('guide') ? 'guide' : (forms[0] ?? 'diagram');
 
       this.#forms.replaceChildren(...(forms.length > 1 ? forms.map((f) => button(f, () => this.setAttribute('form', f), f === form)) : []));
       this.#heading.textContent = this.#title;
@@ -538,6 +548,11 @@ export class FlowfigExplain extends Base {
       this.#tabs = [];
       this.#ctl = {};
       this.#view.replaceChildren();
+      if (asked === 'change' && !this.#before && !this.hasAttribute('before')) {
+        const alert = h('p', 'ff-alert', `${this.#name}: the change form needs a before spec`);
+        alert.setAttribute('role', 'alert');
+        this.#view.append(alert);
+      }
       if (form === 'diagram') {
         const p = pane(spec);
         this.#svg = p.querySelector('svg') ?? undefined;
@@ -553,6 +568,8 @@ export class FlowfigExplain extends Base {
             b.textContent = col ? 'Back to both' : 'Enlarge';
             b.setAttribute('aria-label', col ? 'Back to both' : `Enlarge ${c.querySelector('h3')!.textContent}`);
           }
+          const label = this.#played;
+          for (const s of this.#sides!) seek(s.svg, label && s.spec.steps?.some((x) => str(x.label) === label) ? endOf(s.spec, label) : 0);
         };
         const side = (name: string, of: FlowProps, ops: string[], scope: string): Side => {
           const marks: DiffMarks = { boxes: {}, edges: {}, steps: 0 };
@@ -712,7 +729,7 @@ export class FlowfigExplain extends Base {
 
   #update() {
     const m = this.#all[this.#at];
-    this.#live.textContent = m ? [m.say, m.note].filter(Boolean).join(' ') : '';
+    this.#live.textContent = !m ? '' : this.#g ? [m.say, m.note].filter(Boolean).join(' ') : this.#svg ? m.step : '';
     if (!this.#sides) for (const t of this.#tabs) t.setAttribute('aria-pressed', String(t.textContent === m?.step));
     if (this.#ctl.back) {
       this.#ctl.back.disabled = this.#at === 0;
@@ -722,8 +739,9 @@ export class FlowfigExplain extends Base {
     if (this.#g && m) this.#guide(this.#g, m);
     if (!m || m.step === this.#seeked || !(this.#svg || this.#sides)) return;
     this.#seeked = m.step;
-    if (this.#svg) seek(this.#svg, clock(this.#spec!, m.step)[0], true);
-    else this.#run(m.step);
+    if (!this.#svg) this.#run(m.step);
+    else if (still()) seek(this.#svg, endOf(this.#spec!, m.step));
+    else seek(this.#svg, clock(this.#spec!, m.step)[0], true);
   }
 
   #guide(g: Guide, m: Spot) {

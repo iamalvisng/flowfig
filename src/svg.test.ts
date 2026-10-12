@@ -284,6 +284,7 @@ test('a theme color cannot add markup, CSS rules or a URL to the SVG, and a plai
   assert.doesNotMatch(svg('red}</style><img src=x onerror=alert(1)>'), /<img/);
   assert.doesNotMatch(svg('red} :host,body{display:none} svg{'), /display:none/);
   assert.doesNotMatch(svg('URL(//evil.example/x)'), /evil\.example/);
+  assert.doesNotMatch(svg('rgb(1,2,3'), /rgb\(1,2,3/);
   assert.ok(svg('hsl(10 20% 30% / .5)').includes('--accent:hsl(10 20% 30% / .5);'));
 });
 

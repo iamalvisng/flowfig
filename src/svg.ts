@@ -88,7 +88,8 @@ const FRAME_TOP = 37,
 type Palette = Record<'accent' | 'fg' | 'muted' | 'bg' | 'surface' | 'border', string>;
 const color = (t: Palette, k: keyof Palette) => {
   const v = String(t[k]);
-  return /^[#a-zA-Z0-9 ,.%()/+-]+$/.test(v) && !/url\(/i.test(v) ? v : LIGHT[k];
+  const depth = [...v].reduce((d, c) => (d < 0 ? d : d + (c === '(' ? 1 : c === ')' ? -1 : 0)), 0);
+  return /^[#a-zA-Z0-9 ,.%()/+-]+$/.test(v) && !/url\(/i.test(v) && depth === 0 ? v : LIGHT[k];
 };
 const vars = (t: Palette, cardOn: string) =>
   `--accent:${color(t, 'accent')}; --fg:${color(t, 'fg')}; --muted:${color(t, 'muted')}; --bg:${color(t, 'bg')}; --surface:${color(t, 'surface')}; --border:${color(t, 'border')}; --card-on:${cardOn}; --tint:color-mix(in srgb, var(--accent) 10%, var(--surface));`;
@@ -763,9 +764,9 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
     const tip = edgeTip(r.id, e.source, beats.flat());
     const path0 = r.stub
       ? r.stub.parts
-          .map((d) => `<path d="${d}" fill="none" stroke="${line}" stroke-width="${EDGE_OFF}" marker-end="url(#arrow)"${lit}/>`)
+          .map((d) => `<path d="${d}" fill="none" stroke="${line}" stroke-width="${EDGE_OFF}" marker-end="url(#${sc}arrow)"${lit}/>`)
           .join('') + `<path id="${sc}p-${esc(r.id)}" d="${r.d}" fill="none" stroke="none"/>`
-      : `<path id="${sc}p-${esc(r.id)}" d="${r.d}" fill="none" stroke="${line}" stroke-width="${EDGE_OFF}" marker-end="url(#arrow)"${lit}/>`;
+      : `<path id="${sc}p-${esc(r.id)}" d="${r.d}" fill="none" stroke="${line}" stroke-width="${EDGE_OFF}" marker-end="url(#${sc}arrow)"${lit}/>`;
     const path = tip ? `<g><title>${esc(tip)}</title>${path0}</g>` : path0;
     const pillColor = em ? MARK_COLOR[em] : undefined;
     const pill = (x: number, y: number, lw: number, text: string) =>
@@ -1024,7 +1025,7 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
           const tip = edgeTip(row.edge, fig.edges[ids.indexOf(row.edge)].source, beats.flat());
           parts.push(
             `<g${cls('railrow', moveRow(i))}>${tip ? `<title>${esc(tip)}</title>` : ''}<g${cls(anim(next, 'opacity: .45', 'opacity: 1', 'r'))}>` +
-              `<path d="M ${n2(x1)} ${n2(ly)} H ${n2(x2)}" fill="none" stroke="var(--muted)" stroke-width="${EDGE_OFF}"${row.async ? ' stroke-dasharray="4 3"' : ''} marker-end="url(#arrow)"${cls(lit)}/>` +
+              `<path d="M ${n2(x1)} ${n2(ly)} H ${n2(x2)}" fill="none" stroke="var(--muted)" stroke-width="${EDGE_OFF}"${row.async ? ' stroke-dasharray="4 3"' : ''} marker-end="url(#${sc}arrow)"${cls(lit)}/>` +
               tag +
               pill +
               `</g></g>`,
@@ -1064,7 +1065,7 @@ svg { ${vars(t0, '#eef5fd')} }
 ${css.join('\n')}
 @media (prefers-reduced-motion: reduce) { * { animation-play-state: paused !important; animation-delay: -${holdAt}s !important; } }
 </style>
-<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 1 L 9 5 L 0 9 z" fill="context-stroke"/></marker></defs>
+<defs><marker id="${sc}arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 1 L 9 5 L 0 9 z" fill="context-stroke"/></marker></defs>
 <rect width="100%" height="100%" fill="var(--bg)"/>
 ${
   only
