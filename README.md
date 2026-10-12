@@ -919,7 +919,7 @@ The element has three forms:
 
 - `diagram` shows the figure that `toSvg` draws, with the step tabs of the player.
 - `guide` shows one moment at a time. The cast comes from the lanes. Else it comes from the labeled top-level groups.
-  Else it comes from the boxes that the steps visit. The cast holds at most 6 actors. When the figure has a store box, "Records" takes one of the 6 places. The actor that acts is outlined. "Next:" names the next different actor. In a figure
+  Else it comes from the boxes that the steps visit. A store box adds the actor "Records" at the end. When the cast comes from the boxes, the cast holds at most 6 actors, and "Records" takes one of the 6 places. The actor that acts is outlined. "Next:" names the next different actor. In a figure
   without lanes, a decision box is not an actor.
 - `change` shows the older and the newer spec side by side, with the differences marked. Below the diagrams, an outcome row
   compares Before and After: red for an end box with the tone `red` or `gray`, green for the tone `green`. A step that only one

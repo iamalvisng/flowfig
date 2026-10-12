@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Install the packed tarball into a clean project and use it the way a user does: the two entry
-# points and the bin. The tests run from src/, so only this catches a broken dist/ or package.json.
+# Only this script tests the packed package. The unit tests import from src/.
 # REACT=18 checks the low end of the peer range.
 set -euo pipefail
 
