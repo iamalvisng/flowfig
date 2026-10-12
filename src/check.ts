@@ -24,7 +24,7 @@ import {
 } from './model.ts';
 import type { Finding, Scene, SceneEdge } from './scene.ts';
 import { layoutRail } from './rail.ts';
-import type { SvgOptions } from './svg.ts';
+import type { Level, SvgOptions } from './svg.ts';
 import { crosses, samples, type Pt, type Rect } from './geometry.ts';
 import { textWidth } from './text.ts';
 import { owners, parseSource } from './source.ts';
@@ -546,7 +546,7 @@ export function planFor(fig: FlowProps, opts: SvgOptions): LanePlan | null {
   return lanePlan(fig, { width: opts.width, minText: opts.minText, padding: opts.padding ?? 24, floor });
 }
 
-export function checkRendered(fig: FlowProps, opts: SvgOptions & CheckOptions, scene: Scene): Finding[] {
+export function checkRendered(fig: FlowProps, opts: SvgOptions & CheckOptions, scene: Scene, levels?: Level[]): Finding[] {
   const lost = (planFor(fig, opts)?.lost ?? []).map((id): Finding => ({
     rule: 'lane-end-block',
     severity: 'warning',
@@ -555,7 +555,14 @@ export function checkRendered(fig: FlowProps, opts: SvgOptions & CheckOptions, s
   }));
   return [
     ...checkSpec(fig),
-    ...checkScene(scene, { ...opts, auto: opts.auto ?? fig.layout.auto }),
+    ...(levels
+      ? levels.flatMap((l, i) =>
+          checkScene(
+            { ...l.scene, width: Math.max(...levels.map((x) => x.scene.width)) },
+            { ...opts, auto: opts.auto ?? l.props.layout.auto },
+          ).map((f) => (i ? { ...f, scene: l.line } : f)),
+        )
+      : checkScene(scene, { ...opts, auto: opts.auto ?? fig.layout.auto })),
     ...lost,
     ...checkTheme({ ...fig.theme, ...opts.theme }),
   ];

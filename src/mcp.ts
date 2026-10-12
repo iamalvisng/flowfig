@@ -104,7 +104,7 @@ function run(name: string, args: Record<string, unknown>): Result {
     const props = spec(args.spec, name);
     const opts = { width: args.width as number | undefined, minText: args.minText as number | undefined };
     const rendered = render(props, opts);
-    const findings = sortFindings(checkRendered(props, opts, rendered.scene), args.strict === true);
+    const findings = sortFindings(checkRendered(props, opts, rendered.scene, rendered.levels), args.strict === true);
     const errors = findings.some((f) => f.severity === 'error');
     const lines = reportLines(props, findings);
     if (name === 'check' || errors) return ok(lines.join('\n'), errors);
