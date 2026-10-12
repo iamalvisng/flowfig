@@ -918,8 +918,9 @@ as `flowfig verify`.
 The element has three forms:
 
 - `diagram` shows the figure that `toSvg` draws, with the step tabs of the player.
-- `guide` shows one moment at a time. The cast comes from the lanes, or from the labeled top-level groups, or from the boxes
-  that the steps visit (at most 6). The actor that acts is outlined, and "Next:" names the next different actor. In a figure
+- `guide` shows one moment at a time. The cast comes from the lanes. Else it comes from the labeled top-level groups.
+  Else it comes from the boxes that the steps visit, at most 6. A figure with a store box gets one more actor, "Records". The
+  cap of 6 counts the visited boxes only. The actor that acts is outlined. "Next:" names the next different actor. In a figure
   without lanes, a decision box is not an actor.
 - `change` shows the older and the newer spec side by side, with the differences marked. Below the diagrams, an outcome row
   compares Before and After: red for an end box with the tone `red` or `gray`, green for the tone `green`. A step that only one
@@ -927,17 +928,17 @@ The element has three forms:
 
 For a good guide, give each role a lane or a labeled group. Give each beat a `say`. Use `note` for the reason and `look` for the picture.
 
-| Attribute | Values                                                                  | Default                                       |
-| --------- | ----------------------------------------------------------------------- | --------------------------------------------- |
-| `src`     | The URL of a spec JSON file, or of an SVG that flowfig wrote.           | required, unless the `spec` property is set   |
-| `form`    | `diagram`, `guide` or `change`.                                         | `guide` if the spec has steps, else `diagram` |
-| `step`    | A step label to start on.                                               | the first step                                |
-| `before`  | The URL of the older spec.                                              | required for `change`                         |
-| `theme`   | `auto`, `light` or `dark`.                                              | `auto`                                        |
-| `code`    | Present: each moment shows its `source` and the tables that it touches. | absent                                        |
-| `forms`   | The list of forms that the reader can switch between.                   | all forms that the input allows               |
+| Attribute | Values                                                             | Default                                       |
+| --------- | ------------------------------------------------------------------ | --------------------------------------------- |
+| `src`     | The URL of a spec JSON file, or of an SVG that flowfig wrote.      | required, unless the `spec` property is set   |
+| `form`    | `diagram`, `guide` or `change`.                                    | `guide` if the spec has steps, else `diagram` |
+| `step`    | A step label to start on.                                          | the first step                                |
+| `before`  | The URL of the older spec.                                         | required for `change`                         |
+| `theme`   | `auto`, `light` or `dark`.                                         | `auto`                                        |
+| `code`    | Present: each moment shows its `source` and `via` values.          | absent                                        |
+| `forms`   | The forms that the reader can switch between, separated by spaces. | all forms that the input allows               |
 
-The `theme` key of the spec sets the colors. The element keeps a color only if it is plain color syntax. Else it uses the default color.
+The `theme` key of the spec colors the SVG in the diagram and change forms. It applies only when the `theme` attribute is `auto`. The element keeps a color only if it is plain color syntax. Else it uses the default color.
 
 - Properties: `spec` and `beforeSpec` (objects, instead of the URLs), and `moment` (the index; read and write).
 - Methods: `next()`, `back()`, `play()`, `pause()` and `show(stepLabel)`.
@@ -947,7 +948,7 @@ The `theme` key of the spec sets the colors. The element keeps a color only if i
 
 The element has a shadow root. The CSS of the host page does not reach inside it. To change the look, set the `--flowfig-*` tokens
 on the element: `--flowfig-bg`, `--flowfig-surface`, `--flowfig-border`, `--flowfig-ink`, `--flowfig-muted`, `--flowfig-accent`,
-`--flowfig-on-accent`, `--flowfig-good`, `--flowfig-bad`, `--flowfig-paper`, `--flowfig-paper-ink`, `--flowfig-play` and `--flowfig-font`.
+`--flowfig-on-accent`, `--flowfig-good`, `--flowfig-bad`, `--flowfig-paper`, `--flowfig-paper-ink`, `--flowfig-play` and `--flowfig-font`. Only these tokens change the look.
 
 ```css
 flowfig-explain {
