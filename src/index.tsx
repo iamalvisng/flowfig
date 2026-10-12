@@ -1,5 +1,17 @@
 'use client';
-import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+  type RefObject,
+} from 'react';
 import { arcRoom, avoidOf, markSide, route, type Pt, type Rect, type Routed, type Side } from './geometry.ts';
 import { foldedLabel, groupBox, layoutRail, railState, RAIL } from './rail.ts';
 import { textWidth } from './text.ts';
@@ -66,6 +78,11 @@ import {
   specKey,
   nextWide,
   scenes,
+  insideStep,
+  flowOrder,
+  readMs,
+  portLabel,
+  OPEN_MS,
   type FigScene,
 } from './model.ts';
 
@@ -185,38 +202,72 @@ export function Flow(props: FlowProps) {
           path: s.path.map((id, i) => ({ id, name: all.find((x) => x.path.join('>') === s.path.slice(0, i + 1).join('>'))!.name })),
           onOpen: (id: string, from: Start) => {
             memo.current[at] = from;
-            setStart(undefined);
+            const child = all.find((x) => x.path.join('>') === [...s.path, id].join('>'))!;
+            setStart({
+              step: child.props.steps?.length ? insideStep(child, from.port) : null,
+              beat: 0,
+              playing: from.playing,
+              rect: from.rect,
+            });
             setPath([...s.path, id]);
           },
           onUp: (depth: number) => {
             const to = s.path.slice(0, depth);
-            const saved = memo.current[to.join('>')];
-            const beats =
-              saved.step == null ? 1 : (all.find((x) => x.path.join('>') === to.join('>'))!.props.steps?.[saved.step].flow.length ?? 1);
-            setStart({ ...saved, beat: Math.min(saved.beat + 1, beats - 1), box: s.path[depth] });
+            const { step, beat, playing } = memo.current[to.join('>')];
+            const beats = step == null ? 1 : (all.find((x) => x.path.join('>') === to.join('>'))!.props.steps?.[step].flow.length ?? 1);
+            setStart({ step, beat: Math.min(beat + 1, beats - 1), playing, box: s.path[depth] });
             setPath(to);
           },
         }
       : undefined;
+  const figure = useRef<HTMLElement>(null);
+  const descId = useId();
+  const alt = useMemo(() => altText({ layout: placed.layout, edges: placed.edges, steps }), [placed, steps]);
   return (
-    <FlowBody
-      {...props}
-      {...s.props}
-      key={at}
-      layout={placed.layout}
-      edges={placed.edges}
-      written={s.props}
-      wide={wide}
-      setWide={fold ? setWide : undefined}
-      full={full}
-      setFull={setFull}
-      level={level}
-      start={start}
-    />
+    <figure
+      ref={figure}
+      className="flowfig"
+      aria-label={alt.title}
+      aria-describedby={descId}
+      style={{
+        ...(Object.fromEntries(Object.entries(props.theme ?? {}).map(([k, val]) => [`--fig-${k}`, val])) as CSSProperties),
+        position: full ? 'fixed' : 'relative',
+        inset: full ? 0 : undefined,
+        zIndex: full ? 1000 : undefined,
+        overflow: full ? 'auto' : undefined,
+        margin: full ? 0 : '24px 0',
+        padding: full ? '48px 24px 24px' : '20px 16px 16px',
+        border: full ? 'none' : `1px solid ${v('border')}`,
+        borderRadius: full ? 0 : 16,
+        background: v('bg'),
+        fontFamily: v('font'),
+        color: v('fg'),
+      }}
+    >
+      <div id={descId} style={HIDDEN}>
+        {alt.desc}
+      </div>
+      <FlowBody
+        {...props}
+        {...s.props}
+        key={at}
+        layout={placed.layout}
+        edges={placed.edges}
+        written={s.props}
+        wide={wide}
+        setWide={fold ? setWide : undefined}
+        full={full}
+        setFull={setFull}
+        level={level}
+        start={start}
+        figure={figure}
+      />
+    </figure>
   );
 }
 
-type Start = { step: number | null; beat: number; playing: boolean; box?: string };
+type Start = { step: number | null; beat: number; playing: boolean; box?: string; port?: string; rect?: Rect };
+const reduced = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 // The ASYNC tag is 9 px.
 const RAIL_TEXT = 9;
@@ -246,6 +297,7 @@ function FlowBody({
   setFull,
   level,
   start,
+  figure,
 }: FlowProps & {
   written: FlowProps;
   wide: number;
@@ -260,10 +312,9 @@ function FlowBody({
     onUp: (depth: number) => void;
   };
   start?: Start;
+  figure: RefObject<HTMLElement | null>;
 }) {
   const tl = timeline && isLanesLayout(layout);
-  const alt = useMemo(() => altText({ layout, edges, steps: stepsIn }), [layout, edges, stepsIn]);
-  const descId = useId();
   const tabsId = useId();
   const synthetic = tl && !stepsIn.length;
   const steps = useMemo(
@@ -276,7 +327,35 @@ function FlowBody({
   const outer = useRef<HTMLDivElement>(null);
   const [fit, setFit] = useState({ scale: 1, height: 0, scroll: false });
   const backBtn = useRef<HTMLButtonElement>(null);
-  const up = level?.path.length ? () => level.onUp(level.path.length - 1) : undefined;
+  const ghost = useRef<HTMLDivElement>(null);
+  const place = (n: Element): Rect => {
+    const f = figure.current!,
+      a = f.getBoundingClientRect(),
+      r = n.getBoundingClientRect();
+    return { x: r.left - a.left - f.clientLeft + f.scrollLeft, y: r.top - a.top - f.clientTop + f.scrollTop, w: r.width, h: r.height };
+  };
+  const showGhost = (r: Rect) => {
+    Object.assign(ghost.current!.style, { display: 'block', left: `${r.x}px`, top: `${r.y}px`, width: `${r.w}px`, height: `${r.h}px` });
+    return ghost.current!;
+  };
+  const toward = (from: Rect, to: Rect) => `translate(${from.x - to.x}px, ${from.y - to.y}px) scale(${from.w / to.w}, ${from.h / to.h})`;
+  const moving = useRef(false);
+  const goUp = (depth: number) => {
+    const map = root.current,
+      r = start?.rect;
+    if (moving.current) return;
+    if (reduced() || !map || !r) return level!.onUp(depth);
+    moving.current = true;
+    map.animate([{ opacity: 1 }, { opacity: 0 }], { duration: OPEN_MS.hide, fill: 'forwards' });
+    const to = place(map);
+    showGhost(to).animate([{ transform: 'none' }, { transform: toward(r, to) }], {
+      duration: OPEN_MS.shrink,
+      delay: OPEN_MS.hide,
+      easing: 'cubic-bezier(0.4, 0, 1, 1)',
+      fill: 'forwards',
+    }).onfinish = () => level!.onUp(depth);
+  };
+  const up = level?.path.length ? () => goUp(level.path.length - 1) : undefined;
   useEffect(() => {
     if (!full && !up) return;
     const onKey = (e: KeyboardEvent) => {
@@ -364,7 +443,6 @@ function FlowBody({
     return at;
   }, [beats, beat]);
 
-  const figure = useRef<HTMLElement>(null);
   const [mapW, setMapW] = useState(0);
   const railOnly = withRail === 'only';
   const rail = useMemo(
@@ -380,6 +458,34 @@ function FlowBody({
   const left = useRef(0);
   const busy = useRef(0);
   const jump = useRef<number | null>(start?.beat ?? null);
+  const wait = useRef(
+    start?.rect && start.playing
+      ? OPEN_MS.grow +
+          OPEN_MS.stagger * (nodes(layout).length - 1) +
+          readMs([level!.scene.line, ...level!.scene.ports.map(portLabel)].join(' '))
+      : 0,
+  );
+  useLayoutEffect(() => {
+    const map = root.current;
+    if (!map || reduced()) return;
+    if (start?.box) return void map.animate([{ opacity: 0 }, { opacity: 1 }], { duration: OPEN_MS.fade });
+    if (!start?.rect) return;
+    const to = place(map);
+    showGhost(to).animate([{ transform: toward(start.rect, to) }, { transform: 'none' }], {
+      duration: OPEN_MS.grow,
+      easing: 'cubic-bezier(0.2, 0, 0, 1)',
+    });
+    for (const e of map.querySelectorAll(':scope > svg'))
+      e.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 1, delay: OPEN_MS.grow, fill: 'backwards' });
+    const shows = flowOrder(level!.scene).map((id, k) =>
+      map.querySelector(`[data-fig="${CSS.escape(id)}"]`)?.animate([{ opacity: 0 }, { opacity: 1 }], {
+        duration: OPEN_MS.fade,
+        delay: OPEN_MS.grow + OPEN_MS.stagger * k,
+        fill: 'backwards',
+      }),
+    );
+    shows.at(-1)?.finished.then(() => ghost.current && (ghost.current.style.display = 'none'));
+  }, []);
   const [hoverEdge, setHoverEdge] = useState<string | null>(null);
   const [still, setStill] = useState(false);
   useEffect(() => setStill(window.matchMedia('(prefers-reduced-motion: reduce)').matches), []);
@@ -651,7 +757,8 @@ function FlowBody({
     if (clock.current.beats !== beats) {
       const j = jump.current ?? 0;
       jump.current = null;
-      clock.current = { beats, elapsed: beats.slice(0, j).reduce((t, b) => t + beatMs(b, speed), 0) };
+      clock.current = { beats, elapsed: beats.slice(0, j).reduce((t, b) => t + beatMs(b, speed), 0) - wait.current * BASE_RATE };
+      wait.current = 0;
       setBeat(j);
     }
     if (!beats.length || (!noMap && !routed.length && !(tl && !edges.length))) return;
@@ -671,7 +778,7 @@ function FlowBody({
         if (steps.length > 1) return setActive((a) => ((a ?? 0) + 1) % steps.length);
         clock.current.elapsed = 0;
       }
-      const t = clock.current.elapsed;
+      const t = Math.max(0, clock.current.elapsed);
       if (bar.current) bar.current.style.transform = `scaleX(${Math.min(1, t / total)})`;
       const next = ends.findIndex((e) => t < e);
       const i = next === -1 ? beats.length - 1 : next;
@@ -767,8 +874,6 @@ function FlowBody({
     }
   };
   const focus = hover != null || hoverEdge != null || (step != null && !level);
-
-  const vars = Object.fromEntries(Object.entries(theme ?? {}).map(([k, val]) => [`--fig-${k}`, val])) as CSSProperties;
 
   const timelineFig = useMemo(
     () => (tl ? timelineLayout({ layout, edges, timeline, today }, axisW) : null),
@@ -1129,7 +1234,20 @@ function FlowBody({
     const port = level?.scene.ports.some((p) => p.id === item.id);
     const lines = w != null && str(item.label) ? labelLines(item, w) : null;
     const pad = level ? 9 : 10;
-    const open = () => level!.onOpen(item.id, { step: active, beat, playing });
+    const open = () => {
+      const hop = cur?.hops.find((h) => (h.back ? edges[ids.indexOf(h.edge)]?.from : edges[ids.indexOf(h.edge)]?.to) === item.id);
+      const e = hop && edges[ids.indexOf(hop.edge)];
+      const at: Start = { step: active, beat, playing, port: e ? (hop.back ? e.to : e.from) : undefined };
+      const map = root.current,
+        n = map?.querySelector(`[data-fig="${CSS.escape(item.id)}"]`);
+      if (moving.current) return;
+      if (reduced() || !map || !n) return level!.onOpen(item.id, at);
+      moving.current = true;
+      const rect = place(n);
+      showGhost(rect);
+      map.animate([{ opacity: 1 }, { opacity: 0 }], { duration: OPEN_MS.fade, fill: 'forwards' }).onfinish = () =>
+        level!.onOpen(item.id, { ...at, rect });
+    };
     return (
       <div
         key={item.id}
@@ -1312,29 +1430,7 @@ function FlowBody({
   };
 
   return (
-    <figure
-      ref={figure}
-      className="flowfig"
-      aria-label={alt.title}
-      aria-describedby={descId}
-      style={{
-        ...vars,
-        position: full ? 'fixed' : 'relative',
-        inset: full ? 0 : undefined,
-        zIndex: full ? 1000 : undefined,
-        overflow: full ? 'auto' : undefined,
-        margin: full ? 0 : '24px 0',
-        padding: full ? '48px 24px 24px' : '20px 16px 16px',
-        border: full ? 'none' : `1px solid ${v('border')}`,
-        borderRadius: full ? 0 : 16,
-        background: v('bg'),
-        fontFamily: v('font'),
-        color: v('fg'),
-      }}
-    >
-      <div id={descId} style={HIDDEN}>
-        {alt.desc}
-      </div>
+    <>
       <button
         type="button"
         aria-label={full ? 'Close full screen' : 'Full screen'}
@@ -1356,8 +1452,24 @@ function FlowBody({
         {'@keyframes flowfig-label{from{opacity:0}to{opacity:0}}@keyframes flowfig-in{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}' +
           // The 2 px active border takes 1 px of padding, so the box size stays.
           `.${ACTIVE}:not([data-diamond]){--ff-b:1px;border-width:2px!important;background:color-mix(in srgb, ${hue} 10%, ${v('surface')})!important;box-shadow:${glow}!important;border-color:${hue}!important}` +
-          `.${ACTIVE} polygon{fill:color-mix(in srgb, ${hue} 10%, ${v('surface')});stroke:${hue};stroke-width:2px}`}
+          `.${ACTIVE} polygon{fill:color-mix(in srgb, ${hue} 10%, ${v('surface')});stroke:${hue};stroke-width:2px}` +
+          (level ? '@media (prefers-reduced-motion: reduce){.flowfig *{transition:none!important;animation:none!important}}' : '')}
       </style>
+      {level && (
+        <div
+          ref={ghost}
+          style={{
+            display: 'none',
+            position: 'absolute',
+            zIndex: 4,
+            boxSizing: 'border-box',
+            border: `1.5px solid ${v('accent')}`,
+            borderRadius: 10,
+            transformOrigin: '0 0',
+            pointerEvents: 'none',
+          }}
+        />
+      )}
       {!noMap && (
         <>
           <div
@@ -1380,7 +1492,7 @@ function FlowBody({
                     <Fragment key={p.id}>
                       <button
                         type="button"
-                        onClick={() => level!.onUp(i + 1)}
+                        onClick={() => goUp(i + 1)}
                         style={{ border: 0, padding: 0, background: 'none', font: 'inherit', color: v('accent'), cursor: 'pointer' }}
                       >
                         {p.name}
@@ -1897,7 +2009,7 @@ function FlowBody({
           )}
         </figcaption>
       )}
-    </figure>
+    </>
   );
 }
 
