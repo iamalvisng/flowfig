@@ -57,11 +57,11 @@ test('the transcript names every level with its path and its parts', () => {
     g.children.flatMap((c) => {
       if (isGroup(c)) return levels(c, line);
       if (!c.inside) return [];
-      const path = `${line} > ${str(c.label)}`;
+      const path = line ? `${line} > ${str(c.label)}` : str(c.label);
       return [{ line: path, parts: nodes(c.inside.layout).map((p) => str(p.label)) }, ...levels(c.inside.layout, path)];
     });
   const lines = altText(shop.props as FlowProps).desc.split('\n');
-  const all = levels(shop.props.layout, 'Shop');
+  const all = levels(shop.props.layout, '');
   assert.equal(all.length, 9);
   for (const { line, parts } of all) {
     const text = lines.find((l) => l.startsWith(`${line}:`));

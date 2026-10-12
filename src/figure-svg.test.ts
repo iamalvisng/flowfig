@@ -645,15 +645,15 @@ const edit = (fig: FlowProps, id: string, change: (n: FigNode) => void): FlowPro
   return f;
 };
 const LEVELS = [
-  'Shop > Gateway',
-  'Shop > Gateway > Sign in',
-  'Shop > Cart',
-  'Shop > Cart > Price the cart',
-  'Shop > Orders',
-  'Shop > Orders > Check the cart',
-  'Shop > Payments',
-  'Shop > Payments > Charge the card',
-  'Shop > Mail',
+  'Gateway',
+  'Gateway > Sign in',
+  'Cart',
+  'Cart > Price the cart',
+  'Orders',
+  'Orders > Check the cart',
+  'Payments',
+  'Payments > Charge the card',
+  'Mail',
 ];
 
 test('a render of a figure with parts writes one SVG and prints a line per level and the tour length', () => {
@@ -669,7 +669,7 @@ test('a render of a figure with parts writes one SVG and prints a line per level
         `a line for ${level}`,
       );
     const tour = Math.round(tourPlan(shopFig).ms / 1000);
-    assert.match(r.stderr, new RegExp(`^figure: .*; 3 levels, 9 scenes, 40 parts; tour ${tour} s$`, 'm'));
+    assert.match(r.stderr, new RegExp(`^figure: .*; 3 levels, 10 scenes, 40 parts; tour ${tour} s$`, 'm'));
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -681,7 +681,7 @@ test('check exits 1 with part-edge-mismatch and the level path when an inside ed
   assert.equal(r.status, 1, r.stdout + r.stderr);
   assert.match(
     r.stdout,
-    /error +part-edge-mismatch +\[Shop > Orders\] edge "browser->validate" comes in from "browser", but no edge goes from "browser" to "orders"/,
+    /error +part-edge-mismatch +\[Orders\] edge "browser->validate" comes in from "browser", but no edge goes from "browser" to "orders"/,
   );
 });
 
@@ -689,7 +689,7 @@ test('check --strict exits 1 on a part with no source, and check alone exits 0',
   const spec = JSON.stringify({ props: edit(shopFig, 'save', (n) => delete n.source) });
   const plain = run(['check', '-'], spec);
   assert.equal(plain.status, 0, plain.stdout + plain.stderr);
-  assert.match(plain.stdout, /warning +part-no-source +\[Shop > Orders\] part "save" has no source/);
+  assert.match(plain.stdout, /warning +part-no-source +\[Orders\] part "save" has no source/);
   assert.equal(run(['check', '-', '--strict'], spec).status, 1);
 });
 
@@ -703,7 +703,6 @@ test('verify exits 1 with missing-symbol and the level path when a part symbol i
     writeFileSync(join(dir, 'src/repo.ts'), 'export function readOrder() {}\n');
     const spec: FlowProps = {
       layout: {
-        label: 'Shop',
         children: [
           { id: 'gateway', label: 'Gateway', source: 'src/gateway.ts#checkout' },
           {
@@ -730,8 +729,8 @@ test('verify exits 1 with missing-symbol and the level path when a part symbol i
     writeFileSync(join(dir, 'shop.json'), JSON.stringify({ props: spec }));
     const r = run(['verify', join(dir, 'shop.json'), '--root', dir]);
     assert.equal(r.status, 1, r.stdout + r.stderr);
-    assert.match(r.stdout, /missing-symbol +.*part "save" \[Shop > Orders\] -> src\/repo\.ts#insertOrder: symbol not defined/);
-    assert.match(r.stdout, /^\[Shop > Orders\] 1 of 2 parts defined; edges: /m);
+    assert.match(r.stdout, /missing-symbol +.*part "save" \[Orders\] -> src\/repo\.ts#insertOrder: symbol not defined/);
+    assert.match(r.stdout, /^\[Orders\] 1 of 2 parts defined; edges: /m);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -759,7 +758,7 @@ test('diff lists an added part with its level path and a moved part as moved fro
     assert.equal(r.status, 0, r.stderr);
     const lines = r.stdout.split('\n');
     assert.ok(
-      lines.some((l) => l.includes('Shop > Orders') && l.includes('added') && l.includes('ship-label')),
+      lines.some((l) => l.includes('[Orders]') && l.includes('added') && l.includes('ship-label')),
       r.stdout,
     );
     assert.ok(

@@ -294,7 +294,6 @@ test('an inside edge from a port is found, not found or unsure by the call in th
     const verdict = (gateway: string) => {
       const fig: FlowProps = {
         layout: {
-          label: 'Shop',
           children: [
             { id: 'gateway', label: 'Gateway', source: `src/${gateway}.ts#checkout` },
             {
@@ -310,7 +309,7 @@ test('an inside edge from a port is found, not found or unsure by the call in th
         },
         edges: [{ from: 'gateway', to: 'orders' }],
       };
-      const level = verifyReport(fig, { root }).coverage.levels.find((l) => l.path === 'Shop > Orders')!.coverage;
+      const level = verifyReport(fig, { root }).coverage.levels.find((l) => l.path === 'Orders')!.coverage;
       return { found: level.found, notFound: level.notFound, unsure: level.unsure };
     };
     assert.deepEqual(verdict('found'), { found: 1, notFound: 0, unsure: 0 });

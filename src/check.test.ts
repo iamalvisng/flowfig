@@ -704,7 +704,7 @@ test('each Inside rule fires on its fault and stays quiet on a figure with three
       {
         rule: 'part-edge-mismatch',
         severity: 'error',
-        scene: 'Shop > Orders',
+        scene: 'Orders',
         message: 'edge "browser->validate" comes in from "browser", but no edge goes from "browser" to "orders"',
       },
     ],
@@ -714,7 +714,7 @@ test('each Inside rule fires on its fault and stays quiet on a figure with three
       {
         rule: 'part-edge-mismatch',
         severity: 'error',
-        scene: 'Shop > Orders',
+        scene: 'Orders',
         message: 'edge "gateway->payments" has no part at either end',
       },
     ],
@@ -727,7 +727,7 @@ test('each Inside rule fires on its fault and stays quiet on a figure with three
       {
         rule: 'part-edge-mismatch',
         severity: 'warning',
-        scene: 'Shop > Mail',
+        scene: 'Mail',
         message:
           'edge "payments->mail" comes in, but no edge inside "mail" starts at "payments"; the open view cannot show where the flow comes in',
       },
@@ -735,7 +735,7 @@ test('each Inside rule fires on its fault and stays quiet on a figure with three
     [
       'a part with no source',
       edit(shopFig, 'save', (n) => delete n.source),
-      { rule: 'part-no-source', severity: 'warning', scene: 'Shop > Orders', message: 'part "save" has no source' },
+      { rule: 'part-no-source', severity: 'warning', scene: 'Orders', message: 'part "save" has no source' },
     ],
     [
       'a box with 17 parts',
@@ -811,14 +811,13 @@ test('duplicate-id fires on one id at two levels and names both paths', () => {
   const f = checkSpec(twice).filter((x) => x.rule === 'duplicate-id');
   assert.equal(f.length, 1, JSON.stringify(f));
   assert.equal(f[0].severity, 'error');
-  assert.ok(f[0].message.includes('Shop > Gateway') && f[0].message.includes('Shop > Orders > Check the cart'), f[0].message);
+  assert.ok(/\bGateway\b/.test(f[0].message) && f[0].message.includes('Orders > Check the cart'), f[0].message);
 });
 
 test('small-text on an inner level uses the width of the widest level, because the image scales as one', () => {
   const step = (i: number) => ({ id: `step-${i}`, label: `Step ${i}`, source: `examples/shop/orders.ts#step${i}` });
   const wide: FlowProps = {
     layout: {
-      label: 'Shop',
       children: [
         { id: 'gateway', label: 'Gateway', source: 'examples/shop/gateway.ts#checkout' },
         {
@@ -860,6 +859,6 @@ test('small-text on an inner level uses the width of the widest level, because t
     ],
   };
   const small = (f: Finding[]) => f.filter((x) => x.rule === 'small-text').map((x) => x.scene);
-  assert.ok(small(check(wide)).includes('Shop > Mail'), JSON.stringify(check(wide)));
+  assert.ok(small(check(wide)).includes('Mail'), JSON.stringify(check(wide)));
   assert.deepEqual(small(check(wide, { scene: 'mail' })), []);
 });

@@ -141,7 +141,6 @@ const mail = {
 
 const props: Figure['props'] = {
   layout: {
-    label: 'Shop',
     children: [
       { id: 'browser', label: 'Browser' },
       { id: 'gateway', label: 'Gateway', source: 'examples/shop/gateway.ts#checkout', inside: gateway },
@@ -159,19 +158,18 @@ const props: Figure['props'] = {
   edges: chain(['browser', 'gateway', 'orders', 'payments', 'mail']).concat({ from: 'gateway', to: 'cart' }),
   steps: [
     {
+      label: 'Place an order',
+      flow: [
+        { edges: 'gateway->orders', say: 'The gateway asks Orders to place the order.' },
+        { edges: 'orders->payments', say: 'Orders asks Payments to charge the card.' },
+        { edges: 'payments->mail', say: 'Payments asks Mail to send the receipt.' },
+      ],
+    },
+    {
       label: 'Add to cart',
       flow: [
         { edges: 'browser->gateway', say: 'The browser sends the item.' },
         { edges: 'gateway->cart', say: 'The gateway adds the item to the cart.' },
-      ],
-    },
-    {
-      label: 'Place an order',
-      flow: [
-        { edges: 'browser->gateway', say: 'The browser sends the order.' },
-        { edges: 'gateway->orders', say: 'The gateway asks Orders to place the order.' },
-        { edges: 'orders->payments', say: 'Orders asks Payments to charge the card.' },
-        { edges: 'payments->mail', say: 'Payments asks Mail to send the receipt.' },
       ],
     },
   ],

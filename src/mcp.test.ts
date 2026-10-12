@@ -241,7 +241,7 @@ test('the render tool prints the same lines as the CLI render for a figure with 
     const r = spawnSync('node', [wrapper, 'inside-shop', out], { encoding: 'utf8' });
     assert.equal(r.status, 0, r.stderr);
     const lines = text(call('render', { spec: shop.props, out }));
-    assert.match(lines, /^\[Shop > Orders\]/m);
+    assert.match(lines, /^\[Orders\]/m);
     assert.equal(lines, (r.stderr + r.stdout).trimEnd());
   } finally {
     rmSync(dir, { recursive: true, force: true });

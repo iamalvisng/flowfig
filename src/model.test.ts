@@ -479,26 +479,26 @@ test('an inside edge from a neighbor gives one port that takes the neighbor labe
 test('the tour opens each box one time, in arrival order then layout order, and lasts the root loop plus each open', () => {
   const opens = (fig: FlowProps) => tourPlan(fig).opens.map((o) => o.path.join(' > '));
   assert.deepEqual(opens(shopFig), [
-    'gateway',
-    'gateway > auth',
-    'cart',
-    'cart > price',
     'orders',
     'orders > validate',
     'payments',
     'payments > charge-card',
     'mail',
+    'gateway',
+    'gateway > auth',
+    'cart',
+    'cart > price',
   ]);
   assert.deepEqual(opens({ ...shopFig, steps: [shopFig.steps![1]] }), [
     'gateway',
     'gateway > auth',
+    'cart',
+    'cart > price',
     'orders',
     'orders > validate',
     'payments',
     'payments > charge-card',
     'mail',
-    'cart',
-    'cart > price',
   ]);
   const speed = shopFig.speed ?? 900;
   const loopMs = (steps: FlowProps['steps']) =>
@@ -506,7 +506,7 @@ test('the tour opens each box one time, in arrival order then layout order, and 
       steps!.map((s) => s.flow.map(toBeat)),
       speed,
     ).ends.at(-1)! * 1000;
-  const label = (path: string[]) => ['Shop', ...path.map((id) => str(find(shopFig.layout, id)!.label))];
+  const label = (path: string[]) => path.map((id) => str(find(shopFig.layout, id)!.label));
   let want = loopMs(shopFig.steps);
   for (const { path } of tourPlan(shopFig).opens) {
     const owner = find(shopFig.layout, path.at(-1)!)!;
@@ -519,7 +519,7 @@ test('the tour opens each box one time, in arrival order then layout order, and 
       50 * (items.length - 1) +
       readMs([label(path).join(' > '), ...portLabels].join(' ')) +
       loopMs(owner.inside!.steps!.slice(0, 1)) +
-      readMs(`back to ${label(path).at(-2)}`) +
+      readMs(path.length > 1 ? `back to ${label(path).at(-2)}` : 'Back') +
       120 +
       300 +
       120;

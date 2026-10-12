@@ -107,16 +107,23 @@ const summary = (ids: string[]) => `(() => {
   };
 })()`;
 
-test('a click on "Orders" shows its parts, the path line "Shop > Orders" and the in and out ports', { skip }, async () => {
-  await withReactPage(entry, async (page) => {
-    await show(page, 1400, { autoplay: false });
-    await openOrders(page);
-    assert.equal(await page.ev(`!!${box('cart')}`), false, 'the root boxes are gone');
-    assert.match(await page.ev(`document.querySelector('figure').innerText`), /Shop\s*>\s*Orders/);
-    assert.equal(await page.ev(`${box('gateway')}.innerText.trim()`), 'in: from Gateway');
-    assert.equal(await page.ev(`${box('payments')}.innerText.trim()`), 'out: to Payments');
-  });
-});
+test(
+  'a click on "Orders" shows its parts, the path line "Orders" and the in and out ports, and "Check the cart" adds to the path',
+  { skip },
+  async () => {
+    await withReactPage(entry, async (page) => {
+      await show(page, 1400, { autoplay: false });
+      await openOrders(page);
+      assert.equal(await page.ev(`!!${box('cart')}`), false, 'the root boxes are gone');
+      assert.equal(await page.ev(`${box('gateway')}.innerText.trim()`), 'in: from Gateway');
+      assert.equal(await page.ev(`${box('payments')}.innerText.trim()`), 'out: to Payments');
+      assert.ok(await page.ev(`!!${BACK}`), 'the header has a Back button');
+      await page.ev(`${box('validate')}.click()`);
+      await page.until(allShown(['parse-cart', 'check-limits']), 'the Check the cart level shows');
+      assert.match(await page.ev(`document.querySelector('figure').innerText`), /Orders\s*>\s*Check the cart/);
+    });
+  },
+);
 
 test('the back button and Escape return to the root level, and focus lands on "Orders"', { skip }, async () => {
   await withReactPage(entry, async (page) => {
@@ -161,7 +168,7 @@ test(
     const steps = shopFig.steps!.map((s) => ({ ...s, flow: s.flow.map((b) => ({ ...(b as object), ms: 1500 })) }));
     await withReactPage(entry, async (page) => {
       await show(page, 1400, { speed: 400, steps });
-      await page.ev(`document.querySelectorAll('[role="tab"]')[1].click()`);
+      await page.ev(`document.querySelectorAll('[role="tab"]')[0].click()`);
       await page.until(`${box('orders')}?.classList.contains('flowfig-active')`, 'the packet arrives at Orders');
       await openOrders(page);
       const dot = `(() => {
@@ -182,7 +189,7 @@ test(
       await page.ev(`${BACK}.click()`);
       await page.until(ROOT, 'Back shows the root level');
       assert.ok(
-        !(await page.ev(`document.querySelector('figcaption').innerText`)).includes('The browser sends the order.'),
+        !(await page.ev(`document.querySelector('figcaption').innerText`)).includes('The gateway asks Orders to place the order.'),
         'the step does not restart',
       );
       await page.until(
