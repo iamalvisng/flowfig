@@ -932,14 +932,16 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
       ? []
       : steps.map((_, si) => {
           const on = segs.map((s) => s.si === si);
-          return `<text x="${n2(W / 2)}" y="${n2(H - capH + 16)}" opacity="0"${cls('steplabel', anim(on, 'opacity: 1', 'opacity: 0', 's'))}>${esc(str(steps[si].label))}</text>`;
+          return `<text x="${n2(W / 2)}" y="${n2(H - legendH - capH + 16)}" opacity="0"${cls('steplabel', anim(on, 'opacity: 1', 'opacity: 0', 's'))}>${esc(str(steps[si].label))}</text>`;
         });
   const said = [...new Set(captions)].map((text) => {
     const on = captions.map((c) => c === text);
     const lines = wrap(text, wrapW, 13.5);
     return (
       `<g opacity="0"${cls(anim(on, 'opacity: 1', 'opacity: 0', 'y'))}>` +
-      lines.map((l, li) => `<text x="${n2(W / 2)}" y="${n2(H - capH + capTop + 16 + li * 20)}" class="caption">${esc(l)}</text>`).join('') +
+      lines
+        .map((l, li) => `<text x="${n2(W / 2)}" y="${n2(H - legendH - capH + capTop + 16 + li * 20)}" class="caption">${esc(l)}</text>`)
+        .join('') +
       `</g>`
     );
   });

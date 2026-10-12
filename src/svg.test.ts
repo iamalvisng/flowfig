@@ -1562,3 +1562,21 @@ test('a long step label and a diff legend stay inside a narrow figure', () => {
   ];
   assert.ok(xs.length === 3 && Number(xs[0][1]) >= 0);
 });
+
+test('marks: the step caption sits above the diff legend, not on it', () => {
+  const fig: FlowProps = {
+    layout: {
+      direction: 'column',
+      children: [
+        { id: 'a', label: 'A' },
+        { id: 'b', label: 'B' },
+      ],
+    },
+    edges: [{ from: 'a', to: 'b' }],
+    steps: [{ label: 'one', caption: 'A sends the job to B.', flow: [{ edges: 'a->b' }] }],
+  };
+  const svg = toSvg(fig, { marks: { boxes: { a: 'added' }, edges: {}, steps: 0 } });
+  const caption = Number(/y="([\d.]+)" class="caption"/.exec(svg)![1]);
+  const legend = Number(/<rect x="[\d.]+" y="([\d.]+)"[^>]*data-diff/.exec(svg)![1]);
+  assert.ok(caption < legend, `caption ${caption}, legend ${legend}`);
+});

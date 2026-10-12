@@ -1,4 +1,4 @@
-import { render } from './svg.ts';
+import { diff, formatDiff, render, type DiffMarks } from './svg.ts';
 import { BASE_RATE, DARK, LIGHT, STEP_HOLD_MS, beatMs, edgeId, nodes, str, toBeat, type FlowProps } from './model.ts';
 import { cast, moments, type Moment } from './explain.ts';
 import { ART, PIC_CSS, TOKENS } from './looks.ts';
@@ -6,6 +6,7 @@ import { ART, PIC_CSS, TOKENS } from './looks.ts';
 type Form = 'diagram' | 'guide' | 'change';
 type Spot = Moment & { step: string; ms: number; code: string[] };
 type El = HTMLElement;
+type Side = { spec: FlowProps; svg: SVGSVGElement; out: El };
 type Guide = {
   kick: El;
   say: El;
@@ -136,6 +137,16 @@ const CSS = [
   '.ff-back::before{content:"\\2190  "/""}',
   '.ff-next::after{content:"  \\2192"/""}',
   '@container ff-host (width < 900px){.ff-g{aspect-ratio:auto;height:auto}.ff-g>.ff-view{flex:none;container-type:inline-size}.ff-guide{height:auto;grid-template-rows:auto 300px auto}.ff-top{padding:16px 3cqw 0}.ff-bot{padding:10px 3cqw}}',
+  '.ff-verdict{padding:12px 16px;background:var(--flowfig-surface);border:1px solid var(--flowfig-border);border-radius:10px;font-size:16px;font-weight:500}',
+  '.ff-verdict pre{margin:0;max-height:9em;overflow:auto;font:13px/1.45 ui-monospace,Menlo,monospace;font-weight:400;white-space:pre-wrap}',
+  '.ff-sides{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,var(--ff-side)),1fr));gap:16px}',
+  '.ff-side{display:flex;flex-direction:column;gap:8px;min-width:0;padding:12px 14px;background:var(--flowfig-surface);border:1px solid var(--flowfig-border);border-radius:12px}',
+  '.ff-side h3{margin:0;font-size:15px;font-weight:600}',
+  '.ff-out{margin:0;padding:8px 10px;border-radius:8px;background:var(--flowfig-bg);font-weight:600}',
+  '.ff-out:empty::before{content:"The outcome shows when a step ends.";color:var(--flowfig-muted);font-weight:400}',
+  '[data-diff] :is(rect,path,polygon){stroke:var(--flowfig-accent)!important}',
+  '[data-diff] :is(rect,polygon,path:not([fill=none])){fill:color-mix(in srgb,var(--flowfig-accent) 8%,var(--bg))!important}',
+  'rect[data-diff]{fill:var(--flowfig-accent)}',
   '@media (prefers-reduced-motion:reduce){.ff-guide *{animation:none!important;transition:none!important;scroll-behavior:auto!important}}',
   PIC_CSS,
 ].join('\n');
@@ -144,6 +155,38 @@ let sheet: CSSStyleSheet | undefined;
 
 const PLAIN =
   '<ellipse class="ff-sh" cx="100" cy="151" rx="56" ry="6"/><rect class="ff-b2" x="48" y="28" width="104" height="120" rx="14"/><rect class="ff-b3" x="62" y="42" width="76" height="92" rx="8"/>';
+
+const clock = (spec: FlowProps, label: string) => {
+  const speed = spec.speed ?? 900;
+  let start = 0;
+  for (const s of spec.steps ?? []) {
+    const ms = s.flow.reduce((a, b) => a + beatMs(toBeat(b), speed), 0);
+    if (str(s.label) === label) return [start, ms];
+    start += ms + (s.flow.length ? STEP_HOLD_MS : 0);
+  }
+  return [start, 0];
+};
+
+const seek = (svg: SVGSVGElement, ms: number, run = false) => {
+  const t = ms / BASE_RATE;
+  if (run) svg.unpauseAnimations();
+  else svg.pauseAnimations();
+  svg.setCurrentTime(t / 1000);
+  for (const a of svg.getAnimations({ subtree: true })) {
+    if (run) a.play();
+    else a.pause();
+    a.currentTime = t;
+  }
+};
+
+const pane = (spec: FlowProps, opts?: Parameters<typeof render>[1]) => {
+  const { svg, scene } = render(spec, opts);
+  const p = h('div', 'ff-pane');
+  p.innerHTML = svg;
+  p.style.setProperty('--ff-min', `${(scene.width * 11) / scene.minFont}px`);
+  p.style.setProperty('--ff-max', `${scene.width}px`);
+  return p;
+};
 
 const h = <K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, ...kids: (Node | string)[]) => {
   const e = document.createElement(tag);
@@ -196,6 +239,8 @@ export class FlowfigExplain extends Base {
   #seeked?: string;
   #svg?: SVGSVGElement;
   #g?: Guide;
+  #sides?: Side[];
+  #ends: ReturnType<typeof setTimeout>[] = [];
   #tabs: HTMLButtonElement[] = [];
   #ctl: Record<string, HTMLButtonElement> = {};
   #heading = h('h2', 'ff-title');
@@ -312,7 +357,33 @@ export class FlowfigExplain extends Base {
   }
 
   #labels() {
-    return (this.#spec?.steps ?? []).map((s) => str(s.label));
+    const of = (spec?: FlowProps) => (spec?.steps ?? []).map((s) => str(s.label));
+    return this.#sides ? of(this.#spec).filter((l) => of(this.#before).includes(l)) : of(this.#spec);
+  }
+
+  #pick(label: string) {
+    this.#seeked = undefined;
+    this.show(label);
+    this.#update();
+  }
+
+  #run(label: string) {
+    this.#ends.forEach(clearTimeout);
+    const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    this.#ends = (this.#sides ?? []).map((s) => {
+      const [start, ms] = clock(s.spec, label);
+      // The last step fades out in its final 400 ms, so stop inside the hold.
+      const end = start + ms + STEP_HOLD_MS / 2;
+      s.out.textContent = '';
+      seek(s.svg, still ? end : start, !still);
+      return setTimeout(
+        () => {
+          seek(s.svg, end);
+          s.out.textContent = moments(s.spec, label).at(-1)?.summary?.outcome ?? '';
+        },
+        still ? 0 : (end - start) / BASE_RATE,
+      );
+    });
   }
 
   #stepBy(d: number) {
@@ -337,7 +408,7 @@ export class FlowfigExplain extends Base {
       else this.play();
     } else if (/^[1-9]$/.test(e.key)) {
       const label = this.#labels()[Number(e.key) - 1];
-      if (label !== undefined) this.show(label);
+      if (label !== undefined) this.#pick(label);
     } else return;
     e.preventDefault();
   };
@@ -414,20 +485,42 @@ export class FlowfigExplain extends Base {
       this.#heading.hidden = !this.#title;
       this.#svg = undefined;
       this.#g = undefined;
+      this.#sides = undefined;
       this.#root.classList.toggle('ff-g', form === 'guide');
       this.#seeked = undefined;
       this.#tabs = [];
       this.#ctl = {};
       this.#view.replaceChildren();
       if (form === 'diagram') {
-        const { svg, scene } = render(spec);
-        const pane = h('div', 'ff-pane');
-        pane.innerHTML = svg;
-        pane.style.setProperty('--ff-min', `${(scene.width * 11) / scene.minFont}px`);
-        pane.style.setProperty('--ff-max', `${scene.width}px`);
-        this.#svg = pane.querySelector('svg') ?? undefined;
+        const p = pane(spec);
+        this.#svg = p.querySelector('svg') ?? undefined;
         this.#tabs = this.#labels().map((label) => button(label, () => this.show(label), false));
-        this.#view.append(pane, h('div', 'ff-row', ...this.#tabs));
+        this.#view.append(p, h('div', 'ff-row', ...this.#tabs));
+      } else if (form === 'change' && this.#before) {
+        const changes = diff(this.#before, spec);
+        const side = (name: string, of: FlowProps, ops: string[], scope: string) => {
+          const marks: DiffMarks = { boxes: {}, edges: {}, steps: 0 };
+          for (const c of changes)
+            if (ops.includes(c.op) && (c.kind === 'box' || c.kind === 'edge')) marks[c.kind === 'box' ? 'boxes' : 'edges'][c.id] = c.op;
+          const p = pane(of, { marks, scope });
+          const out = h('p', 'ff-out');
+          out.dataset.outcome = '';
+          out.setAttribute('aria-live', 'polite');
+          const col = h('section', 'ff-side', h('h3', '', name), p, out);
+          col.dataset.side = name.toLowerCase();
+          return { el: col, min: p.style.getPropertyValue('--ff-min'), side: { spec: of, svg: p.querySelector('svg')!, out } };
+        };
+        const sides = [side('Before', this.#before, ['removed', 'changed'], 'b'), side('After', spec, ['added', 'changed'], 'a')];
+        const wide = h('div', 'ff-sides', ...sides.map((s) => s.el));
+        wide.style.setProperty('--ff-side', `calc(max(${sides.map((s) => s.min).join()}) + 30px)`);
+        const verdict = document.createElement('slot');
+        verdict.name = 'verdict';
+        verdict.append(h('pre', '', formatDiff(changes, 'text')));
+        this.#sides = sides.map((s) => s.side);
+        this.#tabs = this.#labels().map((label) => button(label, () => this.#pick(label), false));
+        this.#view.append(h('div', 'ff-verdict', verdict), h('div', 'ff-row', ...this.#tabs), wide);
+        for (const s of this.#sides) seek(s.svg, 0);
+        this.#seeked = this.#all[this.#at]?.step;
       } else if (form === 'guide') {
         this.#ctl = {
           back: button('Back', () => this.back()),
@@ -529,17 +622,10 @@ export class FlowfigExplain extends Base {
       this.#ctl.play.textContent = this.#timer ? 'Pause' : 'Play';
     }
     if (this.#g && m) this.#guide(this.#g, m);
-    if (!this.#svg || !m || m.step === this.#seeked) return;
+    if (!m || m.step === this.#seeked || !(this.#svg || this.#sides)) return;
     this.#seeked = m.step;
-    const speed = this.#spec?.speed ?? 900;
-    const earlier = (this.#spec?.steps ?? []).slice(0, this.#labels().indexOf(m.step));
-    const ms = earlier.reduce(
-      (sum, s) => sum + s.flow.reduce((a, b) => a + beatMs(toBeat(b), speed), 0) + (s.flow.length ? STEP_HOLD_MS : 0),
-      0,
-    );
-    const t = ms / 1000 / BASE_RATE;
-    this.#svg.setCurrentTime(t);
-    for (const a of this.#svg.getAnimations({ subtree: true })) a.currentTime = t * 1000;
+    if (this.#svg) seek(this.#svg, clock(this.#spec!, m.step)[0], true);
+    else this.#run(m.step);
   }
 
   #guide(g: Guide, m: Spot) {
