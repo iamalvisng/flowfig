@@ -42,7 +42,7 @@ const USAGE = `usage: flowfig <-|spec.json|figure.ts> [out.svg] [--open]   rende
        flowfig from-mermaid <file.mmd|file.md|-> [--out <dir>]   convert Mermaid diagrams to specs
        flowfig gif <figure.svg> [out.gif] [--step <n>] [--dark] [--fps <n>] [--scale <n>] [--mp4]   write an animated GIF
        flowfig frames <figure.svg> [out.png] [--step <n>] [--dark] [--fps <n>] [--every <ms>] [--scale <n>] [--open]   write one PNG sheet of the key frames
-flags for render and check: --strict (warnings are errors), --json, --width <px>, --min-text <px>, --no-check (render only), --no-verify (render only), --scene <id> (render one level)
+flags for render and check: --strict (warnings are errors), --json, --width <px>, --min-text <px>, --no-check (render only), --no-verify (render only), --scene <id> (render one level), --script (add the script that opens a box on a click)
 flowfig --version, -v                               print the version`;
 function usage(message: string): never {
   console.error(message);
@@ -463,7 +463,7 @@ const json = flag('--json'),
   skipVerify = flag('--no-verify'),
   open = flag('--open');
 if (command === 'check' && open) usage('--open works with a render, not with check');
-const opts = { width: value('--width'), minText: value('--min-text'), scene: option('--scene') };
+const opts = { width: value('--width'), minText: value('--min-text'), scene: option('--scene'), script: flag('--script') };
 const unknown = args.find((a) => a.startsWith('-') && a !== '-');
 if (unknown) usage(`unknown flag ${unknown}`);
 const [input, out] = args;

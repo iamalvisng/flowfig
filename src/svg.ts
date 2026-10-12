@@ -1151,11 +1151,22 @@ ${body}</svg>
 };
 
 export type Level = { line: string; props: FlowProps; scene: Scene };
+const SCRIPT = `(()=>{const s=document.currentScript.closest('svg'),G=[...s.querySelectorAll('.scene')],S=[G[0]],R=matchMedia('(prefers-reduced-motion: reduce)').matches,
+W=(g,k)=>g.dataset[k].split(' ').map(p=>p.split(',').map(Number));let q=[],L=W(G[0],'loop'),w=[0,-1],o,t=0,p=performance.now();
+const seek=t=>{s.pauseAnimations();s.setCurrentTime(t);for(const a of s.getAnimations({subtree:true}))a.pause(),a.currentTime=t*1e3+a.effect.getTiming().delay},
+tick=n=>{if(t>=w[1]){o=q.length>0;if(!o)q=L.slice();w=q.shift();t=w[0]}seek(R&&o?w[1]:Math.min(t,w[1]));t+=R?(o?1e9:0):(n-p)/1e3;p=n;requestAnimationFrame(tick)},
+show=()=>{const c=S.at(-1);for(const g of G){g.style.pointerEvents=g==c?'':'none';for(const x of g.querySelectorAll('.hit,.back'))x.setAttribute('role','button'),x.setAttribute('tabindex',g==c?0:-1)}},
+go=(a,b)=>{q=a;L=b;w=[0,-1];t=0;show()},
+back=()=>{if(S.length>1){const g=S.pop();go(W(g,'back'),W(S.at(-1),'loop'))}},
+act=e=>{const x=e.target.closest('.hit,.back');if(!x||x.closest('.scene')!=S.at(-1))return;if(x.classList.contains('back'))back();else{const g=G.find(g=>g.id=='s-'+x.dataset.open);S.push(g);go(W(g,'open'),W(g,'loop'))}return 1};
+s.setAttribute('role','group');s.addEventListener('click',act);
+s.addEventListener('keydown',e=>{const k=e.key;if(k=='Escape'||k=='Backspace')back();else if(!((k=='Enter'||k==' ')&&act(e)))return;e.preventDefault()});
+show();requestAnimationFrame(tick)})()`;
 const BAND = 28;
 
 /** The SVG string and the scene it drew. The scene shape may change; use `toSvg` for the SVG only. */
 export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; scene: Scene; levels?: Level[] } {
-  const { scene: one, ...rest } = opts;
+  const { scene: one, script, ...rest } = opts;
   const all = scenes(spec);
   const key = (path: string[]) => path.join('>');
   const under = <T extends { path: string[] }>(list: T[], path: string[]) =>
@@ -1222,6 +1233,8 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
   const W = Math.max(...drawn.map((x) => x.d.W)),
     H = Math.max(...drawn.map((x) => x.d.H)) + BAND;
   const left = (d: { W: number }) => (W - d.W) / 2;
+  const windows = (w: [number, number][], at: number) =>
+    (w.length ? w : [[at, at]]).map(([a, b]) => `${n2(a / 1000)},${n2(b / 1000)}`).join(' ');
   const groups = drawn.map(({ s, o, d }) => {
     const shown: [number, number][] = o
       ? [
@@ -1237,9 +1250,23 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
     const band = o
       ? `<text class="back" x="16" y="19">Back</text><text class="path" x="${n2(16 + textWidth('Back', 14) + 12)}" y="19">${esc(s.line)}</text>`
       : '';
+    const area = d.scene.area!;
+    const hits = !script
+      ? ''
+      : under(all, s.path)
+          .map((x) => {
+            const r = d.scene.boxes.find((b) => b.id === x.path.at(-1))!.rect;
+            return `<rect class="hit" x="${n2(r.x - area.x)}" y="${n2(r.y - area.y)}" width="${n2(r.w)}" height="${n2(r.h)}" fill="transparent" tabindex="0" role="button" aria-label="Open ${esc(x.name)}, ${x.parts} parts" data-open="${esc(x.path.at(-1)!)}"/>`;
+          })
+          .join('');
+    const data = !script
+      ? ''
+      : o
+        ? ` data-open="${windows([o.open], 0)}" data-loop="${windows(o.loop, o.open[1])}" data-back="${windows([o.back], 0)}"`
+        : ` data-loop="${windows(plan.loop, 0)}"`;
     return (
-      `<g class="${track(shown.map(([t, v]) => [t, `opacity: ${v}`]))}"><g class="scene"${o ? ` id="s-${esc(s.path.at(-1)!)}"` : ''}>${band}` +
-      `<g transform="translate(${n2(left(d))} ${BAND})">\n${d.body}</g></g></g>`
+      `<g class="${track(shown.map(([t, v]) => [t, `opacity: ${v}`]))}"><g class="scene"${o ? ` id="s-${esc(s.path.at(-1)!)}"` : ''}${data}>${band}` +
+      `<g transform="translate(${n2(left(d))} ${BAND})">\n${d.body}${hits}</g></g></g>`
     );
   });
   const frames = drawn.slice(1).map(({ s, o, d }) => {
@@ -1275,7 +1302,7 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
     '.back { fill: var(--accent); font-size: 14px; }\n.path { fill: var(--fg); font-size: 14px; }',
     ...tour,
   ];
-  const body = `${groups.join('\n')}\n<g pointer-events="none">${frames.join('')}</g>\n`;
+  const body = `${groups.join('\n')}\n<g pointer-events="none">${frames.join('')}</g>\n${script ? `<script><![CDATA[${SCRIPT}]]></script>\n` : ''}`;
   return {
     svg: page(root.fig, rest, W, H, css.join('\n'), root.holdAt, body),
     scene: root.scene,
