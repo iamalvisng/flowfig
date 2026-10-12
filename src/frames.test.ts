@@ -28,6 +28,11 @@ test('one beat gives move at mid-travel, arrive after the arrival, read before t
       [71, 'end'],
     ],
   );
+  assert.deepEqual(kinds({ ...ONE, speed: 3000, steps: [{ label: 'w', flow: [{ edges: 'w', ms: 500 }] }] }, { fps: 20 }), [
+    [4, 'move'],
+    [7, 'read'],
+    [39, 'end'],
+  ]);
 });
 
 test('the beat times equal the keyTimes and the dur that the SVG writes', () => {

@@ -62,8 +62,8 @@ export function keyFrames(fig: FlowProps, o: { fps: number; every?: number; step
       const text = hopText(si, bi),
         say = said(si, bi);
       if (b.hops.length) {
-        add(Math.round(((t0 + t1) / 2) * f), 'move', si, bi, text, say);
-        add(Math.ceil(t1 * f + 0.5), 'arrive', si, bi, text, say);
+        add(Math.round(((t0 + Math.min(t1, tEnd)) / 2) * f), 'move', si, bi, text, say);
+        if (t1 <= tEnd) add(Math.ceil(t1 * f + 0.5), 'arrive', si, bi, text, say);
       }
       add(Math.floor(tEnd * f - 0.5), 'read', si, bi, text, say);
     });
