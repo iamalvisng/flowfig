@@ -814,6 +814,15 @@ test('duplicate-id fires on one id at two levels and names both paths', () => {
   assert.ok(/\bGateway\b/.test(f[0].message) && f[0].message.includes('Orders > Check the cart'), f[0].message);
 });
 
+test('a bad source on a level 3 part gives one finding with the full level path', () => {
+  const bad = edit(shopFig, 'read-token', (n) => (n.source = 'auth.ts#read token'));
+  const f = checkSpec(bad).filter((x) => x.rule === 'bad-source');
+  assert.deepEqual(
+    f.map((x) => x.message),
+    ['part "read-token" [Gateway > Sign in]: source "auth.ts#read token" is not path or path#symbol'],
+  );
+});
+
 test('small-text on an inner level uses the width of the widest level, because the image scales as one', () => {
   const step = (i: number) => ({ id: `step-${i}`, label: `Step ${i}`, source: `examples/shop/orders.ts#step${i}` });
   const wide: FlowProps = {
