@@ -4,7 +4,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync 
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { captureFrames, findBrowser, launch } from './browser.ts';
+import { captureFrames, findBrowser, launch, type Cdp } from './browser.ts';
 import { delays, encodeGif } from './gif.ts';
 import { GUIDE, TOPICS } from './guide.ts';
 import { runDraw } from './draw.ts';
@@ -45,6 +45,64 @@ flowfig --version, -v                               print the version`;
 function usage(message: string): never {
   console.error(message);
   process.exit(2);
+}
+async function withBrowser(
+  name: string,
+  work: (cdp: Cdp, run: { written: string[]; proceed: () => Promise<void>; onStop?: () => Promise<unknown> }) => Promise<void>,
+): Promise<never> {
+  const found = findBrowser({ platform: process.platform, env: process.env, exists: existsSync });
+  if (!found.path)
+    usage(
+      [`${name} needs Chrome, Edge, Chromium or Brave. Checked:`, ...found.checked, 'Set CHROME_PATH to the browser program.'].join('\n'),
+    );
+  const temp = mkdtempSync(join(tmpdir(), `flowfig-${name}-`));
+  let launching: ReturnType<typeof launch> | undefined;
+  let cleaning: Promise<void> | undefined;
+  const cleanup = () =>
+    (cleaning ??= (async () => {
+      await (await launching?.catch(() => undefined))?.close();
+      try {
+        // Windows can hold a file lock briefly after the exit, so retry.
+        rmSync(temp, { recursive: true, force: true, maxRetries: 10 });
+      } catch (e) {
+        console.error(`warning: could not remove ${temp}: ${(e as Error).message}`);
+      }
+    })());
+  let stopped = 0;
+  const yieldLoop = () => new Promise((done) => setImmediate(done));
+  // A write comes right after this check, so a signal must run its handler first.
+  const run: { written: string[]; proceed: () => Promise<void>; onStop?: () => Promise<unknown> } = {
+    written: [],
+    proceed: async () => {
+      await yieldLoop();
+      if (stopped) throw new Error('stopped');
+    },
+  };
+  // Keep the handlers: a second signal must not end the process mid-cleanup.
+  const onSignal = (signal: NodeJS.Signals) => {
+    if (stopped) return;
+    stopped = signal === 'SIGINT' ? 130 : 143;
+    void (run.onStop?.() ?? Promise.resolve())
+      .then(() => run.written.forEach((f) => rmSync(f, { force: true })))
+      .then(cleanup)
+      .finally(() => process.exit(stopped));
+  };
+  process.on('SIGINT', onSignal);
+  process.on('SIGTERM', onSignal);
+  let code = 0;
+  try {
+    launching = launch(found.path, join(temp, 'profile'));
+    await work((await launching).cdp, run);
+  } catch (e) {
+    if (!stopped) console.error(`${name}: ${(e as Error).message}`);
+    code = 1;
+  } finally {
+    await cleanup();
+  }
+  // A late signal runs its handler in this await, before the exit.
+  await yieldLoop();
+  if (stopped) run.written.forEach((f) => rmSync(f, { force: true }));
+  process.exit(stopped || code);
 }
 const args = process.argv.slice(2);
 const flag = (name: string) => {
@@ -248,60 +306,25 @@ if (args[0] === 'gif') {
   const size = /<svg\b[^>]*?\swidth="([\d.]+)"[^>]*?\sheight="([\d.]+)"/.exec(svg);
   if (!size) usage(`${path}: no width and height on the <svg> element`);
   if (!existsSync(dirname(resolve(out)))) usage(`${out}: the folder does not exist`);
-  const found = findBrowser({ platform: process.platform, env: process.env, exists: existsSync });
-  if (!found.path)
-    usage(['gif needs Chrome, Edge, Chromium or Brave. Checked:', ...found.checked, 'Set CHROME_PATH to the browser program.'].join('\n'));
   const line = (file: string, frames: number, bytes: number) =>
     `${file} — ${frames} frame${frames === 1 ? '' : 's'}, ${(frames / fps).toFixed(1)} s, ${(bytes / 1048576).toFixed(1)} MB`;
 
-  const temp = mkdtempSync(join(tmpdir(), 'flowfig-gif-'));
-  let launching: ReturnType<typeof launch> | undefined;
-  let cleaning: Promise<void> | undefined;
-  const cleanup = () =>
-    (cleaning ??= (async () => {
-      await (await launching?.catch(() => undefined))?.close();
-      try {
-        // Windows can hold a file lock briefly after the exit, so retry.
-        rmSync(temp, { recursive: true, force: true, maxRetries: 10 });
-      } catch (e) {
-        console.error(`warning: could not remove ${temp}: ${(e as Error).message}`);
-      }
-    })());
-  const written: string[] = [];
-  let ffmpeg: ReturnType<typeof spawn> | undefined,
-    ffmpegDone: Promise<unknown> = Promise.resolve(),
-    stopped = 0;
-  const yieldLoop = () => new Promise((done) => setImmediate(done));
-  // Keep the handlers: a second signal must not end the process mid-cleanup.
-  const onSignal = (signal: NodeJS.Signals) => {
-    if (stopped) return;
-    stopped = signal === 'SIGINT' ? 130 : 143;
-    ffmpeg?.kill('SIGKILL');
-    void ffmpegDone
-      .then(() => written.forEach((f) => rmSync(f, { force: true })))
-      .then(cleanup)
-      .finally(() => process.exit(stopped));
-  };
-  process.on('SIGINT', onSignal);
-  process.on('SIGTERM', onSignal);
-  // A write comes right after this check, so a signal must run its handler first.
-  const proceed = async () => {
-    await yieldLoop();
-    if (stopped) throw new Error('stopped');
-  };
-  let code = 0;
-  try {
-    launching = launch(found.path, join(temp, 'profile'));
-    const browser = await launching;
+  await withBrowser('gif', async (cdp, run) => {
+    let ffmpeg: ReturnType<typeof spawn> | undefined,
+      ffmpegDone: Promise<unknown> = Promise.resolve();
+    run.onStop = () => {
+      ffmpeg?.kill('SIGKILL');
+      return ffmpegDone;
+    };
     const viewport = { width: Math.ceil(Number(size[1])), height: Math.ceil(Number(size[2])) };
-    const { pngs } = await captureFrames(browser.cdp, pageHtml(svg, basename(path)), { ...viewport, scale, fps, dark });
+    const { pngs } = await captureFrames(cdp, pageHtml(svg, basename(path)), { ...viewport, scale, fps, dark });
     const wait = delays(pngs.length, fps);
     // The GIF keeps the PNG bytes: a decoded 2400 x 1600 frame is 15 MB.
     const gif = await encodeGif(
       pngs.map((png, i) => ({ load: () => decodePng(png), delay: wait[i], same: i > 0 && png.equals(pngs[i - 1]) })),
     );
-    await proceed();
-    written.push(out);
+    await run.proceed();
+    run.written.push(out);
     writeFileSync(out, gif);
     console.log(line(out, pngs.length, gif.length));
     if (gif.length > 10485760)
@@ -313,8 +336,8 @@ if (args[0] === 'gif') {
       const ffmpegBin = process.env.FLOWFIG_FFMPEG ?? 'ffmpeg';
       if (spawnSync(ffmpegBin, ['-version']).error) console.error('gif: no ffmpeg on the PATH, so no MP4. The GIF is written.');
       else {
-        await proceed();
-        written.push(mp4Path);
+        await run.proceed();
+        run.written.push(mp4Path);
         // yuv420p needs an even width and height, so the pad filter adds a pixel.
         ffmpeg = spawn(ffmpegBin, [
           '-y',
@@ -345,7 +368,7 @@ if (args[0] === 'gif') {
           ffmpeg!.once('error', () => done(-1));
           ffmpeg!.once('close', done);
         }));
-        await proceed();
+        await run.proceed();
         if (status !== 0) {
           rmSync(mp4Path, { force: true });
           throw new Error(`ffmpeg failed: ${stderr.trim()}`);
@@ -353,16 +376,7 @@ if (args[0] === 'gif') {
         console.log(line(mp4Path, pngs.length, statSync(mp4Path).size));
       }
     }
-  } catch (e) {
-    if (!stopped) console.error(`gif: ${(e as Error).message}`);
-    code = 1;
-  } finally {
-    await cleanup();
-  }
-  // A late signal runs its handler in this await, before the exit.
-  await yieldLoop();
-  if (stopped) written.forEach((f) => rmSync(f, { force: true }));
-  process.exit(stopped || code);
+  });
 }
 
 const command = args[0] === 'check' ? args.shift()! : 'render';
