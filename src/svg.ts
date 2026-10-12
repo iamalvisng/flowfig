@@ -270,9 +270,13 @@ export type SvgOptions = {
   marks?: DiffMarks;
   /** Links a box to an href, by box id. `flowfig atlas` sets it. */
   links?: Record<string, string>;
+  /** A prefix for animation names and path ids. Each page SVG needs its own. */
+  scope?: string;
 };
 
 const MARK_COLOR: Record<DiffMark, string> = { added: TONES.green, removed: TONES.red, changed: TONES.orange };
+const tagged = (op: DiffMark | undefined, id: string, inner: string) =>
+  op ? `<g data-diff="${op}" data-id="${esc(id)}">${inner}</g>` : inner;
 const marked = (mark: DiffMark | undefined, inner: string) =>
   mark === 'removed' ? `<g opacity="0.5" stroke-dasharray="5 4">${inner}</g>` : mark ? `<g stroke-width="2">${inner}</g>` : inner;
 
@@ -293,7 +297,10 @@ function legendSvg(items: { color: string; text: string }[], W: number, H: numbe
   let x = (W - legendWidth(items)) / 2;
   return items
     .map((i, k) => {
-      const sq = i.color === 'none' ? '' : `<rect x="${n2(x)}" y="${n2(H - 24)}" width="10" height="10" rx="2" fill="${i.color}"/>`;
+      const sq =
+        i.color === 'none'
+          ? ''
+          : `<rect x="${n2(x)}" y="${n2(H - 24)}" width="10" height="10" rx="2" fill="${i.color}" data-diff="${i.text.split(' ')[0]}"/>`;
       const out = `${sq}<text x="${n2(x + (i.color === 'none' ? 0 : 16))}" y="${n2(H - 15)}" font-size="12" fill="var(--muted)">${esc(i.text)}</text>\n`;
       x += widths[k] + 20;
       return out;
@@ -306,6 +313,7 @@ const SYSTEM_FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helv
 /** The SVG string and the scene it drew. The scene shape may change; use `toSvg` for the SVG only. */
 export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; scene: Scene } {
   const fig = autoLayout(spec);
+  const sc = opts.scope ?? '';
   const speed = (opts.speed ?? fig.speed ?? 900) / 1000 / BASE_RATE;
   const pad = opts.padding ?? 24;
   const tl = fig.timeline && isLanesLayout(fig.layout) ? timelineLayout(fig, TL_AXIS_W) : null;
@@ -518,7 +526,7 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
     if (!segs.length || on.every((x) => !x)) return '';
     const key = prefix + on.map((x) => (x ? 1 : 0)).join('');
     if (!seen.has(key)) {
-      const name = `a${seen.size}`;
+      const name = `${sc}a${seen.size}`;
       seen.set(key, name);
       const frames = runs(on.map((x) => (x ? onCss : offCss)));
       css.push(`@keyframes ${name} { ${frames} }\n.${name} { animation: ${name} ${n2(total)}s infinite step-end; }`);
@@ -535,7 +543,7 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
     if (!segs.length || values.every((v) => v === base)) return '';
     const key = prefix + values.join('|');
     if (!seen.has(key)) {
-      const name = `a${seen.size}`;
+      const name = `${sc}a${seen.size}`;
       seen.set(key, name);
       const kf = runs(values);
       css.push(`@keyframes ${name} { ${kf} }\n.${name} { animation: ${name} ${n2(total)}s infinite step-end; }`);
@@ -590,7 +598,7 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
     const kf = merged.map((f) => `${pct(f.a / total)},${pct(f.b / total - 0.0001)} { ${f.css} }`);
     const key = (shape ? 'B' : 'R') + kf.join(' ');
     if (!seen.has(key)) {
-      const name = `a${seen.size}`;
+      const name = `${sc}a${seen.size}`;
       seen.set(key, name);
       css.push(`@keyframes ${name} { ${kf.join(' ')} }\n.${name} { animation: ${name} ${n2(total)}s infinite linear; }`);
     }
@@ -611,7 +619,7 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
     const diffMark = opts.marks?.boxes[item.id];
     const href = opts.links?.[item.id];
     const tip = (inner: string) => {
-      const body = marked(diffMark, item.source ? `<g><title>${esc(item.source)}</title>${inner}</g>` : inner);
+      const body = tagged(diffMark, item.id, marked(diffMark, item.source ? `<g><title>${esc(item.source)}</title>${inner}</g>` : inner));
       return href == null ? body : `<a href="${esc(href)}" tabindex="-1">${body}</a>`;
     };
     const bt = diffMark ? MARK_COLOR[diffMark] : item.tone && TONES[item.tone];
@@ -751,8 +759,8 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
     const path0 = r.stub
       ? r.stub.parts
           .map((d) => `<path d="${d}" fill="none" stroke="${line}" stroke-width="${EDGE_OFF}" marker-end="url(#arrow)"${lit}/>`)
-          .join('') + `<path id="p-${esc(r.id)}" d="${r.d}" fill="none" stroke="none"/>`
-      : `<path id="p-${esc(r.id)}" d="${r.d}" fill="none" stroke="${line}" stroke-width="${EDGE_OFF}" marker-end="url(#arrow)"${lit}/>`;
+          .join('') + `<path id="${sc}p-${esc(r.id)}" d="${r.d}" fill="none" stroke="none"/>`
+      : `<path id="${sc}p-${esc(r.id)}" d="${r.d}" fill="none" stroke="${line}" stroke-width="${EDGE_OFF}" marker-end="url(#arrow)"${lit}/>`;
     const path = tip ? `<g><title>${esc(tip)}</title>${path0}</g>` : path0;
     const pillColor = em ? MARK_COLOR[em] : undefined;
     const pill = (x: number, y: number, lw: number, text: string) =>
@@ -780,14 +788,18 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
       fonts.push(11);
       label = pill(r.mid.x, r.mid.y, lw, str(e.label));
     }
-    return marked(em === 'removed' ? em : undefined, hidden ? `<g opacity="0"${shown}>${path}${label}</g>` : path + label);
+    return tagged(
+      em,
+      r.id,
+      marked(em === 'removed' ? em : undefined, hidden ? `<g opacity="0"${shown}>${path}${label}</g>` : path + label),
+    );
   });
 
   const packets = hops.map((h, i) => {
     const t0 = h.t0 / total,
       t1 = h.t1 / total,
       tEnd = h.tEnd / total;
-    const name = `p${i}`;
+    const name = `${sc}p${i}`;
     css.push(
       `@keyframes ${name} { 0%,${pct(t0)} { opacity: 0 } ${pct(t0 + 0.0001)},${pct(tEnd - 0.0001)} { opacity: 1 } ${pct(tEnd)},100% { opacity: 0 } }\n` +
         `.${name} { animation: ${name} ${n2(total)}s infinite step-end; }`,
@@ -807,7 +819,7 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
     return (
       `<g${cls(name)} opacity="0"><circle r="10" fill="${h.tone ?? 'var(--accent)'}" opacity="0.2"/><circle r="4.5" fill="${h.tone ?? 'var(--accent)'}"/>${chip}` +
       `<animateMotion dur="${n2(total)}s" repeatCount="indefinite" keyTimes="0;${n4(t0)};${n4(t1)};1" keyPoints="${h.back ? '1;1;0;0' : '0;0;1;1'}" calcMode="linear">` +
-      `<mpath href="#p-${esc(h.edge)}" xlink:href="#p-${esc(h.edge)}"/></animateMotion></g>`
+      `<mpath href="#${sc}p-${esc(h.edge)}" xlink:href="#${sc}p-${esc(h.edge)}"/></animateMotion></g>`
     );
   });
 
@@ -863,7 +875,7 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
           at = home;
         }
       });
-      const name = `a${seen.size}`;
+      const name = `${sc}a${seen.size}`;
       seen.set('playhead', name);
       const kf = pts.map(([t, x]) => `${pct(t / total)} { transform: translateX(${n2(x - home)}px) }`).join(' ');
       css.push(`@keyframes ${name} { ${kf} }\n.${name} { animation: ${name} ${n2(total)}s infinite linear; }`);
@@ -872,7 +884,7 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
         const on = dates.map((x) => x.d === d);
         const key = `d${d}${on.map((x) => (x ? 1 : 0)).join('')}`;
         if (!seen.has(key)) {
-          const nm = `a${seen.size}`;
+          const nm = `${sc}a${seen.size}`;
           seen.set(key, nm);
           const fr = dates
             .map(
