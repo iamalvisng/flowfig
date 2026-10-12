@@ -2,6 +2,9 @@ import type { ReactNode } from 'react';
 import { textWidth, wrap } from './text.ts';
 import type { Rect } from './geometry.ts';
 
+export const LOOKS = ['person', 'shop', 'desk', 'truck', 'phone', 'server', 'cabinet', 'team', 'tower', 'queue', 'gear', 'cloud'] as const;
+export type FigLook = (typeof LOOKS)[number];
+
 /** A box. A box with `show` in a step becomes a content card. */
 export type FigNode = {
   /** Name that edges, steps and beats use for this box. Unique in the figure. */
@@ -30,6 +33,8 @@ export type FigNode = {
   source?: string;
   /** A figure with more detail: an SVG path from the repo root. */
   detail?: string;
+  /** The picture of this box or group in <flowfig-explain>. The diagram ignores it. */
+  look?: FigLook;
 };
 /** A frame that lays out its children in a row or a column. */
 export type FigGroup = {
@@ -47,6 +52,8 @@ export type FigGroup = {
   children: (FigNode | FigGroup)[];
   /** On the root layout: flowfig places the boxes. A labeled group is a frame. */
   auto?: true;
+  /** The picture of this box or group in <flowfig-explain>. The diagram ignores it. */
+  look?: FigLook;
 };
 /** An arrow from one box to another. */
 export type FigEdge = {
@@ -92,6 +99,8 @@ export type FigBeat = {
   edges?: FigHop | FigHop[];
   /** The line of narration for this beat. */
   say?: ReactNode;
+  /** One line under the say in <flowfig-explain>, 15 words or fewer. */
+  note?: ReactNode;
   /** Fills the content card of each named box until the step ends. */
   show?: Record<string, FigContent>;
   /** Ids of boxes to highlight for this beat, without a packet or a content card. */

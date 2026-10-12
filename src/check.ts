@@ -1,6 +1,7 @@
 import {
   DARK,
   LIGHT,
+  LOOKS,
   ON_ACCENT,
   TONES,
   edgeId,
@@ -110,11 +111,22 @@ export function checkSpec(fig: FlowProps): Finding[] {
   const knownEdges = new Set(edges);
   const empty = new Set<string>();
   const walk = (g: FigGroup): void => {
-    for (const c of g.children)
+    for (const c of g.children) {
+      if (c.look != null && !(LOOKS as readonly string[]).includes(c.look)) {
+        const who = isGroup(c) ? `group "${c.id ?? str(c.label)}"` : `box "${c.id}"`;
+        out.push(
+          warn(
+            'unknown-look',
+            isGroup(c) ? (c.id == null ? [] : [c.id]) : [c.id],
+            `${who} has look "${c.look}"; use one of: ${LOOKS.join(', ')}`,
+          ),
+        );
+      }
       if (isGroup(c)) {
         if (c.id != null && !nodes(c).length) empty.add(c.id);
         walk(c);
       }
+    }
   };
   walk(fig.layout);
   fig.edges.forEach((e, i) => {
