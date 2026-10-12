@@ -318,6 +318,20 @@ test('opts.speed sets the travel and the beat length', () => {
   assert.equal(Number(motion[2]), Math.round((400 / 1000 / BASE_RATE / total) * 10000) / 10000);
 });
 
+test('every keyTimes list rises from 0 to 1 when a beat is shorter than its hop', () => {
+  const svg = toSvg({ ...fig, speed: 3000, steps: [{ label: 'a', flow: [{ edges: 'call' }, { edges: 'call', ms: 100 }] }] });
+  const lists = [...svg.matchAll(/keyTimes="([^"]+)"/g)].map((m) => m[1].split(';').map(Number));
+  assert.ok(lists.length > 0);
+  for (const k of lists) {
+    assert.equal(k[0], 0, String(k));
+    assert.equal(k.at(-1), 1, String(k));
+    assert.ok(
+      k.every((v, i) => i === 0 || v >= k[i - 1]),
+      String(k),
+    );
+  }
+});
+
 test('a long loop keeps a real travel window in keyTimes: the packet moves, it does not jump', () => {
   const say = 'one two three four five six seven eight nine ten';
   const fig: FlowProps = {
