@@ -1233,7 +1233,6 @@ function FlowBody({
     const parts = level?.owners.get(item.id);
     const port = level?.scene.ports.some((p) => p.id === item.id);
     const lines = w != null && str(item.label) ? labelLines(item, w) : null;
-    const pad = level ? 9 : 10;
     const open = () => {
       const hop = cur?.hops.find((h) => (h.back ? edges[ids.indexOf(h.edge)]?.from : edges[ids.indexOf(h.edge)]?.to) === item.id);
       const e = hop && edges[ids.indexOf(hop.edge)];
@@ -1280,7 +1279,7 @@ function FlowBody({
           justifyContent: 'center',
           padding: diamond
             ? '22px 34px'
-            : `calc(${store ? 24 : pad}px - var(--ff-b, 0px)) calc(${card ? 10 : 16}px - var(--ff-b, 0px)) calc(${pad}px - var(--ff-b, 0px))`,
+            : `calc(${store ? 23 : 9}px - var(--ff-b, 0px)) calc(${card ? 10 : 16}px - var(--ff-b, 0px)) calc(9px - var(--ff-b, 0px))`,
           textAlign: 'center',
           background: diamond ? undefined : bt ? toneTint(bt, v('bg')) : v('bg'),
           color: port ? v('muted') : v('fg'),

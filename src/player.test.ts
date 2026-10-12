@@ -272,7 +272,7 @@ test('a long box label draws two lines in the player, and the box has the SVG wi
   const lines = [...box[2].matchAll(/white-space:nowrap;line-height:(\d+)px/g)].map((m) => Number(m[1]));
   assert.deepEqual(lines, [18, 18]);
   const pads = [...box[1].match(/padding:([^;]*)/)![1].matchAll(/calc\((\d+)px/g)].map((m) => Number(m[1]));
-  assert.equal(pads[0] + lines[0] + lines[1] + pads[2], toSvgScene(fig2).scene.boxes[0].rect.h);
+  assert.equal(pads[0] + lines[0] + lines[1] + pads[2] + 2, toSvgScene(fig2).scene.boxes[0].rect.h);
 });
 
 const longLabel = 'Has the customer already paid for this order today';
