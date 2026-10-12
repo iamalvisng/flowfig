@@ -86,7 +86,7 @@ const FRAME_TOP = 37,
 
 // The card-on fills approximate the player's 8 % accent tint.
 const vars = (t: Record<'accent' | 'fg' | 'muted' | 'bg' | 'surface' | 'border', string>, cardOn: string) =>
-  `--accent:${t.accent}; --fg:${t.fg}; --muted:${t.muted}; --bg:${t.bg}; --surface:${t.surface}; --border:${t.border}; --card-on:${cardOn}; --tint:color-mix(in srgb, var(--accent) 10%, var(--surface));`;
+  `--accent:${esc(t.accent)}; --fg:${esc(t.fg)}; --muted:${esc(t.muted)}; --bg:${esc(t.bg)}; --surface:${esc(t.surface)}; --border:${esc(t.border)}; --card-on:${cardOn}; --tint:color-mix(in srgb, var(--accent) 10%, var(--surface));`;
 
 const content = (c: FigContent): FigRow[] | string => (isRows(c) ? c : str(c));
 const esc = (s: string) => s.replace(/[<>&"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' })[c]!);

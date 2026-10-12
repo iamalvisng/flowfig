@@ -279,6 +279,11 @@ test('the SVG applies fig.theme, the theme font, and lets opts.theme win', () =>
   assert.ok(!toSvg(themed, { theme: { accent: '#00ff00' } }).includes('#ff0000'));
 });
 
+test('a theme color cannot close the SVG style and add markup', () => {
+  const svg = toSvg({ ...fig, theme: { accent: 'red}</style><img src=x onerror=alert(1)>' } });
+  assert.doesNotMatch(svg, /<img/);
+});
+
 test('a beat lasts long enough to read its caption. The packet crosses in speed', () => {
   const say = 'one two three four five six seven eight nine ten';
   const two: FlowProps = {
