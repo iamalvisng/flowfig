@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { captureFrames, findBrowser, launch, type Cdp } from './browser.ts';
+import { keyFrames, sheetGrid, sheetSvg } from './frames.ts';
 import { delays, encodeGif } from './gif.ts';
 import { GUIDE, TOPICS } from './guide.ts';
 import { runDraw } from './draw.ts';
@@ -12,7 +13,7 @@ import { runInit } from './init.ts';
 import { serve } from './mcp.ts';
 import { runAtlas } from './atlas.ts';
 import { runFromMermaid } from './mermaid.ts';
-import { openedLine, openSvg, runOpen } from './open.ts';
+import { openedLine, openFile, openSvg, runOpen } from './open.ts';
 import { pageHtml } from './page.ts';
 import { decodePng } from './png.ts';
 import { diff, formatDiff, mergeFigures } from './diff.ts';
@@ -40,6 +41,7 @@ const USAGE = `usage: flowfig <-|spec.json|figure.ts> [out.svg] [--open]   rende
        flowfig open <figure.svg> [--html <path>]          show the figure in the default browser
        flowfig from-mermaid <file.mmd|file.md|-> [--out <dir>]   convert Mermaid diagrams to specs
        flowfig gif <figure.svg> [out.gif] [--step <n>] [--dark] [--fps <n>] [--scale <n>] [--mp4]   write an animated GIF
+       flowfig frames <figure.svg> [out.png] [--step <n>] [--dark] [--fps <n>] [--every <ms>] [--scale <n>] [--open]   write one PNG sheet of the key frames
 flags for render and check: --strict (warnings are errors), --json, --width <px>, --min-text <px>, --no-check (render only), --no-verify (render only)
 flowfig --version, -v                               print the version`;
 function usage(message: string): never {
@@ -376,6 +378,82 @@ if (args[0] === 'gif') {
         console.log(line(mp4Path, pngs.length, statSync(mp4Path).size));
       }
     }
+  });
+}
+
+if (args[0] === 'frames') {
+  args.shift();
+  const dark = flag('--dark'),
+    opening = flag('--open');
+  const fps = value('--fps') ?? 20,
+    scale = value('--scale') ?? 1,
+    step = value('--step'),
+    every = value('--every');
+  if (!Number.isInteger(fps) || fps > 50) usage('--fps needs a whole number from 1 to 50');
+  const unknown = args.find((a) => a.startsWith('-'));
+  if (unknown) usage(`unknown flag ${unknown}`);
+  const [path, outArg] = args;
+  if (!path) usage('usage: flowfig frames <figure.svg> [out.png] [--step <n>] [--dark] [--fps <n>] [--every <ms>] [--scale <n>] [--open]');
+  if (!path.endsWith('.svg')) usage(`${path}: expected a .svg path`);
+  const props = (() => {
+    try {
+      return loadSpec(path);
+    } catch (e) {
+      return usage((e as Error).message);
+    }
+  })();
+  const count = props.steps?.length ?? 0;
+  if (!count) usage(`${path}: frames needs a figure with steps; this figure has 0`);
+  if (step !== undefined && (!Number.isInteger(step) || step > count)) usage(`--step needs a whole number from 1 to ${count}`);
+  const fig = step === undefined ? props : { ...props, steps: [props.steps![step - 1]] };
+  const svg = step === undefined ? readFileSync(path, 'utf8') : toSvg(fig);
+  const { tiles, frames } = keyFrames(fig, { fps, every, step });
+  if (tiles.length > 64) usage(`${path}: ${tiles.length} tiles; the sheet holds 64 or fewer. Use --step <n> or a larger --every <ms>.`);
+  const out = outArg ?? path.replace(/\.svg$/, step === undefined ? '-frames.png' : `-step${step}-frames.png`);
+  const size = /<svg\b[^>]*?\swidth="([\d.]+)"[^>]*?\sheight="([\d.]+)"/.exec(svg);
+  if (!size) usage(`${path}: no width and height on the <svg> element`);
+  if (!existsSync(dirname(resolve(out)))) usage(`${out}: the folder does not exist`);
+  const [w, h] = [Number(size[1]), Number(size[2])];
+  const grid = sheetGrid(tiles.length, w, h, scale);
+  const loopMs = Math.round((frames * 1000) / fps);
+  await withBrowser('frames', async (cdp, run) => {
+    const shot = await captureFrames(cdp, pageHtml(svg, basename(path)), {
+      width: Math.ceil(w),
+      height: Math.ceil(h),
+      scale: grid.tile / w,
+      fps,
+      dark,
+      frames: tiles.map((t) => t.frame),
+    });
+    if (Math.abs(Math.round((shot.loopMs * fps) / 1000) - frames) > 1)
+      throw new Error(`${path}: the SVG loop is ${Math.round(shot.loopMs)} ms but its spec gives ${loopMs} ms. Render the figure again.`);
+    const header = `${basename(path)} · ${tiles.length} tiles of ${frames} frames at ${fps} fps · loop ${loopMs} ms`;
+    const sheet = await captureFrames(cdp, pageHtml(sheetSvg(tiles, shot.pngs, grid, { header, fps, dark, scale }), basename(out)), {
+      width: grid.width,
+      height: grid.height,
+      scale: 1,
+      fps,
+      dark,
+    });
+    const png = sheet.pngs[0];
+    await run.proceed();
+    run.written.push(out);
+    writeFileSync(out, png);
+    for (const t of tiles)
+      console.log(
+        [
+          `#${t.frame}`.padEnd(4),
+          `${Math.round((t.frame * 1000) / fps)} ms`.padEnd(7),
+          `step ${t.step}${t.beat ? ` beat ${t.beat}` : ''}`.padEnd(14),
+          t.kinds.join('+').padEnd(7),
+          t.text,
+        ].join(' ') + (t.say ? `  "${t.say}"` : ''),
+      );
+    console.log(
+      `${out} — ${tiles.length} tiles of ${frames} frames at ${fps} fps, ${grid.cols} x ${grid.rows} grid, ${grid.width} x ${grid.height} px, ${(png.length / 1048576).toFixed(1)} MB`,
+    );
+    if (grid.warning) console.error(grid.warning);
+    if (opening) await openFile(out);
   });
 }
 

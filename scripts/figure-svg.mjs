@@ -11,7 +11,7 @@ const at = ['check', 'verify', 'diff'].includes(args[0]) ? 1 : 0;
 
 if (
   args[at] &&
-  !['docs', 'init', 'draw', 'help', 'mcp', 'open', 'gif', 'atlas', 'from-mermaid'].includes(args[at]) &&
+  !['docs', 'init', 'draw', 'help', 'mcp', 'open', 'gif', 'frames', 'atlas', 'from-mermaid'].includes(args[at]) &&
   /^\w[\w-]*$/.test(args[at])
 ) {
   const slug = args[at];
