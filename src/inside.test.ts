@@ -6,13 +6,11 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { browser, withReactPage, type Page } from './react-page.ts';
-import * as model from './model.ts';
-import { isGroup, type FigGroup, type FigNode, type FlowProps } from './model.ts';
+import { isGroup, tourPlan, type FigGroup, type FigNode, type FlowProps } from './model.ts';
 import { render, toSvg } from './svg.ts';
 import { decodePng } from './png.ts';
 import shop from '../figures/inside-shop.ts';
 
-const { tourPlan } = model;
 const shopFig = shop.props as FlowProps;
 const skip = !browser.path;
 const cli = join(dirname(dirname(fileURLToPath(import.meta.url))), 'scripts', 'figure-svg.mjs');

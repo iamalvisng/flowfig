@@ -340,6 +340,112 @@ export function scenes(fig: FlowProps): FigScene[] {
   open(root);
   return out;
 }
+
+export const OPEN_MS = { fade: 120, grow: 360, stagger: 50, hide: 120, shrink: 300 };
+export type Times = { beats: { t0: number; t1: number; tEnd: number }[][]; ends: number[] };
+export type TourOpen = {
+  path: string[];
+  step: number;
+  open: [number, number];
+  grown: number;
+  loop: [number, number][];
+  back: [number, number];
+  times: Times;
+};
+export type Tour = { ms: number; loop: [number, number][]; times: Times; opens: TourOpen[] };
+
+const hopEnds = (e: FigEdge, back: boolean) => (back ? [e.to, e.from] : [e.from, e.to]);
+
+export function insideStep(s: FigScene, port?: string): number {
+  const byId = new Map(s.props.edges.map((e) => [edgeId(e), e]));
+  const at = (s.props.steps ?? []).findIndex((st) => {
+    const h = st.flow.length ? toBeat(st.flow[0]).hops[0] : undefined;
+    const e = h && byId.get(h.edge);
+    return e != null && hopEnds(e, h!.back)[0] === port;
+  });
+  return Math.max(at, 0);
+}
+
+export function flowOrder(s: FigScene): string[] {
+  const cols = laneColumns(s.props);
+  const ids = nodes(s.props.layout)
+    .map((n) => n.id)
+    .sort((a, b) => cols.get(a)! - cols.get(b)!);
+  const port = new Set(s.ports.map((p) => p.id));
+  return [...ids.filter((id) => port.has(id)), ...ids.filter((id) => !port.has(id))];
+}
+
+export function tourPlan(fig: FlowProps): Tour {
+  const all = scenes(fig);
+  const byKey = new Map(all.map((s) => [s.path.join('>'), s]));
+  const speed = fig.speed ?? 900;
+  const opens: TourOpen[] = [];
+  const done = new Set<string>();
+  const cut = (from: number, to: number, spans: [number, number][]) => {
+    const out: [number, number][] = [];
+    let at = from;
+    for (const [a, b] of spans) {
+      if (a > at) out.push([at, a]);
+      at = b;
+    }
+    if (to > at) out.push([at, to]);
+    return out;
+  };
+  const play = (s: FigScene, steps: FigStep[], at: number) => {
+    const beats = steps.map((st) => st.flow.map(toBeat));
+    const base = beatTimes(beats, speed);
+    const byId = new Map(s.props.edges.map((e) => [edgeId(e), e]));
+    const spans: [number, number][] = [];
+    let shift = 0;
+    const openAt = (id: string, port: string | undefined, p: number) => {
+      const key = [...s.path, id].join('>');
+      const inner = byKey.get(key);
+      if (!inner || done.has(key)) return;
+      const L = openBox(inner, port, p);
+      spans.push([p, p + L]);
+      shift += L;
+    };
+    const times: Times = { beats: [], ends: [] };
+    beats.forEach((row, si) => {
+      times.beats.push(
+        row.map((b, bi) => {
+          const t = base.beats[si][bi];
+          const t0 = at + t.t0 * 1000 + shift,
+            t1 = at + t.t1 * 1000 + shift;
+          for (const h of b.hops) {
+            const e = byId.get(h.edge);
+            if (e) openAt(hopEnds(e, h.back)[1], hopEnds(e, h.back)[0], at + t.tEnd * 1000 + shift);
+          }
+          return { t0: t0 / 1000, t1: t1 / 1000, tEnd: (at + t.tEnd * 1000 + shift) / 1000 };
+        }),
+      );
+      times.ends.push((at + base.ends[si] * 1000 + shift) / 1000);
+    });
+    const last = at + (base.ends.at(-1) ?? 0) * 1000;
+    for (const n of nodes(s.props.layout)) openAt(n.id, undefined, last + shift);
+    if (times.ends.length) times.ends[times.ends.length - 1] = (last + shift) / 1000;
+    return { times, end: last + shift, spans };
+  };
+  const openBox = (sc: FigScene, port: string | undefined, p: number): number => {
+    done.add(sc.path.join('>'));
+    const grown = p + readMs(sc.name) + OPEN_MS.fade + OPEN_MS.grow;
+    const count = nodes(sc.props.layout).length;
+    const loopAt = grown + OPEN_MS.stagger * (count - 1) + readMs([sc.line, ...sc.ports.map(portLabel)].join(' '));
+    const steps = sc.props.steps ?? [];
+    const step = steps.length ? insideStep(sc, port) : -1;
+    const entry: TourOpen = { path: sc.path, step, open: [p, loopAt], grown, loop: [], back: [0, 0], times: { beats: [], ends: [] } };
+    opens.push(entry);
+    const r = play(sc, step === -1 ? [] : [steps[step]], loopAt);
+    const up = sc.path.length > 1 ? `back to ${byKey.get(sc.path.slice(0, -1).join('>'))!.name}` : 'Back';
+    const end = r.end + readMs(up) + OPEN_MS.hide + OPEN_MS.shrink + OPEN_MS.fade;
+    entry.loop = cut(loopAt, r.end, r.spans);
+    entry.back = [r.end, end];
+    entry.times = r.times;
+    return end - p;
+  };
+  const root = play(all[0], fig.steps ?? [], 0);
+  return { ms: root.end, loop: cut(0, root.end, root.spans), times: root.times, opens };
+}
 export const LANE_GAP = 56,
   LANE_PAD = 24,
   LANE_ROW_GAP = 20;

@@ -26,9 +26,10 @@ import {
   nodes,
   isGroup,
   str,
+  scenes,
+  tourPlan,
 } from './model.ts';
 import type { FigBeat, FigGroup, FigNode, FlowProps } from './model.ts';
-import * as model from './model.ts';
 import shop from '../figures/inside-shop.ts';
 
 test('each documented way to write a beat gives the same hops', () => {
@@ -446,7 +447,6 @@ test('the narrow-mode spec key does not throw on a circular label or a ref to a 
   assert.equal(specKey(...spec(createElement('b', null, 10n))), specKey(...spec(createElement('b', null, 10n))));
 });
 
-const { scenes, tourPlan } = model;
 const shopFig = shop.props as FlowProps;
 const find = (g: FigGroup, id: string): FigNode | undefined => {
   for (const c of g.children) {

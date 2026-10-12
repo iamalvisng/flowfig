@@ -7,8 +7,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { GUIDE, TOPICS } from './guide.ts';
 import { VERSION } from './version.ts';
-import * as model from './model.ts';
-import { isGroup, type FigGroup, type FigNode, type FlowProps } from './model.ts';
+import { isGroup, tourPlan, type FigGroup, type FigNode, type FlowProps } from './model.ts';
 import shop from '../figures/inside-shop.ts';
 
 const cli = join(dirname(dirname(fileURLToPath(import.meta.url))), 'scripts', 'figure-svg.mjs');
@@ -631,7 +630,6 @@ test('a render prints the edge summary and the verify counts; --no-verify drops 
   }
 });
 
-const { tourPlan } = model;
 const shopFig = shop.props as FlowProps;
 const find = (g: FigGroup, id: string): FigNode | undefined => {
   for (const c of g.children) {
