@@ -48,7 +48,7 @@ const n = (k: number, word: string) => `${k} ${word}${k === 1 ? '' : 's'}`;
 
 /** One line per finding, the counts line (unless `withCounts` is false), and the `figure:` line. No color: the CLI adds it. */
 export function reportLines(props: FlowProps, findings: Finding[], withCounts = true): string[] {
-  const out = findings.map((f) => `${f.severity.padEnd(8)} ${f.rule.padEnd(18)} ${f.message}`);
+  const out = findings.map((f) => `${f.severity.padEnd(8)} ${f.rule.padEnd(18)} ${f.scene ? `[${f.scene}] ` : ''}${f.message}`);
   const errors = findings.filter((f) => f.severity === 'error').length;
   if (withCounts) out.push(`${n(errors, 'error')}, ${n(findings.length - errors, 'warning')}`);
   const c = counts(props);

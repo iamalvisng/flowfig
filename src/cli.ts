@@ -204,7 +204,8 @@ if (args[0] === 'verify') {
   if (json) console.log(JSON.stringify({ findings, links: all, coverage }, null, 2));
   else {
     const n = (k: number, word: string) => `${k} ${word}${k === 1 ? '' : 's'}`;
-    for (const f of findings) console.log(`${f.severity.padEnd(8)} ${f.rule.padEnd(18)} ${f.figure}: ${f.message}`);
+    for (const f of findings)
+      console.log(`${f.severity.padEnd(8)} ${f.rule.padEnd(18)} ${f.figure}: ${f.scene ? `[${f.scene}] ` : ''}${f.message}`);
     console.log(`${n(errors, 'error')}, ${n(findings.length - errors, 'warning')}`);
     for (const c of coverage) {
       console.log(coverageLine(c.figure, c));
