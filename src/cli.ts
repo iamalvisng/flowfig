@@ -417,10 +417,11 @@ if (args[0] === 'frames') {
   const grid = sheetGrid(tiles.length, w, h, scale);
   const loopMs = Math.round((frames * 1000) / fps);
   await withBrowser('frames', async (cdp, run) => {
-    const shot = await captureFrames(cdp, pageHtml(svg, basename(path)), {
-      width: Math.ceil(w),
-      height: Math.ceil(h),
-      scale: grid.tile / w,
+    // A fractional device scale draws paused opacity animations two ways on alternate frames.
+    const shot = await captureFrames(cdp, pageHtml(svg, basename(path), '', '', '<style>svg { width: 100% }</style>'), {
+      width: grid.tile,
+      height: grid.tileH,
+      scale: 1,
       fps,
       dark,
       frames: tiles.map((t) => t.frame),
