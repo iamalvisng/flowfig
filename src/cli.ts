@@ -439,16 +439,14 @@ if (args[0] === 'frames') {
     await run.proceed();
     run.written.push(out);
     writeFileSync(out, png);
-    for (const t of tiles)
-      console.log(
-        [
-          `#${t.frame}`.padEnd(4),
-          `${Math.round((t.frame * 1000) / fps)} ms`.padEnd(7),
-          `step ${t.step}${t.beat ? ` beat ${t.beat}` : ''}`.padEnd(14),
-          t.kinds.join('+').padEnd(7),
-          t.text,
-        ].join(' ') + (t.say ? `  "${t.say}"` : ''),
-      );
+    const rows = tiles.map((t) => [
+      `#${t.frame}`,
+      `${Math.round((t.frame * 1000) / fps)} ms`,
+      `step ${t.step}${t.beat ? ` beat ${t.beat}` : ''}`,
+      t.kinds.join('+'),
+    ]);
+    const widths = [0, 1, 2, 3].map((c) => Math.max(...rows.map((r) => r[c].length)));
+    tiles.forEach((t, i) => console.log([...rows[i].map((v, c) => v.padEnd(widths[c])), t.text].join(' ') + (t.say ? `  "${t.say}"` : '')));
     console.log(
       `${out} — ${tiles.length} tiles of ${frames} frames at ${fps} fps, ${grid.cols} x ${grid.rows} grid, ${grid.width} x ${grid.height} px, ${(png.length / 1048576).toFixed(1)} MB`,
     );

@@ -346,6 +346,13 @@ test('frames on checkout writes one PNG with 17 tiles, 17 tile lines and the fil
     const r = frames([checkout(dir)]);
     assert.equal(r.status, 0, r.stderr);
     assert.equal(tileLines(r.stdout).length, 17);
+    const cols = tileLines(r.stdout).map((l) =>
+      /^(#\d+ +)(\d+ ms +)(step \d+(?: beat \d+)? +)(\S+ +)/
+        .exec(l)!
+        .slice(1)
+        .map((c) => c.length),
+    );
+    assert.equal(new Set(cols.map(String)).size, 1, String(cols));
     assert.match(r.stdout, /checkout-frames\.png — 17 tiles of 318 frames at 20 fps, /);
     assert.match(r.stdout, fileLine);
     assert.deepEqual([...readFileSync(join(dir, 'checkout-frames.png')).subarray(1, 4)], [0x50, 0x4e, 0x47]);
