@@ -309,7 +309,8 @@ test('an inside edge from a port is found, not found or unsure by the call in th
         },
         edges: [{ from: 'gateway', to: 'orders' }],
       };
-      const level = verifyReport(fig, { root }).coverage.levels.find((l) => l.path === 'Orders')!.coverage;
+      const level = verifyReport(fig, { root }).coverage.levels?.find((l) => l.path === 'Orders')?.coverage;
+      assert.ok(level);
       return { found: level.found, notFound: level.notFound, unsure: level.unsure };
     };
     assert.deepEqual(verdict('found'), { found: 1, notFound: 0, unsure: 0 });
