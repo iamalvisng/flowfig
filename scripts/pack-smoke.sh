@@ -26,6 +26,10 @@ if (!toSvg(props).includes('<svg')) throw new Error('toSvg: no <svg>');
 if (!renderToString(createElement(Flow, props)).length) throw new Error('Flow: empty render');
 "
 
+node --input-type=module -e "await import('flowfig/element')"
+! grep -qE "from ['\"]\.\.?/|import\(['\"]\.\.?/" node_modules/flowfig/dist/element.js || { echo 'element.js has a relative import'; exit 1; }
+[ -f node_modules/flowfig/dist/element.d.ts ] || { echo 'element.d.ts is missing'; exit 1; }
+
 spec='{"props":{"layout":{"children":[{"id":"a","label":"A"}]},"edges":[],"steps":[]}}'
 echo "$spec" | npx --no-install flowfig - out.svg
 [ "$(npx --no-install flowfig --spec out.svg)" = "$spec" ] || { echo 'bin: spec did not round-trip'; exit 1; }
