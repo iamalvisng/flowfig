@@ -156,6 +156,8 @@ A state lifecycle marks the first state with `mark: "start"` and each final stat
 
 ![An order status lifecycle with a start dot and two end rings](docs/order-status.svg)
 
+A box with inside parts opens to show them, down to 3 levels. See [Inside a box](#inside-a-box).
+
 ## Open and share
 
 `npx flowfig open figure.svg` shows the figure in your default browser.
@@ -346,6 +348,40 @@ A group with a `label` or an `id` stays together as one frame. flowfig removes a
 and `align`. flowfig ignores `around` on the edges. A `direction` on the root forces `"row"` or `"column"`. `lanes` and
 `timeline` figures ignore `auto`.
 
+### Inside a box
+
+A box can hold its inside parts, down to 3 levels. Put the parts in `inside`, with the same fields as a figure:
+`layout`, `edges` and `steps`. An inside edge can start or end at an outer neighbor of the box. The open box shows that
+neighbor as a port.
+
+```json
+{
+  "id": "orders",
+  "label": "Orders",
+  "source": "src/orders.ts#createOrder",
+  "inside": {
+    "layout": {
+      "auto": true,
+      "children": [
+        { "id": "validate", "label": "Check the cart", "source": "src/orders.ts#validateCart" },
+        { "id": "save", "label": "Save the order", "source": "src/orders.ts#insertOrder" }
+      ]
+    },
+    "edges": [
+      { "from": "gateway", "to": "validate" },
+      { "from": "validate", "to": "save" },
+      { "from": "save", "to": "payments" }
+    ]
+  }
+}
+```
+
+The SVG plays a tour: it opens each box in turn and plays one step inside it. A README image shows that tour. Add
+`--script` to open a box with a click when the SVG is in a browser tab. `--scene orders` renders one level as a plain
+figure. The React player opens a box on a click. `check` and `verify` run on each level.
+
+![Flow figure: Browser, Gateway, Cart, Orders, Payments, Mail. Steps: Place an order, Add to cart.](docs/inside-shop.svg)
+
 ### Edges
 
 | Field    | Meaning                                                                                             | Default    |
@@ -454,6 +490,8 @@ The last line gives the counts of the parts of the figure. Compare the counts wi
 | `--json`          | Print the findings as a JSON array, for scripts. Each finding has `rule`, `severity`, `ids` and `message`. |
 | `--width <px>`    | The page width for `small-text` and for the lanes wrap. Default: 830.                                      |
 | `--min-text <px>` | The smallest text size the reader must get. Default: 10.                                                   |
+| `--scene <id>`    | A render only: draw the level inside the box with this id, as a plain figure.                              |
+| `--script`        | A render only: add the script that opens a box with a click.                                               |
 
 The exit code is 0 with no errors, 1 with one or more errors, and 2 for bad use, such as a missing input, an unknown flag, or a `--width` value that is not a number.
 
