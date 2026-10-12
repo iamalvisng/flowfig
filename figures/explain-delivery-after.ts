@@ -49,6 +49,7 @@ const props: Figure['props'] = {
               { id: 'final', label: 'Job kept for a rerun', sub: 'after 5 failed tries', tone: 'red' },
             ],
           },
+          { id: 'agree', label: 'All records agree', sub: 'after one retry', tone: 'green' },
         ],
       },
       {
@@ -80,6 +81,7 @@ const props: Figure['props'] = {
     { from: 'out', to: 'packs', label: 'packs out' },
     { from: 'out', to: 'retry', label: 'error' },
     { from: 'retry', to: 'final', label: 'after 5 tries' },
+    { from: 'packs', to: 'agree' },
   ],
   steps: [
     {
@@ -107,9 +109,22 @@ const props: Figure['props'] = {
           say: 'The API saves the completed job and queues the delivery job.',
         },
         { edges: ['enqueue->mark', 'mark->posted', 'posted->out'], say: 'The worker tries to write the packs out.' },
+        { edges: 'out->retry', say: 'The write fails once. The job waits in the queue.' },
+        { edges: [{ edge: 'out->retry', back: true }, 'out->packs'], say: 'The job runs again, and the packs are written.' },
+        { edges: 'packs->agree', say: 'The pack ledger matches the delivery.' },
+      ],
+    },
+    {
+      label: 'All tries fail',
+      flow: [
+        {
+          edges: ['driver->type', 'type->owner', 'owner->repeat', 'repeat->save', 'save->enqueue'],
+          say: 'The API saves the completed job and queues the delivery job.',
+        },
+        { edges: ['enqueue->mark', 'mark->posted', 'posted->out'], say: 'The worker tries to write the packs out.' },
         {
           edges: ['out->retry', 'retry->final'],
-          say: 'The write fails. The queue waits and runs the job again, up to 5 tries.',
+          say: 'Every try fails. After 5 tries, the job stops.',
           note: 'A failed job stays in Redis for a rerun.',
         },
       ],

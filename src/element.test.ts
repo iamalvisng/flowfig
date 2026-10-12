@@ -159,7 +159,7 @@ test(
       await page.ev(`${button('Ledger write fails')}.click()`);
       const outcome = (side: string) => `(${sr}.querySelector('[data-side="${side}"] [data-outcome]')?.textContent ?? '')`;
       await page.until(
-        `${outcome('before')}.includes('Ledger miss logged') && ${outcome('after')}.includes('Job kept for a rerun')`,
+        `${outcome('before')}.includes('Ledger miss logged') && ${outcome('after')}.includes('All records agree')`,
         'both sides play the step to its outcome',
         30_000,
       );
