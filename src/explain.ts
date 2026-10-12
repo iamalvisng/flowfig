@@ -14,6 +14,7 @@ export type Moment = {
 const CAST_MAX = 6;
 
 const isStore = (n: FigNode) => n.shape === 'store';
+const isDecision = (n?: FigNode) => n?.shape === 'decision';
 
 const labeledTop = (g: FigGroup): FigGroup[] => g.children.flatMap((c) => (!isGroup(c) ? [] : c.label != null ? [c] : labeledTop(c)));
 
@@ -43,7 +44,8 @@ export function cast(fig: FlowProps): Actor[] {
     const seen = new Set<string>();
     for (const step of fig.steps ?? [])
       for (const { hops } of hopsOf(fig, step))
-        for (const h of hops) for (const id of [h.source, h.target]) if (byId.has(id) && !isStore(byId.get(id)!)) seen.add(id);
+        for (const h of hops)
+          for (const id of [h.source, h.target]) if (byId.has(id) && !isStore(byId.get(id)!) && !isDecision(byId.get(id))) seen.add(id);
     actors = [...seen].slice(0, stores.length ? CAST_MAX - 1 : CAST_MAX).map((id) => {
       const n = byId.get(id)!;
       return { name: str(n.label), look: n.look, boxes: [id] };
@@ -77,9 +79,10 @@ export function moments(fig: FlowProps, step: string): Moment[] {
   const outcome = last ? labelOf(last.target) : '';
 
   let prev = actors[0]?.name ?? '';
-  const out: Moment[] = beats.map(({ beat, hops }) => {
+  const out: Moment[] = beats.map(({ beat, hops }, i) => {
     const end = hops.at(-1);
-    const actor = end ? (actorOf.get(end.target) ?? labelOf(end.target)) : prev;
+    const own = (id: string) => actorOf.get(id) ?? labelOf(id);
+    const actor = !end ? prev : actorOf.has(end.target) || !isDecision(byId.get(end.target)) ? own(end.target) : i ? prev : own(end.source);
     prev = actor;
     const labels = hops.map((h) => str(h.edge.label)).filter(Boolean);
     const say = str(beat.say) || (end ? (labels.length ? `${labels.join(', ')}: ${labelOf(end.target)}` : labelOf(end.target)) : '');
@@ -103,7 +106,8 @@ export function moments(fig: FlowProps, step: string): Moment[] {
   const notReached = [...new Set([...first].filter((id) => !mine.has(id)).map(labelOf))];
 
   out.forEach((m, i) => {
-    if (!m.note) m.note = i + 1 < out.length ? `Next: ${out[i + 1].actor}` : `Outcome: ${outcome}`;
+    const next = out.slice(i + 1).find((o) => o.actor !== m.actor);
+    if (!m.note) m.note = next ? `Next: ${next.actor}` : `Outcome: ${outcome}`;
   });
   out.push({
     actor: out.at(-1)!.actor,

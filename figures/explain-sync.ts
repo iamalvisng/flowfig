@@ -7,19 +7,44 @@ const props: Figure['props'] = {
       {
         direction: 'row',
         children: [
-          { id: 'app', label: 'Worker app', sub: 'sends saved records', look: 'phone' },
+          { label: 'Worker app', look: 'phone', children: [{ id: 'app', label: 'Worker app', sub: 'sends saved records' }] },
           {
+            label: 'Server',
+            look: 'server',
             direction: 'column',
             children: [
-              { id: 'dup', label: 'Saved before?', shape: 'decision' },
-              { id: 'dupno', label: 'Answer: DUPLICATE', tone: 'gray' },
-            ],
-          },
-          {
-            direction: 'column',
-            children: [
-              { id: 'client', label: 'Client allowed?', shape: 'decision' },
-              { id: 'clientno', label: 'Answer: refused', tone: 'gray' },
+              {
+                direction: 'row',
+                children: [
+                  {
+                    direction: 'column',
+                    children: [
+                      { id: 'dup', label: 'Saved before?', shape: 'decision' },
+                      { id: 'dupno', label: 'Answer: DUPLICATE', tone: 'gray' },
+                    ],
+                  },
+                  {
+                    direction: 'column',
+                    children: [
+                      { id: 'client', label: 'Client allowed?', shape: 'decision' },
+                      { id: 'clientno', label: 'Answer: refused', tone: 'gray' },
+                    ],
+                  },
+                ],
+              },
+              {
+                direction: 'row',
+                children: [
+                  { id: 'txn', label: 'Save in one transaction', sub: 'collection, audit, voucher' },
+                  {
+                    direction: 'column',
+                    children: [
+                      { id: 'voucher', label: 'Voucher OK?', shape: 'decision' },
+                      { id: 'rollback', label: 'Rolled back', sub: 'no table changes', tone: 'gray' },
+                    ],
+                  },
+                ],
+              },
             ],
           },
         ],
@@ -27,30 +52,26 @@ const props: Figure['props'] = {
       {
         direction: 'row',
         children: [
-          { id: 'txn', label: 'Save in one transaction', sub: 'collection, audit, voucher', look: 'server' },
-          {
-            direction: 'column',
-            children: [
-              { id: 'voucher', label: 'Voucher OK?', shape: 'decision' },
-              { id: 'rollback', label: 'Rolled back', sub: 'no table changes', tone: 'gray' },
-            ],
-          },
           { id: 'db', label: 'Postgres', shape: 'store', look: 'cabinet' },
-        ],
-      },
-      {
-        direction: 'row',
-        children: [
-          { id: 'event', label: 'collection.created' },
           {
+            label: 'Helpers',
+            look: 'team',
             direction: 'column',
             children: [
+              { id: 'event', label: 'collection.created' },
               { id: 'jobs', label: 'Job orders' },
               { id: 'stock', label: 'Stock' },
             ],
           },
-          { id: 'push', label: 'Push queue', shape: 'store', look: 'queue' },
-          { id: 'phone', label: 'Firebase push', look: 'cloud' },
+          {
+            label: 'Phones',
+            look: 'cloud',
+            direction: 'column',
+            children: [
+              { id: 'push', label: 'Push queue', shape: 'store', look: 'queue' },
+              { id: 'phone', label: 'Firebase push' },
+            ],
+          },
         ],
       },
     ],

@@ -93,17 +93,42 @@ test('without lanes, the cast is the labeled top-level groups in order', () => {
   assert.equal(actors[0].look, 'phone');
 });
 
-test('with no lanes and no labeled groups, the cast is at most 6 boxes in the order the steps first visit them', () => {
-  const actors = cast(sync.props);
-  assert.ok(actors.length <= 6, `${actors.length} actors`);
+test('with no lanes and no labeled groups, the cast skips decision boxes, and a moment at a decision keeps the actor before it', () => {
+  const plain: FlowProps = {
+    layout: {
+      children: [
+        { id: 'app', label: 'App', look: 'phone' },
+        { id: 'api', label: 'API' },
+        { id: 'check', label: 'Valid?', shape: 'decision' },
+        { id: 'db', label: 'Database', shape: 'store' },
+      ],
+    },
+    edges: [
+      { from: 'app', to: 'api' },
+      { from: 'api', to: 'check' },
+      { from: 'check', to: 'db', label: 'yes' },
+    ],
+    steps: [
+      { label: 'Save', flow: ['app->api', 'api->check', 'check->db'] },
+      { label: 'Recheck', flow: ['api->check'] },
+    ],
+  };
   assert.deepEqual(
-    actors.slice(0, 3).map((a) => [a.name, a.look]),
+    cast(plain).map((a) => [a.name, a.look]),
     [
-      ['Worker app', 'phone'],
-      ['Saved before?', undefined],
-      ['Client allowed?', undefined],
+      ['App', 'phone'],
+      ['API', undefined],
+      ['Records', undefined],
     ],
   );
+  const save = moments(plain, 'Save');
+  assert.deepEqual(
+    save.map((m) => m.actor),
+    ['API', 'API', 'Records', 'Records'],
+  );
+  assert.equal(save[0].note, 'Next: Records');
+  assert.deepEqual(save[2].stamp, { mark: '✓', label: 'yes' });
+  assert.equal(moments(plain, 'Recheck')[0].actor, 'API');
 });
 
 test('every store box joins one actor named Records', () => {

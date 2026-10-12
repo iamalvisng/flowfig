@@ -31,6 +31,7 @@ type Guide = {
   at: number;
   step: string;
   x: number;
+  tog: HTMLButtonElement;
 };
 
 const FORMS: Form[] = ['diagram', 'guide', 'change'];
@@ -63,7 +64,7 @@ const CSS = [
   '.ff-pane>svg{display:block;width:100%;height:auto;min-width:var(--ff-min);max-width:var(--ff-max);margin:0 auto}',
   '.ff-live{margin:0;min-height:1.5em}',
   '.ff-alert{margin:0;color:var(--flowfig-bad)}',
-  '.ff-g{position:relative;box-sizing:border-box;height:100%;aspect-ratio:16/10;min-height:520px;display:flex;flex-direction:column;gap:0;padding:0;overflow:hidden}',
+  '.ff-g{position:relative;box-sizing:border-box;width:100%;height:100%;aspect-ratio:16/10;min-height:520px;display:flex;flex-direction:column;gap:0;padding:0;overflow:hidden}',
   '.ff-g>.ff-title{margin:16px 3% 0}',
   '.ff-g>.ff-row{padding:12px 3% 0}',
   '.ff-row:empty{display:none}',
@@ -78,37 +79,39 @@ const CSS = [
   '.ff-note{margin:8px 0 0;font-size:clamp(15px,1.6cqw,20px);line-height:1.35;color:var(--flowfig-muted)}',
   '.ff-note.ff-bad{color:var(--flowfig-bad)}',
   '.ff-code{flex:0 0 34%;box-sizing:border-box;max-height:17cqh;overflow:auto;margin:0;padding:8px 12px;font:13px/1.45 ui-monospace,Menlo,monospace;white-space:pre;background:var(--flowfig-surface);border:1px solid var(--flowfig-border);border-radius:10px}',
-  '.ff-stage{position:relative;overflow:hidden}',
+  '.ff-stage{--top:195px;position:relative;overflow:hidden;container-type:size}',
   '.ff-cast{position:absolute;left:2cqw;right:2cqw;bottom:1.5cqh;display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);align-items:end}',
   '.ff-c{display:flex;flex-direction:column;align-items:center;gap:8px}',
-  '.ff-fig{position:relative;box-sizing:border-box;width:min(90%,33cqh);aspect-ratio:5/4;padding:6% 7% 3%;background:var(--flowfig-surface);border:1px solid var(--flowfig-border);border-radius:20px;opacity:.42;filter:saturate(.55);transition:transform .3s,opacity .3s,filter .3s,box-shadow .3s}',
+  '.ff-fig{position:relative;box-sizing:border-box;width:max(48px,min(90%,(100cqh - var(--top)) * 1.25));aspect-ratio:5/4;padding:6% 7% 3%;background:var(--flowfig-surface);border:1px solid var(--flowfig-border);border-radius:20px;opacity:.42;filter:saturate(.55);transition:transform .3s,opacity .3s,filter .3s,box-shadow .3s}',
   '.ff-fig svg{display:block;width:100%;height:100%;overflow:visible}',
   '.ff-fig[aria-current=true],.ff-fig.ff-on{opacity:1;filter:none}',
   '.ff-fig[aria-current=true]{transform:translateY(-10px);border-color:var(--flowfig-accent);box-shadow:0 0 0 3px var(--flowfig-accent),0 8px 12px var(--flowfig-pic-sh)}',
-  '.ff-name{display:flex;gap:6px;align-items:center;font-size:16px;font-weight:600;color:var(--flowfig-muted)}',
+  '.ff-name{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:16px;font-weight:600;color:var(--flowfig-muted)}',
   '[aria-current=true]+.ff-name{color:var(--flowfig-accent)}',
-  '.ff-count{min-width:22px;padding:0 6px;box-sizing:border-box;font-size:13px;line-height:22px;text-align:center;border-radius:999px;background:var(--flowfig-ink);color:var(--flowfig-bg)}',
-  '.ff-card{position:absolute;top:3cqh;left:50%;z-index:2;display:flex;flex-direction:column;align-items:center;gap:10px;transform:translateX(-50%);transition:left .5s cubic-bezier(.45,0,.2,1)}',
+  '.ff-count{display:inline-block;margin-left:6px;min-width:22px;padding:0 6px;box-sizing:border-box;font-size:13px;line-height:22px;text-align:center;border-radius:999px;background:var(--flowfig-ink);color:var(--flowfig-bg)}',
+  '.ff-card{position:absolute;top:22px;left:50%;z-index:2;transform:translateX(-50%);transition:left .5s cubic-bezier(.45,0,.2,1)}',
   '.ff-paper{position:relative;box-sizing:border-box;width:150px;padding:10px 14px 12px;display:flex;flex-direction:column;gap:5px;background:var(--flowfig-paper);color:var(--flowfig-paper-ink);border-radius:6px 18px 6px 6px;box-shadow:0 4px 12px var(--flowfig-pic-sh),0 0 0 1px #0000000f}',
   '.ff-dn{padding-right:22px;font-size:13px;font-weight:600;line-height:1.3}',
   '.ff-paper b{font-size:26px;line-height:1;font-weight:750}',
   '.ff-paper i{height:5px;border-radius:3px;background:#e3e7ee}',
   '.ff-paper i+i{width:60%}',
   '.ff-st{position:absolute;top:-18px;right:-30px;width:52px;height:52px;display:grid;place-items:center;border-radius:50%;font-size:28px;font-weight:700;background:var(--flowfig-ink);color:var(--flowfig-bg);box-shadow:0 0 0 3px var(--flowfig-bg);transform:rotate(-8deg);animation:ff-stamp .35s .15s cubic-bezier(.2,1.3,.4,1) backwards}',
-  '.ff-pill{padding:4px 12px;font-size:15px;font-weight:600;white-space:nowrap;border-radius:999px;background:var(--flowfig-ink);color:var(--flowfig-bg);animation:ff-fade .3s .3s backwards}',
+  '.ff-pill{position:absolute;left:50%;bottom:0;transform:translate(-50%,50%);padding:4px 12px;font-size:15px;font-weight:600;white-space:nowrap;border-radius:999px;background:var(--flowfig-ink);color:var(--flowfig-bg);animation:ff-fade .3s .3s backwards}',
   '.ff-st.ff-x,.ff-pill.ff-x{background:var(--flowfig-bad)}',
   '.ff-still{animation:none}',
   '@keyframes ff-stamp{from{opacity:0;transform:scale(1.8) rotate(-18deg)}}',
-  '@keyframes ff-fade{from{opacity:0;transform:translateY(-6px)}}',
+  '@keyframes ff-fade{from{opacity:0}}',
   '.ff-recs{position:absolute;left:50%;top:12%;z-index:1;display:flex;flex-direction:column;align-items:center;gap:4px;transform:translateX(-50%)}',
   '.ff-rec{padding:3px 8px;font-size:13px;font-weight:600;white-space:nowrap;background:var(--flowfig-paper);color:var(--flowfig-paper-ink);border:1px solid var(--flowfig-border);border-radius:5px;box-shadow:0 2px 6px var(--flowfig-pic-sh);animation:ff-fly .5s cubic-bezier(.45,0,.2,1) backwards}',
   '@keyframes ff-fly{from{opacity:0;transform:translate(var(--dx),-24cqh)}}',
+  '@container (height < 320px){.ff-stage{--top:140px}.ff-card{top:16px}.ff-paper{padding:6px 10px 10px}.ff-paper i{display:none}.ff-dn{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ff-paper b{font-size:20px}.ff-st{top:-12px;right:-22px;width:40px;height:40px;font-size:22px}}',
   '.ff-end .ff-cast{visibility:hidden}',
   '.ff-end .ff-card{left:calc(3cqw + 75px)!important;top:50%;transform:translate(-50%,-50%)}',
   '.ff-sum{position:absolute;inset:0 3cqw 2cqh calc(3cqw + 200px);display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:3cqw;align-items:center}',
   '.ff-one{padding:18px 20px;background:color-mix(in srgb,var(--flowfig-accent) 8%,var(--flowfig-surface));border:1px solid var(--flowfig-accent);border-radius:14px}',
   '.ff-lbl{margin:0;font-size:13px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--flowfig-muted)}',
   '.ff-one p+p{margin:8px 0 0;font-size:clamp(17px,1.9cqw,24px);line-height:1.35;font-weight:600}',
+  '.ff-nr{max-height:100%;overflow:auto}',
   '.ff-nr ul{margin:8px 0 0;padding:0;list-style:none;display:flex;flex-wrap:wrap;gap:6px}',
   '.ff-nr li{padding:4px 12px;font-size:14px;color:var(--flowfig-muted);border:1px dashed var(--flowfig-muted);border-radius:999px}',
   '.ff-bot{display:flex;flex-direction:column;justify-content:space-between;gap:8px;padding:1.4cqh 3cqw;border-top:1px solid var(--flowfig-border);background:color-mix(in srgb,var(--flowfig-surface) 55%,var(--flowfig-bg))}',
@@ -240,6 +243,9 @@ export class FlowfigExplain extends Base {
     if (name === 'src' || name === 'before') void this.#load();
     else if (name === 'step') {
       if (value) this.show(value);
+    } else if (name === 'code' && this.#g) {
+      this.#g.tog.setAttribute('aria-pressed', String(value !== null));
+      this.#update();
     } else if (name !== 'theme') this.#draw();
   }
 
@@ -466,6 +472,7 @@ export class FlowfigExplain extends Base {
           prog: h('div', 'ff-prog'),
           dots: [],
           chips: this.#labels().map((label) => chip(label, () => this.show(label), false)),
+          tog: chip('Show the code', () => this.toggleAttribute('code'), this.hasAttribute('code')),
           at: -1,
           step: '',
           x: -1,
@@ -490,13 +497,7 @@ export class FlowfigExplain extends Base {
             'div',
             'ff-bot',
             g.prog,
-            h(
-              'div',
-              'ff-what',
-              h('span', 'ff-wl', 'What if…'),
-              h('div', 'ff-chips', ...g.chips),
-              chip('Show the code', () => this.toggleAttribute('code'), this.hasAttribute('code')),
-            ),
+            h('div', 'ff-what', h('span', 'ff-wl', 'What if…'), h('div', 'ff-chips', ...g.chips), g.tog),
             h('div', 'ff-ctl', this.#ctl.back, this.#ctl.play, this.#ctl.next),
           ),
         );
@@ -603,7 +604,7 @@ export class FlowfigExplain extends Base {
     });
     if (i >= 0) {
       g.x = i;
-      g.card.style.left = `${2 + (96 * (i + 0.5)) / n}cqw`;
+      g.card.style.left = `clamp(83px, ${2 + (96 * (i + 0.5)) / n}cqw, calc(100cqw - 113px))`;
     }
     g.dn.textContent = m.step;
     g.num.textContent = `#${this.#labels().indexOf(m.step) + 1}`;
