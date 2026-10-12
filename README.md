@@ -162,6 +162,8 @@ A state lifecycle marks the first state with `mark: "start"` and each final stat
 
 `npx flowfig gif figure.svg` writes an animated GIF for Slack, Notion, X and slides, where SVG animation does not play.
 
+`npx flowfig frames figure.svg` writes one PNG sheet of the key frames, so a coding agent can read the motion in one image.
+
 The options are in [Open and share a figure](#open-and-share-a-figure).
 
 ## flowfig, Mermaid and a hand-drawn image
@@ -484,6 +486,16 @@ npx flowfig gif docs/checkout.svg --dark --mp4    # the dark theme, and also doc
 `--fps` sets the frames per second (1 to 50, default 20). `--scale` sets the pixel scale (default 2). `--mp4` needs `ffmpeg`
 on the PATH. If a GIF is over 10 MB, `gif` prints a warning. Use `--step`, a lower `--fps` or a lower `--scale` to make the
 file smaller.
+
+`flowfig frames` writes one PNG contact sheet: the key frames of the loop, each with the frame number, the time, the step,
+the beat and the boxes. It also prints one line per frame. The frame numbers match `flowfig gif` with the same `--fps`
+and `--step`.
+
+```bash
+npx flowfig frames docs/checkout.svg               # writes docs/checkout-frames.png
+npx flowfig frames docs/checkout.svg --step 2      # only step 2: writes docs/checkout-step2-frames.png
+npx flowfig frames docs/checkout.svg --every 500   # one frame each 500 ms, in place of the key frames
+```
 
 ## Verify in CI
 
