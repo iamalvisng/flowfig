@@ -37,7 +37,7 @@ export function keyFrames(fig: FlowProps, o: { fps: number; every?: number; step
   const tiles: Tile[] = [];
   const add = (at: number, kind: string, si: number, bi: number, text: string, say: string) => {
     const last = tiles.at(-1);
-    const frame = Math.max(at, last?.frame ?? 0);
+    const frame = Math.min(frames - 1, Math.max(at, last?.frame ?? 0));
     if (last && frame === last.frame) {
       if (!last.kinds.includes(kind)) last.kinds.push(kind);
       return;
@@ -48,6 +48,7 @@ export function keyFrames(fig: FlowProps, o: { fps: number; every?: number; step
   if (o.every) {
     const flat = beats.flatMap((step, si) => step.map((b, bi) => ({ si, bi, hop: b.hops.length > 0, ...times.beats[si][bi] })));
     for (let k = 0; k * o.every < dur * 1000; k++) {
+      if (Math.round((k * o.every * f) / 1000) >= frames) break;
       const t = (k * o.every) / 1000;
       const at = flat.findLast((x) => x.t0 <= t) ?? flat[0];
       const kind = at.hop && t < at.t1 ? 'move' : t < at.tEnd ? 'read' : 'hold';

@@ -488,7 +488,7 @@ on the PATH. If a GIF is over 10 MB, `gif` prints a warning. Use `--step`, a low
 file smaller.
 
 `flowfig frames` writes one PNG contact sheet: the key frames of the loop, each with the frame number, the time, the step,
-the beat and the boxes. It also prints one line per frame. The frame numbers match `flowfig gif` with the same `--fps`
+the beat and the boxes. It also prints one line per tile. The frame numbers match `flowfig gif` with the same `--fps`
 and `--step`.
 
 ```bash

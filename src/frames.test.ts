@@ -50,6 +50,16 @@ test('the beat times equal the keyTimes and the dur that the SVG writes', () => 
     assert.ok(Math.abs(Number(k1) - hops[i].t1 / loop) <= 0.00005, `hop ${i} t1`);
   });
   keyFrames(fig, { fps: 20 }).tiles.forEach((t) => assert.ok(t.frame / 20 < Number(motions[0][1]), `tile ${t.frame} wraps`));
+  const short: FlowProps = { ...ONE, speed: 3000, steps: [{ label: 'w', flow: [{ edges: 'w', ms: 100 }] }] };
+  for (const [f, o] of [
+    [fig, { fps: 20 }],
+    [short, { fps: 20 }],
+
+    [ONE, { fps: 20, every: 1790 }],
+  ] as const) {
+    const { tiles, frames } = keyFrames(f, o);
+    tiles.forEach((t) => assert.ok(t.frame < frames, `tile ${t.frame} of ${frames} wraps`));
+  }
 });
 
 test('two kinds on one frame give one tile with both kinds in the label', () => {
