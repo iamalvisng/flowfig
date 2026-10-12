@@ -814,6 +814,23 @@ test('duplicate-id fires on one id at two levels and names both paths', () => {
   assert.ok(/\bGateway\b/.test(f[0].message) && f[0].message.includes('Orders > Check the cart'), f[0].message);
 });
 
+test('duplicate-id fires on two parts or two edges with one id inside one box', () => {
+  const parts = edit(shopFig, 'orders', (n) =>
+    n.inside!.layout.children.push({ id: 'save', label: 'Save again', source: 'examples/shop/orders.ts#insertOrder' }),
+  );
+  const edges = edit(shopFig, 'orders', (n) => n.inside!.edges!.push({ from: 'gateway', to: 'validate' }));
+  for (const [twice, id] of [
+    [parts, 'save'],
+    [edges, 'gateway->validate'],
+  ] as const) {
+    const f = checkSpec(twice).filter((x) => x.rule === 'duplicate-id');
+    assert.deepEqual(
+      f.map((x) => [x.ids, x.scene]),
+      [[[id], 'Orders']],
+    );
+  }
+});
+
 test('a bad source on a level 3 part gives one finding with the full level path', () => {
   const bad = edit(shopFig, 'read-token', (n) => (n.source = 'auth.ts#read token'));
   const f = checkSpec(bad).filter((x) => x.rule === 'bad-source');

@@ -169,7 +169,7 @@ function insideRules(fig: FlowProps): Finding[] {
   for (const s of all.slice(1)) {
     const parent = byKey.get(s.path.slice(0, -1).join('>'))!;
     const owner = s.path.at(-1)!;
-    const found = specRules(s.props).filter((f) => f.rule !== 'duplicate-id' && f.rule !== 'bad-source');
+    const found = specRules(s.props).filter((f) => f.rule !== 'bad-source');
     const parts = new Set(partsOf(s).map((n) => n.id));
     for (const n of partsOf(s)) if (n.source == null) found.push(warn('part-no-source', [n.id], `part "${n.id}" has no source`));
     const outerIn = parent.props.edges.filter((e) => e.to === owner);
