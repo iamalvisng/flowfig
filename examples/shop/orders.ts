@@ -1,9 +1,10 @@
-import { charge } from './payments.ts';
+import { charge, createIntent } from './payments.ts';
 import * as db from './db.ts';
 
 type Cart = { items: number; total: number };
 
 export function createOrder(cart: Cart) {
+  createIntent(cart.total);
   const payment = charge(cart.total);
   const id = db.insertOrder(cart, payment);
   return { id, status: 'created' };

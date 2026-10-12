@@ -21,7 +21,7 @@ import { loadSpec, reportLines, sortFindings, specOf, summaryLines, svgWithSpec,
 import type { FlowProps } from './model.ts';
 import { check, render, toSvg, type Finding } from './svg.ts';
 import { checkRendered } from './check.ts';
-import { coverageLine, links, parseSource, unsureLines, verifyReport, type Coverage, type Link } from './verify.ts';
+import { coverageLine, levelLines, links, parseSource, unsureLines, verifyReport, type Coverage, type Link } from './verify.ts';
 import { VERSION } from './version.ts';
 import { trace, traceLines } from './trace.ts';
 import { coverageLines, coverageReport } from './coverage.ts';
@@ -209,6 +209,7 @@ if (args[0] === 'verify') {
     console.log(`${n(errors, 'error')}, ${n(findings.length - errors, 'warning')}`);
     for (const c of coverage) {
       console.log(coverageLine(c.figure, c));
+      for (const l of levelLines(c)) console.log(l);
       for (const l of unsureLines(c)) console.log(l);
     }
   }

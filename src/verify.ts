@@ -1,5 +1,5 @@
 import { resolve } from 'node:path';
-import { edgeId, nodes, toBeat, type FlowProps } from './model.ts';
+import { edgeId, nodes, scenes, toBeat, type FlowProps } from './model.ts';
 import { headingSlug, links } from './source.ts';
 import type { Finding } from './scene.ts';
 import { codeFile, isDefined, outside, readFile, type CodeFile, type Read } from './code.ts';
@@ -44,6 +44,8 @@ export type Coverage = {
   unsure: number;
   notChecked: number;
   unsureEdges: { id: string; reason: string }[];
+  /** The coverage of each level inside a box, by path line. */
+  levels?: { path: string; coverage: Coverage }[];
 };
 
 const emptyCoverage = (): Coverage => ({ boxes: 0, boxesDefined: 0, found: 0, notFound: 0, unsure: 0, notChecked: 0, unsureEdges: [] });
@@ -53,6 +55,12 @@ export const coverageLine = (figure: string, c: Coverage) =>
   (c.found + c.notFound + c.unsure + c.notChecked
     ? `; edges: ${c.found} found, ${c.notFound} not found, ${c.unsure} unsure, ${c.notChecked} not checked`
     : '');
+
+export const levelLines = (c: Coverage) =>
+  (c.levels ?? []).map(
+    ({ path, coverage: l }) =>
+      `[${path}] ${l.boxesDefined} of ${l.boxes} parts defined; edges: ${l.found} found, ${l.notFound} not found, ${l.unsure} unsure, ${l.notChecked} not checked`,
+  );
 
 export const unsureLines = (c: Coverage) => c.unsureEdges.map((e) => `unsure   edge "${e.id}": ${e.reason}`);
 
@@ -88,54 +96,68 @@ export function verifyReport(
       coverage,
     };
   const files = new Map<string, string | null>();
-  for (const l of all) {
-    const full = resolve(root, l.path);
-    if (!files.has(full)) files.set(full, outside(root, l.path) ? null : read(full));
-    const text = files.get(full);
-    const before = findings.length;
-    let doubt = false;
-    const fail = (rule: string, what: string) =>
-      findings.push({ rule, severity: 'error', ids: [], message: `${l.owner} -> ${l.source}: ${what}` });
-    if (text == null) fail('missing-file', 'file not found');
-    else if (l.symbol) {
-      const code = codeFile(root, l.path, read, cache);
-      if (code) {
-        const r = defines(root, code, l.symbol, read, cache);
-        if (r === false) fail('missing-symbol', 'symbol not defined');
-        doubt = r == null;
-      } else if (
-        !new RegExp(`(^|[^\\w$])${escape(l.symbol)}(?![\\w$])`).test(text) &&
-        !(/\.(md|markdown)$/i.test(l.path) && hasHeading(text, l.symbol))
-      )
-        fail('missing-symbol', 'symbol not found');
-    }
-    if (l.owner.startsWith('box "')) {
-      coverage.boxes++;
-      if (findings.length === before && !doubt) coverage.boxesDefined++;
-    }
-  }
-  const source = new Map(nodes(fig.layout).map((n) => [n.id, n.source]));
-  const check = (who: string, id: string, caller?: string, callee?: string, via?: string) => {
-    const { result, reason } = caller ? edgeResult(root, caller, callee, via, read, cache) : { result: 'not-checked', reason: '' };
-    if (result === 'found') coverage.found++;
-    else if (result === 'not-found') {
-      coverage.notFound++;
-      findings.push({ rule: 'edge-not-found', severity: 'warning', ids: [id], message: `${who}: ${reason}` });
-    } else if (result === 'unsure') {
-      coverage.unsure++;
-      coverage.unsureEdges.push({ id, reason });
-    } else coverage.notChecked++;
-  };
-  for (const e of fig.edges) check(`edge "${edgeId(e)}"`, edgeId(e), e.source ?? source.get(e.from), source.get(e.to), e.via);
-  const byId = new Map(fig.edges.map((e) => [edgeId(e), e]));
-  for (const step of fig.steps ?? [])
-    for (const beat of step.flow)
-      for (const h of toBeat(beat).hops) {
-        const e = byId.get(h.edge);
-        if (!e || (h.source == null && h.via == null)) continue;
-        const [a, b] = h.back ? [e.to, e.from] : [e.from, e.to];
-        check(`hop on "${h.edge}"`, h.edge, h.source ?? (h.back ? undefined : e.source) ?? source.get(a), source.get(b), h.via);
+  const levels: { path: string; coverage: Coverage }[] = [];
+  for (const scene of scenes(fig)) {
+    const level = emptyCoverage();
+    for (const l of all.filter((x) => (x.scene ?? '') === scene.line)) {
+      const full = resolve(root, l.path);
+      if (!files.has(full)) files.set(full, outside(root, l.path) ? null : read(full));
+      const text = files.get(full);
+      const before = findings.length;
+      let doubt = false;
+      const fail = (rule: string, what: string) =>
+        findings.push({ rule, severity: 'error', ids: [], message: `${l.owner} -> ${l.source}: ${what}` });
+      if (text == null) fail('missing-file', 'file not found');
+      else if (l.symbol) {
+        const code = codeFile(root, l.path, read, cache);
+        if (code) {
+          const r = defines(root, code, l.symbol, read, cache);
+          if (r === false) fail('missing-symbol', 'symbol not defined');
+          doubt = r == null;
+        } else if (
+          !new RegExp(`(^|[^\\w$])${escape(l.symbol)}(?![\\w$])`).test(text) &&
+          !(/\.(md|markdown)$/i.test(l.path) && hasHeading(text, l.symbol))
+        )
+          fail('missing-symbol', 'symbol not found');
       }
+      if (l.owner.startsWith('box "') || l.owner.startsWith('part "')) {
+        level.boxes++;
+        if (findings.length === before && !doubt) level.boxesDefined++;
+      }
+    }
+    const props = scene.props;
+    const source = new Map(nodes(props.layout).map((n) => [n.id, n.source]));
+    const check = (who: string, id: string, caller?: string, callee?: string, via?: string) => {
+      const { result, reason } = caller ? edgeResult(root, caller, callee, via, read, cache) : { result: 'not-checked', reason: '' };
+      if (result === 'found') level.found++;
+      else if (result === 'not-found') {
+        level.notFound++;
+        findings.push({
+          rule: 'edge-not-found',
+          severity: 'warning',
+          ids: [id],
+          message: `${who}${scene.line ? ` [${scene.line}]` : ''}: ${reason}`,
+        });
+      } else if (result === 'unsure') {
+        level.unsure++;
+        level.unsureEdges.push({ id, reason });
+      } else level.notChecked++;
+    };
+    for (const e of props.edges) check(`edge "${edgeId(e)}"`, edgeId(e), e.source ?? source.get(e.from), source.get(e.to), e.via);
+    const byId = new Map(props.edges.map((e) => [edgeId(e), e]));
+    for (const step of props.steps ?? [])
+      for (const beat of step.flow)
+        for (const h of toBeat(beat).hops) {
+          const e = byId.get(h.edge);
+          if (!e || (h.source == null && h.via == null)) continue;
+          const [a, b] = h.back ? [e.to, e.from] : [e.from, e.to];
+          check(`hop on "${h.edge}"`, h.edge, h.source ?? (h.back ? undefined : e.source) ?? source.get(a), source.get(b), h.via);
+        }
+    for (const k of ['boxes', 'boxesDefined', 'found', 'notFound', 'unsure', 'notChecked'] as const) coverage[k] += level[k];
+    coverage.unsureEdges.push(...level.unsureEdges);
+    if (scene.line) levels.push({ path: scene.line, coverage: level });
+  }
+  if (levels.length) coverage.levels = levels;
   return { findings, coverage };
 }
 
