@@ -40,7 +40,11 @@ export const TOOLS = [
       'Check a figure, then write it as one animated SVG file. Returns the check lines and the path. On an error, writes nothing.',
     inputSchema: {
       type: 'object',
-      properties: { ...checkProps, out: { type: 'string', description: 'The SVG path to write.' } },
+      properties: {
+        ...checkProps,
+        out: { type: 'string', description: 'The SVG path to write.' },
+        scene: { type: 'string', description: 'The id of a box with inside: render that level as a plain figure.' },
+      },
       required: ['spec', 'out'],
     },
   },
@@ -100,9 +104,13 @@ function run(name: string, args: Record<string, unknown>): Result {
   }
   if (name === 'check' || name === 'render') {
     need(args, name, name === 'render' ? ['spec', 'out'] : ['spec']);
-    types(args, name, { width: 'number', minText: 'number', out: 'string', strict: 'boolean' });
+    types(args, name, { width: 'number', minText: 'number', out: 'string', scene: 'string', strict: 'boolean' });
     const props = spec(args.spec, name);
-    const opts = { width: args.width as number | undefined, minText: args.minText as number | undefined };
+    const opts = {
+      width: args.width as number | undefined,
+      minText: args.minText as number | undefined,
+      ...(name === 'render' && { scene: args.scene as string | undefined }),
+    };
     const rendered = render(props, opts);
     const findings = sortFindings(checkRendered(props, opts, rendered.scene, rendered.levels), args.strict === true);
     const errors = findings.some((f) => f.severity === 'error');

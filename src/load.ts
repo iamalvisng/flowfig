@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { altText, counts, toBeat, type FlowProps } from './model.ts';
+import { altText, counts, scenes, toBeat, tourPlan, type FlowProps } from './model.ts';
 import { coverageLine, detailFindings, levelLines, owners, unsureLines, verifyReport } from './verify.ts';
 import { toSvg, type Finding, type SvgOptions } from './svg.ts';
 
@@ -52,8 +52,13 @@ export function reportLines(props: FlowProps, findings: Finding[], withCounts = 
   const errors = findings.filter((f) => f.severity === 'error').length;
   if (withCounts) out.push(`${n(errors, 'error')}, ${n(findings.length - errors, 'warning')}`);
   const c = counts(props);
+  const all = scenes(props);
+  const levels =
+    all.length > 1
+      ? `; ${1 + Math.max(...all.map((s) => s.path.length))} levels, ${all.length} scenes, ${all.reduce((k, s) => k + s.parts, 0)} parts; tour ${Math.round(tourPlan(props).ms / 1000)} s`
+      : '';
   out.push(
-    `figure: ${n(c.boxes, 'box').replace('boxs', 'boxes')}, ${n(c.groups, 'group')}, ${n(c.edges, 'edge')}, ${n(c.steps, 'step')}, ${n(c.messages, 'message')}`,
+    `figure: ${n(c.boxes, 'box').replace('boxs', 'boxes')}, ${n(c.groups, 'group')}, ${n(c.edges, 'edge')}, ${n(c.steps, 'step')}, ${n(c.messages, 'message')}${levels}`,
   );
   return out;
 }
