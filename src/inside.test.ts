@@ -411,6 +411,23 @@ test('the player and the SVG place each box of each level within 1 px', { skip }
           r.every((v, i) => Math.abs(v - got[id][i]) <= 1),
           `${owner.id} > ${id}: SVG ${r.join()}, player ${got[id].join()}`,
         );
+      const fit = await page.ev(`(() => {
+        const map = document.querySelector('[role="tabpanel"] > div'), s = getComputedStyle(map);
+        const m = map.getBoundingClientRect(), p = map.parentElement.getBoundingClientRect();
+        const rs = [...map.querySelectorAll('[data-fig]')].map((b) => b.getBoundingClientRect());
+        const x0 = Math.min(...rs.map((r) => r.left)) - parseFloat(s.paddingLeft), y0 = Math.min(...rs.map((r) => r.top)) - parseFloat(s.paddingTop);
+        const x1 = Math.max(...rs.map((r) => r.right)) + parseFloat(s.paddingRight), y1 = Math.max(...rs.map((r) => r.bottom)) + parseFloat(s.paddingBottom);
+        return { frame: [m.x, m.y, m.width, m.height], parts: [x0, y0, x1 - x0, y1 - y0], at: [m.x + m.width / 2, m.y + m.height / 2], mid: [p.x + p.width / 2, p.y + p.height / 2] };
+      })()`);
+      const near = (a: number[], b: number[]) => a.every((v, i) => Math.abs(v - b[i]) <= 1);
+      assert.ok(near(fit.frame, fit.parts), `${owner.id}: frame ${fit.frame.join()}, parts plus padding ${fit.parts.join()}`);
+      assert.ok(near(fit.at, fit.mid), `${owner.id}: center ${fit.at.join()}, canvas center ${fit.mid.join()}`);
+      const label = String(owner.inside!.steps![0].label);
+      const tab = await page.ev(`(() => {
+        const t = [...document.querySelectorAll('[role="tab"]')].find((e) => e.textContent.trim() === ${JSON.stringify(label)});
+        return t && ${SHOWN}(t) > 0.69 ? t.getBoundingClientRect().top : null;
+      })()`);
+      assert.ok(tab != null && tab > fit.frame[1] + fit.frame[3], `${owner.id}: the step label "${label}" shows under the map`);
     };
     const back = (to: string) => page.ev(`${BACK}.click()`).then(() => page.until(shown(box(to)), `back shows ${to}`));
     for (const owner of owners(shopFig.layout)) {

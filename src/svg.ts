@@ -941,18 +941,19 @@ function draw(spec: FlowProps, opts: SvgOptions, at?: At) {
   const shift = (W - (bounds.w + pad * 2 + arcL + arcR)) / 2 + arcL;
   const railX = rail ? (W - rail.width) / 2 : 0;
 
+  const still = (on: boolean[]) => !!at?.fades && on.every(Boolean);
   const labels =
     rail || synthetic
       ? []
       : steps.map((_, si) => {
           const on = segs.map((s) => s.si === si);
-          return `<text x="${n2(W / 2)}" y="${n2(H - capH + 16)}" opacity="0"${cls('steplabel', anim(on, 'opacity: 1', 'opacity: 0', 's'))}>${esc(str(steps[si].label))}</text>`;
+          return `<text x="${n2(W / 2)}" y="${n2(H - capH + 16)}"${still(on) ? '' : ' opacity="0"'}${cls('steplabel', !still(on) && anim(on, 'opacity: 1', 'opacity: 0', 's'))}>${esc(str(steps[si].label))}</text>`;
         });
   const said = [...new Set(captions)].map((text) => {
     const on = captions.map((c) => c === text);
     const lines = wrap(text, wrapW, 13.5);
     return (
-      `<g opacity="0"${cls(anim(on, 'opacity: 1', 'opacity: 0', 'y'))}>` +
+      `<g${still(on) ? '' : ` opacity="0"${cls(anim(on, 'opacity: 1', 'opacity: 0', 'y'))}`}>` +
       lines.map((l, li) => `<text x="${n2(W / 2)}" y="${n2(H - capH + capTop + 16 + li * 20)}" class="caption">${esc(l)}</text>`).join('') +
       `</g>`
     );
@@ -1110,7 +1111,8 @@ ${legendSvg(legend, W, H)}`;
       lanes: placed.filter((p) => p.lane).map((p) => ({ id: str((p.item as FigGroup).label), rect: { x: p.x, y: p.y, w: p.w, h: p.h } })),
     }),
   };
-  return { W, H, css: css.join('\n'), body, holdAt, scene, fig };
+  const frame = { x: shift - arcL, w: bounds.w + pad * 2 + arcL + arcR, h: mapH };
+  return { W, H, css: css.join('\n'), body, holdAt, scene, fig, frame };
 }
 
 const page = (fig: FlowProps, opts: SvgOptions, W: number, H: number, css: string, holdAt: number, body: string) => {
@@ -1233,7 +1235,7 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
   });
   const W = Math.max(...drawn.map((x) => x.d.W)),
     H = Math.max(...drawn.map((x) => x.d.H)) + BAND;
-  const left = (d: { W: number }) => (W - d.W) / 2;
+  const off = (d: { W: number; H: number }) => [(W - d.W) / 2, (H + BAND - d.H) / 2];
   const windows = (w: [number, number][], at: number) =>
     (w.length ? w : [[at, at]]).map(([a, b]) => `${n2(a / 1000)},${n2(b / 1000)}`).join(' ');
   const groups = drawn.map(({ s, o, d }) => {
@@ -1267,16 +1269,18 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
         : ` data-loop="${windows(plan.loop, 0)}"`;
     return (
       `<g class="${track(shown.map(([t, v]) => [t, `opacity: ${v}`]))}"><g class="scene"${o ? ` id="s-${esc(s.path.at(-1)!)}"` : ''}${data}>${band}` +
-      `<g transform="translate(${n2(left(d))} ${BAND})">\n${d.body}${hits}</g></g></g>`
+      `<g transform="translate(${n2(off(d)[0])} ${n2(off(d)[1])})">\n${d.body}${hits}</g></g></g>`
     );
   });
   const frames = drawn.slice(1).map(({ s, o, d }) => {
     const parent = drawn.find((x) => key(x.s.path) === key(s.path.slice(0, -1)))!.d;
     const r = parent.scene.boxes.find((b) => b.id === s.path.at(-1))!.rect;
-    const fx = left(d);
-    const dx = r.x - parent.scene.area!.x + left(parent) - fx,
-      dy = r.y - parent.scene.area!.y;
-    const small = `transform: translate(${n2(dx)}px, ${n2(dy)}px) scale(${n4(r.w / d.W)}, ${n4(r.h / d.H)})`;
+    const [px, py] = off(parent),
+      fx = off(d)[0] + d.frame.x,
+      fy = off(d)[1];
+    const dx = px + r.x - parent.scene.area!.x - fx,
+      dy = py + r.y - parent.scene.area!.y - fy;
+    const small = `transform: translate(${n2(dx)}px, ${n2(dy)}px) scale(${n4(r.w / d.frame.w)}, ${n4(r.h / d.frame.h)})`;
     const full = 'transform: translate(0px, 0px) scale(1, 1)';
     const from = fadeAt(o!),
       shut = o!.back[1] - fade;
@@ -1293,8 +1297,8 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
       [plan.ms, `opacity: 0; ${small}`],
     ]);
     return (
-      `<rect class="open-frame ${name}" data-for="${esc(s.path.at(-1)!)}" x="${n2(fx)}" y="${BAND}" width="${n2(d.W)}" height="${n2(d.H)}" rx="10"` +
-      ` fill="none" stroke="var(--border)" vector-effect="non-scaling-stroke" style="transform-box: view-box; transform-origin: ${n2(fx)}px ${BAND}px"/>`
+      `<rect class="open-frame ${name}" data-for="${esc(s.path.at(-1)!)}" x="${n2(fx)}" y="${n2(fy)}" width="${n2(d.frame.w)}" height="${n2(d.frame.h)}" rx="10"` +
+      ` fill="none" stroke="var(--border)" vector-effect="non-scaling-stroke" style="transform-box: view-box; transform-origin: ${n2(fx)}px ${n2(fy)}px"/>`
     );
   });
   const root = drawn[0].d;
