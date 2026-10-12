@@ -65,6 +65,8 @@ import {
   textFloor,
   specKey,
   nextWide,
+  scenes,
+  type FigScene,
 } from './model.ts';
 
 export type * from './model.ts';
@@ -153,7 +155,17 @@ const HIDDEN: CSSProperties = {
  * Use `toSvg` from `flowfig/svg` for a static animated SVG.
  */
 export function Flow(props: FlowProps) {
-  const { layout, edges, steps, lanes, timeline } = props;
+  const all = useMemo(
+    () => scenes(props),
+    [props.layout, props.edges, props.steps, props.lanes, props.timeline, props.rail, props.theme, props.speed],
+  );
+  const [path, setPath] = useState<string[]>([]);
+  const [full, setFull] = useState(false);
+  const [start, setStart] = useState<Start>();
+  const memo = useRef<Record<string, Start>>({});
+  const at = path.join('>');
+  const s = all.find((x) => x.path.join('>') === at) ?? all[0];
+  const { layout, edges, steps, lanes, timeline } = s.props;
   const key = useMemo(() => specKey(layout, edges, steps), [layout, edges, steps]);
   const [narrow, setNarrow] = useState({ wide: 0, key: '' });
   const fold = !lanes && !timeline && props.rail !== 'only';
@@ -163,10 +175,48 @@ export function Flow(props: FlowProps) {
     () => autoLayout({ layout: wide > 0 ? { ...layout, auto: true, direction: 'column' } : layout, edges, steps, lanes, timeline }),
     [wide, layout, edges, steps, lanes, timeline],
   );
+  const level =
+    all.length > 1
+      ? {
+          scene: s,
+          owners: new Map(
+            all.filter((x) => x.path.slice(0, -1).join('>') === at && x.path.length > s.path.length).map((x) => [x.path.at(-1)!, x.parts]),
+          ),
+          path: s.path.map((id, i) => ({ id, name: all.find((x) => x.path.join('>') === s.path.slice(0, i + 1).join('>'))!.name })),
+          onOpen: (id: string, from: Start) => {
+            memo.current[at] = from;
+            setStart(undefined);
+            setPath([...s.path, id]);
+          },
+          onUp: (depth: number) => {
+            const to = s.path.slice(0, depth);
+            const saved = memo.current[to.join('>')];
+            const beats =
+              saved.step == null ? 1 : (all.find((x) => x.path.join('>') === to.join('>'))!.props.steps?.[saved.step].flow.length ?? 1);
+            setStart({ ...saved, beat: Math.min(saved.beat + 1, beats - 1), box: s.path[depth] });
+            setPath(to);
+          },
+        }
+      : undefined;
   return (
-    <FlowBody {...props} layout={placed.layout} edges={placed.edges} written={props} wide={wide} setWide={fold ? setWide : undefined} />
+    <FlowBody
+      {...props}
+      {...s.props}
+      key={at}
+      layout={placed.layout}
+      edges={placed.edges}
+      written={s.props}
+      wide={wide}
+      setWide={fold ? setWide : undefined}
+      full={full}
+      setFull={setFull}
+      level={level}
+      start={start}
+    />
   );
 }
+
+type Start = { step: number | null; beat: number; playing: boolean; box?: string };
 
 // The ASYNC tag is 9 px.
 const RAIL_TEXT = 9;
@@ -192,7 +242,25 @@ function FlowBody({
   written,
   wide,
   setWide,
-}: FlowProps & { written: FlowProps; wide: number; setWide?: (w: number) => void }) {
+  full,
+  setFull,
+  level,
+  start,
+}: FlowProps & {
+  written: FlowProps;
+  wide: number;
+  setWide?: (w: number) => void;
+  full: boolean;
+  setFull: (f: boolean) => void;
+  level?: {
+    scene: FigScene;
+    owners: Map<string, number>;
+    path: { id: string; name: string }[];
+    onOpen: (id: string, at: Start) => void;
+    onUp: (depth: number) => void;
+  };
+  start?: Start;
+}) {
   const tl = timeline && isLanesLayout(layout);
   const alt = useMemo(() => altText({ layout, edges, steps: stepsIn }), [layout, edges, stepsIn]);
   const descId = useId();
@@ -207,17 +275,31 @@ function FlowBody({
   const root = useRef<HTMLDivElement>(null);
   const outer = useRef<HTMLDivElement>(null);
   const [fit, setFit] = useState({ scale: 1, height: 0, scroll: false });
-  const [full, setFull] = useState(false);
+  const backBtn = useRef<HTMLButtonElement>(null);
+  const up = level?.path.length ? () => level.onUp(level.path.length - 1) : undefined;
   useEffect(() => {
-    if (!full) return;
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setFull(false);
+    if (!full && !up) return;
+    const onKey = (e: KeyboardEvent) => {
+      const at = document.activeElement;
+      const inside = !!at && !!figure.current?.contains(at);
+      if (e.key === 'Escape' && up && (inside || full)) up();
+      else if (e.key === 'Escape') setFull(false);
+      else if (e.key === 'Backspace' && up && inside && !at!.closest('input,textarea,[contenteditable]')) {
+        e.preventDefault();
+        up();
+      }
+    };
     addEventListener('keydown', onKey);
     return () => removeEventListener('keydown', onKey);
-  }, [full]);
+  }, [full, up]);
+  useEffect(() => {
+    if (start?.box) figure.current?.querySelector<HTMLElement>(`[data-fig="${CSS.escape(start.box)}"]`)?.focus();
+    else if (level?.path.length) backBtn.current?.focus();
+  }, []);
   const dots = useRef<(SVGGElement | null)[]>([]);
   const chips = useRef<(HTMLDivElement | null)[]>([]);
   const bar = useRef<HTMLDivElement>(null);
-  const [beat, setBeat] = useState(0);
+  const [beat, setBeat] = useState(start?.beat ?? 0);
   const [holding, setHolding] = useState(false);
   const [returning, setReturning] = useState(false);
   const firstLabel = useRef<string | null>('');
@@ -236,8 +318,8 @@ function FlowBody({
         : null,
     [lanes, tl, layout, edges, steps, withRail],
   );
-  const [active, setActive] = useState<number | null>(steps.length ? 0 : null);
-  const [playing, setPlaying] = useState(autoplay);
+  const [active, setActive] = useState<number | null>(start ? start.step : steps.length ? 0 : null);
+  const [playing, setPlaying] = useState(start ? start.playing : autoplay);
   const playingRef = useRef(playing);
   playingRef.current = playing;
   const [rate, setRate] = useState<1 | 2>(1);
@@ -297,7 +379,7 @@ function FlowBody({
   const user = useRef(false);
   const left = useRef(0);
   const busy = useRef(0);
-  const jump = useRef<number | null>(null);
+  const jump = useRef<number | null>(start?.beat ?? null);
   const [hoverEdge, setHoverEdge] = useState<string | null>(null);
   const [still, setStill] = useState(false);
   useEffect(() => setStill(window.matchMedia('(prefers-reduced-motion: reduce)').matches), []);
@@ -684,7 +766,7 @@ function FlowBody({
       setActive(step);
     }
   };
-  const focus = hover != null || hoverEdge != null || step != null;
+  const focus = hover != null || hoverEdge != null || (step != null && !level);
 
   const vars = Object.fromEntries(Object.entries(theme ?? {}).map(([k, val]) => [`--fig-${k}`, val])) as CSSProperties;
 
@@ -1042,8 +1124,12 @@ function FlowBody({
     const card = carded.has(item.id);
     const dl = diamond && !card ? diamondLines(item, nodeWidth(item, false) + 70) : null;
     const w = diamond || card || item.width != null || str(item.label) ? nodeWidth(item, card, cap) + (diamond ? 70 : 0) : undefined;
-    const lines = w != null && str(item.label) ? labelLines(item, w) : null;
     const bt = item.tone && TONES[item.tone];
+    const parts = level?.owners.get(item.id);
+    const port = level?.scene.ports.some((p) => p.id === item.id);
+    const lines = w != null && str(item.label) ? labelLines(item, w) : null;
+    const pad = level ? 9 : 10;
+    const open = () => level!.onOpen(item.id, { step: active, beat, playing });
     return (
       <div
         key={item.id}
@@ -1052,6 +1138,17 @@ function FlowBody({
         data-diamond={diamond || undefined}
         onMouseEnter={() => setHover(item.id)}
         onMouseLeave={() => setHover(null)}
+        {...(parts != null && {
+          role: 'button',
+          tabIndex: 0,
+          'aria-label': `Open ${str(item.label) || item.id}, ${parts} parts`,
+          onClick: open,
+          onKeyDown: (e: { key: string; preventDefault: () => void }) => {
+            if (e.key !== 'Enter' && e.key !== ' ') return;
+            e.preventDefault();
+            open();
+          },
+        })}
         style={{
           position: 'relative',
           isolation: 'isolate',
@@ -1065,19 +1162,23 @@ function FlowBody({
           justifyContent: 'center',
           padding: diamond
             ? '22px 34px'
-            : `calc(${store ? 24 : 10}px - var(--ff-b, 0px)) calc(${card ? 10 : 16}px - var(--ff-b, 0px)) calc(10px - var(--ff-b, 0px))`,
+            : `calc(${store ? 24 : pad}px - var(--ff-b, 0px)) calc(${card ? 10 : 16}px - var(--ff-b, 0px)) calc(${pad}px - var(--ff-b, 0px))`,
           textAlign: 'center',
           background: diamond ? undefined : bt ? toneTint(bt, v('bg')) : v('bg'),
-          color: v('fg'),
-          border: diamond ? undefined : `1px solid ${bt ?? (lit ? v('accent') : v('border'))}`,
+          color: port ? v('muted') : v('fg'),
+          border: diamond ? undefined : `1px ${port ? 'dashed' : 'solid'} ${bt ?? (lit ? v('accent') : v('border'))}`,
           ...(bt && { '--ff-box': bt }),
-          boxShadow: diamond ? undefined : '0 1px 2px rgba(0,0,0,.06)',
+          boxShadow: diamond
+            ? undefined
+            : parts != null
+              ? `3px 3px 0 -1px ${v('bg')}, 3px 3px 0 0 ${v('border')}`
+              : '0 1px 2px rgba(0,0,0,.06)',
           opacity: focus && !lit ? 0.7 : 1,
           borderRadius: store ? '50% / 12px' : 10,
           fontSize: 14,
           fontWeight: 500,
           transition: 'border-color .4s, background .4s, box-shadow .4s, border-width .4s, padding .4s, opacity .25s',
-          cursor: 'default',
+          cursor: parts != null ? 'pointer' : 'default',
         }}
       >
         {diamond && (
@@ -1138,7 +1239,16 @@ function FlowBody({
             }}
           />
         )}
-        {lines ? (
+        {lines && port ? (
+          <div style={{ lineHeight: `${LABEL_LINE}px`, width: 'min-content', margin: '0 auto' }}>
+            {lines.map((l, i) => (
+              <Fragment key={i}>
+                {i > 0 && ' '}
+                <span style={{ whiteSpace: 'nowrap' }}>{l}</span>
+              </Fragment>
+            ))}
+          </div>
+        ) : lines ? (
           lines.map((l, i) => (
             <div key={i} style={{ whiteSpace: 'nowrap', lineHeight: `${LABEL_LINE}px` }}>
               {l}
@@ -1229,7 +1339,7 @@ function FlowBody({
         type="button"
         aria-label={full ? 'Close full screen' : 'Full screen'}
         title={full ? 'Close (Esc)' : 'Full screen'}
-        onClick={() => setFull((f) => !f)}
+        onClick={() => setFull(!full)}
         style={{
           ...iconBtn,
           position: 'absolute',
@@ -1260,6 +1370,39 @@ function FlowBody({
               backgroundSize: '14px 14px',
             }}
           >
+            {up && (
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12, fontSize: 13, color: v('muted') }}>
+                <button ref={backBtn} type="button" onClick={up} style={{ ...iconBtn, width: 'auto', padding: '0 12px', font: 'inherit' }}>
+                  Back
+                </button>
+                {level!.path.map((p, i) =>
+                  i < level!.path.length - 1 ? (
+                    <Fragment key={p.id}>
+                      <button
+                        type="button"
+                        onClick={() => level!.onUp(i + 1)}
+                        style={{ border: 0, padding: 0, background: 'none', font: 'inherit', color: v('accent'), cursor: 'pointer' }}
+                      >
+                        {p.name}
+                      </button>
+                      {' > '}
+                    </Fragment>
+                  ) : (
+                    <span key={p.id} style={{ color: v('fg') }}>
+                      {p.name}
+                    </span>
+                  ),
+                )}
+                <div aria-live="polite" style={HIDDEN}>
+                  {`${level!.scene.line}: ${level!.scene.parts} parts.` +
+                    level!.scene.ports
+                      .map((p) =>
+                        p.way === 'in' ? ` In from ${p.name}.` : p.way === 'out' ? ` Out to ${p.name}.` : ` In and out: ${p.name}.`,
+                      )
+                      .join('')}
+                </div>
+              </div>
+            )}
             <div
               ref={outer}
               role="tabpanel"
