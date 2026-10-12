@@ -59,16 +59,25 @@ export function moments(fig: FlowProps, step: string): Moment[] {
   const actors = cast(fig);
   const byId = new Map(nodes(fig.layout).map((n) => [n.id, n]));
   const actorOf = new Map(actors.flatMap((a) => a.boxes.map((id) => [id, a.name] as const)));
-  const labelOf = (id: string) => str(byId.get(id)?.label);
+  const groupLabels = new Map<string, unknown>();
+  const walk = (g: FigGroup) => {
+    for (const c of g.children) {
+      if (!isGroup(c)) continue;
+      if (c.id) groupLabels.set(c.id, c.label);
+      walk(c);
+    }
+  };
+  walk(fig.layout);
+  const labelOf = (id: string) => str(byId.get(id)?.label ?? groupLabels.get(id));
   const beats = hopsOf(fig, s);
   if (!beats.length) return [];
 
   const sources = new Set(beats.flatMap((b) => b.hops.map((h) => h.source)));
-  const last = beats.at(-1)!.hops.at(-1);
+  const last = beats.flatMap((b) => b.hops).at(-1);
   const outcome = last ? labelOf(last.target) : '';
 
   let prev = actors[0]?.name ?? '';
-  const out: Moment[] = beats.map(({ beat, hops }, i) => {
+  const out: Moment[] = beats.map(({ beat, hops }) => {
     const end = hops.at(-1);
     const actor = end ? (actorOf.get(end.target) ?? labelOf(end.target)) : prev;
     prev = actor;
@@ -77,9 +86,7 @@ export function moments(fig: FlowProps, step: string): Moment[] {
     const moment: Moment = { actor, say, note: str(beat.note), records: [] };
     if (end && byId.get(end.source)?.shape === 'decision') {
       const dead =
-        i === beats.length - 1 &&
-        !sources.has(end.target) &&
-        [byId.get(end.target)?.tone, end.tone].some((t) => t === 'red' || t === 'gray');
+        end === last && !sources.has(end.target) && [byId.get(end.target)?.tone, end.tone].some((t) => t === 'red' || t === 'gray');
       moment.stamp = { mark: dead ? '✗' : '✓', label: str(end.edge.label) };
     }
     for (const h of hops) {
@@ -89,7 +96,7 @@ export function moments(fig: FlowProps, step: string): Moment[] {
     return moment;
   });
 
-  const visited = (labelsOf: typeof beats) => labelsOf.flatMap((b) => b.hops.flatMap((h) => [h.source, h.target]));
+  const visited = (of: typeof beats) => of.flatMap((b) => b.hops.flatMap((h) => [h.source, h.target]));
   const mine = new Set(visited(beats));
   const first = new Set<string>();
   for (const st of fig.steps ?? []) for (const id of visited(hopsOf(fig, st))) if (byId.has(id)) first.add(id);
