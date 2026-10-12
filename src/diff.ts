@@ -54,11 +54,11 @@ const messages = (fig: FlowProps) => {
         s.flow.flatMap((b) =>
           toBeat(b).hops.map((h) => {
             const key = `${str(s.label)}: ${h.edge}${h.back ? ' back' : ''}${h.data != null ? ` "${str(h.data)}"` : ''}${h.tone ? ` [${h.tone}]` : ''}${h.source ? ` <${h.source}>` : ''}${h.via ? ` via ${h.via}` : ''}`;
-            const full = `${sc.line}\n${key}`;
+            const full = `${sc.path.join('>')}\n${key}`;
             const n = (seen.get(full) ?? 0) + 1;
             seen.set(full, n);
             const id = n > 1 ? `${key} #${n}` : key;
-            return [`${sc.line}\n${id}`, { id, path: sc.line }] as const;
+            return [`${sc.path.join('>')}\n${id}`, { id, path: sc.line }] as const;
           }),
         ),
       ),
@@ -84,7 +84,7 @@ const boxes = (f: FlowProps) => {
 };
 
 const BOX_FIELDS: (keyof Box)[] = ['label', 'sub', 'shape', 'tone', 'mark', 'from', 'to', 'source', 'group'];
-const touched = (a?: Box, b?: Box) => !a || !b || a.path !== b.path || fields(a, b, BOX_FIELDS).length > 0;
+const touched = (a?: Box, b?: Box) => !a || !b || a.owner !== b.owner || fields(a, b, BOX_FIELDS).length > 0;
 
 export function diff(before: FlowProps, after: FlowProps): Change[] {
   const edges = (f: FlowProps) =>
@@ -92,14 +92,14 @@ export function diff(before: FlowProps, after: FlowProps): Change[] {
   const steps = (f: FlowProps) =>
     new Map(
       scenes(f).flatMap((sc) =>
-        (sc.props.steps ?? []).map((s) => [`${sc.line}\n${str(s.label)}`, { ...s, id: str(s.label), path: sc.line }] as const),
+        (sc.props.steps ?? []).map((s) => [`${sc.path.join('>')}\n${str(s.label)}`, { ...s, id: str(s.label), path: sc.line }] as const),
       ),
     );
   const was = boxes(before);
   const now = boxes(after);
   const out = [
     ...compare('box', was, now, (a, b) => [
-      ...(a.path !== b.path ? [`moved from ${a.path || 'the root'} to ${b.path || 'the root'}`] : []),
+      ...(a.owner !== b.owner ? [`moved from ${a.path || 'the root'} to ${b.path || 'the root'}`] : []),
       ...fields(a, b, BOX_FIELDS),
     ]),
     ...compare('edge', edges(before), edges(after), (a, b) => fields(a, b, ['from', 'to', 'label', 'source', 'via'])),

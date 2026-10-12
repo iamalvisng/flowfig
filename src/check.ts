@@ -142,18 +142,14 @@ function insideRules(fig: FlowProps): Finding[] {
   if (total > 60) out.push(err('part-limit', [], `the figure has ${total} parts; the limit is 60`));
 
   const all = scenes(fig);
-  const seen: Record<string, Map<string, string[]>> = { boxes: new Map(), groups: new Map(), edges: new Map() };
+  const seen: Record<string, Map<string, Map<string, string>>> = { boxes: new Map(), groups: new Map(), edges: new Map() };
   const partsOf = (s: FigScene) => {
     const ports = new Set(s.ports.map((p) => p.id));
     return nodes(s.props.layout).filter((n) => !ports.has(n.id));
   };
   for (const s of all) {
-    const line = s.line || 'the root';
-    const add = (m: Map<string, string[]>, ids: string[]) =>
-      ids.forEach((id) => {
-        const lines = m.get(id) ?? [];
-        if (!lines.includes(line)) m.set(id, [...lines, line]);
-      });
+    const add = (m: Map<string, Map<string, string>>, ids: string[]) =>
+      ids.forEach((id) => m.set(id, (m.get(id) ?? new Map()).set(s.path.join('>'), s.line || 'the root')));
     add(
       seen.boxes,
       partsOf(s).map((n) => n.id),
@@ -163,13 +159,13 @@ function insideRules(fig: FlowProps): Finding[] {
   }
   for (const [kind, m] of Object.entries(seen))
     for (const [id, lines] of m)
-      if (lines.length > 1) out.push(err('duplicate-id', [id], `two ${kind} have the id "${id}": ${lines.join(' and ')}`));
+      if (lines.size > 1) out.push(err('duplicate-id', [id], `two ${kind} have the id "${id}": ${[...lines.values()].join(' and ')}`));
 
   const byKey = new Map(all.map((s) => [s.path.join('>'), s]));
   for (const s of all.slice(1)) {
     const parent = byKey.get(s.path.slice(0, -1).join('>'))!;
     const owner = s.path.at(-1)!;
-    const found = specRules(s.props).filter((f) => f.rule !== 'duplicate-id');
+    const found = specRules(s.props).filter((f) => f.rule !== 'bad-source');
     const parts = new Set(partsOf(s).map((n) => n.id));
     for (const n of partsOf(s)) if (n.source == null) found.push(warn('part-no-source', [n.id], `part "${n.id}" has no source`));
     const outerIn = parent.props.edges.filter((e) => e.to === owner);

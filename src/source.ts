@@ -15,7 +15,7 @@ export const headingSlug = (text: string): string =>
     .replace(/[^\p{L}\p{N} -]/gu, '')
     .replace(/ /g, '-');
 
-export type Link = { owner: string; source: string; path: string; symbol?: string; scene?: string };
+export type Link = { owner: string; source: string; path: string; symbol?: string; level?: string };
 
 type Owner = [string, string | undefined, string | undefined, string];
 
@@ -28,10 +28,10 @@ export function owners(fig: FlowProps): Owner[] {
     return [
       ...nodes(s.props.layout)
         .filter((n) => !ports.has(n.id))
-        .map((n): Owner => [`${kind} "${n.id}"${at}`, n.source, undefined, s.line]),
-      ...s.props.edges.map((e): Owner => [`edge "${edgeId(e)}"${at}`, e.source, e.via, s.line]),
+        .map((n): Owner => [`${kind} "${n.id}"${at}`, n.source, undefined, s.path.join('>')]),
+      ...s.props.edges.map((e): Owner => [`edge "${edgeId(e)}"${at}`, e.source, e.via, s.path.join('>')]),
       ...(s.props.steps ?? []).flatMap((st) =>
-        st.flow.flatMap((b) => toBeat(b).hops.map((h): Owner => [`hop on "${h.edge}"${at}`, h.source, h.via, s.line])),
+        st.flow.flatMap((b) => toBeat(b).hops.map((h): Owner => [`hop on "${h.edge}"${at}`, h.source, h.via, s.path.join('>')])),
       ),
     ];
   });
@@ -39,8 +39,8 @@ export function owners(fig: FlowProps): Owner[] {
 
 /** Every well-formed link in the figure, with the box, edge or hop that carries it. `bad-source` covers the rest. */
 export function links(fig: FlowProps): Link[] {
-  return owners(fig).flatMap(([owner, source, , scene]) => {
+  return owners(fig).flatMap(([owner, source, , level]) => {
     const p = source == null ? null : parseSource(source);
-    return p ? [{ owner, source: source!, ...p, ...(scene && { scene }) }] : [];
+    return p ? [{ owner, source: source!, ...p, ...(level && { level }) }] : [];
   });
 }

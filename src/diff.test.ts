@@ -263,6 +263,25 @@ test('a surviving labeled frame whose old boxes are all removed stays one frame'
   );
 });
 
+test('a step removed inside one of two boxes with one label shows as one removed step', () => {
+  const svc = (id: string, steps: boolean): FigNode => ({
+    id,
+    label: 'Svc',
+    inside: {
+      layout: { children: [{ id: `${id}-p`, label: 'P' }] },
+      ...(steps && { steps: [{ label: 'Go', caption: id, flow: [] }] }),
+    },
+  });
+  const changes = diff(
+    { layout: { children: [svc('s1', true), svc('s2', true)] }, edges: [] },
+    { layout: { children: [svc('s1', true), svc('s2', false)] }, edges: [] },
+  );
+  assert.deepEqual(
+    changes.map((c) => [c.kind, c.op, c.id, c.path]),
+    [['step', 'removed', 'Go', 'Svc']],
+  );
+});
+
 test('a removed box inside an unlabeled row does not throw', () => {
   const box = (id: string) => ({ id, label: id });
   const { figure } = mergeFigures(

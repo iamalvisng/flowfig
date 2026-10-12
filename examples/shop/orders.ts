@@ -1,9 +1,11 @@
 import { charge, createIntent } from './payments.ts';
 import * as db from './db.ts';
+import { parseCart } from './validate.ts';
 
 type Cart = { items: number; total: number };
 
 export function createOrder(cart: Cart) {
+  validateCart(cart);
   createIntent(cart.total);
   const payment = charge(cart.total);
   const id = db.insertOrder(cart, payment);
@@ -11,6 +13,7 @@ export function createOrder(cart: Cart) {
 }
 
 export function validateCart(cart: Cart) {
+  parseCart(cart);
   return reserveStock(cart);
 }
 
