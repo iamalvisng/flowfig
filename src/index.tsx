@@ -227,6 +227,7 @@ export function Flow(props: FlowProps) {
     <figure
       ref={figure}
       className="flowfig"
+      data-inside={level ? '' : undefined}
       aria-label={alt.title}
       aria-describedby={descId}
       style={{
@@ -873,7 +874,7 @@ function FlowBody({
       setActive(step);
     }
   };
-  const focus = hover != null || hoverEdge != null || (step != null && !level);
+  const focus = hover != null || hoverEdge != null || step != null;
 
   const timelineFig = useMemo(
     () => (tl ? timelineLayout({ layout, edges, timeline, today }, axisW) : null),
@@ -1233,7 +1234,6 @@ function FlowBody({
     const parts = level?.owners.get(item.id);
     const port = level?.scene.ports.some((p) => p.id === item.id);
     const lines = w != null && str(item.label) ? labelLines(item, w) : null;
-    const pad = level ? 9 : 10;
     const open = () => {
       const hop = cur?.hops.find((h) => (h.back ? edges[ids.indexOf(h.edge)]?.from : edges[ids.indexOf(h.edge)]?.to) === item.id);
       const e = hop && edges[ids.indexOf(hop.edge)];
@@ -1280,7 +1280,7 @@ function FlowBody({
           justifyContent: 'center',
           padding: diamond
             ? '22px 34px'
-            : `calc(${store ? 24 : pad}px - var(--ff-b, 0px)) calc(${card ? 10 : 16}px - var(--ff-b, 0px)) calc(${pad}px - var(--ff-b, 0px))`,
+            : `calc(${store ? 23 : 9}px - var(--ff-b, 0px)) calc(${card ? 10 : 16}px - var(--ff-b, 0px)) calc(9px - var(--ff-b, 0px))`,
           textAlign: 'center',
           background: diamond ? undefined : bt ? toneTint(bt, v('bg')) : v('bg'),
           color: port ? v('muted') : v('fg'),
@@ -1453,7 +1453,9 @@ function FlowBody({
           // The 2 px active border takes 1 px of padding, so the box size stays.
           `.${ACTIVE}:not([data-diamond]){--ff-b:1px;border-width:2px!important;background:color-mix(in srgb, ${hue} 10%, ${v('surface')})!important;box-shadow:${glow}!important;border-color:${hue}!important}` +
           `.${ACTIVE} polygon{fill:color-mix(in srgb, ${hue} 10%, ${v('surface')});stroke:${hue};stroke-width:2px}` +
-          (level ? '@media (prefers-reduced-motion: reduce){.flowfig *{transition:none!important;animation:none!important}}' : '')}
+          (level
+            ? '@media (prefers-reduced-motion: reduce){.flowfig[data-inside] *{transition:none!important;animation:none!important}}'
+            : '')}
       </style>
       {level && (
         <div

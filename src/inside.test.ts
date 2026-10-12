@@ -20,6 +20,7 @@ import { createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Flow } from '/dist/index.js';
 import shop from '/figures/inside-shop.ts';
+window.plain = () => createRoot(document.body.appendChild(document.createElement('div'))).render(createElement(Flow, { layout: { children: [{ id: 'solo', label: 'Solo' }] }, edges: [] }));
 window.show = (o) => createRoot(document.getElementById('root')).render(createElement(Flow, { ...shop.props, ...o }));
 `;
 
@@ -34,7 +35,7 @@ const SHOWN = `((e) => {
   return o;
 })`;
 const box = (id: string) => `document.querySelector('[data-fig="${id}"]')`;
-const shown = (el: string) => `${SHOWN}(${el}) > 0.99`;
+const shown = (el: string) => `${SHOWN}(${el}) > 0.69`;
 const allShown = (ids: string[]) => ids.map((id) => shown(box(id))).join(' && ');
 const BACK = `[...document.querySelectorAll('button')].find((b) => (b.getAttribute('aria-label') ?? b.textContent).trim().startsWith('Back'))`;
 const ORDERS = ['gateway', 'validate', 'reserve', 'total', 'save', 'publish', 'payments'];
@@ -100,7 +101,7 @@ const summary = (ids: string[]) => `(() => {
   return {
     movers: Object.values(moves).filter((n) => n >= 3).length,
     appear,
-    partial: rec.frames.some((f) => Object.values(f.boxes).some((o) => o > 0.01 && o < 0.99)),
+    partial: rec.frames.some((f) => Object.values(f.boxes).some((o) => o > 0.01 && o < 0.69)),
     running: Math.max(...rec.frames.map((f) => f.running)),
   };
 })()`;
@@ -122,6 +123,14 @@ test(
     });
   },
 );
+
+test('a figure with parts dims the boxes outside the active step, as any figure does', { skip }, async () => {
+  await withReactPage(entry, async (page) => {
+    await show(page, 1400, { autoplay: false });
+    await page.until(`getComputedStyle(${box('browser')}).opacity < 0.99`, 'the boxes outside the step dim');
+    assert.ok(await page.ev(`+getComputedStyle(${box('browser')}).opacity > 0.69`), 'the dim keeps the box readable');
+  });
+});
 
 test('the back button and Escape return to the root level, and focus lands on "Orders"', { skip }, async () => {
   await withReactPage(entry, async (page) => {
@@ -201,6 +210,7 @@ test(
 test('during the open only the border moves, and the ports then the parts appear in flow order 40 to 60 ms apart', { skip }, async () => {
   await withReactPage(entry, async (page) => {
     await show(page, 1400, { autoplay: false });
+    await page.until(`!document.getAnimations().some((a) => a.playState === 'running')`, 'the first caption settles');
     await page.ev(RECORD);
     await openOrders(page);
     await sleep(300);
@@ -217,6 +227,13 @@ test('with reduced motion, open and back change the view in one frame and no ani
   await withReactPage(entry, async (page) => {
     await page.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
     await show(page, 1400, { autoplay: false });
+    await page.ev('plain()');
+    await page.until(`!!${box('solo')}`, 'the plain figure renders');
+    assert.notEqual(
+      await page.ev(`getComputedStyle(${box('solo')}).transitionDuration`),
+      '0s',
+      'a figure with no parts keeps its transitions',
+    );
     for (const [what, go, done] of [
       ['open', () => page.ev(`${box('orders')}.click()`), allShown(ORDERS)],
       ['back', () => press(page.send, 'Escape'), ROOT],
@@ -320,11 +337,38 @@ test('a standalone SVG made with --script: a click opens "Orders", the tour stop
   }
 });
 
-test('two figures on one page: a click opens a box in that figure only', { skip }, async () => {
+test('with reduced motion, a standalone SVG shows the hold frame of the loop at the root', { skip }, async () => {
   const dir = mkdtempSync(join(tmpdir(), 'inside-'));
   try {
-    const svg = toSvg(shopFig, { script: true });
-    writeFileSync(join(dir, 'two.html'), `<body style="margin:0">${svg}${svg}</body>`);
+    writeFileSync(join(dir, 'still.html'), `<body style="margin:0">${toSvg(shopFig, { script: true })}</body>`);
+    await withReactPage('', async (page) => {
+      await page.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
+      await page.open(pathToFileURL(join(dir, 'still.html')).href, 1600);
+      await sleep(300);
+      const hold = await page.ev(`+document.querySelector('.scene').dataset.loop.split(' ')[0].split(',')[1] * 1e3`);
+      const times = await page.ev(
+        `[...new Set(document.getAnimations().map((a) => Math.round(a.currentTime - a.effect.getTiming().delay)))]`,
+      );
+      assert.deepEqual(times, [Math.round(hold)]);
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('two different figures with parts on one page: a click opens a box in the first figure only', { skip }, async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'inside-'));
+  try {
+    const slower = { ...shopFig, steps: shopFig.steps!.slice(0, 1) };
+    const svg = toSvg(shopFig, { script: true }),
+      other = toSvg(slower, { script: true });
+    const names = (x: string) => new Set([...x.matchAll(/@keyframes ([\w-]+)/g)].map((m) => m[1]));
+    assert.deepEqual(
+      [...names(svg)].filter((n) => names(other).has(n)),
+      [],
+      'the two figures share no animation name',
+    );
+    writeFileSync(join(dir, 'two.html'), `<body style="margin:0">${svg}${other}</body>`);
     await withReactPage('', async (page) => {
       await page.open(pathToFileURL(join(dir, 'two.html')).href, 1600);
       const fig = (i: number, sel: string) => `document.querySelectorAll('body > svg')[${i}].querySelector('${sel}')`;
