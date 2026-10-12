@@ -118,6 +118,12 @@ export class FlowfigExplain extends Base {
 
   connectedCallback() {
     if (!this.hasAttribute('tabindex')) this.setAttribute('tabindex', '0');
+    for (const k of ['spec', 'beforeSpec', 'moment'] as const) {
+      if (!Object.hasOwn(this, k)) continue;
+      const v = this[k];
+      delete (this as Partial<this>)[k];
+      (this as Record<typeof k, unknown>)[k] = v;
+    }
   }
 
   disconnectedCallback() {

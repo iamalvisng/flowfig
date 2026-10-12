@@ -279,9 +279,12 @@ test('the SVG applies fig.theme, the theme font, and lets opts.theme win', () =>
   assert.ok(!toSvg(themed, { theme: { accent: '#00ff00' } }).includes('#ff0000'));
 });
 
-test('a theme color cannot close the SVG style and add markup', () => {
-  const svg = toSvg({ ...fig, theme: { accent: 'red}</style><img src=x onerror=alert(1)>' } });
-  assert.doesNotMatch(svg, /<img/);
+test('a theme color cannot add markup, CSS rules or a URL to the SVG, and a plain color stays', () => {
+  const svg = (accent: string) => toSvg({ ...fig, theme: { accent } });
+  assert.doesNotMatch(svg('red}</style><img src=x onerror=alert(1)>'), /<img/);
+  assert.doesNotMatch(svg('red} :host,body{display:none} svg{'), /display:none/);
+  assert.doesNotMatch(svg('URL(//evil.example/x)'), /evil\.example/);
+  assert.ok(svg('hsl(10 20% 30% / .5)').includes('--accent:hsl(10 20% 30% / .5);'));
 });
 
 test('a beat lasts long enough to read its caption. The packet crosses in speed', () => {

@@ -85,8 +85,13 @@ const FRAME_TOP = 37,
   FRAME_BOTTOM = 18;
 
 // The card-on fills approximate the player's 8 % accent tint.
-const vars = (t: Record<'accent' | 'fg' | 'muted' | 'bg' | 'surface' | 'border', string>, cardOn: string) =>
-  `--accent:${esc(t.accent)}; --fg:${esc(t.fg)}; --muted:${esc(t.muted)}; --bg:${esc(t.bg)}; --surface:${esc(t.surface)}; --border:${esc(t.border)}; --card-on:${cardOn}; --tint:color-mix(in srgb, var(--accent) 10%, var(--surface));`;
+type Palette = Record<'accent' | 'fg' | 'muted' | 'bg' | 'surface' | 'border', string>;
+const color = (t: Palette, k: keyof Palette) => {
+  const v = String(t[k]);
+  return /^[#a-zA-Z0-9 ,.%()/+-]+$/.test(v) && !/url\(/i.test(v) ? v : LIGHT[k];
+};
+const vars = (t: Palette, cardOn: string) =>
+  `--accent:${color(t, 'accent')}; --fg:${color(t, 'fg')}; --muted:${color(t, 'muted')}; --bg:${color(t, 'bg')}; --surface:${color(t, 'surface')}; --border:${color(t, 'border')}; --card-on:${cardOn}; --tint:color-mix(in srgb, var(--accent) 10%, var(--surface));`;
 
 const content = (c: FigContent): FigRow[] | string => (isRows(c) ? c : str(c));
 const esc = (s: string) => s.replace(/[<>&"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' })[c]!);
