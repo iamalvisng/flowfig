@@ -941,18 +941,19 @@ function draw(spec: FlowProps, opts: SvgOptions, at?: At) {
   const shift = (W - (bounds.w + pad * 2 + arcL + arcR)) / 2 + arcL;
   const railX = rail ? (W - rail.width) / 2 : 0;
 
+  const still = (on: boolean[]) => !!at?.fades && on.every(Boolean);
   const labels =
     rail || synthetic
       ? []
       : steps.map((_, si) => {
           const on = segs.map((s) => s.si === si);
-          return `<text x="${n2(W / 2)}" y="${n2(H - capH + 16)}" opacity="0"${cls('steplabel', anim(on, 'opacity: 1', 'opacity: 0', 's'))}>${esc(str(steps[si].label))}</text>`;
+          return `<text x="${n2(W / 2)}" y="${n2(H - capH + 16)}"${still(on) ? '' : ' opacity="0"'}${cls('steplabel', !still(on) && anim(on, 'opacity: 1', 'opacity: 0', 's'))}>${esc(str(steps[si].label))}</text>`;
         });
   const said = [...new Set(captions)].map((text) => {
     const on = captions.map((c) => c === text);
     const lines = wrap(text, wrapW, 13.5);
     return (
-      `<g opacity="0"${cls(anim(on, 'opacity: 1', 'opacity: 0', 'y'))}>` +
+      `<g${still(on) ? '' : ` opacity="0"${cls(anim(on, 'opacity: 1', 'opacity: 0', 'y'))}`}>` +
       lines.map((l, li) => `<text x="${n2(W / 2)}" y="${n2(H - capH + capTop + 16 + li * 20)}" class="caption">${esc(l)}</text>`).join('') +
       `</g>`
     );

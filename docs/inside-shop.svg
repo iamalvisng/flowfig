@@ -110,10 +110,6 @@ svg { --accent:#0074d9; --fg:#1c1e21; --muted:#606770; --bg:#ffffff; --surface:#
 .f1nm4ucs1p2 { animation: f1nm4ucs1p2 114.8s infinite step-end; }
 @keyframes f1nm4ucs1p3 { 0%,74.3% { opacity: 0 } 74.31%,74.92% { opacity: 1 } 74.93%,100% { opacity: 0 } }
 .f1nm4ucs1p3 { animation: f1nm4ucs1p3 114.8s infinite step-end; }
-@keyframes f1nm4ucs1a8 { 61.3%,76.31% { opacity: 1 } }
-.f1nm4ucs1a8 { animation: f1nm4ucs1a8 114.8s infinite step-end; }
-@keyframes f1nm4ucs1a9 { 61.3%,76.31% { opacity: 1 } }
-.f1nm4ucs1a9 { animation: f1nm4ucs1a9 114.8s infinite step-end; }
 @keyframes f1nm4ucs2a0 { 67.07%,72.22% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } }
 .f1nm4ucs2a0 { animation: f1nm4ucs2a0 114.8s infinite linear; }
 @keyframes f1nm4ucs2a1 { 67.07%,67.69% { fill: var(--bg); stroke: var(--border); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 67.7%,72.22% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } }
@@ -150,10 +146,6 @@ svg { --accent:#0074d9; --fg:#1c1e21; --muted:#606770; --bg:#ffffff; --surface:#
 .f1nm4ucs2p4 { animation: f1nm4ucs2p4 114.8s infinite step-end; }
 @keyframes f1nm4ucs2p5 { 0%,70.21% { opacity: 0 } 70.22%,70.82% { opacity: 1 } 70.83%,100% { opacity: 0 } }
 .f1nm4ucs2p5 { animation: f1nm4ucs2p5 114.8s infinite step-end; }
-@keyframes f1nm4ucs2a12 { 67.07%,72.22% { opacity: 1 } }
-.f1nm4ucs2a12 { animation: f1nm4ucs2a12 114.8s infinite step-end; }
-@keyframes f1nm4ucs2a13 { 67.07%,72.22% { opacity: 1 } }
-.f1nm4ucs2a13 { animation: f1nm4ucs2a13 114.8s infinite step-end; }
 @keyframes f1nm4ucs3a0 { 81.93%,97.57% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } }
 .f1nm4ucs3a0 { animation: f1nm4ucs3a0 114.8s infinite linear; }
 @keyframes f1nm4ucs3a1 { 81.93%,82.55% { fill: var(--bg); stroke: var(--border); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 82.56%,97.57% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } }
@@ -178,10 +170,6 @@ svg { --accent:#0074d9; --fg:#1c1e21; --muted:#606770; --bg:#ffffff; --surface:#
 .f1nm4ucs3p2 { animation: f1nm4ucs3p2 114.8s infinite step-end; }
 @keyframes f1nm4ucs3p3 { 0%,95.56% { opacity: 0 } 95.57%,96.17% { opacity: 1 } 96.18%,100% { opacity: 0 } }
 .f1nm4ucs3p3 { animation: f1nm4ucs3p3 114.8s infinite step-end; }
-@keyframes f1nm4ucs3a8 { 81.93%,97.57% { opacity: 1 } }
-.f1nm4ucs3a8 { animation: f1nm4ucs3a8 114.8s infinite step-end; }
-@keyframes f1nm4ucs3a9 { 81.93%,97.57% { opacity: 1 } }
-.f1nm4ucs3a9 { animation: f1nm4ucs3a9 114.8s infinite step-end; }
 @keyframes f1nm4ucs4a0 { 88.95%,94.1% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } }
 .f1nm4ucs4a0 { animation: f1nm4ucs4a0 114.8s infinite linear; }
 @keyframes f1nm4ucs4a1 { 88.95%,89.57% { fill: var(--bg); stroke: var(--border); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 89.58%,94.1% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } }
@@ -218,10 +206,6 @@ svg { --accent:#0074d9; --fg:#1c1e21; --muted:#606770; --bg:#ffffff; --surface:#
 .f1nm4ucs4p4 { animation: f1nm4ucs4p4 114.8s infinite step-end; }
 @keyframes f1nm4ucs4p5 { 0%,92.09% { opacity: 0 } 92.1%,92.71% { opacity: 1 } 92.72%,100% { opacity: 0 } }
 .f1nm4ucs4p5 { animation: f1nm4ucs4p5 114.8s infinite step-end; }
-@keyframes f1nm4ucs4a12 { 88.95%,94.1% { opacity: 1 } }
-.f1nm4ucs4a12 { animation: f1nm4ucs4a12 114.8s infinite step-end; }
-@keyframes f1nm4ucs4a13 { 88.95%,94.1% { opacity: 1 } }
-.f1nm4ucs4a13 { animation: f1nm4ucs4a13 114.8s infinite step-end; }
 @keyframes f1nm4ucs5a0 { 5.29%,21.77% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } }
 .f1nm4ucs5a0 { animation: f1nm4ucs5a0 114.8s infinite linear; }
 @keyframes f1nm4ucs5a1 { 5.29%,5.91% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 5.92%,17.24% { fill: var(--tint); stroke: var(--accent); stroke-width: 2; filter: drop-shadow(0 0 4px var(--accent)) } 17.56%,21.77% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } }
@@ -260,10 +244,6 @@ svg { --accent:#0074d9; --fg:#1c1e21; --muted:#606770; --bg:#ffffff; --surface:#
 .f1nm4ucs5p4 { animation: f1nm4ucs5p4 114.8s infinite step-end; }
 @keyframes f1nm4ucs5p5 { 0%,19.76% { opacity: 0 } 19.77%,20.37% { opacity: 1 } 20.38%,100% { opacity: 0 } }
 .f1nm4ucs5p5 { animation: f1nm4ucs5p5 114.8s infinite step-end; }
-@keyframes f1nm4ucs5a13 { 5.29%,21.77% { opacity: 1 } }
-.f1nm4ucs5a13 { animation: f1nm4ucs5a13 114.8s infinite step-end; }
-@keyframes f1nm4ucs5a14 { 5.29%,21.77% { opacity: 1 } }
-.f1nm4ucs5a14 { animation: f1nm4ucs5a14 114.8s infinite step-end; }
 @keyframes f1nm4ucs6a0 { 10.64%,15.79% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } }
 .f1nm4ucs6a0 { animation: f1nm4ucs6a0 114.8s infinite linear; }
 @keyframes f1nm4ucs6a1 { 10.64%,11.26% { fill: var(--bg); stroke: var(--border); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 11.27%,15.79% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } }
@@ -300,10 +280,6 @@ svg { --accent:#0074d9; --fg:#1c1e21; --muted:#606770; --bg:#ffffff; --surface:#
 .f1nm4ucs6p4 { animation: f1nm4ucs6p4 114.8s infinite step-end; }
 @keyframes f1nm4ucs6p5 { 0%,13.78% { opacity: 0 } 13.79%,14.4% { opacity: 1 } 14.41%,100% { opacity: 0 } }
 .f1nm4ucs6p5 { animation: f1nm4ucs6p5 114.8s infinite step-end; }
-@keyframes f1nm4ucs6a12 { 10.64%,15.79% { opacity: 1 } }
-.f1nm4ucs6a12 { animation: f1nm4ucs6a12 114.8s infinite step-end; }
-@keyframes f1nm4ucs6a13 { 10.64%,15.79% { opacity: 1 } }
-.f1nm4ucs6a13 { animation: f1nm4ucs6a13 114.8s infinite step-end; }
 @keyframes f1nm4ucs7a0 { 27.89%,44.15% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } }
 .f1nm4ucs7a0 { animation: f1nm4ucs7a0 114.8s infinite linear; }
 @keyframes f1nm4ucs7a1 { 27.89%,28.51% { fill: var(--bg); stroke: var(--border); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 28.52%,29.13% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 29.14%,40.88% { fill: var(--tint); stroke: var(--accent); stroke-width: 2; filter: drop-shadow(0 0 4px var(--accent)) } 41.2%,44.15% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } }
@@ -334,10 +310,6 @@ svg { --accent:#0074d9; --fg:#1c1e21; --muted:#606770; --bg:#ffffff; --surface:#
 .f1nm4ucs7p3 { animation: f1nm4ucs7p3 114.8s infinite step-end; }
 @keyframes f1nm4ucs7p4 { 0%,42.14% { opacity: 0 } 42.15%,42.76% { opacity: 1 } 42.77%,100% { opacity: 0 } }
 .f1nm4ucs7p4 { animation: f1nm4ucs7p4 114.8s infinite step-end; }
-@keyframes f1nm4ucs7a10 { 27.89%,44.15% { opacity: 1 } }
-.f1nm4ucs7a10 { animation: f1nm4ucs7a10 114.8s infinite step-end; }
-@keyframes f1nm4ucs7a11 { 27.89%,44.15% { opacity: 1 } }
-.f1nm4ucs7a11 { animation: f1nm4ucs7a11 114.8s infinite step-end; }
 @keyframes f1nm4ucs8a0 { 34.28%,39.43% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } }
 .f1nm4ucs8a0 { animation: f1nm4ucs8a0 114.8s infinite linear; }
 @keyframes f1nm4ucs8a1 { 34.28%,34.9% { fill: var(--bg); stroke: var(--border); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 34.91%,39.43% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } }
@@ -374,10 +346,6 @@ svg { --accent:#0074d9; --fg:#1c1e21; --muted:#606770; --bg:#ffffff; --surface:#
 .f1nm4ucs8p4 { animation: f1nm4ucs8p4 114.8s infinite step-end; }
 @keyframes f1nm4ucs8p5 { 0%,37.42% { opacity: 0 } 37.43%,38.04% { opacity: 1 } 38.05%,100% { opacity: 0 } }
 .f1nm4ucs8p5 { animation: f1nm4ucs8p5 114.8s infinite step-end; }
-@keyframes f1nm4ucs8a12 { 34.28%,39.43% { opacity: 1 } }
-.f1nm4ucs8a12 { animation: f1nm4ucs8a12 114.8s infinite step-end; }
-@keyframes f1nm4ucs8a13 { 34.28%,39.43% { opacity: 1 } }
-.f1nm4ucs8a13 { animation: f1nm4ucs8a13 114.8s infinite step-end; }
 @keyframes f1nm4ucs9a0 { 49.6%,53.5% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } }
 .f1nm4ucs9a0 { animation: f1nm4ucs9a0 114.8s infinite linear; }
 @keyframes f1nm4ucs9a1 { 49.6%,50.22% { fill: var(--bg); stroke: var(--border); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 50.23%,53.5% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } }
@@ -402,10 +370,6 @@ svg { --accent:#0074d9; --fg:#1c1e21; --muted:#606770; --bg:#ffffff; --surface:#
 .f1nm4ucs9p2 { animation: f1nm4ucs9p2 114.8s infinite step-end; }
 @keyframes f1nm4ucs9p3 { 0%,51.48% { opacity: 0 } 51.49%,52.1% { opacity: 1 } 52.11%,100% { opacity: 0 } }
 .f1nm4ucs9p3 { animation: f1nm4ucs9p3 114.8s infinite step-end; }
-@keyframes f1nm4ucs9a8 { 49.6%,53.5% { opacity: 1 } }
-.f1nm4ucs9a8 { animation: f1nm4ucs9a8 114.8s infinite step-end; }
-@keyframes f1nm4ucs9a9 { 49.6%,53.5% { opacity: 1 } }
-.f1nm4ucs9a9 { animation: f1nm4ucs9a9 114.8s infinite step-end; }
 .f1nm4ucback { fill: var(--accent); font-size: 14px; }
 .f1nm4ucpath { fill: var(--fg); font-size: 14px; }
 @keyframes f1nm4uct0 { 0% { opacity: 0 } 58.65% { opacity: 0 } 58.75% { opacity: 1 } 100% { opacity: 1 } }
@@ -619,8 +583,8 @@ svg { --accent:#0074d9; --fg:#1c1e21; --muted:#606770; --bg:#ffffff; --surface:#
 
 </g>
 
-<text x="401" y="186" opacity="0" class="steplabel f1nm4ucs1a8">Route a request</text>
-<g opacity="0" class="f1nm4ucs1a9"><text x="401" y="212" class="caption"></text></g>
+<text x="401" y="186" class="steplabel">Route a request</text>
+<g><text x="401" y="212" class="caption"></text></g>
 </g></g></g>
 <g class="f1nm4uct59"><g class="scene" id="s-auth"><text class="back f1nm4ucback" x="16" y="19">Back</text><text class="f1nm4ucpath" x="59.2" y="19">Gateway &gt; Sign in</text><g transform="translate(389 37)">
 <g transform="translate(51 0)">
@@ -649,8 +613,8 @@ svg { --accent:#0074d9; --fg:#1c1e21; --muted:#606770; --bg:#ffffff; --surface:#
 
 </g>
 
-<text x="160" y="498" opacity="0" class="steplabel f1nm4ucs2a12">Sign in the caller</text>
-<g opacity="0" class="f1nm4ucs2a13"><text x="160" y="524" class="caption"></text></g>
+<text x="160" y="498" class="steplabel">Sign in the caller</text>
+<g><text x="160" y="524" class="caption"></text></g>
 </g></g></g>
 <g class="f1nm4uct60"><g class="scene" id="s-cart"><text class="back f1nm4ucback" x="16" y="19">Back</text><text class="f1nm4ucpath" x="59.2" y="19">Cart</text><g transform="translate(138 226)">
 <g transform="translate(0 0)">
@@ -673,8 +637,8 @@ svg { --accent:#0074d9; --fg:#1c1e21; --muted:#606770; --bg:#ffffff; --surface:#
 
 </g>
 
-<text x="411" y="120" opacity="0" class="steplabel f1nm4ucs3a8">Add an item</text>
-<g opacity="0" class="f1nm4ucs3a9"><text x="411" y="146" class="caption"></text></g>
+<text x="411" y="120" class="steplabel">Add an item</text>
+<g><text x="411" y="146" class="caption"></text></g>
 </g></g></g>
 <g class="f1nm4uct61"><g class="scene" id="s-price"><text class="back f1nm4ucback" x="16" y="19">Back</text><text class="f1nm4ucpath" x="59.2" y="19">Cart &gt; Price the cart</text><g transform="translate(389 37)">
 <g transform="translate(54.6 0)">
@@ -703,8 +667,8 @@ svg { --accent:#0074d9; --fg:#1c1e21; --muted:#606770; --bg:#ffffff; --surface:#
 
 </g>
 
-<text x="160" y="498" opacity="0" class="steplabel f1nm4ucs4a12">Price the cart</text>
-<g opacity="0" class="f1nm4ucs4a13"><text x="160" y="524" class="caption"></text></g>
+<text x="160" y="498" class="steplabel">Price the cart</text>
+<g><text x="160" y="524" class="caption"></text></g>
 </g></g></g>
 <g class="f1nm4uct62"><g class="scene" id="s-orders"><text class="back f1nm4ucback" x="16" y="19">Back</text><text class="f1nm4ucpath" x="59.2" y="19">Orders</text><g transform="translate(0 226)">
 <g transform="translate(0 0)">
@@ -733,8 +697,8 @@ svg { --accent:#0074d9; --fg:#1c1e21; --muted:#606770; --bg:#ffffff; --surface:#
 
 </g>
 
-<text x="549" y="120" opacity="0" class="steplabel f1nm4ucs5a13">Place an order</text>
-<g opacity="0" class="f1nm4ucs5a14"><text x="549" y="146" class="caption"></text></g>
+<text x="549" y="120" class="steplabel">Place an order</text>
+<g><text x="549" y="146" class="caption"></text></g>
 </g></g></g>
 <g class="f1nm4uct63"><g class="scene" id="s-validate"><text class="back f1nm4ucback" x="16" y="19">Back</text><text class="f1nm4ucpath" x="59.2" y="19">Orders &gt; Check the cart</text><g transform="translate(389 37)">
 <g transform="translate(42.6 0)">
@@ -763,8 +727,8 @@ svg { --accent:#0074d9; --fg:#1c1e21; --muted:#606770; --bg:#ffffff; --surface:#
 
 </g>
 
-<text x="160" y="498" opacity="0" class="steplabel f1nm4ucs6a12">Check the cart</text>
-<g opacity="0" class="f1nm4ucs6a13"><text x="160" y="524" class="caption"></text></g>
+<text x="160" y="498" class="steplabel">Check the cart</text>
+<g><text x="160" y="524" class="caption"></text></g>
 </g></g></g>
 <g class="f1nm4uct64"><g class="scene" id="s-payments"><text class="back f1nm4ucback" x="16" y="19">Back</text><text class="f1nm4ucpath" x="59.2" y="19">Payments</text><g transform="translate(389 70)">
 <g transform="translate(58.3 0)">
@@ -790,8 +754,8 @@ svg { --accent:#0074d9; --fg:#1c1e21; --muted:#606770; --bg:#ffffff; --surface:#
 
 </g>
 
-<text x="160" y="432" opacity="0" class="steplabel f1nm4ucs7a10">Take a payment</text>
-<g opacity="0" class="f1nm4ucs7a11"><text x="160" y="458" class="caption"></text></g>
+<text x="160" y="432" class="steplabel">Take a payment</text>
+<g><text x="160" y="458" class="caption"></text></g>
 </g></g></g>
 <g class="f1nm4uct65"><g class="scene" id="s-charge-card"><text class="back f1nm4ucback" x="16" y="19">Back</text><text class="f1nm4ucpath" x="59.2" y="19">Payments &gt; Charge the card</text><g transform="translate(389 28)">
 <g transform="translate(41 0)">
@@ -820,8 +784,8 @@ svg { --accent:#0074d9; --fg:#1c1e21; --muted:#606770; --bg:#ffffff; --surface:#
 
 </g>
 
-<text x="160" y="516" opacity="0" class="steplabel f1nm4ucs8a12">Charge the card</text>
-<g opacity="0" class="f1nm4ucs8a13"><text x="160" y="542" class="caption"></text></g>
+<text x="160" y="516" class="steplabel">Charge the card</text>
+<g><text x="160" y="542" class="caption"></text></g>
 </g></g></g>
 <g class="f1nm4uct66"><g class="scene" id="s-mail"><text class="back f1nm4ucback" x="16" y="19">Back</text><text class="f1nm4ucpath" x="59.2" y="19">Mail</text><g transform="translate(389 103)">
 <g transform="translate(62.9 0)">
@@ -844,8 +808,8 @@ svg { --accent:#0074d9; --fg:#1c1e21; --muted:#606770; --bg:#ffffff; --surface:#
 
 </g>
 
-<text x="160" y="366" opacity="0" class="steplabel f1nm4ucs9a8">Send the receipt</text>
-<g opacity="0" class="f1nm4ucs9a9"><text x="160" y="392" class="caption"></text></g>
+<text x="160" y="366" class="steplabel">Send the receipt</text>
+<g><text x="160" y="392" class="caption"></text></g>
 </g></g></g>
 <g pointer-events="none"><rect class="open-frame f1nm4uct67" data-for="gateway" x="148" y="193" width="802" height="170" rx="10" fill="none" stroke="var(--border)" vector-effect="non-scaling-stroke" style="transform-box: view-box; transform-origin: 148px 193px"/><rect class="open-frame f1nm4uct68" data-for="auth" x="440" y="37" width="218" height="482" rx="10" fill="none" stroke="var(--border)" vector-effect="non-scaling-stroke" style="transform-box: view-box; transform-origin: 440px 37px"/><rect class="open-frame f1nm4uct69" data-for="cart" x="138" y="226" width="822" height="104" rx="10" fill="none" stroke="var(--border)" vector-effect="non-scaling-stroke" style="transform-box: view-box; transform-origin: 138px 226px"/><rect class="open-frame f1nm4uct70" data-for="price" x="443.6" y="37" width="210.9" height="482" rx="10" fill="none" stroke="var(--border)" vector-effect="non-scaling-stroke" style="transform-box: view-box; transform-origin: 443.6px 37px"/><rect class="open-frame f1nm4uct71" data-for="orders" x="0" y="226" width="1098" height="104" rx="10" fill="none" stroke="var(--border)" vector-effect="non-scaling-stroke" style="transform-box: view-box; transform-origin: 0px 226px"/><rect class="open-frame f1nm4uct72" data-for="validate" x="431.6" y="37" width="234.8" height="482" rx="10" fill="none" stroke="var(--border)" vector-effect="non-scaling-stroke" style="transform-box: view-box; transform-origin: 431.6px 37px"/><rect class="open-frame f1nm4uct73" data-for="payments" x="447.3" y="70" width="203.5" height="416" rx="10" fill="none" stroke="var(--border)" vector-effect="non-scaling-stroke" style="transform-box: view-box; transform-origin: 447.3px 70px"/><rect class="open-frame f1nm4uct74" data-for="charge-card" x="430" y="28" width="238" height="500" rx="10" fill="none" stroke="var(--border)" vector-effect="non-scaling-stroke" style="transform-box: view-box; transform-origin: 430px 28px"/><rect class="open-frame f1nm4uct75" data-for="mail" x="452" y="103" width="194.1" height="350" rx="10" fill="none" stroke="var(--border)" vector-effect="non-scaling-stroke" style="transform-box: view-box; transform-origin: 452px 103px"/></g>
 </svg>

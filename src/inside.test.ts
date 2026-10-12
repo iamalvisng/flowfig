@@ -422,6 +422,12 @@ test('the player and the SVG place each box of each level within 1 px', { skip }
       const near = (a: number[], b: number[]) => a.every((v, i) => Math.abs(v - b[i]) <= 1);
       assert.ok(near(fit.frame, fit.parts), `${owner.id}: frame ${fit.frame.join()}, parts plus padding ${fit.parts.join()}`);
       assert.ok(near(fit.at, fit.mid), `${owner.id}: center ${fit.at.join()}, canvas center ${fit.mid.join()}`);
+      const label = String(owner.inside!.steps![0].label);
+      const tab = await page.ev(`(() => {
+        const t = [...document.querySelectorAll('[role="tab"]')].find((e) => e.textContent.trim() === ${JSON.stringify(label)});
+        return t && ${SHOWN}(t) > 0.69 ? t.getBoundingClientRect().top : null;
+      })()`);
+      assert.ok(tab != null && tab > fit.frame[1] + fit.frame[3], `${owner.id}: the step label "${label}" shows under the map`);
     };
     const back = (to: string) => page.ev(`${BACK}.click()`).then(() => page.until(shown(box(to)), `back shows ${to}`));
     for (const owner of owners(shopFig.layout)) {

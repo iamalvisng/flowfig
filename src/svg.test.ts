@@ -13,6 +13,7 @@ import {
   nodes,
   lanePlan,
   isGroup,
+  str,
   type FigGroup,
   type FigNode,
   type FlowProps,
@@ -1650,6 +1651,10 @@ test('each level of a figure with parts sits in the middle of the canvas, and it
       near(frame, [x0 - 24, y0 - 24, x1 - x0 + 48, y1 - y0 + 48]),
       `${l.line}: frame ${frame.join()}, parts ${[x0, y0, x1, y1].join()}`,
     );
+    const label = r.svg.split('<g class="scene"')[i + 1].match(/<text x="[\d.]+" y="([\d.]+)"([^>]*)class="steplabel[^>]*>([^<]*)/)!;
+    assert.equal(label[3], str(l.props.steps![0].label));
+    assert.ok(!label[2].includes('opacity="0"'), `${l.line}: the step label shows for as long as the level shows`);
+    assert.ok(y + Number(label[1]) > frame[1] + frame[3], `${l.line}: the step label sits under the frame`);
   });
 });
 
