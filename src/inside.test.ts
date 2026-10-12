@@ -20,6 +20,7 @@ import { createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Flow } from '/dist/index.js';
 import shop from '/figures/inside-shop.ts';
+window.plain = () => createRoot(document.body.appendChild(document.createElement('div'))).render(createElement(Flow, { layout: { children: [{ id: 'solo', label: 'Solo' }] }, edges: [] }));
 window.show = (o) => createRoot(document.getElementById('root')).render(createElement(Flow, { ...shop.props, ...o }));
 `;
 
@@ -225,6 +226,13 @@ test('with reduced motion, open and back change the view in one frame and no ani
   await withReactPage(entry, async (page) => {
     await page.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
     await show(page, 1400, { autoplay: false });
+    await page.ev('plain()');
+    await page.until(`!!${box('solo')}`, 'the plain figure renders');
+    assert.notEqual(
+      await page.ev(`getComputedStyle(${box('solo')}).transitionDuration`),
+      '0s',
+      'a figure with no parts keeps its transitions',
+    );
     for (const [what, go, done] of [
       ['open', () => page.ev(`${box('orders')}.click()`), allShown(ORDERS)],
       ['back', () => press(page.send, 'Escape'), ROOT],

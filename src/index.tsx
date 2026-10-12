@@ -227,6 +227,7 @@ export function Flow(props: FlowProps) {
     <figure
       ref={figure}
       className="flowfig"
+      data-inside={level ? '' : undefined}
       aria-label={alt.title}
       aria-describedby={descId}
       style={{
@@ -1452,7 +1453,9 @@ function FlowBody({
           // The 2 px active border takes 1 px of padding, so the box size stays.
           `.${ACTIVE}:not([data-diamond]){--ff-b:1px;border-width:2px!important;background:color-mix(in srgb, ${hue} 10%, ${v('surface')})!important;box-shadow:${glow}!important;border-color:${hue}!important}` +
           `.${ACTIVE} polygon{fill:color-mix(in srgb, ${hue} 10%, ${v('surface')});stroke:${hue};stroke-width:2px}` +
-          (level ? '@media (prefers-reduced-motion: reduce){.flowfig *{transition:none!important;animation:none!important}}' : '')}
+          (level
+            ? '@media (prefers-reduced-motion: reduce){.flowfig[data-inside] *{transition:none!important;animation:none!important}}'
+            : '')}
       </style>
       {level && (
         <div
