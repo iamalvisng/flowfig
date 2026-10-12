@@ -269,6 +269,7 @@ export class FlowfigExplain extends Base {
   #timer?: ReturnType<typeof setTimeout>;
   #shown?: Form;
   #seeked?: string;
+  #played?: string;
   #svg?: SVGSVGElement;
   #g?: Guide;
   #sides?: Side[];
@@ -402,6 +403,7 @@ export class FlowfigExplain extends Base {
 
   #run(label: string) {
     this.#ends.forEach(clearTimeout);
+    this.#played = label;
     for (const t of this.#tabs) t.setAttribute('aria-pressed', String(t.textContent === label));
     const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
     this.#ends = (this.#sides ?? []).map((s) => {
@@ -429,9 +431,12 @@ export class FlowfigExplain extends Base {
 
   #stepBy(d: number) {
     const labels = this.#labels();
-    const i = labels.indexOf(this.#all[this.#at]?.step ?? '');
+    const i = labels.indexOf((this.#sides ? this.#played : this.#all[this.#at]?.step) ?? '');
     const next = labels[Math.min(Math.max(0, i + d), labels.length - 1)];
-    if (next !== undefined) this.show(next);
+    if (next !== undefined) {
+      if (this.#sides) this.#pick(next);
+      else this.show(next);
+    }
   }
 
   #key = (e: KeyboardEvent) => {
@@ -527,6 +532,7 @@ export class FlowfigExplain extends Base {
       this.#svg = undefined;
       this.#g = undefined;
       this.#sides = undefined;
+      this.#played = undefined;
       this.#root.classList.toggle('ff-g', form === 'guide');
       this.#seeked = undefined;
       this.#tabs = [];
@@ -585,7 +591,9 @@ export class FlowfigExplain extends Base {
             if (c.kind === 'step') return `${op} step: ${c.id}`;
             if (c.kind === 'edge') return `${op} link: ${c.id.split('->').map(name).join(' → ')}`;
             const [from, to] = [was.get(c.id)?.[1], now.get(c.id)?.[1]];
-            return c.op === 'changed' && from !== to ? `Moved: ${name(c.id)}, from ${from} to ${to}` : `${op}: ${name(c.id)}`;
+            return c.op === 'changed' && from !== to
+              ? `Moved: ${name(c.id)}, ${[from && `from ${from}`, to && `to ${to}`].filter(Boolean).join(' ')}`
+              : `${op}: ${name(c.id)}`;
           });
         const verdict = document.createElement('slot');
         verdict.name = 'verdict';
