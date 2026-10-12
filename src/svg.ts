@@ -1194,8 +1194,9 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
     eps = plan.ms / 10000;
   const { fade, grow, stagger, hide, shrink } = OPEN_MS;
   const tour: string[] = [];
+  const uid = `f${([...JSON.stringify(spec)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) | 0, 7) >>> 0).toString(36)}`;
   const track = (pts: [number, string, string?][]) => {
-    const name = `t${tour.length}`;
+    const name = `${uid}t${tour.length}`;
     const kf = pts.map(([t, v, ease]) => `${pct(t / plan.ms)} { ${v}${ease ? `; animation-timing-function: ${ease}` : ''} }`).join(' ');
     tour.push(`@keyframes ${name} { ${kf} }\n.${name} { animation: ${name} ${n2(total)}s infinite linear; }`);
     return name;
@@ -1228,7 +1229,7 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
         }),
       );
     const times = o ? o.times : plan.times;
-    return { s, o, props, d: draw(props, rest, { prefix: `s${i}`, ...at(s), fades, times, total }) };
+    return { s, o, props, d: draw(props, rest, { prefix: `${uid}s${i}`, ...at(s), fades, times, total }) };
   });
   const W = Math.max(...drawn.map((x) => x.d.W)),
     H = Math.max(...drawn.map((x) => x.d.H)) + BAND;
@@ -1248,7 +1249,7 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
         ]
       : [[0, 1], ...dips(s.path), [plan.ms, 1]];
     const band = o
-      ? `<text class="back" x="16" y="19">Back</text><text class="path" x="${n2(16 + textWidth('Back', 14) + 12)}" y="19">${esc(s.line)}</text>`
+      ? `<text class="back ${uid}back" x="16" y="19">Back</text><text class="${uid}path" x="${n2(16 + textWidth('Back', 14) + 12)}" y="19">${esc(s.line)}</text>`
       : '';
     const area = d.scene.area!;
     const hits = !script
@@ -1299,7 +1300,7 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
   const root = drawn[0].d;
   const css = [
     ...drawn.map((x) => x.d.css),
-    '.back { fill: var(--accent); font-size: 14px; }\n.path { fill: var(--fg); font-size: 14px; }',
+    `.${uid}back { fill: var(--accent); font-size: 14px; }\n.${uid}path { fill: var(--fg); font-size: 14px; }`,
     ...tour,
   ];
   const body = `${groups.join('\n')}\n<g pointer-events="none">${frames.join('')}</g>\n${script ? `<script><![CDATA[${SCRIPT}]]></script>\n` : ''}`;

@@ -355,11 +355,19 @@ test('with reduced motion, a standalone SVG shows the hold frame of the loop at 
   }
 });
 
-test('two figures on one page: a click opens a box in that figure only', { skip }, async () => {
+test('two different figures with parts on one page: a click opens a box in the first figure only', { skip }, async () => {
   const dir = mkdtempSync(join(tmpdir(), 'inside-'));
   try {
-    const svg = toSvg(shopFig, { script: true });
-    writeFileSync(join(dir, 'two.html'), `<body style="margin:0">${svg}${svg}</body>`);
+    const slower = { ...shopFig, steps: shopFig.steps!.slice(0, 1) };
+    const svg = toSvg(shopFig, { script: true }),
+      other = toSvg(slower, { script: true });
+    const names = (x: string) => new Set([...x.matchAll(/@keyframes ([\w-]+)/g)].map((m) => m[1]));
+    assert.deepEqual(
+      [...names(svg)].filter((n) => names(other).has(n)),
+      [],
+      'the two figures share no animation name',
+    );
+    writeFileSync(join(dir, 'two.html'), `<body style="margin:0">${svg}${other}</body>`);
     await withReactPage('', async (page) => {
       await page.open(pathToFileURL(join(dir, 'two.html')).href, 1600);
       const fig = (i: number, sel: string) => `document.querySelectorAll('body > svg')[${i}].querySelector('${sel}')`;
