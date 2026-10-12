@@ -282,6 +282,22 @@ test('a re-export gives missing-symbol if no target defines the name, and no err
   );
 });
 
+test('two boxes with one label keep their parts and findings apart in verify', () => {
+  withRepo({ 'src/a.ts': 'export function a() {}\n' }, (root) => {
+    const svc = (id: string) => ({
+      id,
+      label: 'Svc',
+      inside: { layout: { children: [{ id: `${id}-p`, label: 'P', source: 'src/a.ts#gone' }] } },
+    });
+    const r = verifyReport({ layout: { children: [svc('s1'), svc('s2')] }, edges: [] }, { root });
+    assert.deepEqual(
+      r.coverage.levels?.map((l) => l.coverage.boxes),
+      [1, 1],
+    );
+    assert.equal(r.findings.filter((f) => f.rule === 'missing-symbol').length, 2);
+  });
+});
+
 test('an inside edge from a port is found, not found or unsure by the call in the neighbor source', () => {
   const files = {
     'src/validate.ts': 'export class Validator {\n  check() {}\n}\n',

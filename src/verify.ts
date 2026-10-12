@@ -99,7 +99,7 @@ export function verifyReport(
   const levels: { path: string; coverage: Coverage }[] = [];
   for (const scene of scenes(fig)) {
     const level = emptyCoverage();
-    for (const l of all.filter((x) => (x.scene ?? '') === scene.line)) {
+    for (const l of all.filter((x) => (x.level ?? '') === scene.path.join('>'))) {
       const full = resolve(root, l.path);
       if (!files.has(full)) files.set(full, outside(root, l.path) ? null : read(full));
       const text = files.get(full);

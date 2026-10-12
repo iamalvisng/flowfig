@@ -831,6 +831,15 @@ test('duplicate-id fires on two parts or two edges with one id inside one box', 
   }
 });
 
+test('duplicate-id fires on one part id in two boxes with one label', () => {
+  const svc = (id: string): FigNode => ({ id, label: 'Svc', inside: { layout: { children: [{ id: 'a', label: 'A', source: 'a.ts' }] } } });
+  const f = checkSpec({ layout: { children: [svc('s1'), svc('s2')] }, edges: [] }).filter((x) => x.rule === 'duplicate-id');
+  assert.deepEqual(
+    f.map((x) => x.ids),
+    [['a']],
+  );
+});
+
 test('a bad source on a level 3 part gives one finding with the full level path', () => {
   const bad = edit(shopFig, 'read-token', (n) => (n.source = 'auth.ts#read token'));
   const f = checkSpec(bad).filter((x) => x.rule === 'bad-source');
