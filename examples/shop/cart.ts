@@ -1,7 +1,7 @@
 import { loadRules } from './pricing.ts';
 
 export function updateCart(items: number) {
-  return { items };
+  return findCart(items);
 }
 
 export function findCart(id: number) {
