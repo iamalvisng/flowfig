@@ -141,4 +141,8 @@ test('--every snaps to the frame grid and names the phase at each time', () => {
     [24, 'hold'],
     [26, 'hold'],
   ]);
+  const short = kinds({ ...ONE, speed: 3000, steps: [{ label: 'w', flow: [{ edges: 'w', ms: 500 }] }] }, { fps: 8, every: 300 }).map(
+    ([, k]) => k,
+  );
+  assert.equal(short.lastIndexOf('move'), short.indexOf('hold') - 1, String(short));
 });

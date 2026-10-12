@@ -51,7 +51,7 @@ export function keyFrames(fig: FlowProps, o: { fps: number; every?: number; step
       if (Math.round((k * o.every * f) / 1000) >= frames) break;
       const t = (k * o.every) / 1000;
       const at = flat.findLast((x) => x.t0 <= t) ?? flat[0];
-      const kind = at.hop && t < at.t1 ? 'move' : t < at.tEnd ? 'read' : 'hold';
+      const kind = at.hop && t < Math.min(at.t1, at.tEnd) ? 'move' : t < at.tEnd ? 'read' : 'hold';
       add(Math.round((k * o.every * f) / 1000), kind, at.si, at.bi, hopText(at.si, at.bi), said(at.si, at.bi));
     }
     return { tiles, frames };
