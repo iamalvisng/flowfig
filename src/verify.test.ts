@@ -281,3 +281,40 @@ test('a re-export gives missing-symbol if no target defines the name, and no err
     },
   );
 });
+
+test('an inside edge from a port is found, not found or unsure by the call in the neighbor source', () => {
+  const files = {
+    'src/validate.ts': 'export class Validator {\n  check() {}\n}\n',
+    'src/orders.ts': 'export function createOrder() {}\n',
+    'src/found.ts': "import { Validator } from './validate.ts';\nexport function checkout(v: Validator) { v.check(); }\n",
+    'src/missing.ts': 'export function checkout() {}\n',
+    'src/dynamic.ts': 'export function checkout(v: any) { v.check(); }\n',
+  };
+  withRepo(files, (root) => {
+    const verdict = (gateway: string) => {
+      const fig: FlowProps = {
+        layout: {
+          label: 'Shop',
+          children: [
+            { id: 'gateway', label: 'Gateway', source: `src/${gateway}.ts#checkout` },
+            {
+              id: 'orders',
+              label: 'Orders',
+              source: 'src/orders.ts#createOrder',
+              inside: {
+                layout: { children: [{ id: 'validate', label: 'Check the cart', source: 'src/validate.ts#Validator.check' }] },
+                edges: [{ from: 'gateway', to: 'validate' }],
+              },
+            },
+          ],
+        },
+        edges: [{ from: 'gateway', to: 'orders' }],
+      };
+      const level = verifyReport(fig, { root }).coverage.levels.find((l) => l.path === 'Shop > Orders')!.coverage;
+      return { found: level.found, notFound: level.notFound, unsure: level.unsure };
+    };
+    assert.deepEqual(verdict('found'), { found: 1, notFound: 0, unsure: 0 });
+    assert.deepEqual(verdict('missing'), { found: 0, notFound: 1, unsure: 0 });
+    assert.deepEqual(verdict('dynamic'), { found: 0, notFound: 0, unsure: 1 });
+  });
+});

@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { handle, TOOLS } from './mcp.ts';
 import { GUIDE, TOPICS } from './guide.ts';
 import { VERSION } from './version.ts';
+import shop from '../figures/inside-shop.ts';
 
 const cli = join(dirname(dirname(fileURLToPath(import.meta.url))), 'dist', 'cli.js');
 const props = {
@@ -230,6 +231,21 @@ test('flowfig mcp loses no line when the reader is slow', async () => {
   child.stdout.resume();
   await new Promise((r) => child.on('close', r));
   assert.equal(out.trimEnd().split('\n').length, 50);
+});
+
+test('the render tool prints the same lines as the CLI render for a figure with parts', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'mcp-'));
+  try {
+    const out = join(dir, 'shop.svg');
+    const wrapper = join(dirname(dirname(fileURLToPath(import.meta.url))), 'scripts', 'figure-svg.mjs');
+    const r = spawnSync('node', [wrapper, 'inside-shop', out], { encoding: 'utf8' });
+    assert.equal(r.status, 0, r.stderr);
+    const lines = text(call('render', { spec: shop.props, out }));
+    assert.match(lines, /^\[Shop > Orders\]/m);
+    assert.equal(lines, (r.stderr + r.stdout).trimEnd());
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('the CLI and the MCP server report the package.json version', () => {

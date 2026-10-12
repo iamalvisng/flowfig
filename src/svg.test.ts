@@ -12,6 +12,7 @@ import {
   beatMs,
   nodes,
   lanePlan,
+  isGroup,
   type FigGroup,
   type FigNode,
   type FlowProps,
@@ -19,6 +20,9 @@ import {
 import type { Pt } from './geometry.ts';
 import { layoutRail, railState, RAIL } from './rail.ts';
 import { checkScene } from './check.ts';
+import { readdirSync, readFileSync } from 'node:fs';
+import { svgWithSpec, specOf } from './load.ts';
+import shop from '../figures/inside-shop.ts';
 
 const fig: FlowProps = {
   speed: 1000,
@@ -1562,4 +1566,48 @@ test('a long step label and a diff legend stay inside a narrow figure', () => {
     ),
   ];
   assert.ok(xs.length === 3 && Number(xs[0][1]) >= 0);
+});
+
+const shopFig = shop.props as FlowProps;
+const owners = (g: FigGroup): FigNode[] =>
+  g.children.flatMap((c) => (isGroup(c) ? owners(c) : c.inside ? [c, ...owners(c.inside.layout)] : []));
+
+test('in each level no two boxes overlap, in-ports sit before every part and out-ports after every part', () => {
+  const before = (a: { x: number; y: number; w: number; h: number }, b: typeof a) => a.x + a.w <= b.x || a.y + a.h <= b.y;
+  for (const owner of owners(shopFig.layout)) {
+    const parts = new Set(nodes(owner.inside!.layout).map((n) => n.id));
+    const edges = owner.inside!.edges ?? [];
+    const boxes = render(shopFig, { scene: owner.id }).scene.boxes;
+    const rect = (id: string) => boxes.find((b) => b.id === id)!.rect;
+    boxes.forEach((a, i) =>
+      boxes
+        .slice(i + 1)
+        .forEach((b) => assert.ok(before(a.rect, b.rect) || before(b.rect, a.rect), `${owner.id}: ${a.id} overlaps ${b.id}`)),
+    );
+    for (const e of edges) {
+      if (!parts.has(e.from)) for (const p of parts) assert.ok(before(rect(e.from), rect(p)), `${owner.id}: in-port ${e.from} before ${p}`);
+      if (!parts.has(e.to)) for (const p of parts) assert.ok(before(rect(p), rect(e.to)), `${owner.id}: out-port ${e.to} after ${p}`);
+    }
+  }
+});
+
+test('each figure with no inside renders the same bytes as its committed SVG in docs/', async () => {
+  const docs = new URL('../docs/', import.meta.url);
+  for (const name of readdirSync(docs).filter((f) => f.endsWith('.svg'))) {
+    const svg = readFileSync(new URL(name, docs), 'utf8');
+    if (!svg.includes('<metadata id="figure-spec">')) continue;
+    assert.equal(svgWithSpec(JSON.parse(specOf(svg, name)).props), svg, name);
+  }
+  const figures = new URL('../figures/', import.meta.url);
+  for (const name of readdirSync(figures)) {
+    const fig = (await import(new URL(name, figures).href)).default;
+    if (owners(fig.props.layout).length) continue;
+    assert.equal(svgWithSpec(fig.props), readFileSync(new URL(name.replace(/\.ts$/, '.svg'), docs), 'utf8'), name);
+  }
+});
+
+test('two renders of a figure with parts give the same bytes', () => {
+  const first = toSvg(shopFig, { script: true });
+  assert.match(first, /<g class="scene" id="s-orders"/);
+  assert.equal(toSvg(shopFig, { script: true }), first);
 });

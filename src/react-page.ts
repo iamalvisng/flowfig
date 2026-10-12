@@ -13,6 +13,7 @@ export type Page = {
   ev: (expression: string) => Promise<any>;
   until: (expression: string, what: string) => Promise<void>;
   load: (width: number) => Promise<void>;
+  open: (url: string, width: number) => Promise<void>;
 };
 
 export async function withReactPage(entry: string, run: (page: Page) => Promise<void>): Promise<void> {
@@ -51,7 +52,20 @@ for (const m of ['error', 'warn']) {
       const { frameTree } = await send('Page.getFrameTree');
       await send('Page.setDocumentContent', { frameId: frameTree.frame.id, html });
     };
-    await run({ send, ev, until, load });
+    let watched = false;
+    const open = async (url: string, width: number) => {
+      await noErrors();
+      await send('Emulation.setDeviceMetricsOverride', { width, height: 844, deviceScaleFactor: 1, mobile: false });
+      if (!watched) {
+        watched = true;
+        await send('Page.enable');
+        await send('Page.addScriptToEvaluateOnNewDocument', { source: capture });
+      }
+      const loaded = cdp.once('Page.loadEventFired', sessionId);
+      await send('Page.navigate', { url });
+      await loaded;
+    };
+    await run({ send, ev, until, load, open });
     await noErrors();
   } finally {
     await close();

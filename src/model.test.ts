@@ -21,8 +21,15 @@ import {
   beatMs,
   groupGap,
   toBeat,
+  beatTimes,
+  readMs,
+  nodes,
+  isGroup,
+  str,
 } from './model.ts';
 import type { FigBeat, FigGroup, FigNode, FlowProps } from './model.ts';
+import * as model from './model.ts';
+import shop from '../figures/inside-shop.ts';
 
 test('each documented way to write a beat gives the same hops', () => {
   assert.deepEqual(toBeat('a->b'), { hops: [{ edge: 'a->b', back: false }] });
@@ -437,4 +444,85 @@ test('the narrow-mode spec key does not throw on a circular label or a ref to a 
   assert.notEqual(specKey(...spec(span('Pay'))), specKey(...spec(span('Ship'))));
   assert.notEqual(specKey(...spec(10n)), specKey(...spec('10')));
   assert.equal(specKey(...spec(createElement('b', null, 10n))), specKey(...spec(createElement('b', null, 10n))));
+});
+
+const { scenes, tourPlan } = model;
+const shopFig = shop.props as FlowProps;
+const find = (g: FigGroup, id: string): FigNode | undefined => {
+  for (const c of g.children) {
+    const n = isGroup(c) ? find(c, id) : c.id === id ? c : c.inside && find(c.inside.layout, id);
+    if (n) return n;
+  }
+};
+const sceneOf = (fig: FlowProps, path: string) => scenes(fig).find((s) => s.path.join(' > ') === path)!;
+const ports = (fig: FlowProps, path: string) => {
+  const parts = new Set(nodes(find(fig.layout, path.split(' > ').at(-1)!)!.inside!.layout).map((n) => n.id));
+  return nodes(sceneOf(fig, path).props.layout)
+    .filter((n) => !parts.has(n.id))
+    .map((n) => ({ id: n.id, label: str(n.label), source: n.source }));
+};
+
+test('an inside edge from a neighbor gives one port that takes the neighbor label and source; edges both ways give one port', () => {
+  assert.deepEqual(ports(shopFig, 'orders'), [
+    { id: 'gateway', label: 'in: from Gateway', source: 'examples/shop/gateway.ts#checkout' },
+    { id: 'payments', label: 'out: to Payments', source: 'examples/shop/payments.ts#charge' },
+  ]);
+  const both = structuredClone(shopFig);
+  both.edges.push({ from: 'orders', to: 'gateway' });
+  find(both.layout, 'orders')!.inside!.edges!.push({ from: 'publish', to: 'gateway' });
+  assert.deepEqual(
+    ports(both, 'orders').filter((p) => p.id === 'gateway'),
+    [{ id: 'gateway', label: 'in and out: Gateway', source: 'examples/shop/gateway.ts#checkout' }],
+  );
+});
+
+test('the tour opens each box one time, in arrival order then layout order, and lasts the root loop plus each open', () => {
+  const opens = (fig: FlowProps) => tourPlan(fig).opens.map((o) => o.path.join(' > '));
+  assert.deepEqual(opens(shopFig), [
+    'gateway',
+    'gateway > auth',
+    'cart',
+    'cart > price',
+    'orders',
+    'orders > validate',
+    'payments',
+    'payments > charge-card',
+    'mail',
+  ]);
+  assert.deepEqual(opens({ ...shopFig, steps: [shopFig.steps![1]] }), [
+    'gateway',
+    'gateway > auth',
+    'orders',
+    'orders > validate',
+    'payments',
+    'payments > charge-card',
+    'mail',
+    'cart',
+    'cart > price',
+  ]);
+  const speed = shopFig.speed ?? 900;
+  const loopMs = (steps: FlowProps['steps']) =>
+    beatTimes(
+      steps!.map((s) => s.flow.map(toBeat)),
+      speed,
+    ).ends.at(-1)! * 1000;
+  const label = (path: string[]) => ['Shop', ...path.map((id) => str(find(shopFig.layout, id)!.label))];
+  let want = loopMs(shopFig.steps);
+  for (const { path } of tourPlan(shopFig).opens) {
+    const owner = find(shopFig.layout, path.at(-1)!)!;
+    const items = nodes(sceneOf(shopFig, path.join(' > ')).props.layout);
+    const portLabels = ports(shopFig, path.join(' > ')).map((p) => p.label);
+    want +=
+      readMs(str(owner.label)) +
+      120 +
+      360 +
+      50 * (items.length - 1) +
+      readMs([label(path).join(' > '), ...portLabels].join(' ')) +
+      loopMs(owner.inside!.steps!.slice(0, 1)) +
+      readMs(`back to ${label(path).at(-2)}`) +
+      120 +
+      300 +
+      120;
+  }
+  assert.ok(Math.abs(tourPlan(shopFig).ms - want) < 1, `tour ${tourPlan(shopFig).ms} ms, plan sum ${want} ms`);
 });
