@@ -210,6 +210,7 @@ test(
 test('during the open only the border moves, and the ports then the parts appear in flow order 40 to 60 ms apart', { skip }, async () => {
   await withReactPage(entry, async (page) => {
     await show(page, 1400, { autoplay: false });
+    await page.until(`!document.getAnimations().some((a) => a.playState === 'running')`, 'the first caption settles');
     await page.ev(RECORD);
     await openOrders(page);
     await sleep(300);
