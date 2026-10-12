@@ -1,13 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { findBrowser } from './browser.ts';
 import { delays, encodeGif, type GifFrame } from './gif.ts';
-import type { Image } from './png.ts';
+import { decodePng, type Image } from './png.ts';
 
 function lzwDecode(data: number[], minSize: number): number[] {
   const clear = 1 << minSize,
@@ -326,6 +326,106 @@ test('gif --mp4 writes the MP4 with ffmpeg, and only the GIF without ffmpeg', { 
     assert.equal(r.status, 0, r.stderr);
     assert.match(r.stdout, /one\.gif — 7 frames, .*\n.*one\.mp4 — 7 frames, /);
     assert.ok(existsSync(join(dir, 'one.mp4')));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+const frames = (args: string[]) => spawnSync(process.execPath, [cli, 'frames', ...args], { encoding: 'utf8' });
+const checkout = (dir: string) => {
+  const svg = join(dir, 'checkout.svg');
+  execFileSync(process.execPath, [cli, 'checkout', svg, '--no-check']);
+  return svg;
+};
+const tileLines = (stdout: string) => stdout.split('\n').filter((l) => /^#\d+ /.test(l));
+const fileLine = /(\S+) — (\d+) tiles of (\d+) frames at (\d+) fps, (\d+) x (\d+) grid, (\d+) x (\d+) px, [\d.]+ MB\n$/;
+
+test('frames on checkout writes one PNG with 17 tiles, 17 tile lines and the file line', { skip }, () => {
+  const dir = mkdtempSync(join(tmpdir(), 'frames-e2e-'));
+  try {
+    const r = frames([checkout(dir)]);
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(tileLines(r.stdout).length, 17);
+    assert.match(r.stdout, /checkout-frames\.png — 17 tiles of 318 frames at 20 fps, /);
+    assert.match(r.stdout, fileLine);
+    assert.deepEqual([...readFileSync(join(dir, 'checkout-frames.png')).subarray(1, 4)], [0x50, 0x4e, 0x47]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('the sheet long edge is 1568 px or less, and the sheet size matches the file line', { skip }, () => {
+  const dir = mkdtempSync(join(tmpdir(), 'frames-e2e-'));
+  try {
+    const r = frames([checkout(dir)]);
+    assert.equal(r.status, 0, r.stderr);
+    const [, , , , , , , w, h] = fileLine.exec(r.stdout)!;
+    const png = readFileSync(join(dir, 'checkout-frames.png'));
+    const size = [png.readUInt32BE(16), png.readUInt32BE(20)];
+    assert.deepEqual(size, [Number(w), Number(h)]);
+    assert.ok(Math.max(...size) <= 1568, size.join(' x '));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('two runs on checkout give the same PNG bytes', { skip }, () => {
+  const dir = mkdtempSync(join(tmpdir(), 'frames-e2e-'));
+  try {
+    const svg = checkout(dir);
+    assert.equal(frames([svg, join(dir, 'a.png')]).status, 0);
+    assert.equal(frames([svg, join(dir, 'b.png')]).status, 0);
+    assert.ok(readFileSync(join(dir, 'a.png')).equals(readFileSync(join(dir, 'b.png'))), 'the two sheets differ');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('frames --dark gives a dark sheet; the default is light', { skip }, () => {
+  const dir = mkdtempSync(join(tmpdir(), 'frames-e2e-'));
+  try {
+    const svg = render(dir, 'one', ONE);
+    assert.equal(frames([svg, join(dir, 'light.png')]).status, 0);
+    assert.equal(frames([svg, join(dir, 'dark.png'), '--dark']).status, 0);
+    const corner = (file: string) => [...decodePng(readFileSync(join(dir, file))).data.subarray(0, 3)];
+    const sum = (c: number[]) => c[0] + c[1] + c[2];
+    assert.ok(sum(corner('light.png')) > sum(corner('dark.png')) + 300, `${corner('light.png')} vs ${corner('dark.png')}`);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('frames --step 2 writes checkout-step2-frames.png with frame numbers from 0', { skip }, () => {
+  const dir = mkdtempSync(join(tmpdir(), 'frames-e2e-'));
+  try {
+    const r = frames([checkout(dir), '--step', '2']);
+    assert.equal(r.status, 0, r.stderr);
+    assert.ok(existsSync(join(dir, 'checkout-step2-frames.png')));
+    assert.equal(existsSync(join(dir, 'checkout-frames.png')), false);
+    const loop = Number(fileLine.exec(r.stdout)![3]);
+    const numbers = tileLines(r.stdout).map((l) => Number(/^#(\d+)/.exec(l)![1]));
+    assert.ok(loop < 318, `loop ${loop}`);
+    assert.ok(numbers[0] < 20 && Math.max(...numbers) < loop, `${numbers.join(' ')} of ${loop}`);
+    assert.ok(
+      tileLines(r.stdout).every((l) => /\bstep 2\b/.test(l)),
+      r.stdout,
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('an SVG whose loop does not match its spec exits 1 with the render-again message', { skip }, () => {
+  const dir = mkdtempSync(join(tmpdir(), 'frames-e2e-'));
+  try {
+    const svg = render(dir, 'one', ONE);
+    const text = readFileSync(svg, 'utf8');
+    const loop = /animation: \S+ ([\d.]+)s infinite/.exec(text)![1];
+    writeFileSync(svg, text.replaceAll(`${loop}s`, `${(Number(loop) * 2).toFixed(2)}s`));
+    const r = frames([svg]);
+    assert.equal(r.status, 1, r.stderr);
+    assert.match(r.stderr, /one\.svg: the SVG loop is \d+ ms but its spec gives \d+ ms\. Render the figure again\./);
+    assert.equal(existsSync(join(dir, 'one-frames.png')), false);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
