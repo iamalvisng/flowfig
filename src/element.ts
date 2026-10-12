@@ -1,12 +1,25 @@
 import { diff, formatDiff, render, type DiffMarks } from './svg.ts';
-import { BASE_RATE, DARK, LIGHT, STEP_HOLD_MS, beatMs, edgeId, nodes, str, toBeat, type FlowProps } from './model.ts';
+import {
+  BASE_RATE,
+  DARK,
+  LIGHT,
+  STEP_HOLD_MS,
+  beatMs,
+  edgeId,
+  isGroup,
+  nodes,
+  str,
+  toBeat,
+  type FigGroup,
+  type FlowProps,
+} from './model.ts';
 import { cast, moments, type Moment } from './explain.ts';
 import { ART, PIC_CSS, TOKENS } from './looks.ts';
 
 type Form = 'diagram' | 'guide' | 'change';
 type Spot = Moment & { step: string; ms: number; code: string[] };
 type El = HTMLElement;
-type Side = { spec: FlowProps; svg: SVGSVGElement; out: El };
+type Side = { name: string; spec: FlowProps; svg: SVGSVGElement; out: El; tile: El };
 type Guide = {
   kick: El;
   say: El;
@@ -138,15 +151,34 @@ const CSS = [
   '.ff-next::after{content:"  \\2192"/""}',
   '@container ff-host (width < 900px){.ff-g{aspect-ratio:auto;height:auto}.ff-g>.ff-view{flex:none;container-type:inline-size}.ff-guide{height:auto;grid-template-rows:auto 300px auto}.ff-top{padding:16px 3cqw 0}.ff-bot{padding:10px 3cqw}}',
   '.ff-verdict{padding:12px 16px;background:var(--flowfig-surface);border:1px solid var(--flowfig-border);border-radius:10px;font-size:16px;font-weight:500}',
-  '.ff-verdict pre{margin:0;max-height:9em;overflow:auto;font:13px/1.45 ui-monospace,Menlo,monospace;font-weight:400;white-space:pre-wrap}',
-  '.ff-sides{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,var(--ff-side)),1fr));gap:16px}',
+  '.ff-list{margin:6px 0 0;padding-left:20px;font-size:15px;font-weight:400}',
+  '.ff-all{margin-top:8px;font-size:13px;font-weight:400;color:var(--flowfig-muted)}',
+  '.ff-all summary{cursor:pointer}',
+  '.ff-all pre{margin:6px 0 0;max-height:12em;overflow:auto;font:13px/1.45 ui-monospace,Menlo,monospace;color:var(--flowfig-ink);white-space:pre-wrap}',
+  '.ff-tiles{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}',
+  '.ff-tile{padding:8px 14px;background:var(--flowfig-surface);border:1px solid var(--flowfig-border);border-radius:10px}',
+  '.ff-out{margin:2px 0 0;min-height:1.5em;font-size:16px;font-weight:600}',
+  '.ff-out:empty::before{content:"Press a step to compare";color:var(--flowfig-muted);font-weight:400}',
+  '.ff-wait .ff-out:empty::before{content:"Playing…"}',
+  '.ff-none .ff-out{color:var(--flowfig-muted);font-weight:400}',
+  '.ff-tile.ff-bad{border-color:var(--flowfig-bad)}',
+  '.ff-bad .ff-out{color:var(--flowfig-bad)}',
+  '.ff-tile.ff-good{border-color:var(--flowfig-good)}',
+  '.ff-good .ff-out{color:var(--flowfig-good)}',
+  '.ff-sides{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}',
+  '.ff-sides.ff-big{grid-template-columns:minmax(0,1fr)}',
+  '@container ff-host (width < 700px){.ff-sides{grid-template-columns:minmax(0,1fr)}}',
   '.ff-side{display:flex;flex-direction:column;gap:8px;min-width:0;padding:12px 14px;background:var(--flowfig-surface);border:1px solid var(--flowfig-border);border-radius:12px}',
-  '.ff-side h3{margin:0;font-size:15px;font-weight:600}',
-  '.ff-out{margin:0;padding:8px 10px;border-radius:8px;background:var(--flowfig-bg);font-weight:600}',
-  '.ff-out:empty::before{content:"The outcome shows when a step ends.";color:var(--flowfig-muted);font-weight:400}',
-  '[data-diff] :is(rect,path,polygon){stroke:var(--flowfig-accent)!important}',
+  '.ff-sh{display:flex;align-items:center;justify-content:space-between;gap:8px}',
+  '.ff-sh h3{margin:0;font-size:15px;font-weight:600}',
+  '.ff-sides:not(.ff-big) .ff-pane{cursor:zoom-in}',
+  '.ff-sides:not(.ff-big) .ff-pane>svg{min-width:0}',
+  '.ff-big .ff-pane{max-height:80vh;overflow:auto}',
+  '.ff-side svg[role=img]{--accent:var(--flowfig-play)!important}',
+  '[data-diff] :is(rect,path,polygon){stroke:var(--flowfig-accent)!important;filter:none!important}',
   '[data-diff] :is(rect,polygon,path:not([fill=none])){fill:color-mix(in srgb,var(--flowfig-accent) 8%,var(--bg))!important}',
   'rect[data-diff]{fill:var(--flowfig-accent)}',
+  '[data-diff] text{fill:var(--fg)!important}',
   '@media (prefers-reduced-motion:reduce){.ff-guide *{animation:none!important;transition:none!important;scroll-behavior:auto!important}}',
   PIC_CSS,
 ].join('\n');
@@ -240,7 +272,7 @@ export class FlowfigExplain extends Base {
   #svg?: SVGSVGElement;
   #g?: Guide;
   #sides?: Side[];
-  #ends: ReturnType<typeof setTimeout>[] = [];
+  #ends: (ReturnType<typeof setTimeout> | undefined)[] = [];
   #tabs: HTMLButtonElement[] = [];
   #ctl: Record<string, HTMLButtonElement> = {};
   #heading = h('h2', 'ff-title');
@@ -358,10 +390,11 @@ export class FlowfigExplain extends Base {
 
   #labels() {
     const of = (spec?: FlowProps) => (spec?.steps ?? []).map((s) => str(s.label));
-    return this.#sides ? of(this.#spec).filter((l) => of(this.#before).includes(l)) : of(this.#spec);
+    return this.#sides ? [...new Set([...of(this.#spec), ...of(this.#before)])] : of(this.#spec);
   }
 
   #pick(label: string) {
+    if (this.#sides && !this.#all.some((m) => m.step === label)) return this.#run(label);
     this.#seeked = undefined;
     this.show(label);
     this.#update();
@@ -369,17 +402,25 @@ export class FlowfigExplain extends Base {
 
   #run(label: string) {
     this.#ends.forEach(clearTimeout);
+    for (const t of this.#tabs) t.setAttribute('aria-pressed', String(t.textContent === label));
     const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
     this.#ends = (this.#sides ?? []).map((s) => {
+      const step = s.spec.steps?.find((x) => str(x.label) === label);
+      s.out.textContent = step ? '' : `This step is not in ${s.name}`;
+      s.tile.className = `ff-tile ${step ? 'ff-wait' : 'ff-none'}`;
+      if (!step) return void seek(s.svg, 0);
       const [start, ms] = clock(s.spec, label);
       // The last step fades out in its final 400 ms, so stop inside the hold.
       const end = start + ms + STEP_HOLD_MS / 2;
-      s.out.textContent = '';
+      const hop = step.flow.length ? toBeat(step.flow.at(-1)!).hops.at(-1) : undefined;
+      const edge = s.spec.edges.find((e) => edgeId(e) === hop?.edge);
+      const tone = nodes(s.spec.layout).find((n) => n.id === (hop?.back ? edge?.from : edge?.to))?.tone;
       seek(s.svg, still ? end : start, !still);
       return setTimeout(
         () => {
           seek(s.svg, end);
           s.out.textContent = moments(s.spec, label).at(-1)?.summary?.outcome ?? '';
+          s.tile.className = `ff-tile${tone === 'red' || tone === 'gray' ? ' ff-bad' : tone === 'green' ? ' ff-good' : ''}`;
         },
         still ? 0 : (end - start) / BASE_RATE,
       );
@@ -498,27 +539,76 @@ export class FlowfigExplain extends Base {
         this.#view.append(p, h('div', 'ff-row', ...this.#tabs));
       } else if (form === 'change' && this.#before) {
         const changes = diff(this.#before, spec);
-        const side = (name: string, of: FlowProps, ops: string[], scope: string) => {
+        const zoom = (col?: El) => {
+          wide.classList.toggle('ff-big', !!col);
+          for (const c of wide.children as HTMLCollectionOf<El>) {
+            c.hidden = !!col && c !== col;
+            const b = c.querySelector('button')!;
+            b.textContent = col ? 'Back to both' : 'Enlarge';
+            b.setAttribute('aria-label', col ? 'Back to both' : `Enlarge ${c.querySelector('h3')!.textContent}`);
+          }
+        };
+        const side = (name: string, of: FlowProps, ops: string[], scope: string): Side => {
           const marks: DiffMarks = { boxes: {}, edges: {}, steps: 0 };
           for (const c of changes)
             if (ops.includes(c.op) && (c.kind === 'box' || c.kind === 'edge')) marks[c.kind === 'box' ? 'boxes' : 'edges'][c.id] = c.op;
           const p = pane(of, { marks, scope });
+          const big = button('Enlarge', () => zoom(wide.classList.contains('ff-big') ? undefined : col));
+          big.setAttribute('aria-label', `Enlarge ${name}`);
+          const col = h('section', 'ff-side', h('div', 'ff-sh', h('h3', '', name), big), p);
+          p.addEventListener('click', () => wide.classList.contains('ff-big') || zoom(col));
           const out = h('p', 'ff-out');
           out.dataset.outcome = '';
           out.setAttribute('aria-live', 'polite');
-          const col = h('section', 'ff-side', h('h3', '', name), p, out);
-          col.dataset.side = name.toLowerCase();
-          return { el: col, min: p.style.getPropertyValue('--ff-min'), side: { spec: of, svg: p.querySelector('svg')!, out } };
+          const tile = h('div', 'ff-tile', h('span', 'ff-lbl', name), out);
+          tile.dataset.side = name.toLowerCase();
+          wide.append(col);
+          return { name, spec: of, svg: p.querySelector('svg')!, out, tile };
         };
-        const sides = [side('Before', this.#before, ['removed', 'changed'], 'b'), side('After', spec, ['added', 'changed'], 'a')];
-        const wide = h('div', 'ff-sides', ...sides.map((s) => s.el));
-        wide.style.setProperty('--ff-side', `calc(max(${sides.map((s) => s.min).join()}) + 30px)`);
+        const wide = h('div', 'ff-sides');
+        this.#sides = [side('Before', this.#before, ['removed', 'changed'], 'b'), side('After', spec, ['added', 'changed'], 'a')];
+        const where = (g: FigGroup, up: string, at: Map<string, string[]>): Map<string, string[]> => {
+          for (const c of g.children)
+            if (isGroup(c)) where(c, c.label == null ? up : str(c.label), at);
+            else at.set(c.id, [str(c.label) || c.id, up]);
+          return at;
+        };
+        const was = where(this.#before.layout, '', new Map());
+        const now = where(spec.layout, '', new Map());
+        const name = (id: string) => (now.get(id) ?? was.get(id))?.[0] ?? id;
+        const rank: Record<string, number> = { box: 0, step: 1, edge: 2 };
+        const plain = changes
+          .filter((c) => c.kind in rank)
+          .sort((a, b) => rank[a.kind] - rank[b.kind])
+          .map((c) => {
+            const op = c.op === 'added' ? 'Added' : c.op === 'removed' ? 'Removed' : 'Changed';
+            if (c.kind === 'step') return `${op} step: ${c.id}`;
+            if (c.kind === 'edge') return `${op} link: ${c.id.split('->').map(name).join(' → ')}`;
+            const [from, to] = [was.get(c.id)?.[1], now.get(c.id)?.[1]];
+            return c.op === 'changed' && from !== to ? `Moved: ${name(c.id)}, from ${from} to ${to}` : `${op}: ${name(c.id)}`;
+          });
         const verdict = document.createElement('slot');
         verdict.name = 'verdict';
-        verdict.append(h('pre', '', formatDiff(changes, 'text')));
-        this.#sides = sides.map((s) => s.side);
+        verdict.append(
+          h('p', 'ff-lbl', 'What changed'),
+          h(
+            'ul',
+            'ff-list',
+            ...[...plain.slice(0, 6), ...(plain.length > 6 ? [`and ${plain.length - 6} more`] : [])].map((t) => h('li', '', t)),
+          ),
+        );
         this.#tabs = this.#labels().map((label) => button(label, () => this.#pick(label), false));
-        this.#view.append(h('div', 'ff-verdict', verdict), h('div', 'ff-row', ...this.#tabs), wide);
+        this.#view.append(
+          h(
+            'div',
+            'ff-verdict',
+            verdict,
+            h('details', 'ff-all', h('summary', '', 'Show all changes'), h('pre', '', formatDiff(changes, 'text'))),
+          ),
+          h('div', 'ff-row', ...this.#tabs),
+          h('div', 'ff-tiles', ...this.#sides.map((s) => s.tile)),
+          wide,
+        );
         for (const s of this.#sides) seek(s.svg, 0);
         this.#seeked = this.#all[this.#at]?.step;
       } else if (form === 'guide') {
@@ -615,7 +705,7 @@ export class FlowfigExplain extends Base {
   #update() {
     const m = this.#all[this.#at];
     this.#live.textContent = m ? [m.say, m.note].filter(Boolean).join(' ') : '';
-    for (const t of this.#tabs) t.setAttribute('aria-pressed', String(t.textContent === m?.step));
+    if (!this.#sides) for (const t of this.#tabs) t.setAttribute('aria-pressed', String(t.textContent === m?.step));
     if (this.#ctl.back) {
       this.#ctl.back.disabled = this.#at === 0;
       this.#ctl.next.disabled = this.#at >= this.#all.length - 1;

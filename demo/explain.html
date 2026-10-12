@@ -8,7 +8,12 @@
   <body style="margin: 0 auto; max-width: 1200px; padding: 16px; display: grid; gap: 24px; font-family: system-ui, sans-serif">
     <flowfig-explain id="oil"></flowfig-explain>
     <flowfig-explain id="sync" form="diagram"></flowfig-explain>
-    <flowfig-explain id="delivery" form="change"></flowfig-explain>
+    <flowfig-explain id="delivery" form="change">
+      <p slot="verdict" style="margin: 0">
+        A delivery could be marked done while the pack ledger never recorded the packs, and nobody was told.<br />
+        Now a failed write runs again by itself, up to 5 tries, and a job that still fails stays in Redis to run again.
+      </p>
+    </flowfig-explain>
     <script type="module" src="/demo/explain.ts"></script>
   </body>
 </html>
