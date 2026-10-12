@@ -56,7 +56,7 @@ import {
   TL_ROW_GAP,
   toBeat,
   altText,
-  beatMs,
+  beatTimes,
   STEP_HOLD_MS,
   playheadItem,
   loopStartItem,
@@ -312,7 +312,6 @@ const SYSTEM_FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helv
 /** The SVG string and the scene it drew. The scene shape may change; use `toSvg` for the SVG only. */
 export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; scene: Scene } {
   const fig = autoLayout(spec);
-  const speed = (opts.speed ?? fig.speed ?? 900) / 1000 / BASE_RATE;
   const pad = opts.padding ?? 24;
   const tl = fig.timeline && isLanesLayout(fig.layout) ? timelineLayout(fig, TL_AXIS_W) : null;
   const synthetic = tl != null && !fig.steps?.length && !opts.marks;
@@ -459,12 +458,10 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
     tEnd: number;
   }[] = [];
   const edgeOf = Object.fromEntries(fig.edges.map((e, i) => [ids[i], e]));
-  let t = 0;
+  const times = beatTimes(beats, opts.speed ?? fig.speed ?? 900);
   beats.forEach((stepBeats, si) => {
     stepBeats.forEach((b, bi) => {
-      const last = bi === stepBeats.length - 1;
-      const dur = beatMs(b, opts.speed ?? fig.speed ?? 900) / 1000 / BASE_RATE;
-      const hold = last ? STEP_HOLD_MS / 1000 / BASE_RATE : 0;
+      const { t0, t1, tEnd } = times.beats[si][bi];
       b.hops.forEach((h, lane) => {
         if (byId[h.edge])
           hops.push({
@@ -476,16 +473,15 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
             back: h.back,
             data: h.data,
             tone: h.tone && TONES[h.tone],
-            t0: t,
-            t1: t + speed,
-            tEnd: t + dur,
+            t0,
+            t1,
+            tEnd,
           });
       });
-      segs.push({ t0: t, t1: t + dur + hold, si, bi });
-      t += dur + hold;
+      segs.push({ t0, t1: bi === stepBeats.length - 1 ? times.ends[si] : tEnd, si, bi });
     });
   });
-  const total = t || 1;
+  const total = times.ends.at(-1) || 1;
 
   const shownAt = segs.map(
     ({ si, bi }) => Object.assign({}, ...beats[si].slice(0, bi + 1).map((b) => b.show)) as Record<string, FigContent>,
