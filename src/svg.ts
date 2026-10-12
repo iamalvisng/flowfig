@@ -787,8 +787,9 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
 
   const packets = hops.map((h, i) => {
     const t0 = h.t0 / total,
-      t1 = h.t1 / total,
-      tEnd = h.tEnd / total;
+      t1 = Math.min(h.t1 / total, 1),
+      tEnd = h.tEnd / total,
+      reach = n4((t1 - t0) / (h.t1 / total - t0));
     const name = `p${i}`;
     css.push(
       `@keyframes ${name} { 0%,${pct(t0)} { opacity: 0 } ${pct(t0 + 0.0001)},${pct(tEnd - 0.0001)} { opacity: 1 } ${pct(tEnd)},100% { opacity: 0 } }\n` +
@@ -808,7 +809,7 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
     })();
     return (
       `<g${cls(name)} opacity="0"><circle r="10" fill="${h.tone ?? 'var(--accent)'}" opacity="0.2"/><circle r="4.5" fill="${h.tone ?? 'var(--accent)'}"/>${chip}` +
-      `<animateMotion dur="${n2(total)}s" repeatCount="indefinite" keyTimes="0;${n4(t0)};${n4(t1)};1" keyPoints="${h.back ? '1;1;0;0' : '0;0;1;1'}" calcMode="linear">` +
+      `<animateMotion dur="${n2(total)}s" repeatCount="indefinite" keyTimes="0;${n4(t0)};${n4(t1)};1" keyPoints="${h.back ? `1;1;${n4(1 - reach)};${n4(1 - reach)}` : `0;0;${reach};${reach}`}" calcMode="linear">` +
       `<mpath href="#p-${esc(h.edge)}" xlink:href="#p-${esc(h.edge)}"/></animateMotion></g>`
     );
   });
