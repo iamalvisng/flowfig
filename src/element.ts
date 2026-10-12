@@ -7,9 +7,7 @@ type Form = 'diagram' | 'guide' | 'change';
 type Spot = Moment & { step: string; ms: number; code: string[] };
 type El = HTMLElement;
 type Guide = {
-  ch: El;
-  no: El;
-  sc: El;
+  kick: El;
   say: El;
   note: El;
   code: El;
@@ -45,7 +43,7 @@ const svgVars = (t: Record<string, string>) =>
     .join('');
 
 const CSS = [
-  `:host{display:block;${tokens(TOKENS.light)}}`,
+  `:host{display:block;container:ff-host/inline-size;${tokens(TOKENS.light)}}`,
   `:host([theme=dark]){${tokens(TOKENS.dark)}}`,
   `@media (prefers-color-scheme:dark){:host(:not([theme=light])){${tokens(TOKENS.dark)}}}`,
   // Important rules from the shadow tree win over the page (CSS Cascade 4).
@@ -73,16 +71,16 @@ const CSS = [
   '.ff-guide{height:100%;display:grid;grid-template-rows:minmax(19cqh,auto) minmax(0,1fr) minmax(23cqh,auto)}',
   '.ff-top{display:flex;gap:20px;align-items:flex-start;padding:2.6cqh 3cqw 0}',
   '.ff-text{flex:1;min-width:0}',
-  '.ff-kick{display:flex;gap:14px;align-items:baseline;font-size:13px;color:var(--flowfig-muted)}',
-  '.ff-ch{color:var(--flowfig-accent);text-transform:uppercase;letter-spacing:.08em;font-weight:700}',
+  '.ff-kick{font-size:13px;color:var(--flowfig-muted)}',
   '.ff-say{margin:6px 0 0;font-size:clamp(19px,2.4cqw,30px);line-height:1.22;font-weight:650;letter-spacing:-.01em}',
   '.ff-note{margin:8px 0 0;font-size:clamp(15px,1.6cqw,20px);line-height:1.35;color:var(--flowfig-muted)}',
   '.ff-note.ff-bad{color:var(--flowfig-bad)}',
   '.ff-code{flex:0 0 34%;box-sizing:border-box;max-height:17cqh;overflow:auto;margin:0;padding:8px 12px;font:13px/1.45 ui-monospace,Menlo,monospace;white-space:pre;background:var(--flowfig-surface);border:1px solid var(--flowfig-border);border-radius:10px}',
-  '.ff-stage{--top:195px;position:relative;overflow:hidden;container-type:size}',
+  '.ff-stage{--top:195px;position:relative;overflow:auto hidden;scroll-behavior:smooth;container:ff-stage/size}',
+  '.ff-track{position:relative;height:100%;width:max(100%,calc(var(--n) * 132px));container-type:inline-size}',
   '.ff-cast{position:absolute;left:2cqw;right:2cqw;bottom:1.5cqh;display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);align-items:end}',
   '.ff-c{display:flex;flex-direction:column;align-items:center;gap:8px}',
-  '.ff-fig{position:relative;box-sizing:border-box;width:max(48px,min(90%,(100cqh - var(--top)) * 1.25));aspect-ratio:5/4;padding:6% 7% 3%;background:var(--flowfig-surface);border:1px solid var(--flowfig-border);border-radius:20px;opacity:.42;filter:saturate(.55);transition:transform .3s,opacity .3s,filter .3s,box-shadow .3s}',
+  '.ff-fig{position:relative;box-sizing:border-box;width:max(124px,min(90%,(100cqh - var(--top)) * 1.25));aspect-ratio:5/4;padding:10px 12px 4px;background:var(--flowfig-surface);border:1px solid var(--flowfig-border);border-radius:20px;opacity:.42;filter:saturate(.55);transition:transform .3s,opacity .3s,filter .3s,box-shadow .3s}',
   '.ff-fig svg{display:block;width:100%;height:100%;overflow:visible}',
   '.ff-fig[aria-current=true],.ff-fig.ff-on{opacity:1;filter:none}',
   '.ff-fig[aria-current=true]{transform:translateY(-10px);border-color:var(--flowfig-accent);box-shadow:0 0 0 3px var(--flowfig-accent),0 8px 12px var(--flowfig-pic-sh)}',
@@ -104,7 +102,7 @@ const CSS = [
   '.ff-recs{position:absolute;left:50%;top:12%;z-index:1;display:flex;flex-direction:column;align-items:center;gap:4px;transform:translateX(-50%)}',
   '.ff-rec{padding:3px 8px;font-size:13px;font-weight:600;white-space:nowrap;background:var(--flowfig-paper);color:var(--flowfig-paper-ink);border:1px solid var(--flowfig-border);border-radius:5px;box-shadow:0 2px 6px var(--flowfig-pic-sh);animation:ff-fly .5s cubic-bezier(.45,0,.2,1) backwards}',
   '@keyframes ff-fly{from{opacity:0;transform:translate(var(--dx),-24cqh)}}',
-  '@container (height < 320px){.ff-stage{--top:140px}.ff-card{top:16px}.ff-paper{padding:6px 10px 10px}.ff-paper i{display:none}.ff-dn{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ff-paper b{font-size:20px}.ff-st{top:-12px;right:-22px;width:40px;height:40px;font-size:22px}}',
+  '@container ff-stage (height < 320px){.ff-track{--top:140px}.ff-card{top:16px}.ff-paper{padding:6px 10px 10px}.ff-paper i{display:none}.ff-dn{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ff-paper b{font-size:20px}.ff-st{top:-12px;right:-22px;width:40px;height:40px;font-size:22px}}',
   '.ff-end .ff-cast{visibility:hidden}',
   '.ff-end .ff-card{left:calc(3cqw + 75px)!important;top:50%;transform:translate(-50%,-50%)}',
   '.ff-sum{position:absolute;inset:0 3cqw 2cqh calc(3cqw + 200px);display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:3cqw;align-items:center}',
@@ -137,7 +135,8 @@ const CSS = [
   '.ff-next{background:var(--flowfig-accent);border-color:var(--flowfig-accent);color:var(--flowfig-on-accent)}',
   '.ff-back::before{content:"\\2190  "/""}',
   '.ff-next::after{content:"  \\2192"/""}',
-  '@media (prefers-reduced-motion:reduce){.ff-guide *{animation:none!important;transition:none!important}}',
+  '@container ff-host (width < 900px){.ff-g{aspect-ratio:auto;height:auto}.ff-g>.ff-view{flex:none;container-type:inline-size}.ff-guide{height:auto;grid-template-rows:auto 300px auto}.ff-top{padding:16px 3cqw 0}.ff-bot{padding:10px 3cqw}}',
+  '@media (prefers-reduced-motion:reduce){.ff-guide *{animation:none!important;transition:none!important;scroll-behavior:auto!important}}',
   PIC_CSS,
 ].join('\n');
 
@@ -454,9 +453,7 @@ export class FlowfigExplain extends Base {
           return b;
         };
         const g: Guide = {
-          ch: h('b', 'ff-ch'),
-          no: h('span', ''),
-          sc: h('span', ''),
+          kick: h('div', 'ff-kick'),
           say: h('h3', 'ff-say'),
           note: h('p', 'ff-note'),
           code: h('pre', 'ff-code'),
@@ -477,7 +474,9 @@ export class FlowfigExplain extends Base {
           step: '',
           x: -1,
         };
-        g.stage.append(
+        const track = h(
+          'div',
+          'ff-track',
           h(
             'div',
             'ff-cast',
@@ -486,12 +485,13 @@ export class FlowfigExplain extends Base {
             ),
           ),
           g.card,
-          g.sum,
         );
+        track.style.setProperty('--n', String(actors.length));
+        g.stage.append(track, g.sum);
         const guide = h(
           'div',
           'ff-guide',
-          h('div', 'ff-top', h('div', 'ff-text', h('div', 'ff-kick', g.ch, g.no, g.sc), g.say, g.note), g.code),
+          h('div', 'ff-top', h('div', 'ff-text', g.kick, g.say, g.note), g.code),
           g.stage,
           h(
             'div',
@@ -551,9 +551,7 @@ export class FlowfigExplain extends Base {
       .slice(0, k + 1)
       .reverse()
       .find((s) => s.stamp)?.stamp;
-    g.ch.textContent = end ? 'Summary' : m.actor;
-    g.no.textContent = end ? '' : `Moment ${k + 1} of ${mine.length - 1}`;
-    g.sc.textContent = m.step;
+    g.kick.textContent = `${end ? 'Summary' : `Moment ${k + 1} of ${mine.length - 1}`} · ${m.step}`;
     g.say.textContent = m.say;
     g.note.textContent = m.note;
     g.note.classList.toggle('ff-bad', stamp?.mark === '✗' && (end || m.stamp === stamp));
@@ -606,6 +604,7 @@ export class FlowfigExplain extends Base {
       g.x = i;
       g.card.style.left = `clamp(83px, ${2 + (96 * (i + 0.5)) / n}cqw, calc(100cqw - 113px))`;
     }
+    g.stage.scrollLeft = end ? 0 : (g.stage.scrollWidth * (2 + (96 * (g.x + 0.5)) / n)) / 100 - g.stage.clientWidth / 2;
     g.dn.textContent = m.step;
     g.num.textContent = `#${this.#labels().indexOf(m.step) + 1}`;
     g.stamp?.remove();
