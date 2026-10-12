@@ -873,7 +873,7 @@ function FlowBody({
       setActive(step);
     }
   };
-  const focus = hover != null || hoverEdge != null || (step != null && !level);
+  const focus = hover != null || hoverEdge != null || step != null;
 
   const timelineFig = useMemo(
     () => (tl ? timelineLayout({ layout, edges, timeline, today }, axisW) : null),

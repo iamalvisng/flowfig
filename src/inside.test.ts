@@ -34,7 +34,7 @@ const SHOWN = `((e) => {
   return o;
 })`;
 const box = (id: string) => `document.querySelector('[data-fig="${id}"]')`;
-const shown = (el: string) => `${SHOWN}(${el}) > 0.99`;
+const shown = (el: string) => `${SHOWN}(${el}) > 0.69`;
 const allShown = (ids: string[]) => ids.map((id) => shown(box(id))).join(' && ');
 const BACK = `[...document.querySelectorAll('button')].find((b) => (b.getAttribute('aria-label') ?? b.textContent).trim().startsWith('Back'))`;
 const ORDERS = ['gateway', 'validate', 'reserve', 'total', 'save', 'publish', 'payments'];
@@ -100,7 +100,7 @@ const summary = (ids: string[]) => `(() => {
   return {
     movers: Object.values(moves).filter((n) => n >= 3).length,
     appear,
-    partial: rec.frames.some((f) => Object.values(f.boxes).some((o) => o > 0.01 && o < 0.99)),
+    partial: rec.frames.some((f) => Object.values(f.boxes).some((o) => o > 0.01 && o < 0.69)),
     running: Math.max(...rec.frames.map((f) => f.running)),
   };
 })()`;
@@ -122,6 +122,14 @@ test(
     });
   },
 );
+
+test('a figure with parts dims the boxes outside the active step, as any figure does', { skip }, async () => {
+  await withReactPage(entry, async (page) => {
+    await show(page, 1400, { autoplay: false });
+    await page.until(`getComputedStyle(${box('browser')}).opacity < 0.99`, 'the boxes outside the step dim');
+    assert.ok(await page.ev(`+getComputedStyle(${box('browser')}).opacity > 0.69`), 'the dim keeps the box readable');
+  });
+});
 
 test('the back button and Escape return to the root level, and focus lands on "Orders"', { skip }, async () => {
   await withReactPage(entry, async (page) => {
