@@ -75,6 +75,7 @@ A topic gives the detail for one kind of figure. Before you write that kind of s
 - \`timeline\`: a roadmap, a plan with dates or a Mermaid \`gantt\`.
 - \`lanes\`: a process that several roles do (a ticket, an order, a refund), or an SOP.
 - \`verify\`: a verify finding in the render output, or a check in CI.
+- \`inside\`: the parts inside a box, down to functions.
 
 ## Workflow
 
@@ -187,6 +188,16 @@ beat is an edge id or an array of edge ids that run at the same time. A beat can
 - \`say\`: the caption for the beat. \`light\`: boxes to highlight. \`ms\`: the beat length.
 - \`show\`: \`{ boxId: [{ tag?, tone?, text, meta?, mark?, mono? }] }\`. The rows fill the content card of each box until the
   step ends.
+
+## Inside a box
+
+- Add \`inside\` to a box if the user asks what happens in that box.
+- Add \`inside\` if the root needs more than 12 boxes to be faithful. Move the inner calls into the box that owns them.
+- Give each part one \`source\`. Find the parts with \`npx flowfig trace <source>\`.
+- An inside edge can start at an outer neighbor X only if the root has the edge X -> box. It can end at an outer neighbor Y
+  only if the root has the edge box -> Y. The open box shows X and Y as ports.
+- The limits: 3 levels, 16 parts in one box, 60 parts in the figure. Ids are unique in the whole figure.
+- For the full example, print \`npx flowfig docs inside\`.
 
 ## Content rules
 
@@ -348,6 +359,64 @@ Copy the count line into the reply as printed.
 
 For CI, \`npx flowfig verify <svg>...\` runs the same check on SVG files. \`--root <folder>\` sets the repo root. \`--json\` prints
 JSON. \`--strict\` makes warnings errors.
+`,
+  inside: `# flowfig topic: inside
+
+Read this topic when the user asks what happens inside a box, or when the root needs more than 12 boxes.
+
+A box with \`inside\` opens in the figure. \`inside\` has \`layout\` (required), \`edges\` and \`steps\`. These work as in \`props\`.
+A part is a box. A part can have its own \`inside\`.
+
+\`\`\`json
+{
+  "layout": { "direction": "row", "children": [
+    { "id": "gateway", "label": "Gateway" },
+    { "id": "orders", "label": "Orders", "source": "src/orders/index.ts#createOrder",
+      "inside": {
+        "layout": { "direction": "row", "children": [
+          { "id": "validate", "label": "Check the cart", "source": "src/orders/validate.ts#validateCart",
+            "inside": {
+              "layout": { "direction": "row", "children": [
+                { "id": "stock", "label": "Check stock", "source": "src/orders/stock.ts#checkStock" },
+                { "id": "price", "label": "Add up the price", "source": "src/orders/price.ts#totalPrice" } ] },
+              "edges": [
+                { "from": "gateway", "to": "stock" },
+                { "from": "stock", "to": "price" },
+                { "from": "price", "to": "save" } ] } },
+          { "id": "save", "label": "Save the order", "source": "src/orders/repo.ts#insertOrder" },
+          { "id": "notify", "label": "Tell the shop", "source": "src/orders/notify.ts#notifyShop" } ] },
+        "edges": [
+          { "from": "gateway", "to": "validate" },
+          { "from": "validate", "to": "save" },
+          { "from": "save", "to": "notify" },
+          { "from": "notify", "to": "payments" } ],
+        "steps": [ { "label": "Place an order", "flow": ["gateway->validate", "validate->save", "save->notify", "notify->payments"] } ] } },
+    { "id": "payments", "label": "Payments" } ] },
+  "edges": [ { "from": "gateway", "to": "orders" }, { "from": "orders", "to": "payments" } ],
+  "steps": [ { "label": "Place an order", "flow": ["gateway->orders", "orders->payments"] } ]
+}
+\`\`\`
+
+Rules:
+
+- An inside edge can start at an outer neighbor X only if the scene above has the edge X -> box. The edge \`gateway->validate\`
+  needs \`gateway->orders\`. The box shows X as an in-port.
+- An inside edge can end at an outer neighbor Y only if the scene above has the edge box -> Y. The edge \`notify->payments\`
+  needs \`orders->payments\`. The box shows Y as an out-port.
+- An inside edge with no part at either end is an error.
+- Inside steps name parts, ports and inside edges. An outer step cannot name a part.
+- Give each part one \`source\`. Find the parts with \`npx flowfig trace <source>\`.
+- The limits: 3 levels, 16 parts in one box, 60 parts in the figure. Ids are unique in the whole figure, at all levels.
+- \`inside\` has no effect in a \`lanes\`, \`timeline\` or \`rail: "only"\` figure.
+
+The check rules:
+
+- \`part-edge-mismatch\`: an inside edge names an outer box with no outer edge in that direction, or an outer edge has no
+  inside edge to continue it. The message starts with the path, for example \`[Orders]\`.
+- \`part-no-source\`: a part has no \`source\`. Add one.
+
+\`npx flowfig --scene <id> ...\` renders only the scene of the box \`<id>\`, as a plain figure. The default render adds no script.
+\`--script\` adds the script that opens the boxes.
 `,
 };
 
