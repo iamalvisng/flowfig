@@ -1,4 +1,5 @@
-import { FlowfigExplain } from '../src/element.ts';
+import '../src/element.ts';
+import type { FlowfigExplain } from '../src/element.ts';
 import oil from '../figures/explain-oil.ts';
 import sync from '../figures/explain-sync.ts';
 import deliveryBefore from '../figures/explain-delivery-before.ts';
