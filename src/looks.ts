@@ -159,3 +159,5 @@ export const ART: Record<FigLook, string> = {
 <rect class="ff-b1" x="76" y="134" width="48" height="12" rx="6"/>
 <rect class="ff-b1" x="94" y="124" width="12" height="12"/>`,
 };
+
+export const HUD = { wide: 880, panel: 376, pad: 16, chips: 52, sheet: 236, tall: 760 };

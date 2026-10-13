@@ -661,7 +661,7 @@ const shrub = (x: number, y: number, r: number) => {
     R = r * U;
   return `<ellipse cx="${f(gx + 3)}" cy="${f(gy + 1)}" rx="${f(R * 1.15)}" ry="${f(R * 0.5)}" fill="${K.ao}"/><circle cx="${f(gx)}" cy="${f(gy - R * 0.62)}" r="${f(R * 0.72)}" fill="${K.leafD}"/><circle cx="${f(gx - R * 0.16)}" cy="${f(gy - R * 0.74)}" r="${f(R * 0.52)}" fill="${K.leaf}"/>`;
 };
-function hull(points: Pt[]): Pt[] {
+export function hull(points: Pt[]): Pt[] {
   const p = points.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]);
   const cross = (o: Pt, a: Pt, b: Pt) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
   const lo: Pt[] = [],

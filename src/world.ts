@@ -1,8 +1,12 @@
 import { cast, failed, hopsOf, isCheck, moments, question } from './explain.ts';
 import { edgeId, isGroup, nodes, str } from './model.ts';
 import type { FigLook, FlowProps } from './model.ts';
-import { BAR_Y, BED_ROWS, C, GL, GZ, LANE, P, PHONE, S, TD, gateArt, street, truckArt } from './world-art.ts';
+import { HUD } from './looks.ts';
+import { textWidth } from './text.ts';
+import { BAR_Y, BED_ROWS, C, GL, GZ, LANE, P, PHONE, S, TD, gateArt, hull, street, truckArt } from './world-art.ts';
 import type { Gate, Lot, Pt } from './world-art.ts';
+
+export type { Pt };
 
 export type Carry = { thing: string; form: 'box' | 'barrel' | 'notes'; count: number; from: number };
 export type Hop = { edge: string; from: string; to: string; label: string; data: string; async: boolean; fail: boolean; carry?: Carry };
@@ -318,6 +322,47 @@ function fresh(sc: Scene, story: number): State {
   return s;
 }
 
+function kit(sc: Scene, s: State) {
+  const A = sc.actors,
+    T = sc.truck,
+    depot = T >= 0 ? A[T].lot.depot! : { x: 0, y: 0 },
+    YX = depot.x + 0.66;
+  const parked = () => !s.truck || (s.truck.orient === 'y' && s.truck.ty + 2.5 <= depot.y + 0.01);
+  const inCab = (a: number) => a === T && !parked();
+  const cabBase = (t: Truck) =>
+    t.orient === 'y' ? P(YX + TD + 0.03, t.ty + 2.17, 0.58) : P(t.orient === 'R' ? t.x + 2.18 : t.x + 0.31, LANE + 0.41, 0.58);
+  const devBase = (a: number) => (inCab(a) ? cabBase(s.truck!) : P(...A[a].port));
+  return {
+    YX,
+    parked,
+    inCab,
+    devBase,
+    devTop: (a: number): Pt => {
+      const b = devBase(a);
+      return [b[0], b[1] - PHONE.h * (inCab(a) ? 0.82 : 1) - 4];
+    },
+    gateMid: (a: number) => {
+      const g = A[a].gate;
+      return P((g.px + g.ex) / 2, g.y, g.z);
+    },
+    gateEnds: (a: number) => {
+      const g = A[a].gate;
+      return [P(g.ex, g.y, g.z - 0.05), P(g.ex, g.y)];
+    },
+    truckPts: (t: Truck): Pt[] => {
+      const w =
+        t.orient === 'y'
+          ? [YX, YX + TD].flatMap((x) => [P(x, t.ty), P(x, t.ty + 2.5), P(x, t.ty, 0.9), P(x, t.ty + 2.5, 1.13)])
+          : [t.x, t.x + 2.5].flatMap((x) => [LANE - 0.4, LANE + 0.4].flatMap((y) => [P(x, y), P(x, y, 1.13)]));
+      if (s.dev.includes(T)) {
+        const b = cabBase(t);
+        w.push([b[0] - 11, b[1] - 40], [b[0] + 11, b[1] - 40]);
+      }
+      return w;
+    },
+  };
+}
+
 const plans = new WeakMap<Scene, Map<string, ReturnType<typeof planOf>>>();
 function plan(sc: Scene, story: number, m: number) {
   const memo = plans.get(sc) ?? new Map<string, ReturnType<typeof planOf>>();
@@ -348,40 +393,12 @@ function planOf(sc: Scene, story: number, m: number) {
   };
   const set = (hop: number, at: number, apply: (s: State) => void) => add(null, hop, at, 0, apply);
 
-  const depot = T >= 0 ? A[T].lot.depot! : { x: 0, y: 0 },
-    YX = depot.x + 0.66,
+  const { YX, gateMid, gateEnds, devBase, devTop, truckPts } = kit(sc, s),
     hulls = A.map((a) => a.lot.hull);
-  const gateMid = (a: number) => {
-    const g = A[a].gate;
-    return P((g.px + g.ex) / 2, g.y, g.z);
-  };
-  const gateEnds = (a: number) => {
-    const g = A[a].gate;
-    return [P(g.ex, g.y, g.z - 0.05), P(g.ex, g.y)];
-  };
-  const inCab = (a: number) => a === T && !(s.truck!.orient === 'y' && s.truck!.ty + 2.5 <= depot.y + 0.01);
-  const cabBase = (t: Truck) =>
-    t.orient === 'y' ? P(YX + TD + 0.03, t.ty + 2.17, 0.58) : P(t.orient === 'R' ? t.x + 2.18 : t.x + 0.31, LANE + 0.41, 0.58);
-  const devBase = (a: number) => (inCab(a) ? cabBase(s.truck!) : P(...A[a].port));
-  const devTop = (a: number): Pt => {
-    const b = devBase(a);
-    return [b[0], b[1] - PHONE.h * (inCab(a) ? 0.82 : 1) - 4];
-  };
   const bedAt = (t: Truck, i: number) =>
     P(t.x + sc.truckArt!.slots[t.orient === 'R' ? 'R' : 'L'][i % 4], BED_ROWS[Math.floor(i / 4)], 0.43);
   const truckRef = (t: Truck) => (t.orient === 'y' ? YX : t.orient === 'R' ? t.x + 2.18 : t.x + 0.31);
   const front = (t: Truck) => (t.orient === 'y' ? P(YX + TD / 2, t.ty + 2.5, 0.6) : P(t.orient === 'R' ? t.x + 2.5 : t.x, LANE, 0.6));
-  const truckPts = (t: Truck): Pt[] => {
-    const w =
-      t.orient === 'y'
-        ? [YX, YX + TD].flatMap((x) => [P(x, t.ty), P(x, t.ty + 2.5), P(x, t.ty, 0.9), P(x, t.ty + 2.5, 1.13)])
-        : [t.x, t.x + 2.5].flatMap((x) => [LANE - 0.4, LANE + 0.4].flatMap((y) => [P(x, y), P(x, y, 1.13)]));
-    if (s.dev.includes(T)) {
-      const b = cabBase(t);
-      w.push([b[0] - 11, b[1] - 40], [b[0] + 11, b[1] - 40]);
-    }
-    return w;
-  };
   const hl = (...as: number[]) =>
     as.forEach((a) => {
       if (!s.hi.includes(a)) s.hi.push(a);
@@ -566,7 +583,7 @@ function planOf(sc: Scene, story: number, m: number) {
       add('answer', i, at, 0, (st) => {
         const g = st.gates[fa],
           row = g.rows.find((r) => r.box === h.from) ?? g.rows[g.rows.push({ box: h.from, q: fb.check, a: '', fail: false }) - 1];
-        Object.assign(row, { a: h.label.charAt(0).toUpperCase() + h.label.slice(1), fail: h.fail });
+        Object.assign(row, { a: h.label.charAt(0).toUpperCase() + h.label.slice(1) || (h.fail ? '✗' : '✓'), fail: h.fail });
         g.on = m;
       });
       if (h.fail) {
@@ -709,4 +726,380 @@ export function stateAt(sc: Scene, story: number, moment: number, t: number): St
   s.frame = [...scratch.frame];
   s.hi = s.summary ? (t === Infinity ? [...sc.stories[story].path] : []) : [...scratch.hi];
   return s;
+}
+
+export type Rect = { x: number; y: number; w: number; h: number };
+export type Cam = { x: number; y: number; z: number };
+export type Stage = { w: number; h: number; narrow: boolean; region: { l: number; t: number; r: number; b: number } };
+type Mark = '✓' | '✗' | '';
+export type Tag = {
+  actor: number;
+  r: Rect;
+  anchor: Pt;
+  pin?: 'l' | 'r' | 't' | 'b';
+  name: string;
+  status: string;
+  mark: Mark;
+  quiet: boolean;
+};
+export type Sign = { actor: number; r: Rect; anchor: Pt; rows: { q: string; a: string; fail: boolean }[] };
+export type Chip = { text: string; r: Rect; fail: boolean };
+export type Placed = {
+  cam: Cam;
+  tags: Tag[];
+  signs: Sign[];
+  chips: Chip[];
+  devices: { actor: number; r: Rect }[];
+  gates: { actor: number; r: Rect }[];
+  hulls: Pt[][];
+  truck?: Pt[];
+  arcs: Pt[][];
+};
+type Opt = Rect & { anchor: Pt };
+
+export const ZMIN = 0.45;
+const GAP = 12,
+  MARGIN = 48,
+  TAG_H = 46,
+  CHIP_H = 26;
+const width = (text: string, size: number, bold: boolean) => textWidth(text, size) * (bold ? 1.06 : 1);
+
+export const hit = (a: Rect, b: Rect, pad = 0) =>
+  a.x < b.x + b.w + pad && b.x < a.x + a.w + pad && a.y < b.y + b.h + pad && b.y < a.y + a.h + pad;
+
+export function polyHit(poly: Pt[], r: Rect, pad = 0): boolean {
+  const R: Pt[] = [
+    [r.x - pad, r.y - pad],
+    [r.x + r.w + pad, r.y - pad],
+    [r.x + r.w + pad, r.y + r.h + pad],
+    [r.x - pad, r.y + r.h + pad],
+  ];
+  const axes: Pt[] = [
+    [1, 0],
+    [0, 1],
+  ];
+  poly.forEach((p, i) => {
+    const o = poly[(i + 1) % poly.length];
+    axes.push([o[1] - p[1], p[0] - o[0]]);
+  });
+  for (const [ax, ay] of axes) {
+    const pa = poly.map((p) => p[0] * ax + p[1] * ay),
+      pb = R.map((p) => p[0] * ax + p[1] * ay);
+    if (Math.max(...pa) <= Math.min(...pb) || Math.max(...pb) <= Math.min(...pa)) return false;
+  }
+  return true;
+}
+
+export function stageFor(w: number, h: number): Stage {
+  const narrow = w < HUD.wide;
+  return {
+    w,
+    h,
+    narrow,
+    region: narrow
+      ? { l: 8, t: HUD.chips + 8, r: w - 8, b: h - HUD.sheet - 8 }
+      : { l: HUD.pad * 2 + HUD.panel, t: HUD.chips + HUD.pad, r: w - HUD.pad, b: h - HUD.pad },
+  };
+}
+
+function layout(sc: Scene, s: State, stage: Stage, cam: Cam) {
+  const A = sc.actors,
+    story = sc.stories[s.story],
+    k = kit(sc, s),
+    { l, t, r, b } = stage.region,
+    cx = (l + r) / 2,
+    cy = (t + b) / 2,
+    view = { x: l, y: t, w: r - l, h: b - t };
+  const pr = (p: Pt): Pt => [(p[0] - cam.x) * cam.z + cx, (p[1] - cam.y) * cam.z + cy];
+  const span = (ps: Pt[]): Rect => {
+    const xs = ps.map((p) => pr(p)[0]),
+      ys = ps.map((p) => pr(p)[1]),
+      x = Math.min(...xs),
+      y = Math.min(...ys);
+    return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y };
+  };
+  const hulls = A.map((a) => a.lot.hull.map(pr));
+  const truckW = s.truck && !k.parked() ? k.truckPts(s.truck) : null;
+  const truck = truckW ? hull(truckW.map(pr)) : undefined;
+  const gates = A.flatMap((a, i) => {
+    const g = a.gate,
+      st = s.gates[i];
+    if (!a.checks || (st.on !== s.moment && !st.fail)) return [];
+    const up = st.deg > 1 ? g.z + g.L : g.z + 0.3;
+    return [{ actor: i, r: span([P(g.px - 0.35, g.y), P(g.ex + 0.12, g.y), P(g.px, g.y, up), P(g.ex, g.y, g.z)]) }];
+  });
+  const devices = s.dev
+    .filter((a) => !k.inCab(a))
+    .map((a) => {
+      const p = k.devBase(a);
+      return {
+        actor: a,
+        r: span([
+          [p[0] - PHONE.w / 2, p[1] - PHONE.h],
+          [p[0] + PHONE.w / 2, p[1]],
+        ]),
+      };
+    })
+    .filter((d) => hit(d.r, view));
+  const arcs = s.arcs.filter((a) => a.t > 0).map((a) => Array.from({ length: 33 }, (_, i) => pr(bez(a, a.t * (0.05 + (0.9 * i) / 32)))));
+  const taken: Rect[] = [...devices, ...gates].map((d) => d.r);
+  let bad = 0,
+    hidden = 0,
+    crowd = 0;
+  const inRegion = (o: Rect) => o.x >= l && o.y >= t && o.x + o.w <= r && o.y + o.h <= b;
+  const offB = (o: Rect) => !hulls.some((h) => polyHit(h, o, 2)) && !(truck && polyHit(truck, o, 2));
+  const offA = (o: Rect) => !arcs.some((arc) => arc.some(([x, y]) => x > o.x - 4 && x < o.x + o.w + 4 && y > o.y - 4 && y < o.y + o.h + 4));
+  const free = (o: Rect) => !taken.some((x) => hit(x, o, 6));
+  const clean = <T extends Rect>(opts: T[]) => opts.find((o) => inRegion(o) && offB(o) && offA(o) && free(o));
+  const pick = <T extends Rect>(opts: T[]): T => {
+    const o = clean(opts);
+    if (o) return o;
+    bad++;
+    return opts.find((o) => inRegion(o) && free(o)) ?? opts[0];
+  };
+
+  const chips: Chip[] = [];
+  const chip = (text: string, fail: boolean, opts: Pt[], w: number, around: Pt[]) => {
+    if (!around.some(([x, y]) => x >= l && x <= r && y >= t && y <= b)) return void hidden++;
+    for (const [px, py] of around)
+      for (const d of [10, 30, 50])
+        for (let i = 0; i < 8; i++) {
+          const u = (i * Math.PI) / 4;
+          opts.push([px + Math.cos(u) * (d + w / 2) - w / 2, py + Math.sin(u) * (d + CHIP_H / 2) - CHIP_H / 2]);
+        }
+    const rs = opts.map(([x, y]) => ({ x, y, w, h: CHIP_H }));
+    const o = rs.find((o) => inRegion(o) && offB(o) && free(o));
+    if (!o) bad++;
+    chips.push({ text, fail, r: o ?? rs[0] });
+    taken.push(o ?? rs[0]);
+  };
+  for (const a of s.arcs) {
+    if (a.moment !== s.moment || a.t !== 1 || !a.text) continue;
+    const w = 20 + width(a.text, 13, true),
+      g = 10;
+    let top = a.a;
+    for (let i = 0; i <= 40; i++) {
+      const p = bez(a, i / 40);
+      if (p[1] < top[1]) top = p;
+    }
+    const [px, py] = pr(top);
+    const opts: Pt[] = [[px - w / 2, py - CHIP_H - g]];
+    for (const u of [0.8, 0.2, 0.65, 0.35]) {
+      const [qx, qy] = pr(bez(a, u));
+      opts.push([qx + g, qy - CHIP_H / 2], [qx - g - w, qy - CHIP_H / 2]);
+    }
+    chip(
+      a.text,
+      a.fail,
+      opts,
+      w,
+      [0.5, 0.3, 0.7].map((u) => pr(bez(a, u))),
+    );
+  }
+  const seen = new Set<string>();
+  for (const u of Object.values(s.units)) {
+    if ((u.moment !== s.moment && !s.summary) || u.moment < 0 || (u.where !== 'yard' && u.where !== 'gate') || seen.has(u.thing)) continue;
+    seen.add(u.thing);
+    const w = 20 + width(u.thing, 13, true),
+      g = 10,
+      h = CHIP_H,
+      [px, py] = pr([u.p[0], u.p[1] + 6]);
+    chip(
+      u.thing,
+      u.fail,
+      [
+        [px - w / 2, py + g],
+        [px + g, py - h / 2],
+        [px - g - w, py - h / 2],
+        [px + g, py + g],
+        [px - g - w, py + g],
+        [px - w / 2, py + 3 * g],
+      ],
+      w,
+      [[px, py]],
+    );
+  }
+
+  const signs: Sign[] = [];
+  for (const g of gates) {
+    const gs = s.gates[g.actor];
+    if (!gs.rows.length || !(gs.on === s.moment || (s.summary && gs.fail && !stage.narrow))) continue;
+    if (!hit(g.r, view)) {
+      hidden++;
+      continue;
+    }
+    const rows = gs.rows.map(({ q, a, fail }) => ({ q, a, fail }));
+    const w = 22 + Math.max(...rows.map((x) => width(x.q, 15, true) + (x.a ? width(x.a, 13, true) + 40 : 0))),
+      h = rows.length * 30 + (rows.length - 1) * 6 + 14;
+    const gr = g.r,
+      gate = A[g.actor].gate,
+      foot = pr(P(gate.ex, gate.y)),
+      bot = gr.y + gr.h,
+      mid = gr.x + gr.w / 2,
+      gy = gr.y + gr.h / 2;
+    const opts: Opt[] = (
+      [
+        [foot[0] - 14, bot + GAP, foot],
+        [foot[0] - w + 14, bot + GAP, foot],
+        [mid - w / 2, bot + GAP, foot],
+        [mid - 14, gr.y - GAP - h, [mid, gr.y]],
+        [mid - w + 14, gr.y - GAP - h, [mid, gr.y]],
+        [gr.x + gr.w + GAP, gy - h / 2, [gr.x + gr.w, gy]],
+        [gr.x - GAP - w, gy - h / 2, [gr.x, gy]],
+        [gr.x + gr.w + GAP, bot - h, [gr.x + gr.w, bot - 4]],
+        [gr.x - GAP - w, bot - h, [gr.x, bot - 4]],
+      ] as [number, number, Pt][]
+    ).map(([x, y, anchor]) => ({ x, y, w, h, anchor }));
+    const o = pick(opts);
+    signs.push({ actor: g.actor, r: { x: o.x, y: o.y, w, h }, anchor: o.anchor, rows });
+    taken.push(o);
+  }
+
+  const tags: Tag[] = [];
+  const rank = (a: number) => (s.hi.includes(a) ? 0 : story.path.includes(a) ? 1 : 2);
+  const order = A.map((_, a) => a).sort((p, q) => rank(p) - rank(q));
+  for (const a of order) {
+    const ev = s.ever[a],
+      name = A[a].name,
+      status = ev ? ev.label : 'Not reached',
+      mark: Mark = ev ? (ev.fail ? '✗' : '✓') : '',
+      w = 20 + Math.max(width(name, 14.8, true), 18 + width(status, 13.8, false)),
+      h = TAG_H,
+      g = GAP,
+      onTruck = a === sc.truck && truckW,
+      top = onTruck ? truckW.reduce((m, p) => (p[1] < m[1] ? p : m)) : A[a].lot.tag,
+      [ax, ay] = pr(top),
+      anchor: Pt = [ax, ay];
+    const opts: Opt[] = [];
+    if (onTruck) {
+      const [bx, by] = pr(truckW.reduce((m, p) => (p[1] > m[1] ? p : m)));
+      for (const x of [bx - w / 2, bx + 4, bx - w - 4]) opts.push({ x, y: by + g, w, h, anchor: [bx, by] });
+    }
+    for (const [x, y] of [
+      [ax - w / 2, ay - g - h],
+      [ax + g, ay - h / 2],
+      [ax - g - w, ay - h / 2],
+      [ax + 4, ay - g - h],
+      [ax - w - 4, ay - g - h],
+      [ax - w / 2, ay + g],
+      [ax + g, ay - g - h],
+      [ax - g - w, ay - g - h],
+      [ax + g, ay + 4],
+      [ax - g - w, ay + 4],
+      [ax - w / 2, ay - 2 * g - h],
+      [ax + 4, ay - 2 * g - h],
+      [ax - w - 4, ay - 2 * g - h],
+      [ax - w + 36, ay - g - h],
+      [ax - 36, ay - g - h],
+    ])
+      opts.push({ x, y, w, h, anchor });
+    const must = s.hi.includes(a) || (s.summary && story.path.includes(a));
+    const base = { actor: a, name, status, mark, quiet: !story.path.includes(a) };
+    const out = ax < l || ax > r || ay < t || ay > b;
+    if (must && stage.narrow && (out || !clean(opts))) {
+      if (!out) crowd++;
+      const tag = pin(base, w, h, [ax, ay]);
+      tags.push(tag);
+      taken.push(tag.r);
+      continue;
+    }
+    const o = must ? pick(opts) : clean(opts);
+    if (!o) continue;
+    tags.push({ ...base, r: { x: o.x, y: o.y, w, h }, anchor: o.anchor });
+    taken.push(o);
+  }
+
+  function pin(base: Omit<Tag, 'r' | 'anchor'>, w: number, h: number, [ax, ay]: Pt): Tag {
+    const over = { l: l - ax, r: ax - r, t: t - ay, b: ay - b };
+    const side = (Object.keys(over) as Tag['pin'][]).reduce((m, e) => (over[e!] > over[m!] ? e : m))!;
+    const across = side === 'l' || side === 'r';
+    const lo = across ? t : l,
+      hi = across ? b - h : r - w,
+      at = Math.max(lo, Math.min(hi, across ? ay - h / 2 : ax - w / 2));
+    const opts: Opt[] = [];
+    for (let d = 0; d <= hi - lo; d += 8)
+      for (const v of d ? [at - d, at + d] : [at]) {
+        if (v < lo || v > hi) continue;
+        const x = across ? (side === 'l' ? l : r - w) : v,
+          y = across ? v : side === 't' ? t : b - h;
+        opts.push({ x, y, w, h, anchor: [Math.max(l, Math.min(r, ax)), Math.max(t, Math.min(b, ay))] });
+      }
+    const o = pick(opts);
+    return { ...base, r: { x: o.x, y: o.y, w, h }, anchor: o.anchor, pin: side };
+  }
+
+  bad += devices.filter((d) => !inRegion(d.r) || !offB(d.r)).length;
+  const placed: Placed = { cam, tags, signs, chips, devices, gates, hulls, truck, arcs };
+  return { placed, bad, hidden, crowd, pts: s.frame.map(pr) };
+}
+
+export function place(sc: Scene, s: State, stage: Stage): Placed {
+  const pts = s.frame.length ? s.frame : sc.actors.flatMap((a) => a.lot.hull);
+  const xs = pts.map((p) => p[0]),
+    ys = pts.map((p) => p[1]);
+  let x0 = Math.min(...xs),
+    x1 = Math.max(...xs);
+  const y0 = Math.min(...ys),
+    y1 = Math.max(...ys);
+  if (x1 - x0 < 520) [x0, x1] = [(x0 + x1) / 2 - 260, (x0 + x1) / 2 + 260];
+  const { l, t, r, b } = stage.region,
+    rw = r - l,
+    rh = b - t,
+    pad = stage.narrow ? 0 : MARGIN,
+    floor = stage.narrow ? ZMIN : 0;
+  const fit = (c: Cam) => {
+    const lay = layout(sc, { ...s, frame: pts }, stage, c);
+    const rects = [...lay.placed.signs, ...lay.placed.tags, ...lay.placed.devices, ...lay.placed.chips].map((o) => o.r);
+    const L = Math.min(...rects.map((o) => o.x), ...lay.pts.map((p) => p[0])),
+      R = Math.max(...rects.map((o) => o.x + o.w), ...lay.pts.map((p) => p[0])),
+      T = Math.min(...rects.map((o) => o.y), ...lay.pts.map((p) => p[1])),
+      B = Math.max(...rects.map((o) => o.y + o.h), ...lay.pts.map((p) => p[1]));
+    return { lay, L, R, T, B };
+  };
+  let best: ReturnType<typeof layout> | null = null,
+    last: ReturnType<typeof layout> | undefined;
+  let z = Math.max(floor, Math.min((rw - 2 * pad) / (x1 - x0), (rh - 2 * pad) / (y1 - y0), 1));
+  for (let n = 0; n < 50 && z >= floor; n++, z *= 0.96) {
+    let c: Cam = { x: (x0 + x1) / 2, y: (y0 + y1) / 2, z };
+    for (let round = 0; round < 3; round++) {
+      const f = fit(c);
+      last = f.lay;
+      if (round < 2) {
+        c = { x: c.x + ((f.L + f.R) / 2 - (l + r) / 2) / z, y: c.y + ((f.T + f.B) / 2 - (t + b) / 2) / z, z };
+        continue;
+      }
+      if (f.R - f.L <= rw - 2 * pad && f.B - f.T <= rh - 2 * pad) {
+        if (!f.lay.bad && !f.lay.crowd) return f.lay.placed;
+        if (!best || f.lay.bad < best.bad) best = f.lay;
+      }
+    }
+  }
+  if (!stage.narrow) return (best ?? last!).placed;
+  const aim = focus(sc, s) ?? { x: (x0 + x1) / 2, y: (y0 + y1) / 2 };
+  let follow: { lay: ReturnType<typeof layout>; score: number } | null = best && { lay: best, score: best.bad * 1e6 };
+  for (let z = ZMIN; z <= 1; z += 0.1)
+    for (const dy of SHIFT)
+      for (const dx of SHIFT) {
+        const lay = layout(sc, s, stage, { x: aim.x + dx / z, y: aim.y + dy / z, z });
+        const score =
+          lay.bad * 1e6 +
+          (lay.placed.tags.filter((t) => t.pin).length + lay.hidden + lay.crowd) * 300 +
+          Math.hypot(dx, dy) +
+          (z - ZMIN) * 1000;
+        if (!follow || score < follow.score) follow = { lay, score };
+      }
+  return follow!.lay.placed;
+}
+const SHIFT = Array.from({ length: 13 }, (_, i) => (i - 6) * 40);
+
+function focus(sc: Scene, s: State): { x: number; y: number } | null {
+  if (s.lead) return { x: s.lead[0], y: s.lead[1] };
+  const hops = sc.stories[s.story].moments[s.moment] ?? [];
+  const ends: number[] = [];
+  for (const e of plan(sc, s.story, s.moment).steps) if (e.hop >= 0) ends[e.hop] = Math.max(ends[e.hop] ?? 0, e.end);
+  let last = -1;
+  ends.forEach((e, i) => (last = last < 0 || e >= ends[last] ? i : last));
+  const a = last >= 0 ? sc.boxes[hops[last].to]?.actor : undefined;
+  const m = a === undefined ? undefined : mean(sc.actors[a].lot.hull);
+  return m ? { x: m[0], y: m[1] } : null;
 }

@@ -4,8 +4,9 @@ import { readFileSync } from 'node:fs';
 import { LOOKS, edgeId, nodes, str } from './model.ts';
 import type { FlowProps } from './model.ts';
 import { cast } from './explain.ts';
-import { scene, stateAt, timeline } from './world.ts';
-import type { Ev } from './world.ts';
+import { HUD } from './looks.ts';
+import { hit, place, polyHit, scene, stageFor, stateAt, timeline } from './world.ts';
+import type { Ev, Placed, Pt, Rect, Stage } from './world.ts';
 import oil from '../figures/explain-oil.ts';
 import returns from '../figures/returns-process.ts';
 import checkout from '../figures/checkout.ts';
@@ -143,4 +144,81 @@ test('a hop to a box outside every actor moves nothing and stops nothing', () =>
   const { events } = timeline(sc, 0, 0);
   assert.ok(!events.some((e) => e.hop === 0));
   assert.ok(events.some((e) => e.hop === 1 && e.kind === 'pulse'));
+});
+
+const near = (r: Rect, p: Pt): Pt => [Math.max(r.x, Math.min(p[0], r.x + r.w)), Math.max(r.y, Math.min(p[1], r.y + r.h))];
+
+function audit(p: Placed, st: Stage): string[] {
+  const out: string[] = [];
+  const vis = [
+    ...p.tags.map((t) => ({ n: `tag ${t.name}`, r: t.r })),
+    ...p.signs.map((s) => ({ n: `sign ${s.actor}`, r: s.r })),
+    ...p.chips.map((c) => ({ n: `chip ${c.text}`, r: c.r })),
+    ...p.devices.map((d) => ({ n: `device ${d.actor}`, r: d.r })),
+  ];
+  for (let i = 0; i < vis.length; i++)
+    for (let j = i + 1; j < vis.length; j++) if (hit(vis[i].r, vis[j].r)) out.push(`${vis[i].n} x ${vis[j].n}`);
+  for (const v of vis) {
+    for (const g of p.gates) if (hit(v.r, g.r)) out.push(`${v.n} x gate ${g.actor}`);
+    p.hulls.forEach((h, a) => polyHit(h, v.r) && out.push(`${v.n} x building ${a}`));
+    if (p.truck && polyHit(p.truck, v.r)) out.push(`${v.n} x truck`);
+    const { l, t, r, b } = st.region;
+    if (v.r.x < l || v.r.y < t || v.r.x + v.r.w > r || v.r.y + v.r.h > b) out.push(`${v.n} outside the view`);
+    if (!v.n.startsWith('chip'))
+      for (const arc of p.arcs)
+        if (arc.some(([x, y]) => x > v.r.x && x < v.r.x + v.r.w && y > v.r.y && y < v.r.y + v.r.h)) out.push(`arc x ${v.n}`);
+  }
+  for (const o of [...p.tags.filter((t) => !t.pin), ...p.signs]) {
+    const [x, y] = near(o.r, o.anchor);
+    const len = Math.hypot(x - o.anchor[0], y - o.anchor[1]);
+    if (len > 24.5) out.push(`leader ${Math.round(len)} px`);
+  }
+  return out;
+}
+
+test('no tag, sign, chip or device overlaps another overlay or a building', () => {
+  const hits: string[] = [];
+  for (const fig of [oil, returns]) {
+    const sc = scene(fig.props);
+    for (const [w, h] of [
+      [1440, 900],
+      [2000, 1150],
+      [390, 844],
+    ]) {
+      const st = stageFor(w, w >= HUD.wide ? Math.min(h, (w * 10) / 16) : Math.min(h, HUD.tall));
+      sc.stories.forEach((story, s) =>
+        story.moments.forEach((_, m) => {
+          for (const x of audit(place(sc, stateAt(sc, s, m, Infinity), st), st))
+            hits.push(`${fig.title} ${w}x${h} ${story.name} ${m + 1}: ${x}`);
+        }),
+      );
+    }
+  }
+  assert.deepEqual(hits, []);
+});
+
+test('a story inside one actor still gets a framed camera', () => {
+  const sc = scene({
+    layout: {
+      children: [
+        {
+          label: 'Home',
+          look: 'person',
+          children: [
+            { id: 'a', label: 'Wake' },
+            { id: 'b', label: 'Eat' },
+          ],
+        },
+      ],
+    },
+    edges: [{ from: 'a', to: 'b' }],
+    steps: [{ label: 'Morning', flow: ['a->b'] }],
+  });
+  for (const [w, h] of [
+    [1440, 900],
+    [390, 760],
+  ]) {
+    const { cam } = place(sc, stateAt(sc, 0, 0, Infinity), stageFor(w, h));
+    assert.ok(Number.isFinite(cam.x) && Number.isFinite(cam.y) && cam.z > 0 && cam.z <= 1, JSON.stringify(cam));
+  }
 });
