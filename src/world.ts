@@ -1,7 +1,7 @@
 import { cast, failed, hopsOf, isCheck, moments, question } from './explain.ts';
 import { edgeId, isGroup, nodes, str } from './model.ts';
 import type { FigLook, FlowProps } from './model.ts';
-import { BAR_Y, C, GL, GZ, LANE, P, PHONE, S, TD, gateArt, street, truckArt } from './world-art.ts';
+import { BAR_Y, BED_ROWS, C, GL, GZ, LANE, P, PHONE, S, TD, gateArt, street, truckArt } from './world-art.ts';
 import type { Gate, Lot, Pt } from './world-art.ts';
 
 export type Carry = { thing: string; form: 'box' | 'barrel' | 'notes'; count: number; from: number };
@@ -175,7 +175,7 @@ export type State = {
   lead?: Pt;
 };
 export type Ev = {
-  kind: 'camera' | 'pulse' | 'door' | 'drive' | 'unit' | 'parcel' | 'arm' | 'release' | 'fail' | 'reply';
+  kind: 'camera' | 'pulse' | 'door' | 'drive' | 'unit' | 'parcel' | 'question' | 'answer' | 'arm' | 'release' | 'fail' | 'reply';
   hop: number;
   start: number;
   end: number;
@@ -302,7 +302,7 @@ function fresh(sc: Scene, story: number): State {
     seen.add(c.thing);
     for (let k = 0; k < c.count; k++) {
       const id = `${c.thing}/${k}`,
-        bed = a === sc.truck && s.truck;
+        bed = a === sc.truck && c.form !== 'notes' && s.truck;
       s.units[id] = {
         thing: c.thing,
         k,
@@ -318,7 +318,16 @@ function fresh(sc: Scene, story: number): State {
   return s;
 }
 
+const plans = new WeakMap<Scene, Map<string, ReturnType<typeof planOf>>>();
 function plan(sc: Scene, story: number, m: number) {
+  const memo = plans.get(sc) ?? new Map<string, ReturnType<typeof planOf>>();
+  plans.set(sc, memo);
+  const key = `${story}/${m}`;
+  if (!memo.has(key)) memo.set(key, planOf(sc, story, m));
+  return memo.get(key)!;
+}
+
+function planOf(sc: Scene, story: number, m: number) {
   const st = sc.stories[story],
     hops = st.moments[m] ?? [],
     A = sc.actors,
@@ -358,7 +367,8 @@ function plan(sc: Scene, story: number, m: number) {
     const b = devBase(a);
     return [b[0], b[1] - PHONE.h * (inCab(a) ? 0.82 : 1) - 4];
   };
-  const bedAt = (t: Truck, i: number) => P(t.x + sc.truckArt!.slots[t.orient === 'R' ? 'R' : 'L'][Math.min(i, 3)], LANE, 0.43);
+  const bedAt = (t: Truck, i: number) =>
+    P(t.x + sc.truckArt!.slots[t.orient === 'R' ? 'R' : 'L'][i % 4], BED_ROWS[Math.floor(i / 4)], 0.43);
   const truckRef = (t: Truck) => (t.orient === 'y' ? YX : t.orient === 'R' ? t.x + 2.18 : t.x + 0.31);
   const front = (t: Truck) => (t.orient === 'y' ? P(YX + TD / 2, t.ty + 2.5, 0.6) : P(t.orient === 'R' ? t.x + 2.5 : t.x, LANE, 0.6));
   const truckPts = (t: Truck): Pt[] => {
@@ -494,13 +504,14 @@ function plan(sc: Scene, story: number, m: number) {
     const dest = (k: number): Pt => (toGate ? [(A[ta].gate.px + A[ta].gate.ex) / 2 + 0.1 - k * 0.42, 6.45] : yardSpot(sc, ta, k));
     set(i, at, (st) => ids.forEach((id) => (st.units[id].moment = m)));
     if (toGate) set(i, at, (st) => void (st.gates[ta].on = m));
-    if (s.truck && ta === T) {
+    const truck = h.carry!.form !== 'notes' && s.truck;
+    if (truck && ta === T) {
       const t0 = driveTo(i, at, sa),
-        base = s.truck.load.length;
+        base = truck.load.length;
       s.frame.push(...ids.map((id) => s.units[id].p));
       return Math.max(...ids.map((id, k) => hopUnit(i, t0 + 280 * k, id, ids, s.units[id].p, bedAt(s.truck!, base + k), 'bed', ta)));
     }
-    if (s.truck && sa === T) {
+    if (truck && sa === T) {
       const t0 = driveTo(i, at, ta);
       return Math.max(
         ...ids.map((id, k) => hopUnit(i, t0 + 280 * k, id, ids, bedAt(s.truck!, s.truck!.load.indexOf(id)), P(...dest(k)), where, ta)),
@@ -552,7 +563,7 @@ function plan(sc: Scene, story: number, m: number) {
     if (fb.check) {
       hl(fa);
       s.frame.push(...gateEnds(fa));
-      set(i, at, (st) => {
+      add('answer', i, at, 0, (st) => {
         const g = st.gates[fa],
           row = g.rows.find((r) => r.box === h.from) ?? g.rows[g.rows.push({ box: h.from, q: fb.check, a: '', fail: false }) - 1];
         Object.assign(row, { a: h.label.charAt(0).toUpperCase() + h.label.slice(1), fail: h.fail });
@@ -573,6 +584,7 @@ function plan(sc: Scene, story: number, m: number) {
           },
           linear,
         );
+        at += 380 - 120;
         if (ta !== fa) {
           const near: number[] = [];
           at = pulse(
@@ -588,6 +600,7 @@ function plan(sc: Scene, story: number, m: number) {
         set(i, at, reach(ta, tb));
         return at;
       }
+      at += 380;
       const z = 0.8,
         w = (2 * Math.PI) / 0.4,
         wd = w * Math.sqrt(1 - z * z);
@@ -641,15 +654,17 @@ function plan(sc: Scene, story: number, m: number) {
       if (!gate) set(i, at, (st) => void (st.dev.includes(ta) && (st.screens[ta] = 'in')));
     }
     if (tb.check) {
-      const reset = sa !== ta;
+      const reset = sa !== ta,
+        d0 = s.gates[ta].deg;
       s.frame.push(...gateEnds(ta));
-      set(i, at, (st) => {
+      if (d0 > 0) at = add('arm', i, at, 260, (st, p) => void (st.gates[ta].deg = d0 * (1 - p)));
+      add('question', i, at, 0, (st) => {
         const g = st.gates[ta];
         if (reset) Object.assign(g, { rows: [], fail: false });
-        g.deg = 0;
         if (!g.rows.some((r) => r.box === h.to)) g.rows.push({ box: h.to, q: tb.check, a: '', fail: false });
         g.on = m;
       });
+      at += 250;
     }
     set(i, at, reach(ta, tb));
     return at;
@@ -668,12 +683,12 @@ function plan(sc: Scene, story: number, m: number) {
     for (const u of Object.values(s.units)) if (['yard', 'gate'].includes(u.where)) s.frame.push(u.p, [u.p[0], u.p[1] + 40]);
     A.forEach((_, a) => s.gates[a].fail && s.frame.push(...gateEnds(a)));
   }
-  return { steps, start, scratch: s };
+  return { steps, start, scratch: s, end: Math.max(CAM, ...ends) };
 }
 
 export function timeline(sc: Scene, story: number, moment: number): { events: Ev[]; end: number } {
-  const events = plan(sc, story, moment).steps.flatMap(({ kind, hop, start, end }) => (kind ? [{ kind, hop, start, end }] : []));
-  return { events, end: Math.max(CAM, ...events.map((e) => e.end)) };
+  const { steps, end } = plan(sc, story, moment);
+  return { events: steps.flatMap(({ kind, hop, start, end }) => (kind ? [{ kind, hop, start, end }] : [])), end };
 }
 
 export function stateAt(sc: Scene, story: number, moment: number, t: number): State {
@@ -691,7 +706,7 @@ export function stateAt(sc: Scene, story: number, moment: number, t: number): St
     const head = raw < 1 && e.hop >= 0 && hopEnd[e.hop] >= best ? e.head?.(s, p) : undefined;
     if (head) [s.lead, best] = [head, hopEnd[e.hop]];
   }
-  s.frame = scratch.frame;
-  s.hi = s.summary ? (t === Infinity ? [...sc.stories[story].path] : []) : scratch.hi;
+  s.frame = [...scratch.frame];
+  s.hi = s.summary ? (t === Infinity ? [...sc.stories[story].path] : []) : [...scratch.hi];
   return s;
 }

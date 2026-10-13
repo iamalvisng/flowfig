@@ -766,6 +766,7 @@ export const LANE = 6.6,
   GZ = 0.8,
   GL = 1.2;
 const BH = 0.46;
+export const BED_ROWS = [LANE - 0.19, LANE + 0.19];
 
 export const INK = { ink: '#141A22', data: '#2456D6', fail: '#B8322A', muted: '#646C79' };
 const BARREL = { side: '#D9822B', shade: '#B4661D', top: '#EDAA5E', rim: '#6E3E10' };
@@ -877,8 +878,8 @@ export function truckArt(depot: { x: number; y: number }) {
   rFront += [0.36, 0.86, 2.14].map(wheelAt).join('');
   const slotsL = [0.27, 0.69, 1.11, 1.53].map((d) => bedX + d + 0.06),
     slotsR = [0.27, 0.69, 1.11, 1.53].map((d) => rBed + d - 0.04);
-  const loadL = slotsL.map((x, i) => at(P(x, LANE, 0.43), '', 'tl' + i)).join(''),
-    loadR = slotsR.map((x, i) => at(P(x, LANE, 0.43), '', 'tr' + i)).join('');
+  const loadL = BED_ROWS.flatMap((y, r) => slotsL.map((x, i) => at(P(x, y, 0.43), '', 'tl' + (r * 4 + i)))).join(''),
+    loadR = BED_ROWS.flatMap((y, r) => slotsR.map((x, i) => at(P(x, y, 0.43), '', 'tr' + (r * 4 + i)))).join('');
   const outDoor = hull(
     [depot.x + 0.2, depot.x + 1.9].flatMap((x) => [depot.y, depot.y + 6].flatMap((y) => [0, 2.5].map((z) => P(x, y, z)))),
   )
