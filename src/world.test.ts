@@ -5,7 +5,7 @@ import { LOOKS, edgeId, nodes, str } from './model.ts';
 import type { FlowProps } from './model.ts';
 import { cast, worldReady } from './explain.ts';
 import { HUD } from './looks.ts';
-import { hit, place, polyHit, scene, stageFor, stateAt, storyCams, timeline } from './world.ts';
+import { CAM, hit, place, polyHit, scene, stageFor, stateAt, storyCams, timeline } from './world.ts';
 import type { Ev, Placed, Pt, Rect, Scene, Stage, State } from './world.ts';
 import oil from '../figures/explain-oil.ts';
 import returns from '../figures/returns-process.ts';
@@ -255,10 +255,13 @@ test('every needed tag, sign, chip and device is on stage, none overlaps, and th
         const fit = place(sc, stateAt(sc, s, n - 1, Infinity), st).cam.z,
           xs = story.path.flatMap((a) => sc.actors[a].lot.hull.map((p) => p[0])),
           pull = w >= HUD.wide && (Math.max(...xs) - Math.min(...xs)) * fit < 0.7 * (st.region.r - st.region.l),
-          aim = w < HUD.wide ? fit : pull ? z[n - 2] * 0.92 : Math.min(fit, z[n - 2]);
+          phone = w < HUD.wide,
+          aim = phone ? z[n - 2] * 2 : pull ? z[n - 2] * 0.92 : Math.min(fit, z[n - 2]),
+          move = timeline(sc, s, n - 1).events.find((e) => e.kind === 'camera');
         if (z[n - 1] > aim + 1e-6 && !place(sc, stateAt(sc, s, n - 1, Infinity), st, aim).faults)
           hits.push(`${fig.title} ${w}x${h} ${story.name}: the outcome zooms in`);
-        if (!pull && z[n - 1] < aim - 1e-6) hits.push(`${fig.title} ${w}x${h} ${story.name}: the outcome pulls back`);
+        if (!pull && z[n - 1] < (phone ? z[n - 2] : aim) - 1e-6) hits.push(`${fig.title} ${w}x${h} ${story.name}: the outcome pulls back`);
+        if (!move || move.end - move.start < CAM) hits.push(`${fig.title} ${w}x${h} ${story.name}: the outcome camera cuts short`);
         for (let m = 0; m < n - 2; m++)
           if (z[m] > z[m + 1] * 1.2 + 1e-6) hits.push(`${fig.title} ${w}x${h} ${story.name} ${m + 1}: the zoom jumps out`);
         story.moments.forEach((_, m) => {

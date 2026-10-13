@@ -1322,17 +1322,23 @@ export function storyCams(sc: Scene, story: number, stage: Stage): Placed[] {
   if (!n) return out;
   out[n - 1] = place(sc, stateAt(sc, story, n - 1, Infinity), stage);
   for (let m = n - 2; m >= 0; m--)
-    out[m] = place(sc, stateAt(sc, story, m, Infinity), stage, Math.min(stage.narrow ? 1 : 1.2, out[m + 1].cam.z * 1.2));
+    out[m] = place(
+      sc,
+      stateAt(sc, story, m, Infinity),
+      stage,
+      Math.min(stage.narrow ? 1 : 1.2, out[m + 1].cam.z * (m === n - 2 && stage.w < HUD.wide ? 1 : 1.2)),
+    );
   const fit = out[n - 1].cam.z,
     xs = sc.stories[story].path.flatMap((a) => sc.actors[a].lot.hull.map((p) => p[0])),
     aim =
       stage.w < HUD.wide
-        ? fit
+        ? out[n - 2].cam.z * 2
         : (Math.max(...xs) - Math.min(...xs)) * fit < 0.7 * (stage.region.r - stage.region.l)
           ? out[n - 2].cam.z * 0.92
           : out[n - 2].cam.z;
+  const end = stateAt(sc, story, n - 1, Infinity);
   if (fit > aim) {
-    const back = place(sc, stateAt(sc, story, n - 1, Infinity), stage, aim);
+    const back = place(sc, end, stage, aim);
     if (!back.faults) out[n - 1] = back;
   }
   return out;
