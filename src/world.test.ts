@@ -191,7 +191,7 @@ function audit(sc: Scene, s: State, p: Placed, st: Stage): string[] {
   p.arcs.forEach((arc, k) =>
     p.hulls.forEach((h, a) => !ends[k].includes(a) && arc.some((q) => inside(q, h)) && out.push(`arc x building ${a}`)),
   );
-  const reach = st.narrow ? 64.5 : 24.5;
+  const reach = st.w < HUD.wide && s.summary ? 40.5 : st.narrow ? 64.5 : 24.5;
   for (const o of p.tags) {
     const [x, y] = o.anchor;
     if (o.pin && x >= l && x <= r && y >= t && y <= b) out.push(`tag ${o.name} pinned while its actor is in frame`);
@@ -255,7 +255,7 @@ test('every needed tag, sign, chip and device is on stage, none overlaps, and th
         const fit = place(sc, stateAt(sc, s, n - 1, Infinity), st).cam.z,
           xs = story.path.flatMap((a) => sc.actors[a].lot.hull.map((p) => p[0])),
           pull = w >= HUD.wide && (Math.max(...xs) - Math.min(...xs)) * fit < 0.7 * (st.region.r - st.region.l),
-          aim = pull ? z[n - 2] * 0.92 : Math.min(fit, z[n - 2]);
+          aim = w < HUD.wide ? fit : pull ? z[n - 2] * 0.92 : Math.min(fit, z[n - 2]);
         if (z[n - 1] > aim + 1e-6 && !place(sc, stateAt(sc, s, n - 1, Infinity), st, aim).faults)
           hits.push(`${fig.title} ${w}x${h} ${story.name}: the outcome zooms in`);
         if (!pull && z[n - 1] < aim - 1e-6) hits.push(`${fig.title} ${w}x${h} ${story.name}: the outcome pulls back`);

@@ -1125,7 +1125,7 @@ export function layout(sc: Scene, s: State, stage: Stage, cam: Cam, full = false
       [ax - 36, ay - g - h],
     ])
       opts.push({ x, y, w, h, anchor });
-    const ds = stage.narrow ? [12, 20, 30, 44, 58] : [12, 18, 24];
+    const ds = stage.w < HUD.wide && s.summary ? [12, 20, 30, 40] : stage.narrow ? [12, 20, 30, 44, 58] : [12, 18, 24];
     const cands: Cands<Opt> = [
       opts,
       () => ring(anchor, w, h, ds),
@@ -1191,7 +1191,17 @@ export function layout(sc: Scene, s: State, stage: Stage, cam: Cam, full = false
 }
 
 export function place(sc: Scene, s: State, stage: Stage, top = stage.narrow ? 1 : 1.2): Placed {
-  const pts = s.frame.length ? s.frame : sc.actors.flatMap((a) => a.lot.hull);
+  const kt = kit(sc, s),
+    last = s.summary && stage.w < HUD.wide ? sc.stories[s.story].moments.slice(-3, -1).flat() : [],
+    near = [...new Set(last.flatMap((h) => [sc.boxes[h.from]?.actor, sc.boxes[h.to]?.actor]))].filter((a) => a !== undefined),
+    pts = near.length
+      ? [
+          ...near.flatMap((a) => (a === sc.truck && s.truck && !kt.parked() ? kt.truckPts(s.truck) : sc.actors[a].lot.hull)),
+          ...sc.actors.flatMap((a, i) => (s.gates[i].fail ? kt.gateEnds(i) : [])),
+        ]
+      : s.frame.length
+        ? s.frame
+        : sc.actors.flatMap((a) => a.lot.hull);
   const xs = pts.map((p) => p[0]),
     ys = pts.map((p) => p[1]);
   let x0 = Math.min(...xs),
@@ -1316,9 +1326,11 @@ export function storyCams(sc: Scene, story: number, stage: Stage): Placed[] {
   const fit = out[n - 1].cam.z,
     xs = sc.stories[story].path.flatMap((a) => sc.actors[a].lot.hull.map((p) => p[0])),
     aim =
-      stage.w >= HUD.wide && (Math.max(...xs) - Math.min(...xs)) * fit < 0.7 * (stage.region.r - stage.region.l)
-        ? out[n - 2].cam.z * 0.92
-        : out[n - 2].cam.z;
+      stage.w < HUD.wide
+        ? fit
+        : (Math.max(...xs) - Math.min(...xs)) * fit < 0.7 * (stage.region.r - stage.region.l)
+          ? out[n - 2].cam.z * 0.92
+          : out[n - 2].cam.z;
   if (fit > aim) {
     const back = place(sc, stateAt(sc, story, n - 1, Infinity), stage, aim);
     if (!back.faults) out[n - 1] = back;
