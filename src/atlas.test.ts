@@ -36,7 +36,7 @@ const withAtlas = async (run: (dir: string, out: string) => Promise<void> | void
     spawnSync(process.execPath, [cli, 'atlas', '--root', dir, '--out', out]);
     await run(dir, out);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true, maxRetries: 10 });
   }
 };
 
