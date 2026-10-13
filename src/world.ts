@@ -26,6 +26,7 @@ export type Scene = {
 };
 
 const FORMS: readonly Carry['form'][] = ['box', 'barrel', 'notes'];
+const BED = BED_ROWS.length * 4;
 const units = (n?: number) => Math.min(4, Math.max(1, Math.round(n ?? 1)));
 
 export function scene(fig: FlowProps, wide = false): Scene {
@@ -312,7 +313,7 @@ function fresh(sc: Scene, story: number): State {
     seen.add(c.thing);
     for (let k = 0; k < c.count; k++) {
       const id = `${c.thing}/${k}`,
-        bed = a === sc.truck && c.form !== 'notes' && s.truck;
+        bed = a === sc.truck && c.form !== 'notes' && s.truck && s.truck.load.length < BED ? s.truck : null;
       s.units[id] = {
         thing: c.thing,
         k,
@@ -534,13 +535,17 @@ function planOf(sc: Scene, story: number, m: number) {
     if (truck && ta === T) {
       const t0 = driveTo(i, at, sa),
         base = truck.load.length;
-      s.frame.push(...ids.map((id) => s.units[id].p));
-      return Math.max(...ids.map((id, k) => hopUnit(i, t0 + 280 * k, id, ids, s.units[id].p, bedAt(s.truck!, base + k), 'bed', ta)));
+      const fit = ids.slice(0, Math.max(0, BED - base));
+      s.frame.push(...fit.map((id) => s.units[id].p));
+      return Math.max(t0, ...fit.map((id, k) => hopUnit(i, t0 + 280 * k, id, fit, s.units[id].p, bedAt(s.truck!, base + k), 'bed', ta)));
     }
     if (truck && sa === T) {
       const t0 = driveTo(i, at, ta);
       return Math.max(
-        ...ids.map((id, k) => hopUnit(i, t0 + 280 * k, id, ids, bedAt(s.truck!, s.truck!.load.indexOf(id)), P(...dest(k)), where, ta)),
+        ...ids.map((id, k) => {
+          const slot = s.truck!.load.indexOf(id);
+          return hopUnit(i, t0 + 280 * k, id, ids, slot < 0 ? s.units[id].p : bedAt(s.truck!, slot), P(...dest(k)), where, ta);
+        }),
       );
     }
     const paths = ids.map((id, k): Pt[] => {

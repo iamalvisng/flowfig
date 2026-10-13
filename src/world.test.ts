@@ -382,3 +382,29 @@ test('an unknown look draws a plain building and still gives a world', () => {
   assert.equal(sc.actors[1].lot.hull.length > 2, true);
   assert.equal(storyCams(sc, 0, stageFor(1440, 900)).length, 2);
 });
+
+test('more units than the truck bed holds stay in the yard, with finite positions and a framed camera', () => {
+  const fig: FlowProps = {
+    layout: {
+      children: [
+        { label: 'Shop', look: 'shop', children: ['x', 'y', 'z'].map((id) => ({ id, label: id.toUpperCase() })) },
+        { label: 'Van', look: 'truck', children: [{ id: 't', label: 'Load' }] },
+        { label: 'Home', look: 'person', children: [{ id: 'h', label: 'Receive' }] },
+      ],
+    },
+    edges: [
+      ...['x', 'y', 'z'].map((id) => ({ from: id, to: 't', carries: { thing: `thing ${id}`, count: 4 } })),
+      { from: 't', to: 'h', carries: { thing: 'thing x', count: 4 } },
+    ],
+    steps: [{ label: 'Deliver', flow: ['x->t', 'y->t', 'z->t', 't->h'] }],
+  };
+  const sc = scene(fig);
+  sc.stories[0].moments.forEach((_, m) => {
+    for (const u of Object.values(stateAt(sc, 0, m, Infinity).units)) assert.ok(u.p.every(Number.isFinite), `${u.thing} ${u.k} at ${m}`);
+  });
+  for (const [w, h] of [
+    [1440, 900],
+    [390, 760],
+  ])
+    for (const p of storyCams(sc, 0, stageFor(w, h))) assert.ok(Number.isFinite(p.cam.z) && p.faults >= 0);
+});
