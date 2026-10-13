@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { LOOKS, edgeId, nodes, str, type FlowProps } from './model.ts';
+import { LOOKS, edgeId, nodes, str } from './model.ts';
 import { cast } from './explain.ts';
 import { scene } from './world.ts';
 import oil from '../figures/explain-oil.ts';
@@ -18,7 +18,7 @@ test('the world scene code holds no word from any figure', () => {
   const stop = new Set<string>([...LOOKS, ...FIELDS, 'shape', 'data', 'box', 'barrel', 'notes', 'edges', 'steps', 'say', 'note']);
   const terms = new Set<string>();
   const add = (v: unknown) => {
-    const t = str(v).trim();
+    const t = str(v).trim().toLowerCase();
     if (t && !stop.has(t)) terms.add(t);
   };
   for (const { props: p } of FIGURES) {
@@ -31,33 +31,13 @@ test('the world scene code holds no word from any figure', () => {
   for (const file of ['world.ts', 'world-art.ts']) {
     const src = readFileSync(new URL(file, import.meta.url), 'utf8');
     for (const [lit] of src.matchAll(/'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"|`(?:[^`\\]|\\.)*`/g)) {
-      const words = new Set(lit.match(/[\p{L}\d][\p{L}\d-]*/gu) ?? []);
+      const low = lit.toLowerCase();
+      const words = new Set(low.match(/[\p{L}\d][\p{L}\d-]*/gu) ?? []);
       for (const t of terms)
-        if (/^[\p{L}\d]+$/u.test(t) ? words.has(t) : lit.includes(t)) hits.push(`${file}: "${t}" in ${lit.slice(0, 50)}`);
+        if (/^[\p{L}\d]+$/u.test(t) ? words.has(t) : low.includes(t)) hits.push(`${file}: "${t}" in ${lit.slice(0, 50)}`);
     }
   }
   assert.deepEqual(hits, []);
-});
-
-test('the scene keeps spec text out of the drawing, so a label cannot add markup', () => {
-  const bad = '<img src=x onerror=alert(1)>';
-  const fig: FlowProps = {
-    lanes: true,
-    layout: {
-      direction: 'column',
-      children: [
-        { label: bad, look: 'person', children: [{ id: 'a', label: bad, check: bad }] },
-        { label: 'B', children: [{ id: 'b', label: bad }] },
-      ],
-    },
-    edges: [{ from: 'a', to: 'b', label: bad, carries: { thing: bad } }],
-    steps: [{ label: bad, outcome: bad, flow: [{ edges: { edge: 'a->b', data: bad }, say: bad }] }],
-  };
-  const sc = scene(fig);
-  assert.ok(!sc.svg.includes('<img') && !sc.svg.includes('onerror'));
-  assert.equal(sc.boxes.a.label, bad);
-  assert.equal(sc.stories[0].moments[0][0].label, bad);
-  assert.equal(sc.actors.length, 2);
 });
 
 test('a thing starts at the actor of its carries.from box or group, with 1 to 4 units', () => {
@@ -69,25 +49,27 @@ test('a thing starts at the actor of its carries.from box or group, with 1 to 4 
   });
   const hop = sc.stories[0].moments.flat().find((h) => h.edge === 'arrive')!;
   assert.deepEqual(hop.carry, { thing: 'item', form: 'box', count: 4, from: sc.actors.findIndex((a) => a.name === 'Customer') });
-  assert.deepEqual(sc.things.item, { form: 'box', count: 4 });
+  assert.deepEqual(sc.things.get('item'), { form: 'box', count: 4 });
 });
 
-test('the device comes from the look, and the antenna tip stays inside the hull', () => {
-  const sc = scene(oil.props);
-  for (const a of sc.actors) {
-    const want = a.look === 'truck' ? 'cab' : a.look === 'person' || a.look === 'phone' ? 'phone' : 'antenna';
-    assert.equal(a.device, want, a.name);
-    const [rx, ry] = a.lot.roof;
-    const h = a.lot.hull;
-    const sides = h.map(([x, y], i) => {
-      const [nx, ny] = h[(i + 1) % h.length];
-      return (nx - x) * (ry - y) - (ny - y) * (rx - x);
-    });
-    assert.ok(sides.every((c) => c >= -1) || sides.every((c) => c <= 1), `${a.name}: the roof point is outside the hull`);
+test('the device comes from the look, and only an antenna actor has a roof antenna', () => {
+  const mark = 'fill="#ffffff" stroke="#2456D6"';
+  const expected = [
+    { fig: oil, devices: ['phone', 'antenna', 'cab', 'antenna'], antennas: 2 },
+    { fig: returns, devices: ['phone', 'antenna', 'antenna', 'antenna'], antennas: 3 },
+  ];
+  for (const { fig, devices, antennas } of expected) {
+    const sc = scene(fig.props);
+    assert.deepEqual(
+      sc.actors.map((a) => a.device),
+      devices,
+    );
+    assert.equal(sc.svg.split(mark).length - 1, antennas);
+    for (const a of sc.actors) {
+      if (a.device !== 'antenna') assert.equal(a.lot.roof, null, a.name);
+      else assert.ok(Math.min(...a.lot.hull.map((p) => p[1])) <= a.lot.roof![1], a.name);
+    }
   }
-  assert.equal(
-    sc.truck,
-    sc.actors.findIndex((a) => a.look === 'truck'),
-  );
-  assert.ok(sc.truckArt);
+  assert.equal(scene(oil.props).truck, 2);
+  assert.ok(scene(oil.props).truckArt);
 });

@@ -676,9 +676,9 @@ function hull(points: Pt[]): Pt[] {
   }
   return lo.slice(0, -1).concat(up.slice(0, -1));
 }
-export type Lot = { x: number; hull: Pt[]; tag: Pt; door: number; depot: { x: number; y: number } | null; roof: Pt };
+export type Lot = { x: number; hull: Pt[]; tag: Pt; door: number; depot: { x: number; y: number } | null; roof: Pt | null };
 
-export function street(looks: (FigLook | undefined)[]): { svg: string; lots: Lot[] } {
+export function street(looks: (FigLook | undefined)[], withAntenna: boolean[]): { svg: string; lots: Lot[] } {
   const n = looks.length,
     X0 = -40,
     X1 = (n - 1) * PITCH + 44;
@@ -710,12 +710,19 @@ export function street(looks: (FigLook | undefined)[]): { svg: string; lots: Lot
     const x = xs[i],
       b = (look ? BUILD[look] : plain)(x, BY),
       tip: P3 = [b.ant[0], b.ant[1], b.ant[2] + (b.own ? 0 : 0.8)];
-    if (!b.own) b.svg += antenna(b.ant);
-    const hl = hull([...b.pts, tip].map((p) => P(...p))).map(([u, v]): Pt => [f(u), f(v)]);
+    if (withAntenna[i] && !b.own) b.svg += antenna(b.ant);
+    const hl = hull((withAntenna[i] ? [...b.pts, tip] : b.pts).map((p) => P(...p))).map(([u, v]): Pt => [f(u), f(v)]);
     const top = hl.reduce((q, p) => (p[1] < q[1] ? p : q));
     const v = P(x, BY, 1.5);
     const [rx, ry] = P(...tip);
-    lots.push({ x, hull: hl, tag: [f(v[0]), f(top[1])], door: x + 1.5, depot: b.depot ?? null, roof: [f(rx), f(ry)] });
+    lots.push({
+      x,
+      hull: hl,
+      tag: [f(v[0]), f(top[1])],
+      door: x + 1.5,
+      depot: b.depot ?? null,
+      roof: withAntenna[i] ? [f(rx), f(ry)] : null,
+    });
     objs.push([x + 1.5 + BY + 1.5, `<g class="bld" id="b-${i}">${b.svg}</g>`]);
   });
   for (const x of xs) {

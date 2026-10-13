@@ -17,7 +17,7 @@ export type Scene = {
   stories: Story[];
   truck: number;
   truckArt: ReturnType<typeof truckArt> | null;
-  things: Record<string, { form: Carry['form']; count: number }>;
+  things: Map<string, { form: Carry['form']; count: number }>;
   keys: ('data' | 'thing' | 'check')[];
 };
 
@@ -40,17 +40,22 @@ export function scene(fig: FlowProps): Scene {
   };
   walk(fig.layout);
 
-  const { svg: ground, lots } = street(cs.map((a) => a.look));
   const truck = cs.findIndex((a) => a.look === 'truck');
+  const devices = cs.map((a, i): Device => (i === truck ? 'cab' : a.look === 'person' || a.look === 'phone' ? 'phone' : 'antenna'));
+  const { svg: ground, lots } = street(
+    cs.map((a) => a.look),
+    devices.map((d) => d === 'antenna'),
+  );
 
-  const things: Scene['things'] = {};
+  const things: Scene['things'] = new Map();
   for (const e of fig.edges) {
     const c = typeof e.carries === 'object' ? e.carries : undefined;
-    if (c && str(c.thing) && !things[c.thing]) things[c.thing] = { form: FORMS.find((x) => x === c.form) ?? 'box', count: units(c.count) };
+    if (c && str(c.thing) && !things.has(c.thing))
+      things.set(c.thing, { form: FORMS.find((x) => x === c.form) ?? 'box', count: units(c.count) });
   }
 
   const actors: SceneActor[] = cs.map((a, i) => {
-    const device: Device = i === truck ? 'cab' : a.look === 'person' || a.look === 'phone' ? 'phone' : 'antenna';
+    const device = devices[i];
     const xs = (k: number) => lots[k].hull.map((p) => p[0]);
     const left = Math.min(...xs(i));
     const prev = i > 0 ? Math.max(...xs(i - 1)) : left - 160;
@@ -93,7 +98,7 @@ export function scene(fig: FlowProps): Scene {
       };
       if (c) {
         const origin = c.from ? (byId.has(c.from) ? c.from : firstBox.get(c.from)) : h.source;
-        hop.carry = { thing: c.thing, ...things[c.thing], from: actorOf.get(origin ?? '') ?? -1 };
+        hop.carry = { thing: c.thing, ...things.get(c.thing)!, from: actorOf.get(origin ?? '') ?? -1 };
       }
       for (const a of [actorOf.get(h.source), actorOf.get(h.target), hop.carry?.from]) if (a !== undefined && a >= 0) path.add(a);
       return hop;
