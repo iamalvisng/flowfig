@@ -91,6 +91,6 @@ test('with reduced motion the SVG holds one frame at any time', { skip: !browser
     assert.equal(await shot(2500), first);
   } finally {
     await close();
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true, maxRetries: 10 });
   }
 });
