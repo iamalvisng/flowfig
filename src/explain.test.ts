@@ -99,7 +99,7 @@ test('a failed check is marked even when the story goes on', () => {
 
 test('without a note, the short line names the next actor, and the outcome moment has no extra line', () => {
   const pickup = moments(oil.props, 'Normal pickup');
-  assert.equal(pickup[1].note, 'Next: Worker');
+  assert.equal(pickup[1].note, 'Worker acts next.');
   assert.equal(pickup.at(-1)?.note, '');
   assert.equal(moments(oil.props, 'Expired certification')[0].note, 'The office does not see the certification.');
 });
@@ -179,7 +179,7 @@ test('with no lanes and no labeled groups, the cast skips decision boxes, and a 
     save.map((m) => m.actor),
     ['API', 'API', 'Records', 'Records'],
   );
-  assert.equal(save[0].note, 'Next: Records');
+  assert.equal(save[0].note, 'Records acts next.');
   assert.deepEqual(save[2].stamp, { mark: '✓', label: 'yes' });
   assert.equal(moments(plain, 'Recheck')[0].actor, 'API');
 });

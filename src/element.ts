@@ -44,6 +44,12 @@ type Guide = {
 };
 
 const KEYS = { data: 'Data through the air', thing: 'Things on the road or by hand', check: 'A check' };
+const ICONS = {
+  data: '<path d="M2 14C3 5 13 5 14 14" fill="none" stroke="#2456D6" stroke-width="1.6"/><circle cx="8" cy="7.3" r="2.6" fill="#2456D6"/>',
+  thing: '<rect x="4" y="2" width="8" height="12" rx="2" fill="#D9822B"/><path d="M4 6h8M4 10h8" stroke="#A35F1C"/>',
+  check:
+    '<path d="M3 3v11" stroke="#2e3440" stroke-width="2.4"/><path d="M3 6h11" stroke="#2e3440" stroke-width="2.6" stroke-dasharray="3 2"/>',
+};
 
 const FORMS: Form[] = ['diagram', 'guide', 'change'];
 const tokens = (t: Record<string, string>) =>
@@ -86,6 +92,7 @@ const CSS = [
   '.ff-stage[data-stage=diagram]{background:var(--flowfig-bg)}',
   '.ff-stage>.ff-pane{position:absolute;inset:0;overflow:auto}',
   `.ff-chips{position:absolute;top:${HUD.pad}px;left:${HUD.pad * 2 + HUD.panel}px;max-width:calc(100% - ${HUD.pad * 3 + HUD.panel}px);box-sizing:border-box;display:flex;gap:2px;padding:4px;overflow-x:auto;background:var(--flowfig-surface);border:1px solid var(--flowfig-border);border-radius:10px}`,
+  '.ff-cut{mask-image:linear-gradient(90deg,#000 calc(100% - 40px),transparent)}',
   '.ff-chip,.ff-hd .ff-btn{flex:none;border:0;border-radius:7px;padding:6px 12px;font:500 14px/20px var(--flowfig-font);color:var(--flowfig-muted);background:none}',
   '.ff-chip[aria-pressed=true],.ff-hd .ff-btn[aria-pressed=true]{background:var(--ff-well);color:var(--flowfig-ink);font-weight:600}',
   '.ff-hd{display:flex;flex-wrap:wrap;align-items:center;gap:8px}',
@@ -120,9 +127,8 @@ const CSS = [
   '.ff-next::after{content:"  \\2192"/""}',
   '.ff-more{display:none}',
   '.ff-key{margin:0;padding:12px 0 0;list-style:none;display:flex;flex-direction:column;gap:4px;border-top:1px solid var(--flowfig-border);font-size:13px;color:var(--flowfig-muted)}',
-  '.ff-key li::before{content:"";display:inline-block;width:18px;height:0;margin-right:10px;vertical-align:middle;border-top:2px solid #2456D6}',
-  '.ff-key li[data-k=thing]::before{height:10px;border:0;background:#D9822B;border-radius:2px}',
-  '.ff-key li[data-k=check]::before{height:10px;border:0;border-top:3px solid #2e3440}',
+  '.ff-key li{display:flex;align-items:center;gap:10px}',
+  '.ff-skip li::before{content:"\\2717";margin-right:8px;color:var(--flowfig-bad)}',
   `@container ff-host (width < ${HUD.wide}px){.ff-g{aspect-ratio:auto;height:min(100svh,${HUD.tall}px);max-height:none}.ff-chips{top:8px;left:8px;max-width:calc(100% - 16px)}.ff-hud{top:auto;left:0;right:0;bottom:0;width:auto;height:${HUD.sheet}px;max-height:none;gap:8px;padding:12px 16px;border-radius:12px 12px 0 0;font-size:13px}.ff-say{font-size:16px}.ff-note{font-size:13px}.ff-kick,.ff-moments button,.ff-key{font-size:11px}.ff-ht,.ff-code,.ff-tog,.ff-key,.ff-moments:not(.ff-open),.ff-skip:not(.ff-open){display:none}.ff-hd{order:-3}.ff-say{order:-2}.ff-ctl{order:-1}.ff-more{display:inline-block}}`,
   `@container ff-guide (${HUD.slim * 2}px <= width < ${HUD.wide}px) and (height < ${HUD.short}px){.ff-chips{top:${HUD.pad}px;left:${HUD.pad * 2 + HUD.slim}px;max-width:calc(100% - ${HUD.pad * 3 + HUD.slim}px)}.ff-hud{top:${HUD.pad}px;left:${HUD.pad}px;right:auto;bottom:auto;width:${HUD.slim}px;height:auto;max-height:calc(100% - ${HUD.pad * 2}px);border-radius:8px}}`,
   '.ff-verdict{padding:12px 16px;background:var(--flowfig-surface);border:1px solid var(--flowfig-border);border-radius:10px;font-size:16px;font-weight:500}',
@@ -175,6 +181,8 @@ const endOf = (spec: FlowProps, label: string) => {
   const [start, ms] = clock(spec, label);
   return start + ms + STEP_HOLD_MS / 2;
 };
+
+const cut = (bar?: El | null) => bar?.classList.toggle('ff-cut', bar.scrollLeft + bar.clientWidth < bar.scrollWidth - 1);
 
 const still = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -690,6 +698,10 @@ export class FlowfigExplain extends Base {
               g.key.replaceChildren(
                 ...scene.keys.map((k) => {
                   const li = h('li', '', KEYS[k]);
+                  li.insertAdjacentHTML(
+                    'afterbegin',
+                    `<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">${ICONS[k]}</svg>`,
+                  );
                   li.dataset.k = k;
                   return li;
                 }),
@@ -729,6 +741,7 @@ export class FlowfigExplain extends Base {
             h('div', 'ff-ft', g.tog, full),
           ),
         );
+        guide.querySelector('.ff-chips')!.addEventListener('scroll', (e) => cut(e.currentTarget as El));
         guide.addEventListener('click', (e) => {
           if (e.composedPath()[0] !== this.#ctl.play) this.pause();
         });
@@ -781,6 +794,7 @@ export class FlowfigExplain extends Base {
     g.code.hidden = end || !this.hasAttribute('code');
     g.code.textContent = m.code.length ? m.code.join('\n') : 'No source in the spec.';
     for (const c of g.chips) c.setAttribute('aria-pressed', String(c.textContent === m.step));
+    cut(g.chips[0]?.parentElement);
     const skipped = m.summary?.notReached ?? [];
     g.skip.hidden = !skipped.length;
     g.skip.replaceChildren(

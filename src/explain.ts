@@ -154,7 +154,7 @@ export function moments(fig: FlowProps, step: string): Moment[] {
 
   out.forEach((m, i) => {
     const next = out.slice(i + 1).find((o) => o.actor !== m.actor);
-    if (!m.note) m.note = next ? `Next: ${next.actor}` : `Outcome: ${outcome}`;
+    if (!m.note && next) m.note = `${next.actor} acts next.`;
   });
   out.push({
     actor: out.at(-1)!.actor,
