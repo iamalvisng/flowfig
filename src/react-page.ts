@@ -46,6 +46,8 @@ for (const m of ['error', 'warn']) {
     const load = async (width: number) => {
       await noErrors();
       await send('Emulation.setDeviceMetricsOverride', { width, height: 844, deviceScaleFactor: 1, mobile: false });
+      // The Windows CI runner reports reduced motion, so the player shows no active message.
+      await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }] });
       const { frameTree } = await send('Page.getFrameTree');
       await send('Page.setDocumentContent', { frameId: frameTree.frame.id, html });
     };
@@ -53,6 +55,6 @@ for (const m of ['error', 'warn']) {
     await noErrors();
   } finally {
     await close();
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true, maxRetries: 10 });
   }
 }
