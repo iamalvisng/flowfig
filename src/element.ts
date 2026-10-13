@@ -802,7 +802,7 @@ export class FlowfigExplain extends Base {
     if (world?.fits(story)) {
       if (g.diagram) g.diagram.hidden = true;
       g.key.hidden = false;
-      this.#motion = world.show(story, k, motion);
+      this.#motion = world.show(story, k, motion, m.say);
       return;
     }
     this.#motion = 0;

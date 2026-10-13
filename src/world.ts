@@ -1245,7 +1245,11 @@ function focus(sc: Scene, s: State): { x: number; y: number } | null {
   return m ? { x: m[0], y: m[1] } : null;
 }
 
-export type World = { show(story: number, moment: number, motion: boolean): number; fits(story: number): boolean; stop(): void };
+export type World = {
+  show(story: number, moment: number, motion: boolean, say: string): number;
+  fits(story: number): boolean;
+  stop(): void;
+};
 
 const OV = '#141A22',
   OV2 = '#4B5361',
@@ -1347,7 +1351,8 @@ export function mountWorld(stage: HTMLElement, sc: Scene, resized: () => void): 
     cam: Cam | undefined,
     cur: { story: number; moment: number } | undefined,
     raf = 0,
-    built = '';
+    built = '',
+    said = '';
   const lays = new Map<string, Placed>();
   let tags: { el: HTMLElement; actor: number; name: string; mk: HTMLElement; st: HTMLElement }[] = [],
     signs: { el: HTMLElement; actor: number; rows: { q: HTMLElement; a: HTMLElement }[] }[] = [],
@@ -1507,7 +1512,7 @@ export function mountWorld(stage: HTMLElement, sc: Scene, resized: () => void): 
       const ev = s.ever[t.actor];
       if (ev && acting.includes(t.actor)) spoken.push(`${t.name}: ${ev.label}${ev.fail ? ', failed' : ''}.`);
     }
-    svg.setAttribute('aria-label', spoken.join(' '));
+    svg.setAttribute('aria-label', spoken.join(' ') || said);
     for (const t of tags) {
       const ev = s.ever[t.actor];
       t.mk.hidden = !ev;
@@ -1563,8 +1568,9 @@ export function mountWorld(stage: HTMLElement, sc: Scene, resized: () => void): 
   measure();
 
   return {
-    show(story, moment, motion) {
+    show(story, moment, motion, say) {
       cancelAnimationFrame(raf);
+      said = say;
       cur = { story, moment };
       if (!stg.w || !stg.h) return 0;
       const to = layoutFor(story, moment).cam;
