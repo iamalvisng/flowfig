@@ -1732,7 +1732,11 @@ export function mountWorld(stage: HTMLElement, fig: FlowProps, resized: () => vo
       return end;
     },
     fits(story) {
-      return !stg.w || sc.stories[story].moments.every((_, m) => !layoutFor(story, m).faults);
+      try {
+        return !stg.w || sc.stories[story].moments.every((_, m) => !layoutFor(story, m).faults);
+      } catch {
+        return false;
+      }
     },
     stop() {
       cancelAnimationFrame(raf);

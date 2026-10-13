@@ -38,7 +38,9 @@ before(async () => {
   server = createServer((req, res) => {
     const path = decodeURIComponent(new URL(req.url ?? '/', 'http://x').pathname);
     const spec = /^\/spec\/([\w-]+)\.json$/.exec(path)?.[1];
-    const file = path.startsWith('/dist/') ? join(dist, normalize(path.slice(6))) : '';
+    const bare = /^\/(dist|nochunk)\//.exec(path);
+    const file =
+      bare && !(bare[1] === 'nochunk' && path.includes('element-world')) ? join(dist, normalize(path.slice(bare[0].length))) : '';
     if (pages.has(path)) res.writeHead(200, { 'content-type': 'text/html' }).end(pages.get(path));
     else if (spec && specs[spec]) res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(specs[spec]));
     else if (file.startsWith(dist) && existsSync(file)) res.writeHead(200, { 'content-type': 'text/javascript' }).end(readFileSync(file));
@@ -372,6 +374,22 @@ test(
     }
   },
 );
+
+test('a world chunk that fails to load leaves the diagram, not an alert', { skip: !browser.path }, async () => {
+  const path = `/page-${pages.size}`;
+  pages.set(path, `<!doctype html><body><script type="module" src="/nochunk/element.js"></script>${guide('oil')}</body>`);
+  const { targetId } = await cdp.send('Target.createTarget', { url: origin + path });
+  const { sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true });
+  const ev = async (e: string) => (await cdp.send('Runtime.evaluate', { expression: e, returnByValue: true }, sessionId)).result.value;
+  try {
+    const shown = `(() => { const d = ${sr}?.querySelector('[data-stage="diagram"]'); return !!d && !d.hidden && !!d.querySelector('svg[role="img"]'); })()`;
+    for (let t = Date.now(); !(await ev(shown)); await new Promise((r) => setTimeout(r, 50)))
+      assert.ok(Date.now() - t < 5000, 'the diagram shows');
+    assert.equal(await ev(`!!${sr}.querySelector('[role="alert"]')`), false);
+  } finally {
+    await cdp.send('Target.closeTarget', { targetId });
+  }
+});
 
 test('the world stage and the moments list read a refused check as failed', { skip: !browser.path }, async () => {
   const page = await open(guide('oil'), `!!${sr}?.querySelector('[data-actor]')`);

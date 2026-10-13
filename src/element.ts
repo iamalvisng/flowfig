@@ -715,7 +715,13 @@ export class FlowfigExplain extends Base {
               g.drawn = '';
               this.#update();
             })
-            .catch((e) => this.#fault(`${this.#name}: ${(e as Error).message}`));
+            .catch(() => {
+              if (load !== this.#worldLoads || this.#g !== g) return;
+              this.#world?.stop();
+              this.#world = undefined;
+              g.ready = false;
+              this.#update();
+            });
         } else {
           g.stage.dataset.stage = 'diagram';
           g.stage.append(pane(spec));
