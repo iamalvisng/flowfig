@@ -294,6 +294,7 @@ full reference, run `npx flowfig docs`.
 | `label`  | The title in the box.                                                                                     | required                            |
 | `sub`    | A smaller line under the label.                                                                           | none                                |
 | `shape`  | `"box"`, `"decision"` (a diamond) or `"store"` (a data cylinder).                                         | `"box"`                             |
+| `check`  | The question on the gate in the guide world. The labels of the edges out of the box are the answers.      | the label, for a `decision` box     |
 | `source` | The code this draws: `path` or `path#symbol`. `flowfig verify` checks it.                                 | none                                |
 | `detail` | A more detailed figure: the SVG path from the repo root. `flowfig atlas` links the box to it.             | none                                |
 | `lines`  | The least number of text lines that a content card keeps.                                                 | none                                |
@@ -351,26 +352,28 @@ and `align`. flowfig ignores `around` on the edges. A `direction` on the root fo
 
 ### Edges
 
-| Field    | Meaning                                                                                             | Default    |
-| -------- | --------------------------------------------------------------------------------------------------- | ---------- |
-| `from`   | The id of the box or group where the edge starts.                                                   | required   |
-| `to`     | The id of the box or group where the edge ends.                                                     | required   |
-| `id`     | The name that beats use.                                                                            | `from->to` |
-| `label`  | The text on the edge.                                                                               | none       |
-| `around` | `"above"`, `"below"`, `"left"` or `"right"` routes the edge around the boxes between, on that side. | none       |
-| `quiet`  | `true` draws the edge only while a step uses it.                                                    | `false`    |
-| `source` | The code this edge draws: `path` or `path#symbol`. `flowfig verify` checks it.                      | none       |
+| Field     | Meaning                                                                                                                                                                                                                            | Default    |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| `from`    | The id of the box or group where the edge starts.                                                                                                                                                                                  | required   |
+| `to`      | The id of the box or group where the edge ends.                                                                                                                                                                                    | required   |
+| `id`      | The name that beats use.                                                                                                                                                                                                           | `from->to` |
+| `label`   | The text on the edge.                                                                                                                                                                                                              | none       |
+| `around`  | `"above"`, `"below"`, `"left"` or `"right"` routes the edge around the boxes between, on that side.                                                                                                                                | none       |
+| `quiet`   | `true` draws the edge only while a step uses it.                                                                                                                                                                                   | `false`    |
+| `carries` | What moves on the edge in the guide world: `"data"`, or `{ thing, form, count, from }` for a physical thing. `form` is `box`, `barrel` or `notes`. `count` is 1 to 4. `from` is the id of the box or group where the thing starts. | `"data"`   |
+| `source`  | The code this edge draws: `path` or `path#symbol`. `flowfig verify` checks it.                                                                                                                                                     | none       |
 
 ### Steps
 
 Each step is one story. The player shows one tab for each step. With no steps, the figure is a still map.
 
-| Field     | Meaning                                               | Default  |
-| --------- | ----------------------------------------------------- | -------- |
-| `label`   | The tab title.                                        | required |
-| `flow`    | The beats, in play order.                             | required |
-| `caption` | The line under the figure while no beat has a `say`.  | none     |
-| `nodes`   | The ids of the boxes to highlight for the whole step. | none     |
+| Field     | Meaning                                                                                                | Default                         |
+| --------- | ------------------------------------------------------------------------------------------------------ | ------------------------------- |
+| `label`   | The tab title.                                                                                         | required                        |
+| `flow`    | The beats, in play order.                                                                              | required                        |
+| `caption` | The line under the figure while no beat has a `say`.                                                   | none                            |
+| `outcome` | One sentence, 15 words or fewer, about how the story ends. The guide shows it at the end of the story. | "Ends at: <the last box label>" |
+| `nodes`   | The ids of the boxes to highlight for the whole step.                                                  | none                            |
 
 ### Beats
 
@@ -425,8 +428,10 @@ The last line gives the counts of the parts of the figure. Compare the counts wi
 
 | Rule                        | Severity | What it finds                                                                                                              |
 | --------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `unknown-id`                | error    | An edge, step or beat names a box, group or edge that does not exist.                                                      |
+| `unknown-id`                | error    | An edge, step or beat names a box, group or edge that does not exist, or `carries.from` names no box and no group.         |
 | `duplicate-id`              | error    | Two boxes, two groups or two edges have the same id.                                                                       |
+| `bad-carries`               | warning  | An edge `carries` has an empty `thing`, a `form` that is not `box`, `barrel` or `notes`, or a `count` that is not 1 to 4.  |
+| `thing-no-road`             | warning  | A thing edge starts and ends at the same actor, or one end has no actor.                                                   |
 | `hidden-edge`               | error    | A `quiet` edge that no beat uses, so the figure never shows it.                                                            |
 | `text-overflow`             | error    | Text that needs more width than its box has.                                                                               |
 | `edge-crosses-box`          | error    | An edge that goes through a box that is not one of its ends.                                                               |

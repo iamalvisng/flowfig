@@ -672,3 +672,41 @@ test('an edge to a group with no boxes fails check --strict', () => {
   assert.equal(r.status, 1);
   assert.match(r.stdout, /edge "a->g" ends at group "g", which has no boxes/);
 });
+
+test('check warns when a thing edge has a bad name, form or count, names an unknown start, or does not travel', () => {
+  const fig: FlowProps = {
+    lanes: true,
+    layout: {
+      direction: 'column',
+      children: [
+        {
+          label: 'Shop',
+          children: [
+            { id: 'a', label: 'Pack' },
+            { id: 'b', label: 'Label', check: 'isPaid()' },
+          ],
+        },
+        { label: 'Home', children: [{ id: 'c', label: 'Receive' }] },
+      ],
+    },
+    edges: [
+      { from: 'a', to: 'b', carries: { thing: 'parcel' } },
+      { id: 'arrive', from: 'b', to: 'c', carries: { thing: 'parcel', count: 6 } },
+      { from: 'a', to: 'c', carries: { thing: '', form: 'crate' as 'box' } },
+      { from: 'c', to: 'a', carries: { thing: 'cash', from: 'till' } },
+    ],
+  };
+  const found = checkSpec(fig);
+  const said = (rule: string) => found.filter((f) => f.rule === rule).map((f) => f.message);
+  assert.deepEqual(said('thing-no-road'), [
+    'edge "a->b" carries "parcel", but both ends are at actor "Shop"; set carries.from to the box where the thing starts',
+  ]);
+  assert.deepEqual(said('bad-carries'), [
+    'edge "arrive" has carries.count 6; use 1 to 4',
+    'edge "a->c" has an empty carries.thing; name the thing in plain words',
+    'edge "a->c" has carries.form "crate"; use box, barrel or notes',
+  ]);
+  assert.deepEqual(said('unknown-id'), ['edge "c->a" has carries.from "till", which names no box and no group']);
+  assert.ok(found.filter((f) => f.rule === 'bad-carries' || f.rule === 'thing-no-road').every((f) => f.severity === 'warning'));
+  assert.ok(found.some((f) => f.rule === 'plain-text' && f.message.startsWith('box "b": check')));
+});

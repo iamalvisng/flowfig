@@ -19,6 +19,12 @@ import {
 import type { Pt } from './geometry.ts';
 import { layoutRail, railState, RAIL } from './rail.ts';
 import { checkScene } from './check.ts';
+import oil from '../figures/explain-oil.ts';
+import returns from '../figures/returns-process.ts';
+import checkout from '../figures/checkout.ts';
+import sync from '../figures/explain-sync.ts';
+import deliveryBefore from '../figures/explain-delivery-before.ts';
+import deliveryAfter from '../figures/explain-delivery-after.ts';
 
 const fig: FlowProps = {
   speed: 1000,
@@ -1599,4 +1605,13 @@ test('a scoped figure points its arrows at its own marker, so two figures on one
     assert.match(svg, /marker-end="url\(#x-arrow\)"/);
     assert.doesNotMatch(svg, /url\(#arrow\)/);
   }
+});
+
+test('the explain fields change no diagram', () => {
+  const strip = (p: FlowProps): FlowProps =>
+    JSON.parse(JSON.stringify(p, (k, v) => (['carries', 'check', 'outcome', 'look'].includes(k) ? undefined : v)));
+  for (const f of [oil, returns, checkout, sync, deliveryBefore, deliveryAfter])
+    assert.equal(toSvg(f.props), toSvg(strip(f.props)), f.title);
+  assert.notDeepEqual(strip(oil.props), oil.props);
+  assert.notDeepEqual(strip(returns.props), returns.props);
 });
