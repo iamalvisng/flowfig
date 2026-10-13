@@ -768,6 +768,7 @@ export type Placed = {
   hulls: Pt[][];
   truck?: Pt[];
   arcs: Pt[][];
+  faults: number;
 };
 type Opt = Rect & { anchor: Pt };
 
@@ -777,6 +778,24 @@ const GAP = 12,
   TAG_H = 46,
   CHIP_H = 26;
 const nearest = (r: Rect, p: Pt): Pt => [Math.max(r.x, Math.min(p[0], r.x + r.w)), Math.max(r.y, Math.min(p[1], r.y + r.h))];
+function ring(p: Pt, w: number, h: number, ds: number[]): Opt[] {
+  const out: Opt[] = [];
+  const side = (c: number, size: number) => (c > 0.38 ? [0] : c < -0.38 ? [size] : [size / 2, size * 0.1, size * 0.9]);
+  for (const d of ds)
+    for (let i = 0; i < 16; i++) {
+      const c = Math.cos((i * Math.PI) / 8),
+        n = Math.sin((i * Math.PI) / 8);
+      for (const sx of side(c, w)) for (const sy of side(n, h)) out.push({ x: p[0] + c * d - sx, y: p[1] + n * d - sy, w, h, anchor: p });
+    }
+  return out;
+}
+const bounds = (ps: Pt[]): Rect => {
+  const xs = ps.map((p) => p[0]),
+    ys = ps.map((p) => p[1]),
+    x = Math.min(...xs),
+    y = Math.min(...ys);
+  return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y };
+};
 const width = (text: string, size: number, bold: boolean) => textWidth(text, size) * (bold ? 1.06 : 1);
 
 export const hit = (a: Rect, b: Rect, pad = 0) =>
@@ -825,13 +844,7 @@ function layout(sc: Scene, s: State, stage: Stage, cam: Cam) {
     cx = (l + r) / 2,
     cy = (t + b) / 2;
   const pr = (p: Pt): Pt => [(p[0] - cam.x) * cam.z + cx, (p[1] - cam.y) * cam.z + cy];
-  const span = (ps: Pt[]): Rect => {
-    const xs = ps.map((p) => pr(p)[0]),
-      ys = ps.map((p) => pr(p)[1]),
-      x = Math.min(...xs),
-      y = Math.min(...ys);
-    return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y };
-  };
+  const span = (ps: Pt[]) => bounds(ps.map(pr));
   const hulls = A.map((a) => a.lot.hull.map(pr));
   const truckW = s.truck && !k.parked() ? k.truckPts(s.truck) : null;
   const truck = truckW ? hull(truckW.map(pr)) : undefined;
@@ -858,10 +871,11 @@ function layout(sc: Scene, s: State, stage: Stage, cam: Cam) {
   const taken: Rect[] = [...devices, ...gates].map((d) => d.r);
   let bad = 0;
   const inRegion = (o: Rect) => o.x >= l && o.y >= t && o.x + o.w <= r && o.y + o.h <= b;
-  const offB = (o: Rect) => !hulls.some((h) => polyHit(h, o, 2)) && !(truck && polyHit(truck, o, 2));
+  const solids = [...hulls, ...(truck ? [truck] : [])].map((h) => ({ h, box: bounds(h) }));
+  const offB = (o: Rect) => !solids.some(({ h, box }) => hit(box, o, 2) && polyHit(h, o, 2));
   const offA = (o: Rect) => !arcs.some((arc) => arc.some(([x, y]) => x > o.x - 4 && x < o.x + o.w + 4 && y > o.y - 4 && y < o.y + o.h + 4));
   const free = (o: Rect) => !taken.some((x) => hit(x, o, 6));
-  const clean = <T extends Rect>(opts: T[]) => opts.find((o) => inRegion(o) && offB(o) && offA(o) && free(o));
+  const clean = <T extends Rect>(opts: T[]) => opts.find((o) => inRegion(o) && free(o) && offA(o) && offB(o));
   const pick = <T extends Rect>(opts: T[]): T => {
     const o = clean(opts);
     if (o) return o;
@@ -956,6 +970,7 @@ function layout(sc: Scene, s: State, stage: Stage, cam: Cam) {
         [gr.x - GAP - w, bot - h, [gr.x, bot - 4]],
       ] as [number, number, Pt][]
     ).map(([x, y, anchor]) => ({ x, y, w, h, anchor }));
+    for (const p of [foot, [mid, gr.y], [gr.x, gy], [gr.x + gr.w, gy]] as Pt[]) opts.push(...ring(p, w, h, [12, 24]));
     const o = pick(opts);
     signs.push({ actor: g.actor, r: { x: o.x, y: o.y, w, h }, anchor: o.anchor, rows });
     taken.push(o);
@@ -999,15 +1014,16 @@ function layout(sc: Scene, s: State, stage: Stage, cam: Cam) {
       [ax - 36, ay - g - h],
     ])
       opts.push({ x, y, w, h, anchor });
-    if (stage.narrow)
-      for (const d of [30, 44, 58])
-        for (let i = 0; i < 16; i++) {
-          const c = Math.cos((i * Math.PI) / 8),
-            n = Math.sin((i * Math.PI) / 8),
-            x = ax + c * d - (c > 0.38 ? 0 : c < -0.38 ? w : w / 2),
-            y = ay + n * d - (n > 0.38 ? 0 : n < -0.38 ? h : h / 2);
-          opts.push({ x, y, w, h, anchor });
-        }
+    const ds = stage.narrow ? [12, 20, 30, 44, 58] : [12, 18, 24];
+    opts.push(
+      ...ring(anchor, w, h, ds),
+      ...ring(
+        hulls[a].reduce((m, p) => (p[1] > m[1] ? p : m)),
+        w,
+        h,
+        ds,
+      ),
+    );
     const must = s.hi.includes(a) || (s.summary && story.path.includes(a));
     const base = { actor: a, name, status, mark, quiet: !story.path.includes(a) };
     const out = ax < l || ax > r || ay < t || ay > b;
@@ -1045,7 +1061,7 @@ function layout(sc: Scene, s: State, stage: Stage, cam: Cam) {
   }
 
   bad += devices.filter((d) => !inRegion(d.r) || !offB(d.r)).length;
-  const placed: Placed = { cam, tags, signs, chips, devices, gates, hulls, truck, arcs };
+  const placed: Placed = { cam, tags, signs, chips, devices, gates, hulls, truck, arcs, faults: bad };
   return { placed, bad, pts: s.frame.map(pr) };
 }
 
@@ -1093,22 +1109,24 @@ export function place(sc: Scene, s: State, stage: Stage): Placed {
     return { lay: best ?? last!, ok: false };
   };
   const whole = search(stage.narrow ? ZMIN : 0, 1);
-  if (whole.ok || !stage.narrow) return whole.lay.placed;
+  if (whole.ok) return whole.lay.placed;
+  const ref = stage.narrow ? ZMIN : whole.lay.placed.cam.z;
   const mid = { x: (x0 + x1) / 2, y: (y0 + y1) / 2 };
   const grid = (aim: { x: number; y: number }, zs: number[]) => {
-    let follow: { lay: ReturnType<typeof layout>; score: number } | null = null;
-    for (const z of zs)
-      for (const dy of SHIFT)
-        for (const dx of SHIFT) {
-          const lay = layout(sc, s, stage, { x: aim.x + dx / z, y: aim.y + dy / z, z });
-          if (lay.bad) continue;
-          const score = lay.placed.tags.filter((t) => t.pin).length * 300 + Math.hypot(dx, dy) + Math.abs(z - ZMIN) * 1000;
-          if (!follow || score < follow.score) follow = { lay, score };
-        }
-    return follow?.lay;
+    const cams = zs
+      .flatMap((z) => SHIFT.flatMap((dy) => SHIFT.map((dx) => ({ z, dx, dy, base: Math.hypot(dx, dy) + Math.abs(z - ref) * 1000 }))))
+      .sort((p, q) => p.base - q.base);
+    let best: { lay: ReturnType<typeof layout>; score: number } | null = null;
+    for (const { z, dx, dy, base } of cams) {
+      if (best && base >= best.score) break;
+      const lay = layout(sc, s, stage, { x: aim.x + dx / z, y: aim.y + dy / z, z });
+      const score = base + lay.placed.tags.filter((t) => t.pin).length * 300;
+      if (!lay.bad && (!best || score < best.score)) best = { lay, score };
+    }
+    return best?.lay;
   };
-  const zs = [0, 1, 2, 3, 4, 5].map((i) => ZMIN + i * 0.1),
-    far = [0.4, 0.35, 0.3, 0.25];
+  const zs = [0, 1, 2, 3, 4, 5].map((i) => (stage.narrow ? ZMIN + i * 0.1 : ref * (1 - i * 0.08))),
+    far = [0.4, 0.35, 0.3, 0.25].filter((z) => z < Math.min(...zs));
   return (grid(focus(sc, s) ?? mid, zs) ?? grid(mid, zs) ?? grid(mid, far) ?? whole.lay).placed;
 }
 const SHIFT = Array.from({ length: 13 }, (_, i) => (i - 6) * 40);

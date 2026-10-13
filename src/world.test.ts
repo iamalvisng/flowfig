@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { LOOKS, edgeId, nodes, str } from './model.ts';
 import type { FlowProps } from './model.ts';
 import { cast } from './explain.ts';
@@ -15,6 +15,11 @@ import deliveryBefore from '../figures/explain-delivery-before.ts';
 import deliveryAfter from '../figures/explain-delivery-after.ts';
 
 const FIGURES = [oil, returns, checkout, sync, deliveryBefore, deliveryAfter];
+const FIXTURES: { title: string; props: FlowProps }[] = await Promise.all(
+  readdirSync(new URL('../figures/', import.meta.url))
+    .filter((f) => f.endsWith('.ts'))
+    .map(async (f) => (await import(`../figures/${f}`)).default),
+);
 
 test('the world scene code holds no word from any figure', () => {
   const FIELDS = ['label', 'from', 'to', 'id', 'check', 'carries', 'thing', 'form', 'count', 'outcome', 'look', 'tone'];
@@ -212,7 +217,7 @@ function audit(sc: Scene, s: State, p: Placed, st: Stage): string[] {
 
 test('every needed tag, sign, chip and device is on stage, and none overlaps another overlay, a building or an arc', () => {
   const hits: string[] = [];
-  for (const fig of [oil, returns]) {
+  for (const fig of FIXTURES) {
     const sc = scene(fig.props);
     for (const [w, h] of [
       [1440, 900],
@@ -223,7 +228,9 @@ test('every needed tag, sign, chip and device is on stage, and none overlaps ano
       sc.stories.forEach((story, s) =>
         story.moments.forEach((_, m) => {
           const state = stateAt(sc, s, m, Infinity);
-          for (const x of audit(sc, state, place(sc, state, st), st)) hits.push(`${fig.title} ${w}x${h} ${story.name} ${m + 1}: ${x}`);
+          const p = place(sc, state, st);
+          if (p.faults) hits.push(`${fig.title} ${w}x${h} ${story.name} ${m + 1}: place() reports ${p.faults} faults`);
+          for (const x of audit(sc, state, p, st)) hits.push(`${fig.title} ${w}x${h} ${story.name} ${m + 1}: ${x}`);
         }),
       );
     }
