@@ -1078,6 +1078,22 @@ export function place(sc: Scene, s: State, stage: Stage): Placed {
     rw = r - l,
     rh = b - t,
     pad = stage.narrow ? 0 : MARGIN;
+  const k = kit(sc, s),
+    need: [Pt, number][] = [];
+  sc.actors.forEach(({ checks, gate: g }, a) => {
+    const gs = s.gates[a];
+    if (checks && gs.rows.length && gs.on === s.moment) need.push([P(g.px, g.y), 24], [P(g.ex, g.y), 24]);
+  });
+  for (const a of s.dev) if (!k.inCab(a)) need.push([k.devBase(a), 0], [k.devTop(a), 0]);
+  for (const a of s.arcs) if (a.moment === s.moment && a.t === 1 && a.text) need.push([bez(a, 0.5), 80]);
+  for (const u of Object.values(s.units))
+    if ((u.moment === s.moment || s.summary) && u.moment >= 0 && (u.where === 'yard' || u.where === 'gate')) need.push([u.p, 80]);
+  const inside = (c: Cam, x: number, y: number, m: number) => {
+    const px = (x - c.x) * c.z + (l + r) / 2,
+      py = (y - c.y) * c.z + (t + b) / 2;
+    return px >= l - m && px <= r + m && py >= t - m && py <= b + m;
+  };
+  const holds = (c: Cam) => need.every(([[x, y], m]) => inside(c, x, y, m));
   const fit = (c: Cam) => {
     const lay = layout(sc, { ...s, frame: pts }, stage, c);
     const rects = [...lay.placed.signs, ...lay.placed.tags, ...lay.placed.devices, ...lay.placed.chips].map((o) => o.r);
@@ -1112,18 +1128,28 @@ export function place(sc: Scene, s: State, stage: Stage): Placed {
   if (whole.ok) return whole.lay.placed;
   const ref = stage.narrow ? ZMIN : whole.lay.placed.cam.z;
   const mid = { x: (x0 + x1) / 2, y: (y0 + y1) / 2 };
+  const story = sc.stories[s.story],
+    lift = s.truck && !k.parked() ? k.truckPts(s.truck).reduce((m, p) => (p[1] < m[1] ? p : m)) : null,
+    must = sc.actors.flatMap((a, i) =>
+      s.hi.includes(i) || (s.summary && story.path.includes(i)) ? [i === sc.truck && lift ? lift : a.lot.tag] : [],
+    );
+  const pins = (c: Cam) => (stage.narrow ? must.filter(([x, y]) => !inside(c, x, y, 0)).length : 0);
   const grid = (aim: { x: number; y: number }, zs: number[]) => {
     const cams = zs
-      .flatMap((z) => SHIFT.flatMap((dy) => SHIFT.map((dx) => ({ z, dx, dy, base: Math.hypot(dx, dy) + Math.abs(z - ref) * 1000 }))))
-      .sort((p, q) => p.base - q.base);
-    let best: { lay: ReturnType<typeof layout>; score: number } | null = null;
-    for (const { z, dx, dy, base } of cams) {
-      if (best && base >= best.score) break;
-      const lay = layout(sc, s, stage, { x: aim.x + dx / z, y: aim.y + dy / z, z });
-      const score = base + lay.placed.tags.filter((t) => t.pin).length * 300;
-      if (!lay.bad && (!best || score < best.score)) best = { lay, score };
+      .flatMap((z) =>
+        SHIFT.flatMap((dy) =>
+          SHIFT.map((dx) => {
+            const c = { x: aim.x + dx / z, y: aim.y + dy / z, z };
+            return { c, score: Math.hypot(dx, dy) + Math.abs(z - ref) * 1000 + pins(c) * 300 };
+          }),
+        ),
+      )
+      .sort((p, q) => p.score - q.score);
+    for (const { c } of cams) {
+      if (!holds(c)) continue;
+      const lay = layout(sc, s, stage, c);
+      if (!lay.bad) return lay;
     }
-    return best?.lay;
   };
   const zs = [0, 1, 2, 3, 4, 5].map((i) => (stage.narrow ? ZMIN + i * 0.1 : ref * (1 - i * 0.08))),
     far = [0.4, 0.35, 0.3, 0.25].filter((z) => z < Math.min(...zs));
