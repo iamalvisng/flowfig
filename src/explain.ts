@@ -1,5 +1,5 @@
 import { edgeId, isGroup, isLanesLayout, nodes, str, toBeat } from './model.ts';
-import type { FigGroup, FigLook, FigNode, FlowProps } from './model.ts';
+import type { FigGroup, FigLook, FigNode, FigTone, FlowProps } from './model.ts';
 
 export type Actor = { name: string; look?: FigLook; boxes: string[] };
 export type Moment = {
@@ -16,10 +16,16 @@ const CAST_MAX = 6;
 
 const isStore = (n: FigNode) => n.shape === 'store';
 const isDecision = (n?: FigNode) => n?.shape === 'decision';
+const dead = (t?: FigTone) => t === 'red' || t === 'gray';
+type Hop = ReturnType<typeof hopsOf>[number]['hops'][number];
+export const isCheck = (n?: FigNode) => !!n && (n.shape === 'decision' || !!n.check);
+export const question = (n: FigNode) => n.check || (n.shape === 'decision' ? str(n.label) : '');
+export const failed = (byId: Map<string, FigNode>, h: Hop) =>
+  isCheck(byId.get(h.source)) && (dead(byId.get(h.target)?.tone) || h.tone === 'red');
 
 const labeledTop = (g: FigGroup): FigGroup[] => g.children.flatMap((c) => (!isGroup(c) ? [] : c.label != null ? [c] : labeledTop(c)));
 
-const hopsOf = (fig: FlowProps, step: { flow: Parameters<typeof toBeat>[0][] }) => {
+export const hopsOf = (fig: FlowProps, step: { flow: Parameters<typeof toBeat>[0][] }) => {
   const byId = new Map(fig.edges.map((e) => [edgeId(e), e]));
   return step.flow.map((b) => {
     const beat = toBeat(b);
@@ -40,6 +46,19 @@ export function cast(fig: FlowProps): Actor[] {
   for (const g of groups) {
     const boxes = nodes(g).filter((n) => !isStore(n));
     if (boxes.length) actors.push({ name: str(g.label), look: g.look, boxes: boxes.map((n) => n.id) });
+  }
+  if (actors.length) {
+    const owned = new Set(actors.flatMap((a) => a.boxes));
+    for (const step of fig.steps ?? [])
+      for (const { hops } of hopsOf(fig, step))
+        for (const id of hops.flatMap((h) => [h.source, h.target])) {
+          const n = byId.get(id);
+          if (!n || owned.has(id) || isStore(n) || isDecision(n)) continue;
+          owned.add(id);
+          actors.push({ name: str(n.label), look: n.look, boxes: [id] });
+        }
+    const rank = new Map(all.map((n, i) => [n.id, i]));
+    actors.sort((a, b) => rank.get(a.boxes[0])! - rank.get(b.boxes[0])!);
   }
   if (!actors.length) {
     const seen = new Set<string>();
@@ -83,7 +102,6 @@ export function moments(fig: FlowProps, step: string): Moment[] {
   const beats = hopsOf(fig, s);
   if (!beats.length) return [];
 
-  const sources = new Set(beats.flatMap((b) => b.hops.map((h) => h.source)));
   const last = beats.flatMap((b) => b.hops).at(-1);
   const outcome = last ? labelOf(last.target) : '';
 
@@ -96,11 +114,11 @@ export function moments(fig: FlowProps, step: string): Moment[] {
     const labels = hops.map((h) => str(h.edge.label)).filter(Boolean);
     const say = str(beat.say) || (end ? (labels.length ? `${labels.join(', ')}: ${labelOf(end.target)}` : labelOf(end.target)) : '');
     const moment: Moment = { actor, say, note: str(beat.note), records: [] };
-    if (end && byId.get(end.source)?.shape === 'decision') {
-      const dead =
-        end === last && !sources.has(end.target) && [byId.get(end.target)?.tone, end.tone].some((t) => t === 'red' || t === 'gray');
-      moment.stamp = { mark: dead ? '✗' : '✓', label: str(end.edge.label) };
-      moment.question = labelOf(end.source);
+    const asks = hops.filter((h) => isCheck(byId.get(h.source)));
+    const ask = asks.find((h) => failed(byId, h)) ?? asks.at(-1);
+    if (ask) {
+      moment.stamp = { mark: failed(byId, ask) ? '✗' : '✓', label: str(ask.edge.label) };
+      moment.question = question(byId.get(ask.source)!);
     }
     for (const h of hops) {
       const store = byId.get(h.target);
@@ -109,11 +127,38 @@ export function moments(fig: FlowProps, step: string): Moment[] {
     return moment;
   });
 
-  const visited = (of: typeof beats) => of.flatMap((b) => b.hops.flatMap((h) => [h.source, h.target]));
-  const mine = new Set(visited(beats));
-  const first = new Set<string>();
-  for (const st of fig.steps ?? []) for (const id of visited(hopsOf(fig, st))) if (byId.has(id)) first.add(id);
-  const notReached = [...new Set([...first].filter((id) => !mine.has(id)).map(labelOf))];
+  const mine = new Set(beats.flatMap((b) => b.hops.flatMap((h) => [h.source, h.target])));
+  const refusal = beats.flatMap((b) => b.hops).find((h) => failed(byId, h));
+  const order: string[] = [];
+  if (refusal) {
+    const live = fig.edges.filter((e) => e !== refusal.edge && byId.has(e.to) && !dead(byId.get(e.to)!.tone));
+    const reach = new Set([refusal.source]);
+    for (let grew = true; grew;) {
+      grew = false;
+      for (const e of live)
+        if (reach.has(e.from) && !reach.has(e.to)) {
+          reach.add(e.to);
+          grew = true;
+        }
+    }
+    const inner = live.filter((e) => reach.has(e.from) && reach.has(e.to) && e.to !== refusal.source);
+    const need = new Map<string, number>();
+    for (const e of inner) need.set(e.to, (need.get(e.to) ?? 0) + 1);
+    for (const queue = [refusal.source]; queue.length;) {
+      const id = queue.shift()!;
+      order.push(id);
+      for (const e of inner) {
+        if (e.from !== id) continue;
+        need.set(e.to, need.get(e.to)! - 1);
+        if (!need.get(e.to)) queue.push(e.to);
+      }
+    }
+    for (const id of reach) if (!order.includes(id)) order.push(id);
+  }
+  const notReached = order
+    .slice(1)
+    .filter((id) => !mine.has(id))
+    .map(labelOf);
 
   out.forEach((m, i) => {
     const next = out.slice(i + 1).find((o) => o.actor !== m.actor);
@@ -121,10 +166,15 @@ export function moments(fig: FlowProps, step: string): Moment[] {
   });
   out.push({
     actor: out.at(-1)!.actor,
-    say: `End of "${step}"`,
+    say: s.outcome || `Ends at: ${outcome}`,
     note: `Outcome: ${outcome}`,
     records: [],
     summary: { outcome, notReached },
   });
   return out;
 }
+
+const PLACES: readonly (FigLook | undefined)[] = ['person', 'shop', 'truck'];
+
+export const worldReady = (fig: FlowProps) =>
+  fig.edges.some((e) => !!e.carries && typeof e.carries === 'object') || cast(fig).some((a) => PLACES.includes(a.look));

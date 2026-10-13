@@ -56,20 +56,21 @@ const props: Figure['props'] = {
     { from: 'free', to: 'assign', label: 'yes' },
     { from: 'free', to: 'nofree', label: 'no' },
     { from: 'assign', to: 'collect', label: 'push to phone' },
-    { from: 'collect', to: 'sign' },
+    { from: 'collect', to: 'sign', label: 'pump and weigh', carries: { thing: 'used oil', form: 'barrel', count: 4, from: 'ask' } },
     { from: 'sign', to: 'sync' },
     { from: 'sync', to: 'cert' },
     { from: 'cert', to: 'save', label: 'yes' },
     { from: 'cert', to: 'refused', label: 'expired' },
-    { from: 'save', to: 'stock' },
+    { from: 'save', to: 'stock', carries: { thing: 'used oil', from: 'collect' } },
     { from: 'save', to: 'cash' },
-    { from: 'cash', to: 'paid', label: 'yes' },
+    { from: 'cash', to: 'paid', label: 'yes', carries: { thing: 'cash', form: 'notes', from: 'collect' } },
     { from: 'cash', to: 'settle', label: 'no' },
     { from: 'settle', to: 'paid' },
   ],
   steps: [
     {
       label: 'Normal pickup',
+      outcome: 'The worker collects the oil, and the office pays the customer by voucher.',
       flow: [
         { edges: 'ask->many', say: 'The customer asks for a pickup in the app.' },
         { edges: ['many->accept', 'accept->free'], say: 'The office accepts it and looks for a free worker.' },
@@ -84,6 +85,7 @@ const props: Figure['props'] = {
     },
     {
       label: 'Paid in cash',
+      outcome: 'The worker pays the customer in cash at the pickup.',
       flow: [
         { edges: ['ask->many', 'many->accept', 'accept->free', 'free->assign'], say: 'The office accepts and assigns the job.' },
         { edges: ['assign->collect', 'collect->sign', 'sign->sync'], say: 'The worker collects the oil and pays cash.' },
@@ -95,10 +97,12 @@ const props: Figure['props'] = {
     },
     {
       label: 'Too many requests',
+      outcome: 'The app refuses the request. No worker comes.',
       flow: [{ edges: ['ask->many', 'many->toomany'], say: 'The customer has too many open requests. The app refuses.' }],
     },
     {
       label: 'No worker free',
+      outcome: 'The office refuses the request. No worker comes.',
       flow: [
         {
           edges: ['ask->many', 'many->accept', 'accept->free', 'free->nofree'],
@@ -108,6 +112,7 @@ const props: Figure['props'] = {
     },
     {
       label: 'Expired certification',
+      outcome: 'The oil is already in the truck when the server says no.',
       flow: [
         {
           edges: ['ask->many', 'many->accept', 'accept->free', 'free->assign'],

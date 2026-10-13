@@ -1,8 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { FlowProps } from './model.ts';
-import { cast, moments, parcel } from './explain.ts';
+import { cast, moments, parcel, worldReady } from './explain.ts';
 import oil from '../figures/explain-oil.ts';
+import returns from '../figures/returns-process.ts';
+import checkout from '../figures/checkout.ts';
 import sync from '../figures/explain-sync.ts';
 import before from '../figures/explain-delivery-before.ts';
 import after from '../figures/explain-delivery-after.ts';
@@ -49,13 +51,55 @@ test('only the last moment of a step holds the summary, with the label of the bo
   assert.equal(moments(oil.props, 'Too many requests').at(-1)?.summary?.outcome, 'Told: too many requests');
 });
 
-test('the summary lists as not reached the boxes that other steps reach and this step does not', () => {
-  const refused = moments(oil.props, 'Too many requests').at(-1)?.summary?.notReached ?? [];
-  for (const label of ['Accept the request', 'Told: no worker free', 'Gets paid']) assert.ok(refused.includes(label), label);
-  for (const label of ['Under the limit?', 'Told: too many requests']) assert.ok(!refused.includes(label), label);
-  const pickup = moments(oil.props, 'Normal pickup').at(-1)?.summary?.notReached ?? [];
-  assert.ok(pickup.includes('Told: too many requests'));
-  assert.ok(!pickup.includes('Gets paid'));
+test('only a figure with a thing or a person, shop or truck actor gets the world', () => {
+  assert.equal(worldReady(oil.props), true);
+  assert.equal(worldReady(returns.props), true);
+  assert.equal(worldReady(checkout.props), false);
+});
+
+test('a refused story lists only the boxes after the refused check', () => {
+  const skipped = (fig: FlowProps, step: string) => moments(fig, step).at(-1)?.summary?.notReached;
+  assert.deepEqual(skipped(oil.props, 'Expired certification'), [
+    'Save collection and voucher',
+    'Add to stock',
+    'Paid in cash?',
+    'Settle the voucher',
+    'Gets paid',
+  ]);
+  assert.deepEqual(skipped(returns.props, 'rejected: damaged'), ['Refund', 'Close']);
+  assert.deepEqual(skipped(oil.props, 'Normal pickup'), []);
+  assert.deepEqual(skipped(returns.props, 'returned'), []);
+});
+
+test('a failed check is marked even when the story goes on', () => {
+  const fig: FlowProps = {
+    layout: {
+      children: [
+        { id: 'ask', label: 'Order' },
+        { id: 'stock', label: 'Stock', check: 'In stock?' },
+        { id: 'refuse', label: 'Refused', tone: 'red' },
+        { id: 'tell', label: 'Customer told' },
+      ],
+    },
+    edges: [
+      { from: 'ask', to: 'stock' },
+      { from: 'stock', to: 'refuse', label: 'none left' },
+      { from: 'refuse', to: 'tell' },
+    ],
+    steps: [
+      {
+        label: 'Sold out',
+        outcome: 'The shop refuses the order and tells the customer.',
+        flow: ['ask->stock', 'stock->refuse', 'refuse->tell'],
+      },
+      { label: 'Sold out again', flow: ['ask->stock', 'stock->refuse', 'refuse->tell'] },
+    ],
+  };
+  const told = moments(fig, 'Sold out');
+  assert.deepEqual(told[1].stamp, { mark: '✗', label: 'none left' });
+  assert.equal(told[1].question, 'In stock?');
+  assert.equal(told.at(-1)?.say, 'The shop refuses the order and tells the customer.');
+  assert.equal(moments(fig, 'Sold out again').at(-1)?.say, 'Ends at: Customer told');
 });
 
 test('without a note, the short line names the next actor, and the last moment names the outcome', () => {
@@ -101,6 +145,10 @@ test('without lanes, the cast is the labeled top-level groups in order', () => {
     ['Driver app', 'Job orders API', 'Order listener', 'Pack ledger listener'],
   );
   assert.equal(actors[0].look, 'phone');
+  assert.deepEqual(
+    cast(checkout.props).map((a) => a.name),
+    ['Browser', 'Edge', 'Order service', 'External', 'Records'],
+  );
 });
 
 test('with no lanes and no labeled groups, the cast skips decision boxes, and a moment at a decision keeps the actor before it', () => {

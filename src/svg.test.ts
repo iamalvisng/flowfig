@@ -1581,3 +1581,22 @@ test('marks: the step caption sits above the diff legend, not on it', () => {
   const legend = Number(/<rect x="[\d.]+" y="([\d.]+)"[^>]*data-diff/.exec(svg)![1]);
   assert.ok(caption < legend, `caption ${caption}, legend ${legend}`);
 });
+
+test('a scoped figure points its arrows at its own marker, so two figures on one page keep their arrows', () => {
+  const fig: FlowProps = {
+    layout: {
+      children: [
+        { id: 'a', label: 'A' },
+        { id: 'b', label: 'B' },
+      ],
+    },
+    edges: [{ from: 'a', to: 'b' }],
+    steps: [{ label: 'Go', flow: ['a->b'] }],
+  };
+  for (const f of [fig, { ...fig, rail: true }]) {
+    const svg = toSvg(f, { scope: 'x-' });
+    assert.match(svg, /<marker id="x-arrow"/);
+    assert.match(svg, /marker-end="url\(#x-arrow\)"/);
+    assert.doesNotMatch(svg, /url\(#arrow\)/);
+  }
+});

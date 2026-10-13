@@ -35,6 +35,8 @@ export type FigNode = {
   detail?: string;
   /** The picture of this box or group in <flowfig-explain>. The diagram ignores it. */
   look?: FigLook;
+  /** The question on the gate in <flowfig-explain>. Default: the label of a `decision` box. */
+  check?: string;
 };
 /** A frame that lays out its children in a row or a column. */
 export type FigGroup = {
@@ -55,6 +57,17 @@ export type FigGroup = {
   /** The picture of this box or group in <flowfig-explain>. The diagram ignores it. */
   look?: FigLook;
 };
+/** A physical thing that moves on an edge in <flowfig-explain>. */
+export type FigCarry = {
+  /** The name of the thing, in plain words. */
+  thing: string;
+  /** The picture of one unit. Default: `box`. */
+  form?: 'box' | 'barrel' | 'notes';
+  /** How many units move, 1 to 4. Default: 1. */
+  count?: number;
+  /** The id of the box or group where the thing starts. Default: the edge `from`. */
+  from?: string;
+};
 /** An arrow from one box to another. */
 export type FigEdge = {
   /** Name that steps and beats use to send a packet along this edge. Default: `from->to`. */
@@ -73,6 +86,8 @@ export type FigEdge = {
   source?: string;
   /** The route, queue, topic or table that carries this edge. Checked by `flowfig verify`. */
   via?: string;
+  /** What moves on this edge in <flowfig-explain>: `data`, or a thing. Default: `data`. */
+  carries?: 'data' | FigCarry;
 };
 /** One packet on one edge. A string is the edge `id`. */
 export type FigHop =
@@ -139,6 +154,8 @@ export type FigStep = {
   flow: (FigHop | FigHop[] | FigBeat)[];
   /** Ids of boxes to highlight for the whole step. */
   nodes?: string[];
+  /** One sentence, 15 words or fewer, on how the story ends in <flowfig-explain>. */
+  outcome?: string;
 };
 /** Colors for the figure. A key you leave out keeps the built-in color. */
 export type FigTheme = Partial<Record<'accent' | 'fg' | 'muted' | 'bg' | 'surface' | 'border' | 'font', string>>;
