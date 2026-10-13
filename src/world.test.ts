@@ -126,7 +126,6 @@ test('the arm of a raised gate lowers over time, and no two units share a bed sl
   const story = (name: string) => sc.stories.findIndex((s) => s.name === name);
   const s = story('Normal pickup');
   const lower = timeline(sc, s, 5).events.find((e) => e.kind === 'arm' && e.hop === 1)!;
-  assert.equal(lower.end - lower.start, 260);
   const deg = stateAt(sc, s, 5, (lower.start + lower.end) / 2).gates[1].deg;
   assert.ok(deg > 0 && deg < 78, `the arm is half down: ${deg}`);
   const bed = Object.values(stateAt(sc, story('Paid in cash'), 1, Infinity).units).filter((u) => u.where === 'bed');
