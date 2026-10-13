@@ -158,7 +158,7 @@ export function moments(fig: FlowProps, step: string): Moment[] {
   });
   out.push({
     actor: out.at(-1)!.actor,
-    say: s.outcome || `${outcome}.`,
+    say: s.outcome || (/[.?!]$/.test(outcome) ? outcome : `${outcome}.`),
     note: '',
     records: [],
     summary: { outcome, notReached },

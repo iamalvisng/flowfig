@@ -193,3 +193,17 @@ test('every store box joins one actor named Records', () => {
     assert.ok(!actors.some((a) => a.name === store), store);
   assert.equal(moments(sync.props, 'Good record')[3].actor, 'Records');
 });
+
+test('an outcome label that ends in a mark gets no second mark', () => {
+  const fig: FlowProps = {
+    layout: {
+      children: [
+        { id: 'a', label: 'Start' },
+        { id: 'b', label: 'Done!' },
+      ],
+    },
+    edges: [{ from: 'a', to: 'b' }],
+    steps: [{ label: 'Run', flow: ['a->b'] }],
+  };
+  assert.equal(moments(fig, 'Run').at(-1)?.say, 'Done!');
+});
