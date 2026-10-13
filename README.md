@@ -120,7 +120,7 @@ the run.
 
 1. **The agent writes JSON, not pictures.** The agent reads the code and writes a spec of the parts, the calls and their
    order. flowfig does the layout.
-2. **flowfig checks the spec.** `flowfig check` has 27 rules. It finds ids that point nowhere, text wider than its box,
+2. **flowfig checks the spec.** `flowfig check` has 29 rules. It finds ids that point nowhere, text wider than its box,
    edges through boxes, overlapping labels and low contrast. A render runs the same check and writes nothing on an error.
    The agent reads the faults and fixes the spec.
 3. **The output is one animated SVG with no script.** The SVG plays in a GitHub README, PR or issue. It follows the light
@@ -172,7 +172,7 @@ The options are in [Open and share a figure](#open-and-share-a-figure).
 | ------------------------------ | --------------------------------- | ------------------------------------ | ---------------- |
 | Made by an agent from the code | Yes, with the `init` instructions | Yes, as Mermaid text                 | No               |
 | Linked to the code             | Yes, `verify` fails in CI         | No                                   | No               |
-| Checked for faults             | Yes, 27 rules in `flowfig check`  | Syntax errors only                   | No               |
+| Checked for faults             | Yes, 29 rules in `flowfig check`  | Syntax errors only                   | No               |
 | Animated                       | Yes, one packet per message       | No                                   | No               |
 | Shows payloads and order       | Yes, on the map and the rail      | Order and text in a sequence diagram | No               |
 | Plays in a GitHub README       | Yes, as an SVG                    | Yes, GitHub renders it               | Yes, as an image |
@@ -424,14 +424,12 @@ figure: 5 boxes, 3 groups, 4 edges, 2 steps, 6 messages
 
 The last line gives the counts of the parts of the figure. Compare the counts with the parts that you planned.
 
-`flowfig check` has 27 rules: 11 errors and 16 warnings.
+`flowfig check` has 29 rules: 11 errors and 18 warnings.
 
 | Rule                        | Severity | What it finds                                                                                                              |
 | --------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------- |
 | `unknown-id`                | error    | An edge, step or beat names a box, group or edge that does not exist, or `carries.from` names no box and no group.         |
 | `duplicate-id`              | error    | Two boxes, two groups or two edges have the same id.                                                                       |
-| `bad-carries`               | warning  | An edge `carries` has an empty `thing`, a `form` that is not `box`, `barrel` or `notes`, or a `count` that is not 1 to 4.  |
-| `thing-no-road`             | warning  | A thing edge starts and ends at the same actor, or one end has no actor.                                                   |
 | `hidden-edge`               | error    | A `quiet` edge that no beat uses, so the figure never shows it.                                                            |
 | `text-overflow`             | error    | Text that needs more width than its box has.                                                                               |
 | `edge-crosses-box`          | error    | An edge that goes through a box that is not one of its ends.                                                               |
@@ -441,6 +439,8 @@ The last line gives the counts of the parts of the figure. Compare the counts wi
 | `bad-at`                    | error    | An `at` value that is not an integer of 0 or more.                                                                         |
 | `timeline-need-from`        | error    | A box in a timeline has no `from` date.                                                                                    |
 | `bad-date`                  | error    | A `from`, `to` or `today` value is not a real YYYY-MM-DD date, or a `to` is before its `from`.                             |
+| `bad-carries`               | warning  | An edge `carries` has an empty `thing`, a `form` that is not `box`, `barrel` or `notes`, or a `count` that is not 1 to 4.  |
+| `thing-no-road`             | warning  | A thing edge starts and ends at the same actor, or one end has no actor.                                                   |
 | `empty-step`                | warning  | A step with no beats.                                                                                                      |
 | `small-text`                | warning  | At the page width, the smallest text is below the minimum size.                                                            |
 | `bad-source`                | warning  | A `source` that is not `path` or `path#symbol`.                                                                            |
