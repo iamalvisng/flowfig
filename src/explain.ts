@@ -158,8 +158,8 @@ export function moments(fig: FlowProps, step: string): Moment[] {
   });
   out.push({
     actor: out.at(-1)!.actor,
-    say: s.outcome || `Ends at: ${outcome}`,
-    note: `Outcome: ${outcome}`,
+    say: s.outcome || `${outcome}.`,
+    note: '',
     records: [],
     summary: { outcome, notReached },
   });

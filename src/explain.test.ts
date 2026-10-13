@@ -94,13 +94,13 @@ test('a failed check is marked even when the story goes on', () => {
   assert.deepEqual(told[1].stamp, { mark: '✗', label: 'none left' });
   assert.equal(told[1].question, 'In stock?');
   assert.equal(told.at(-1)?.say, 'The shop refuses the order and tells the customer.');
-  assert.equal(moments(fig, 'Sold out again').at(-1)?.say, 'Ends at: Customer told');
+  assert.equal(moments(fig, 'Sold out again').at(-1)?.say, 'Customer told.');
 });
 
-test('without a note, the short line names the next actor, and the last moment names the outcome', () => {
+test('without a note, the short line names the next actor, and the outcome moment has no extra line', () => {
   const pickup = moments(oil.props, 'Normal pickup');
   assert.equal(pickup[1].note, 'Next: Worker');
-  assert.equal(pickup.at(-1)?.note, 'Outcome: Gets paid');
+  assert.equal(pickup.at(-1)?.note, '');
   assert.equal(moments(oil.props, 'Expired certification')[0].note, 'The office does not see the certification.');
 });
 

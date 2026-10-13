@@ -774,10 +774,9 @@ export class FlowfigExplain extends Base {
       .reverse()
       .find((s) => s.stamp);
     const stamp = asked?.stamp;
-    g.kick.textContent = `${end ? 'Summary' : `Moment ${k + 1} of ${mine.length - 1}`} · ${m.step}`;
+    g.kick.textContent = end ? '' : `Moment ${k + 1} of ${mine.length - 1} · ${m.step}`;
     g.say.textContent = m.say;
     g.note.textContent = m.note;
-    g.note.hidden = end && m.say.includes(m.summary!.outcome);
     g.note.classList.toggle('ff-bad', stamp?.mark === '✗' && (end || m.stamp === stamp));
     g.code.hidden = end || !this.hasAttribute('code');
     g.code.textContent = m.code.length ? m.code.join('\n') : 'No source in the spec.';
