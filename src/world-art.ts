@@ -14,8 +14,7 @@ const FRONT = 4.6,
   ROAD0 = 6.0,
   ROAD1 = 8.0,
   WALK1 = 8.6;
-export const PITCH = 10.5,
-  BY = 1.6;
+export const BY = 1.6;
 type Mat = Record<string, string>;
 type Building = { svg: string; ant: P3; own?: boolean; pts: P3[]; depot?: { x: number; y: number } };
 
@@ -678,11 +677,11 @@ export function hull(points: Pt[]): Pt[] {
 }
 export type Lot = { x: number; hull: Pt[]; tag: Pt; door: number; depot: { x: number; y: number } | null; roof: Pt | null };
 
-export function street(looks: (FigLook | undefined)[], withAntenna: boolean[]): { svg: string; lots: Lot[] } {
+export function street(looks: (FigLook | undefined)[], withAntenna: boolean[], pitch: number): { svg: string; lots: Lot[] } {
   const n = looks.length,
     X0 = -40,
-    X1 = (n - 1) * PITCH + 44;
-  const xs = looks.map((_, i) => i * PITCH);
+    X1 = (n - 1) * pitch + 44;
+  const xs = looks.map((_, i) => i * pitch);
   let g = quadT(X0, X1, -40, FRONT - 0.15, 0, K.lawn) + quadT(X0, X1, WALK1, 60, 0, K.lawn);
   for (const x of xs)
     for (const [a, b, c, d] of [

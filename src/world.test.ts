@@ -241,15 +241,21 @@ const SIZES = [
 test('every needed tag, sign, chip and device is on stage, none overlaps, and the camera never jumps and pulls back at the outcome', () => {
   const hits: string[] = [];
   for (const fig of FIXTURES) {
-    const sc = scene(fig.props);
+    const scenes = [scene(fig.props), scene(fig.props, true)];
     for (const [w, h] of worldReady(fig.props) ? SIZES : SIZES.slice(0, 3)) {
       const st = stageFor(w, w >= HUD.wide ? Math.min(h, (w * 10) / 16) : Math.min(h, HUD.tall));
+      const sc = scenes[+!st.narrow];
       sc.stories.forEach((story, s) => {
         const cams = storyCams(sc, s, st),
           z = cams.map((p) => p.cam.z),
           n = z.length;
-        if (n > 1 && z[n - 1] > z[n - 2] * 0.92 + 1e-6 && !place(sc, stateAt(sc, s, n - 1, Infinity), st, z[n - 2] * 0.92).faults)
-          hits.push(`${fig.title} ${w}x${h} ${story.name}: the outcome does not pull back`);
+        const fit = place(sc, stateAt(sc, s, n - 1, Infinity), st).cam.z,
+          xs = story.path.flatMap((a) => sc.actors[a].lot.hull.map((p) => p[0])),
+          pull = w >= HUD.wide && (Math.max(...xs) - Math.min(...xs)) * fit < 0.7 * (st.region.r - st.region.l),
+          aim = pull ? z[n - 2] * 0.92 : Math.min(fit, z[n - 2]);
+        if (z[n - 1] > aim + 1e-6 && !place(sc, stateAt(sc, s, n - 1, Infinity), st, aim).faults)
+          hits.push(`${fig.title} ${w}x${h} ${story.name}: the outcome zooms in`);
+        if (!pull && z[n - 1] < aim - 1e-6) hits.push(`${fig.title} ${w}x${h} ${story.name}: the outcome pulls back`);
         for (let m = 0; m < n - 2; m++)
           if (z[m] > z[m + 1] * 1.2 + 1e-6) hits.push(`${fig.title} ${w}x${h} ${story.name} ${m + 1}: the zoom jumps out`);
         story.moments.forEach((_, m) => {
@@ -340,6 +346,6 @@ test('a story inside one actor still gets a framed camera', () => {
     [390, 760],
   ]) {
     const { cam } = place(sc, stateAt(sc, 0, 0, Infinity), stageFor(w, h));
-    assert.ok(Number.isFinite(cam.x) && Number.isFinite(cam.y) && cam.z > 0 && cam.z <= 1, JSON.stringify(cam));
+    assert.ok(Number.isFinite(cam.x) && Number.isFinite(cam.y) && cam.z > 0 && cam.z <= 1.2, JSON.stringify(cam));
   }
 });

@@ -28,7 +28,7 @@ export type Scene = {
 const FORMS: readonly Carry['form'][] = ['box', 'barrel', 'notes'];
 const units = (n?: number) => Math.min(4, Math.max(1, Math.round(n ?? 1)));
 
-export function scene(fig: FlowProps): Scene {
+export function scene(fig: FlowProps, wide = false): Scene {
   const cs = cast(fig);
   const all = nodes(fig.layout);
   const byId = new Map(all.map((n) => [n.id, n]));
@@ -49,6 +49,7 @@ export function scene(fig: FlowProps): Scene {
   const { svg: ground, lots } = street(
     cs.map((a) => a.look),
     devices.map((d) => d === 'antenna'),
+    wide ? 9 : 10.5,
   );
 
   const things: Scene['things'] = new Map();
@@ -1160,7 +1161,7 @@ export function layout(sc: Scene, s: State, stage: Stage, cam: Cam, full = false
     return { ...base, r: tr, anchor: o.anchor, line: [nearest(tr, o.anchor), o.anchor], pin: side };
   }
 
-  bad += devices.filter((d) => !inRegion(d.r) || !offB(d.r)).length;
+  bad += devices.filter((d) => !inRegion(d.r) || !offB(d.r)).length + gates.filter((g) => s.summary && !inRegion(g.r)).length;
   const placed: Placed = {
     cam,
     tags,
@@ -1176,7 +1177,7 @@ export function layout(sc: Scene, s: State, stage: Stage, cam: Cam, full = false
   return { placed, bad, pr };
 }
 
-export function place(sc: Scene, s: State, stage: Stage, top = 1): Placed {
+export function place(sc: Scene, s: State, stage: Stage, top = stage.narrow ? 1 : 1.2): Placed {
   const pts = s.frame.length ? s.frame : sc.actors.flatMap((a) => a.lot.hull);
   const xs = pts.map((p) => p[0]),
     ys = pts.map((p) => p[1]);
@@ -1298,9 +1299,16 @@ export function storyCams(sc: Scene, story: number, stage: Stage): Placed[] {
     out: Placed[] = [];
   if (!n) return out;
   out[n - 1] = place(sc, stateAt(sc, story, n - 1, Infinity), stage);
-  for (let m = n - 2; m >= 0; m--) out[m] = place(sc, stateAt(sc, story, m, Infinity), stage, Math.min(1, out[m + 1].cam.z * 1.2));
-  if (n > 1 && out[n - 1].cam.z > out[n - 2].cam.z * 0.92) {
-    const back = place(sc, stateAt(sc, story, n - 1, Infinity), stage, out[n - 2].cam.z * 0.92);
+  for (let m = n - 2; m >= 0; m--)
+    out[m] = place(sc, stateAt(sc, story, m, Infinity), stage, Math.min(stage.narrow ? 1 : 1.2, out[m + 1].cam.z * 1.2));
+  const fit = out[n - 1].cam.z,
+    xs = sc.stories[story].path.flatMap((a) => sc.actors[a].lot.hull.map((p) => p[0])),
+    aim =
+      stage.w >= HUD.wide && (Math.max(...xs) - Math.min(...xs)) * fit < 0.7 * (stage.region.r - stage.region.l)
+        ? out[n - 2].cam.z * 0.92
+        : out[n - 2].cam.z;
+  if (fit > aim) {
+    const back = place(sc, stateAt(sc, story, n - 1, Infinity), stage, aim);
     if (!back.faults) out[n - 1] = back;
   }
   return out;
@@ -1392,7 +1400,7 @@ const same = (e: Node, text: string) => {
 
 let sheet: CSSStyleSheet | undefined;
 
-export function mountWorld(stage: HTMLElement, sc: Scene, resized: () => void): World {
+export function mountWorld(stage: HTMLElement, fig: FlowProps, resized: () => void): World {
   const root = stage.getRootNode() as ShadowRoot;
   if (!sheet) {
     sheet = new CSSStyleSheet();
@@ -1400,29 +1408,38 @@ export function mountWorld(stage: HTMLElement, sc: Scene, resized: () => void): 
   }
   if (!root.adoptedStyleSheets.includes(sheet)) root.adoptedStyleSheets = [...root.adoptedStyleSheets, sheet];
   stage.dataset.stage = 'world';
-  const art = sc.truckArt,
-    depot = sc.truck >= 0 ? sc.actors[sc.truck].lot.depot : null;
+  const scenes = [scene(fig), scene(fig, true)];
   const svg = document.createElementNS(NS, 'svg');
   svg.setAttribute('role', 'img');
-  svg.innerHTML =
-    `<g class="fw-cam">${sc.svg}${art?.door ?? ''}<g class="fw-units"></g>${art?.road ?? ''}` +
-    sc.actors.map((a, i) => (a.device === 'antenna' ? '' : `<g class="fw-dev" data-a="${i}">${PHONE.svg}</g>`)).join('') +
-    `<g class="fw-arcs"></g>${sc.actors.map((a) => (a.checks ? `<g class="fw-hx">${FAIL_MARK}</g>` : '')).join('')}</g>`;
   const ov = el('div', 'fw-ov');
   stage.append(svg, ov);
   const q = (sel: string) => svg.querySelector<SVGGraphicsElement>(sel);
-  const camG = q('.fw-cam')!,
-    unitsG = q('.fw-units')!,
-    arcsG = q('.fw-arcs')!,
-    doorPanel = q('#doorPanel');
-  const devs = new Map([...svg.querySelectorAll<SVGGElement>('.fw-dev')].map((g) => [Number(g.dataset.a), g]));
-  const arms = [...svg.querySelectorAll('.arm')],
-    arms2 = [...svg.querySelectorAll('.armW')],
-    hubs = [...svg.querySelectorAll('.hub')],
-    gts = [...svg.querySelectorAll<SVGGElement>('.gt')],
-    hxs = [...svg.querySelectorAll('.fw-hx')];
-  const checkers = sc.actors.flatMap((a, i) => (a.checks ? [i] : []));
   const unitEls = new Map<string, SVGGElement>();
+  let sc = scenes[0];
+  const mount = () => {
+    const art = sc.truckArt;
+    svg.innerHTML =
+      `<g class="fw-cam">${sc.svg}${art?.door ?? ''}<g class="fw-units"></g>${art?.road ?? ''}` +
+      sc.actors.map((a, i) => (a.device === 'antenna' ? '' : `<g class="fw-dev" data-a="${i}">${PHONE.svg}</g>`)).join('') +
+      `<g class="fw-arcs"></g>${sc.actors.map((a) => (a.checks ? `<g class="fw-hx">${FAIL_MARK}</g>` : '')).join('')}</g>`;
+    unitEls.clear();
+    return {
+      art,
+      depot: sc.truck >= 0 ? sc.actors[sc.truck].lot.depot : null,
+      camG: q('.fw-cam')!,
+      unitsG: q('.fw-units')!,
+      arcsG: q('.fw-arcs')!,
+      doorPanel: q('#doorPanel'),
+      devs: new Map([...svg.querySelectorAll<SVGGElement>('.fw-dev')].map((g) => [Number(g.dataset.a), g])),
+      arms: [...svg.querySelectorAll('.arm')],
+      arms2: [...svg.querySelectorAll('.armW')],
+      hubs: [...svg.querySelectorAll('.hub')],
+      gts: [...svg.querySelectorAll<SVGGElement>('.gt')],
+      hxs: [...svg.querySelectorAll('.fw-hx')],
+      checkers: sc.actors.flatMap((a, i) => (a.checks ? [i] : [])),
+    };
+  };
+  let d = mount();
   const show = (e: Element | null, on: boolean) => e?.setAttribute('display', on ? 'inline' : 'none');
   const move = (e: Element | null, p: Pt, k = 1) =>
     e?.setAttribute('transform', `translate(${f1(p[0])} ${f1(p[1])})${k === 1 ? '' : ` scale(${k})`}`);
@@ -1446,22 +1463,22 @@ export function mountWorld(stage: HTMLElement, sc: Scene, resized: () => void): 
 
   function draw(s: State, c: Cam) {
     const { l, t, r, b } = stg.region;
-    camG.setAttribute(
+    d.camG.setAttribute(
       'transform',
       `translate(${f1((l + r) / 2)} ${f1((t + b) / 2)}) scale(${c.z.toFixed(4)}) translate(${f1(-c.x)} ${f1(-c.y)})`,
     );
     const k = kit(sc, s);
     const out = !!s.truck && !k.parked();
-    if (s.truck && depot) {
+    if (s.truck && d.depot) {
       const tk = s.truck;
       show(q('#truck'), tk.orient === 'L');
       show(q('#truckR'), tk.orient === 'R');
       show(q('#truckY'), tk.orient === 'y');
       for (const id of ['#truck', '#truckR']) q(id)?.setAttribute('transform', `translate(${f1(tk.x * C)} ${f1(tk.x * S)})`);
       move(q('#truckY'), P(k.YX, tk.ty));
-      const dy = depot.y + 0.004,
-        x0 = depot.x + 0.3,
-        x1 = depot.x + 1.8,
+      const dy = d.depot.y + 0.004,
+        x0 = d.depot.x + 0.3,
+        x1 = d.depot.x + 1.8,
         zb = 1.03 * tk.door;
       const quad = (z0: number, z1: number, fill: string) =>
         `<polygon points="${[P(x0, dy, z0), P(x1, dy, z0), P(x1, dy, z1), P(x0, dy, z1)].map(pt).join(' ')}" fill="${fill}"/>`;
@@ -1470,9 +1487,9 @@ export function mountWorld(stage: HTMLElement, sc: Scene, resized: () => void): 
         const z = 0.1 + i * 0.105;
         if (z > zb) o += quad(z, Math.min(1.03, z + 0.035), '#56645a');
       }
-      if (doorPanel && doorPanel.dataset.k !== o) {
-        doorPanel.innerHTML = o;
-        doorPanel.dataset.k = o;
+      if (d.doorPanel && d.doorPanel.dataset.k !== o) {
+        d.doorPanel.innerHTML = o;
+        d.doorPanel.dataset.k = o;
       }
       for (const side of ['l', 'r'])
         for (let i = 0; i < 8; i++) {
@@ -1489,7 +1506,7 @@ export function mountWorld(stage: HTMLElement, sc: Scene, resized: () => void): 
       if (!g) {
         g = document.createElementNS(NS, 'g');
         g.innerHTML = UNIT[sc.things.get(u.thing)?.form ?? 'box'] + FAIL_MARK;
-        unitsG.append(g);
+        d.unitsG.append(g);
         unitEls.set(id, g);
       }
       const on = u.where === 'yard' || u.where === 'road' || u.where === 'gate' || u.where === 'air';
@@ -1500,29 +1517,29 @@ export function mountWorld(stage: HTMLElement, sc: Scene, resized: () => void): 
       }
     }
     for (const [id, g] of unitEls) if (!s.units[id]) show(g, false);
-    for (const [a, g] of devs) {
+    for (const [a, g] of d.devs) {
       show(g, s.dev.includes(a));
       move(g, k.devBase(a), (k.inCab(a) ? 0.82 : 1) * phoneScale(c.z, stg));
       for (const sc2 of g.querySelectorAll('.scr')) show(sc2, sc2.getAttribute('data-s') === (s.screens[a] ?? 'idle'));
     }
-    checkers.forEach((a, n) => {
+    d.checkers.forEach((a, n) => {
       const g = sc.actors[a].gate,
         st = s.gates[a],
         rad = (st.deg * Math.PI) / 180;
       const b0 = P(g.px, g.y, g.z),
         e0 = P(g.px + g.L * Math.cos(rad), g.y, g.z + g.L * Math.sin(rad));
-      for (const arm of [arms[n], arms2[n]]) {
+      for (const arm of [d.arms[n], d.arms2[n]]) {
         arm.setAttribute('x1', f1(b0[0]));
         arm.setAttribute('y1', f1(b0[1]));
         arm.setAttribute('x2', f1(e0[0]));
         arm.setAttribute('y2', f1(e0[1]));
       }
-      arms[n].setAttribute('stroke', st.fail ? INK.fail : '#2e3440');
-      gts[n].style.opacity = st.on === s.moment || st.fail ? '' : '0';
-      move(hxs[n], b0);
-      show(hxs[n].firstElementChild, st.fail);
-      hubs[n].setAttribute('cx', f1(b0[0]));
-      hubs[n].setAttribute('cy', f1(b0[1]));
+      d.arms[n].setAttribute('stroke', st.fail ? INK.fail : '#2e3440');
+      d.gts[n].style.opacity = st.on === s.moment || st.fail ? '' : '0';
+      move(d.hxs[n], b0);
+      show(d.hxs[n].firstElementChild, st.fail);
+      d.hubs[n].setAttribute('cx', f1(b0[0]));
+      d.hubs[n].setAttribute('cy', f1(b0[1]));
     });
     let a = '';
     for (const r of s.arcs) {
@@ -1535,7 +1552,7 @@ export function mountWorld(stage: HTMLElement, sc: Scene, resized: () => void): 
       if (r.t > 0 && (r.t < 1 || r.hold))
         a += `<circle cx="${f1(bez(r, r.t)[0])}" cy="${f1(bez(r, r.t)[1])}" r="7" fill="${col}" stroke="#fff" stroke-width="2.4"/>`;
     }
-    arcsG.innerHTML = a;
+    d.arcsG.innerHTML = a;
     sc.actors.forEach((_, i) => {
       q(`#pad-${i}`)?.classList.toggle('on', s.hi.includes(i) && !(i === sc.truck && out));
       q(`#b-${i}`)?.classList.toggle('quiet', !sc.stories[s.story].path.includes(i));
@@ -1656,6 +1673,11 @@ export function mountWorld(stage: HTMLElement, sc: Scene, resized: () => void): 
     if (w === stg.w && h === stg.h) return false;
     stg = stageFor(w, h);
     lays.clear();
+    if (sc !== scenes[+!stg.narrow]) {
+      sc = scenes[+!stg.narrow];
+      d = mount();
+      built = '';
+    }
     svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
     return true;
   };

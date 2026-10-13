@@ -694,7 +694,7 @@ export class FlowfigExplain extends Base {
                   return li;
                 }),
               );
-              this.#world = w.mountWorld(g.stage, scene, () => {
+              this.#world = w.mountWorld(g.stage, spec, () => {
                 const m = this.#all[this.#at];
                 if (this.#g !== g || !m) return;
                 g.drawn = '';
