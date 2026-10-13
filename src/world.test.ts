@@ -277,7 +277,7 @@ test('every needed tag, sign, chip and device is on stage, none overlaps, and th
 test('a stage too small for the overlays gives a frame with faults, not an error', () => {
   const sc = scene(oil.props);
   const faults = sc.stories.flatMap((story, s) =>
-    story.moments.map((_, m) => place(sc, stateAt(sc, s, m, Infinity), stageFor(374, 300)).faults),
+    story.moments.map((_, m) => place(sc, stateAt(sc, s, m, Infinity), stageFor(374, 250)).faults),
   );
   assert.ok(faults.every((n) => n > 0));
 });

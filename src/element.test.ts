@@ -341,7 +341,7 @@ test('a story with a faulty frame shows the diagram, and a clean story shows the
 });
 
 test(
-  'on a phone the stage fills the element, and the sheet shows Back, Play and Next at a refused outcome',
+  'on a phone the world gets 600 px above the sheet, and the sheet shows Back, Play and Next in a moment and at a refused outcome',
   { skip: !browser.path },
   async () => {
     const page = await open(guide('oil'), `${live}.length > 0 && !!${sr}?.querySelector('[data-stage="world"] svg[role="img"]')`);
@@ -349,19 +349,24 @@ test(
       await page.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: false });
       await page.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
       await page.ev(`${button('Expired certification')}.click()`);
-      await page.ev(`${el}.moment = ${el}.moment + 3`);
-      await page.until(`${live}.includes('Outcome')`, 'the outcome shows');
-      const got = await page.ev(`(() => {
-      const r = (e) => e.getBoundingClientRect();
-      const host = r(${el}), stage = r(${sr}.querySelector('.ff-stage')), hud = r(${sr}.querySelector('.ff-hud'));
-      const cut = ['Back', 'Play', 'Next'].filter((n) => {
-        const b = r([...${sr}.querySelectorAll('.ff-ctl button')].find((x) => x.textContent.trim() === n));
-        return b.height === 0 || b.top < hud.top || b.bottom > hud.bottom;
-      });
-      return { host: host.height, stage: stage.height, cut };
-    })()`);
-      assert.equal(got.stage, got.host, 'the stage height');
-      assert.deepEqual(got.cut, []);
+      const base = await page.ev(`${el}.moment`);
+      for (const k of [1, 3]) {
+        await page.ev(`${el}.moment = ${base + k}`);
+        await page.ev(sleep);
+        const got = await page.ev(`(() => {
+        const r = (e) => e.getBoundingClientRect();
+        const host = r(${el}), stage = r(${sr}.querySelector('.ff-stage')), hud = r(${sr}.querySelector('.ff-hud'));
+        const cut = ['Back', 'Play', 'Next'].filter((n) => {
+          const b = r([...${sr}.querySelectorAll('.ff-ctl button')].find((x) => x.textContent.trim() === n));
+          return b.height === 0 || b.top < hud.top || b.bottom > hud.bottom;
+        });
+        return { host: host.height, stage: stage.height, world: hud.top - host.top, key: r(${sr}.querySelector('.ff-key')).height, cut };
+      })()`);
+        assert.equal(got.stage, got.host, 'the stage fills the element');
+        assert.ok(got.world >= 600, `the world above the sheet: ${got.world} px`);
+        assert.equal(got.key, 0, 'the key is hidden');
+        assert.deepEqual(got.cut, [], `moment ${k + 1}`);
+      }
     } finally {
       await page.done();
     }
