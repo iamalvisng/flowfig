@@ -2,8 +2,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { LOOKS, edgeId, nodes, str } from './model.ts';
+import type { FlowProps } from './model.ts';
 import { cast } from './explain.ts';
-import { scene } from './world.ts';
+import { scene, timeline } from './world.ts';
+import type { Ev } from './world.ts';
 import oil from '../figures/explain-oil.ts';
 import returns from '../figures/returns-process.ts';
 import checkout from '../figures/checkout.ts';
@@ -72,4 +74,49 @@ test('the device comes from the look, and only an antenna actor has a roof anten
   }
   assert.equal(scene(oil.props).truck, 2);
   assert.ok(scene(oil.props).truckArt);
+});
+
+test('hops start in cause order', () => {
+  const sc = scene(oil.props);
+  const story = (name: string) => sc.stories.findIndex((s) => s.name === name);
+  const first = (evs: Ev[], hop: number) => Math.min(...evs.filter((e) => e.hop === hop).map((e) => e.start));
+  const last = (evs: Ev[], hop: number) => Math.max(...evs.filter((e) => e.hop === hop).map((e) => e.end));
+  const chain = timeline(sc, story('Normal pickup'), 2).events;
+  assert.ok(chain.some((e) => e.hop === 0) && chain.some((e) => e.hop === 1));
+  assert.ok(first(chain, 1) >= last(chain, 0), 'assign->collect waits for free->assign');
+  const pair = timeline(sc, story('Normal pickup'), 5).events;
+  assert.equal(first(pair, 0), first(pair, 1), 'save->stock and save->cash start together');
+  const refused = timeline(sc, story('Expired certification'), 2).events;
+  const fail = refused.find((e) => e.kind === 'fail')!;
+  const reply = refused.find((e) => e.kind === 'reply')!;
+  assert.equal(fail.start, last(refused, 0), 'the gate turns red when the pulse arrives');
+  assert.ok(reply.start >= fail.end, 'the red reply starts after the gate turns red');
+  for (const evs of [chain, pair, refused]) {
+    const cam = evs.find((e) => e.kind === 'camera')!;
+    assert.ok(
+      evs.every((e) => e === cam || e.start >= cam.end),
+      'the camera ends before the first hop',
+    );
+  }
+});
+
+test('a hop to a box outside every actor moves nothing and stops nothing', () => {
+  const fig: FlowProps = {
+    layout: {
+      children: [
+        { label: 'Shop', look: 'shop', children: [{ id: 'a', label: 'Sell' }] },
+        { id: 'q', label: 'Paid?', shape: 'decision' },
+        { label: 'Bank', children: [{ id: 'b', label: 'Book' }] },
+      ],
+    },
+    edges: [
+      { from: 'a', to: 'q' },
+      { from: 'a', to: 'b' },
+    ],
+    steps: [{ label: 'Sell', flow: [{ edges: ['a->q', 'a->b'] }] }],
+  };
+  const sc = scene(fig);
+  const { events } = timeline(sc, 0, 0);
+  assert.ok(!events.some((e) => e.hop === 0));
+  assert.ok(events.some((e) => e.hop === 1 && e.kind === 'pulse'));
 });
