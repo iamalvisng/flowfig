@@ -1349,7 +1349,7 @@ export function mountWorld(stage: HTMLElement, sc: Scene, resized: () => void): 
     raf = 0,
     built = '';
   const lays = new Map<string, Placed>();
-  let tags: { el: HTMLElement; actor: number; mk: HTMLElement; st: HTMLElement }[] = [],
+  let tags: { el: HTMLElement; actor: number; name: string; mk: HTMLElement; st: HTMLElement }[] = [],
     signs: { el: HTMLElement; actor: number; rows: { q: HTMLElement; a: HTMLElement }[] }[] = [],
     chips: { el: HTMLElement; text: string }[] = [];
 
@@ -1475,7 +1475,7 @@ export function mountWorld(stage: HTMLElement, sc: Scene, resized: () => void): 
         ls += `<path d="M-6 0H6L0 8Z" transform="translate(${pt([px, py])}) rotate(${{ l: 90, t: 180, r: -90, b: 0 }[t.pin]})" fill="${OV}"/>`;
       } else
         ls += `<path d="M${pt(t.line[0])}L${pt(t.line[1])}" stroke="${OV}" stroke-opacity=".55"/><circle cx="${f1(t.line[1][0])}" cy="${f1(t.line[1][1])}" r="2.5" fill="${OV}"/>`;
-      return { el: e, actor: t.actor, mk, st };
+      return { el: e, actor: t.actor, name: t.name, mk, st };
     });
     signs = lay.signs.map((g) => {
       const e = el('div', 'fw-sign');
@@ -1501,6 +1501,13 @@ export function mountWorld(stage: HTMLElement, sc: Scene, resized: () => void): 
   }
 
   function sync(s: State, rest: boolean) {
+    const acting = s.summary ? sc.stories[s.story].path : s.hi;
+    const spoken = [];
+    for (const t of tags) {
+      const ev = s.ever[t.actor];
+      if (ev && acting.includes(t.actor)) spoken.push(`${t.name}: ${ev.label}${ev.fail ? ', failed' : ''}.`);
+    }
+    svg.setAttribute('aria-label', spoken.join(' '));
     for (const t of tags) {
       const ev = s.ever[t.actor];
       t.mk.hidden = !ev;

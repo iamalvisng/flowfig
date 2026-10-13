@@ -339,3 +339,38 @@ test('a story with a faulty frame shows the diagram, and a clean story shows the
     await page.done();
   }
 });
+
+test('the world stage and the moments list read a refused check as failed', { skip: !browser.path }, async () => {
+  const page = await open(guide('oil'), `!!${sr}?.querySelector('[data-actor]')`);
+  try {
+    await page.ev(`${button('Expired certification')}.click()`);
+    await page.ev(`${el}.moment = ${el}.moment + 2`);
+    const label = `(${sr}.querySelector('[data-stage="world"] svg[role="img"]')?.getAttribute('aria-label') ?? '')`;
+    await page.until(`${label}.includes('Worker: Record refused, failed.')`, 'the stage names the refusal', 10_000);
+    const items = await page.ev(
+      `[...${sr}.querySelectorAll('.ff-moments button')].map((b) => b.getAttribute('aria-label') || b.textContent.trim())`,
+    );
+    assert.ok(items.includes('Allowed to sell?, failed'), JSON.stringify(items));
+  } finally {
+    await page.done();
+  }
+});
+
+test('with reduced motion the world holds the still arcs and the answer of the check at once', { skip: !browser.path }, async () => {
+  const page = await open(guide('oil'), `${live}.length > 0 && !!${sr}?.querySelector('[data-stage="world"] svg[role="img"]')`);
+  try {
+    await page.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
+    await page.ev(`${button('Expired certification')}.click()`);
+    await page.ev(`${el}.moment = ${el}.moment + 2`);
+    const rest = `(() => {
+      const w = ${sr}.querySelector('[data-stage="world"]');
+      const arcs = w.querySelectorAll('.fw-arcs path').length;
+      const answers = [...w.querySelectorAll('.fw-sign:not(.fw-off) .fw-a')].filter((a) => a.textContent.trim()).length;
+      return arcs > 0 && answers > 0;
+    })()`;
+    await page.until(rest, 'the rest frame shows arcs and an answer', 10_000);
+    assert.equal(await page.ev(rest), true);
+  } finally {
+    await page.done();
+  }
+});
