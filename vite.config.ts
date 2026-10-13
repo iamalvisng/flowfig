@@ -7,7 +7,9 @@ export default defineConfig({
     lib: { entry: 'src/element.ts', formats: ['es'], fileName: 'element' },
     outDir: 'dist',
     emptyOutDir: false,
-    minify: true,
-    rolldownOptions: { output: { chunkFileNames: 'element-[name].js' } },
+    minify: false,
+    rolldownOptions: {
+      output: { chunkFileNames: 'element-[name].js', minify: { compress: true, mangle: true, codegen: { removeWhitespace: true } } },
+    },
   },
 });

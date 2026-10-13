@@ -26,8 +26,8 @@ if (!renderToString(createElement(Flow, props)).length) throw new Error('Flow: e
 "
 
 node --input-type=module -e "await import('flowfig/element')"
-for f in element.js element-*.js; do
-  for ref in $(grep -oE "(from|import\()\s*['\"]\.\.?/[^'\"]+['\"]" "node_modules/flowfig/dist/$f" | grep -oE "[^/'\"]+\.js"); do
+for f in $(cd node_modules/flowfig/dist && ls element.js element-*.js); do
+  for ref in $(grep -oE "(from|import\(?)\s*['\"\`]\.\.?/[^'\"\`]+['\"\`]" "node_modules/flowfig/dist/$f" | grep -oE "[^/'\"]+\.js"); do
     case "$ref" in element.js | element-*.js) [ -f "node_modules/flowfig/dist/$ref" ] || { echo "$f imports $ref, which is missing"; exit 1; } ;; *) echo "$f imports $ref, not an element file"; exit 1 ;; esac
   done
 done

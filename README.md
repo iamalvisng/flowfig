@@ -934,7 +934,7 @@ For a good guide, give each role a lane or a labeled group. Give each beat a `sa
 
 The guide form shows a figure as a small world when an edge `carries` a thing, or when an actor has the look
 `person`, `shop` or `truck`. Other figures show the diagram in the guide. The world loads from
-`element-world.js` next to `element.js`. A CDN script tag loads it from the same folder. The world art stays light in
+`element-world.js` next to `element.js`, with a shared chunk (`element-looks.js`). A CDN script tag loads them from the same folder. The world art stays light in
 a dark theme.
 
 | Attribute | Values                                                             | Default                                       |
@@ -966,7 +966,7 @@ flowfig-explain {
 }
 ```
 
-The element is one file, under 45 kB gzip, with no React. In a bundler, write `import 'flowfig/element'`.
+The element is `element.js` and the files `element-world.js` and `element-looks.js` next to it. The core loads under 45 kB gzip, and the world loads on demand. There is no React. In a bundler, write `import 'flowfig/element'`.
 
 ## Use with your coding agent
 

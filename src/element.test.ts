@@ -57,7 +57,7 @@ after(async () => {
   if (dir) rmSync(dir, { recursive: true, force: true });
 });
 
-async function open(body: string, ready: string) {
+async function open(body: string, ready: string, size?: [number, number]) {
   const path = `/page-${pages.size}`;
   pages.set(path, `<!doctype html><body><script type="module" src="/dist/element.js"></script>${body}</body>`);
   const { targetId } = await cdp.send('Target.createTarget', { url: origin + path });
@@ -72,6 +72,7 @@ async function open(body: string, ready: string) {
     for (let t = Date.now(); !(await ev(e).catch(() => false)); await new Promise((r) => setTimeout(r, 50)))
       assert.ok(Date.now() - t < ms, what);
   };
+  if (size) await send('Emulation.setDeviceMetricsOverride', { width: size[0], height: size[1], deviceScaleFactor: 1, mobile: false });
   await until(`!!customElements.get('flowfig-explain')`, 'the page defines <flowfig-explain>');
   await until(ready, 'the element shows its first view');
   return { send, ev, until, done: () => cdp.send('Target.closeTarget', { targetId }) };
@@ -89,6 +90,7 @@ test('guide: moment 1 says the first beat, lifts the lane of its target, and Nex
   const page = await open(
     guide('oil'),
     `${live}.includes('The customer asks for a pickup in the app.') && !!${sr}?.querySelector('[data-actor]')`,
+    [1280, 800],
   );
   try {
     const acting = await page.ev(`[...${sr}.querySelectorAll('[data-actor][aria-current="true"]')].map((a) => a.dataset.actor)`);
@@ -215,7 +217,7 @@ test('arrow keys move the moment, and the live region reads the new sentence', {
 
 test('the element core and the world chunk stay in budget', () => {
   const deps = (file: string) =>
-    [...readFileSync(file, 'utf8').matchAll(/\b(?:from|import)\s*(\()?\s*['"](\.{1,2}\/[^'"]+)['"]/g)].map(([, call, spec]) => ({
+    [...readFileSync(file, 'utf8').matchAll(/\b(?:from|import)\s*(\()?\s*['"`](\.{1,2}\/[^'"`]+)['"`]/g)].map(([, call, spec]) => ({
       file: join(dirname(file), spec),
       lazy: !!call,
     }));
@@ -284,6 +286,38 @@ test('the drawn overlays sit where the layout put them', { skip: !browser.path }
         assert.ok(Math.abs(drawn[k] - t.r[k]) <= 2, `${t.name} ${k}: ${drawn[k]} vs ${t.r[k]}`);
       assert.ok(drawn.fits, `${t.name}: the text is wider than its tag`);
     }
+  } finally {
+    await page.done();
+  }
+});
+
+test('a story with a faulty frame shows the diagram, and a clean story shows the world', { skip: !browser.path }, async () => {
+  const page = await open(guide('oil'), `${live}.length > 0 && !!${sr}?.querySelector('[data-stage="world"] svg[role="img"]')`);
+  try {
+    await page.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
+    const sc = scene(oil.props);
+    const shown = `(() => { const d = ${sr}.querySelector('[data-stage="diagram"]'); return !!d && !d.hidden; })()`;
+    let faulty = 0;
+    for (const [w, h] of [
+      [390, 300],
+      [390, 844],
+    ]) {
+      await page.send('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: 1, mobile: true });
+      await page.ev(`new Promise((r) => setTimeout(r, 400))`);
+      for (const [s, story] of sc.stories.entries()) {
+        await page.ev(`${button(story.name)}.click()`);
+        await page.until(`${live}.length > 0 && ${el}.moment >= 0`, 'the story opens');
+        await page.ev(`new Promise((r) => setTimeout(r, 300))`);
+        const box: { w: number; h: number } = await page.ev(
+          `(() => { const g = ${sr}.querySelector('.ff-stage').getBoundingClientRect(); return { w: g.width, h: g.height }; })()`,
+        );
+        const st = stageFor(box.w, box.h);
+        const bad = story.moments.some((_, m) => place(sc, stateAt(sc, s, m, Infinity), st).faults > 0);
+        faulty += bad ? 1 : 0;
+        assert.equal(await page.ev(shown), bad, `${story.name} at ${w}x${h}`);
+      }
+    }
+    assert.ok(faulty > 0, 'the small stage has a faulty story');
   } finally {
     await page.done();
   }

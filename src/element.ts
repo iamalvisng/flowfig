@@ -15,7 +15,7 @@ import {
 } from './model.ts';
 import { moments, worldReady, type Moment } from './explain.ts';
 import { HUD, TOKENS } from './looks.ts';
-import type { Scene, World } from './world.ts';
+import type { World } from './world.ts';
 
 type Form = 'diagram' | 'guide' | 'change';
 type Spot = Moment & { step: string; ms: number; code: string[]; title: string };
@@ -111,7 +111,7 @@ const CSS = [
   '.ff-key li::before{content:"";display:inline-block;width:18px;height:0;margin-right:10px;vertical-align:middle;border-top:2px solid #2456D6}',
   '.ff-key li[data-k=thing]::before{height:10px;border:0;background:#D9822B;border-radius:2px}',
   '.ff-key li[data-k=check]::before{height:10px;border:0;border-top:3px solid #2e3440}',
-  `@container ff-host (width < ${HUD.wide}px){.ff-g{aspect-ratio:auto;height:max(560px,min(100svh,${HUD.tall}px));max-height:none}.ff-chips{top:8px;left:8px;right:8px}.ff-hud{top:auto;left:0;right:0;bottom:0;width:auto;height:${HUD.sheet}px;gap:8px;padding:12px 16px;border-radius:12px 12px 0 0;font-size:13px}.ff-say{font-size:16px}.ff-note{font-size:13px}.ff-kick,.ff-moments button,.ff-key{font-size:11px}.ff-ht,.ff-code,.ff-tog,.ff-moments:not(.ff-open){display:none}.ff-more{display:inline-block}}`,
+  `@container ff-host (width < ${HUD.wide}px){.ff-g{aspect-ratio:auto;height:min(100svh,${HUD.tall}px);max-height:none}.ff-chips{top:8px;left:8px;right:8px}.ff-hud{top:auto;left:0;right:0;bottom:0;width:auto;height:${HUD.sheet}px;gap:8px;padding:12px 16px;border-radius:12px 12px 0 0;font-size:13px}.ff-say{font-size:16px}.ff-note{font-size:13px}.ff-kick,.ff-moments button,.ff-key{font-size:11px}.ff-ht,.ff-code,.ff-tog,.ff-moments:not(.ff-open){display:none}.ff-more{display:inline-block}}`,
   '.ff-verdict{padding:12px 16px;background:var(--flowfig-surface);border:1px solid var(--flowfig-border);border-radius:10px;font-size:16px;font-weight:500}',
   '.ff-list{margin:6px 0 0;padding-left:20px;font-size:15px;font-weight:400}',
   '.ff-all{margin-top:8px;font-size:13px;font-weight:400;color:var(--flowfig-muted)}',
@@ -241,7 +241,6 @@ export class FlowfigExplain extends Base {
   #svg?: SVGSVGElement;
   #g?: Guide;
   #world?: World;
-  #scene?: Scene;
   #worldLoads = 0;
   #motion = 0;
   #seekTimer?: ReturnType<typeof setTimeout>;
@@ -518,7 +517,6 @@ export class FlowfigExplain extends Base {
       clearTimeout(this.#seekTimer);
       this.#world?.stop();
       this.#world = undefined;
-      this.#scene = undefined;
       this.#worldLoads++;
       this.#motion = 0;
       this.#heading.textContent = this.#title;
@@ -671,15 +669,15 @@ export class FlowfigExplain extends Base {
           import('./world.ts')
             .then((w) => {
               if (load !== this.#worldLoads || this.#g !== g) return;
-              this.#scene = w.scene(spec);
+              const scene = w.scene(spec);
               g.key.replaceChildren(
-                ...this.#scene.keys.map((k) => {
+                ...scene.keys.map((k) => {
                   const li = h('li', '', KEYS[k]);
                   li.dataset.k = k;
                   return li;
                 }),
               );
-              this.#world = w.mountWorld(g.stage, this.#scene);
+              this.#world = w.mountWorld(g.stage, scene);
               g.drawn = '';
               this.#update();
             })

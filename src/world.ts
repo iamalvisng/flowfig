@@ -1176,30 +1176,45 @@ const OV = '#141A22',
   OVM = '#646C79',
   RIM = 'rgba(20,26,34,.16)';
 const OV_CSS = [
-  `[data-stage=world]{overflow:hidden}[data-stage=world]>svg,.ff-ov>svg{position:absolute;inset:0;width:100%;height:100%}`,
+  `[data-stage=world]{overflow:hidden}[data-stage=world]>svg,.fw-ov>svg{position:absolute;inset:0;width:100%;height:100%}`,
   `.bld{transition:opacity .3s,filter .3s}.bld.quiet{opacity:.4;filter:saturate(.15)}.pad{opacity:0;transition:opacity .3s}.pad.on{opacity:1}`,
-  `.ff-ov{position:absolute;inset:0;pointer-events:none;overflow:hidden;font-family:var(--flowfig-font);color:${OV}}`,
-  `.ff-tag,.ff-sign,.ff-dchip{position:absolute;left:0;top:0;box-sizing:border-box;overflow:hidden;white-space:nowrap;background:#fff;border:1px solid ${RIM};transition:opacity .2s}`,
-  `.ff-tag{padding:4px 9px;border-radius:6px}`,
-  `.ff-tn{display:block;font:600 14.8px/19px var(--flowfig-font);color:${OV}}`,
-  `.ff-ts{display:flex;font:400 13.8px/17px var(--flowfig-font);color:${OV2}}`,
-  `.ff-mk{flex:none;width:18px;font-style:normal;font-weight:600}`,
-  `.ff-no{color:${INK.fail}}`,
-  `.ff-quiet .ff-tn,.ff-quiet .ff-ts{color:${OVM}}`,
-  `.ff-sign{padding:6px 10px;border-radius:8px}`,
-  `.ff-row{display:flex;align-items:center;justify-content:space-between;height:30px}.ff-row+.ff-row{margin-top:6px}`,
-  `.ff-q{font:600 15px/20px var(--flowfig-font);color:${OV}}`,
-  `.ff-a{margin-left:12px;padding:0 6px;border-radius:5px;font:600 13px/24px var(--flowfig-font);background:#EEF1EA;color:${OV}}`,
-  `.ff-a.ff-no{background:#FCEBE8;color:${INK.fail}}.ff-a.ff-no::before{content:"\\2717";margin-right:4px}`,
-  `.ff-dchip{display:flex;align-items:center;padding:0 9px;border-radius:6px;font:600 13px/1 var(--flowfig-font);color:${INK.data}}`,
-  `.ff-dchip.ff-thing{color:${OV}}.ff-dchip.ff-no{color:${INK.fail}}`,
-  `.ff-off{opacity:0}`,
+  `.fw-ov{position:absolute;inset:0;pointer-events:none;overflow:hidden;font-family:var(--flowfig-font);color:${OV}}`,
+  `.fw-tag,.fw-sign,.fw-dchip{position:absolute;left:0;top:0;box-sizing:border-box;overflow:hidden;white-space:nowrap;background:#fff;border:1px solid ${RIM};transition:opacity .2s}`,
+  `.fw-tag{padding:4px 9px;border-radius:6px}`,
+  `.fw-tn{display:block;font:600 14.8px/19px var(--flowfig-font);color:${OV}}`,
+  `.fw-ts{display:flex;font:400 13.8px/17px var(--flowfig-font);color:${OV2}}`,
+  `.fw-mk{flex:none;width:18px;font-style:normal;font-weight:600}`,
+  `.fw-no{color:${INK.fail}}`,
+  `.fw-quiet .fw-tn,.fw-quiet .fw-ts{color:${OVM}}`,
+  `.fw-sign{padding:6px 10px;border-radius:8px}`,
+  `.fw-row{display:flex;align-items:center;justify-content:space-between;height:30px}.fw-row+.fw-row{margin-top:6px}`,
+  `.fw-q{font:600 15px/20px var(--flowfig-font);color:${OV}}`,
+  `.fw-a{margin-left:12px;padding:0 6px;border-radius:5px;font:600 13px/24px var(--flowfig-font);background:#EEF1EA;color:${OV}}`,
+  `.fw-a.fw-no{background:#FCEBE8;color:${INK.fail}}.fw-a.fw-no::before{content:"\\2717";margin-right:4px}`,
+  `.fw-dchip{display:flex;align-items:center;padding:0 9px;border-radius:6px;font:600 13px/1 var(--flowfig-font);color:${INK.data}}`,
+  `.fw-dchip.fw-thing{color:${OV}}.fw-dchip.fw-no{color:${INK.fail}}`,
+  `.fw-off{opacity:0}`,
 ].join('');
 
 const f1 = (n: number) => n.toFixed(1);
 const pt = (p: Pt) => `${f1(p[0])},${f1(p[1])}`;
-const arcPart = (r: Route, u0: number, u1: number) =>
-  `M${Array.from({ length: 21 }, (_, i) => pt(bez(r, u0 + ((u1 - u0) * i) / 20))).join('L')}`;
+const cut = (r: Route, t: number): Route[] => {
+  const ab = lerp(r.a, r.c1, t),
+    bc = lerp(r.c1, r.c2, t),
+    cd = lerp(r.c2, r.b, t),
+    abc = lerp(ab, bc, t),
+    bcd = lerp(bc, cd, t),
+    m = lerp(abc, bcd, t);
+  return [
+    { a: r.a, c1: ab, c2: abc, b: m },
+    { a: m, c1: bcd, c2: cd, b: r.b },
+  ];
+};
+const arcPart = (r: Route, u0: number, u1: number) => {
+  let s = u0 > 0 ? cut(r, u0)[1] : r;
+  if (u1 < 1) s = cut(s, (u1 - u0) / (1 - u0))[0];
+  return `M${pt(s.a)}C${pt(s.c1)} ${pt(s.c2)} ${pt(s.b)}`;
+};
 const NS = 'http://www.w3.org/2000/svg';
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, text?: string) => {
   const e = document.createElement(tag);
@@ -1231,17 +1246,17 @@ export function mountWorld(stage: HTMLElement, sc: Scene): World {
   const svg = document.createElementNS(NS, 'svg');
   svg.setAttribute('role', 'img');
   svg.innerHTML =
-    `<g class="ff-cam">${sc.svg}${art?.door ?? ''}<g class="ff-units"></g>${art?.road ?? ''}` +
-    sc.actors.map((a, i) => (a.device === 'antenna' ? '' : `<g class="ff-dev" data-a="${i}">${PHONE.svg}</g>`)).join('') +
-    `<g class="ff-arcs"></g></g>`;
-  const ov = el('div', 'ff-ov');
+    `<g class="fw-cam">${sc.svg}${art?.door ?? ''}<g class="fw-units"></g>${art?.road ?? ''}` +
+    sc.actors.map((a, i) => (a.device === 'antenna' ? '' : `<g class="fw-dev" data-a="${i}">${PHONE.svg}</g>`)).join('') +
+    `<g class="fw-arcs"></g></g>`;
+  const ov = el('div', 'fw-ov');
   stage.append(svg, ov);
   const q = (sel: string) => svg.querySelector<SVGGraphicsElement>(sel);
-  const camG = q('.ff-cam')!,
-    unitsG = q('.ff-units')!,
-    arcsG = q('.ff-arcs')!,
+  const camG = q('.fw-cam')!,
+    unitsG = q('.fw-units')!,
+    arcsG = q('.fw-arcs')!,
     doorPanel = q('#doorPanel');
-  const devs = new Map([...svg.querySelectorAll<SVGGElement>('.ff-dev')].map((g) => [Number(g.dataset.a), g]));
+  const devs = new Map([...svg.querySelectorAll<SVGGElement>('.fw-dev')].map((g) => [Number(g.dataset.a), g]));
   const arms = [...svg.querySelectorAll('.arm')],
     arms2 = [...svg.querySelectorAll('.armW')],
     hubs = [...svg.querySelectorAll('.hub')];
@@ -1367,12 +1382,12 @@ export function mountWorld(stage: HTMLElement, sc: Scene): World {
     const lead = document.createElementNS(NS, 'svg');
     let ls = '';
     tags = lay.tags.map((t) => {
-      const e = el('div', `ff-tag${t.quiet ? ' ff-quiet' : ''}`),
-        mk = el('i', 'ff-mk'),
-        st = el('span', 'ff-ts');
+      const e = el('div', `fw-tag${t.quiet ? ' fw-quiet' : ''}`),
+        mk = el('i', 'fw-mk'),
+        st = el('span', 'fw-ts');
       e.dataset.actor = t.name;
       st.append(mk, '');
-      e.append(el('b', 'ff-tn', t.name), st);
+      e.append(el('b', 'fw-tn', t.name), st);
       put(e, t.r);
       if (story.acting[cur?.moment ?? -1] === t.name) e.setAttribute('aria-current', 'true');
       if (t.pin) {
@@ -1386,11 +1401,11 @@ export function mountWorld(stage: HTMLElement, sc: Scene): World {
       return { el: e, actor: t.actor, mk, st };
     });
     signs = lay.signs.map((g) => {
-      const e = el('div', 'ff-sign');
+      const e = el('div', 'fw-sign');
       const rows = g.rows.map((r) => {
-        const row = el('div', 'ff-row'),
-          q = el('span', 'ff-q', r.q),
-          a = el('span', 'ff-a');
+        const row = el('div', 'fw-row'),
+          q = el('span', 'fw-q', r.q),
+          a = el('span', 'fw-a');
         row.append(q, a);
         e.append(row);
         return { q, a };
@@ -1400,7 +1415,7 @@ export function mountWorld(stage: HTMLElement, sc: Scene): World {
       return { el: e, actor: g.actor, rows };
     });
     chips = lay.chips.map((c) => {
-      const e = el('div', `ff-dchip${sc.things.has(c.text) ? ' ff-thing' : ''}${c.fail ? ' ff-no' : ''}`, c.text);
+      const e = el('div', `fw-dchip${sc.things.has(c.text) ? ' fw-thing' : ''}${c.fail ? ' fw-no' : ''}`, c.text);
       put(e, c.r);
       return { el: e, text: c.text };
     });
@@ -1414,24 +1429,24 @@ export function mountWorld(stage: HTMLElement, sc: Scene): World {
       t.mk.hidden = !ev;
       same(t.mk, ev ? (ev.fail ? '✗' : '✓') : '');
       same(t.st.lastChild!, ev ? ev.label : 'Not reached');
-      t.st.classList.toggle('ff-no', !!ev?.fail);
+      t.st.classList.toggle('fw-no', !!ev?.fail);
     }
     for (const g of signs) {
       const gs = s.gates[g.actor];
-      g.el.classList.toggle('ff-off', !rest && !(gs.rows.length && (gs.on === s.moment || s.summary)));
+      g.el.classList.toggle('fw-off', !rest && !(gs.rows.length && (gs.on === s.moment || s.summary)));
       g.rows.forEach((r, i) => {
         const row = gs.rows[i];
         (r.q.parentElement as HTMLElement).style.visibility = row ? '' : 'hidden';
         same(r.a, row?.a ?? '');
         r.a.hidden = !row?.a;
-        r.a.classList.toggle('ff-no', !!row?.fail);
+        r.a.classList.toggle('fw-no', !!row?.fail);
       });
     }
     const live = new Set<string>();
     for (const a of s.arcs) if (a.moment === s.moment && a.t === 1 && a.text) live.add(a.text);
     for (const u of Object.values(s.units))
       if ((u.moment === s.moment || s.summary) && u.moment >= 0 && (u.where === 'yard' || u.where === 'gate')) live.add(u.thing);
-    for (const c of chips) c.el.classList.toggle('ff-off', !rest && !live.has(c.text));
+    for (const c of chips) c.el.classList.toggle('fw-off', !rest && !live.has(c.text));
   }
 
   function frame(rest: boolean, t: number) {
