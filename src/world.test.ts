@@ -201,6 +201,9 @@ function audit(sc: Scene, s: State, p: Placed, st: Stage): string[] {
     if (!o.pin && len > reach) out.push(`tag ${o.name} leader ${Math.round(len)} px`);
   }
   for (const o of p.signs) {
+    const tag = p.tags.find((x) => x.actor === o.actor)?.r,
+      gap = tag ? Math.max(tag.x - o.r.x - o.r.w, o.r.x - tag.x - tag.w, tag.y - o.r.y - o.r.h, o.r.y - tag.y - tag.h, 0) : Infinity;
+    if (o.kick && gap <= 120) out.push(`sign ${o.actor} names its owner beside the owner tag`);
     const [x, y] = near(o.r, o.anchor);
     const len = Math.hypot(x - o.anchor[0], y - o.anchor[1]);
     if (len > 24.5) out.push(`sign ${o.actor} leader ${Math.round(len)} px`);
@@ -323,6 +326,20 @@ test('an unlabeled edge out of a check answers with a check mark or a cross', ()
   const answer = (story: number) => stateAt(sc, story, 1, Infinity).gates[bank].rows.map((r) => r.a);
   assert.deepEqual(answer(0), ['✓']);
   assert.deepEqual(answer(1), ['✗']);
+  assert.equal(stateAt(sc, 1, 1, Infinity).ever[bank].label, 'Refuse', 'a failed check tag shows the result in its own actor');
+  const oils = scene(oil.props),
+    who = (name: string) => oils.actors.findIndex((a) => a.name === name),
+    refused = stateAt(
+      oils,
+      oils.stories.findIndex((s) => s.name === 'Expired certification'),
+      2,
+      Infinity,
+    ).ever;
+  assert.deepEqual(
+    [refused[who('Server')].label, refused[who('Worker')].label],
+    ['Expired', 'Record refused'],
+    'a failed check tag shows the answer when another actor holds the result',
+  );
 });
 
 test('a story inside one actor still gets a framed camera', () => {

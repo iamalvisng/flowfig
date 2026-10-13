@@ -614,7 +614,7 @@ function planOf(sc: Scene, story: number, m: number) {
             st.gates[fa].fail = true;
             st.arcs.forEach((x) => (x.fail ||= x.gate === fa && x.hold));
             for (const u of Object.values(st.units)) u.fail ||= u.where === 'gate' && u.at === fa;
-            st.ever[fa] = { label: fb.label, fail: true };
+            st.ever[fa] = { label: ta === fa || !h.label ? tb.label : answer(h), fail: true };
           },
           ease.out,
         );
@@ -801,7 +801,7 @@ export type Tag = {
   quiet: boolean;
   end: boolean;
 };
-export type Sign = { actor: number; r: Rect; anchor: Pt; rows: { q: string; a: string; fail: boolean }[] };
+export type Sign = { actor: number; r: Rect; anchor: Pt; rows: { q: string; a: string; fail: boolean }[]; kick: boolean };
 export type Chip = { text: string; r: Rect; fail: boolean; mark?: Mark };
 export type Placed = {
   cam: Cam;
@@ -1062,21 +1062,22 @@ export function layout(sc: Scene, s: State, stage: Stage, cam: Cam, full = false
       bot = gr.y + gr.h,
       mid = gr.x + gr.w / 2,
       gy = gr.y + gr.h / 2;
-    const opts: Opt[] = (
+    const ways = (
       [
-        [foot[0] - 14, bot + GAP, foot],
-        [foot[0] - w + 14, bot + GAP, foot],
-        [mid - w / 2, bot + GAP, foot],
         [mid - 14, gr.y - GAP - h, [mid, gr.y]],
         [mid - w + 14, gr.y - GAP - h, [mid, gr.y]],
         [gr.x + gr.w + GAP, gy - h / 2, [gr.x + gr.w, gy]],
         [gr.x - GAP - w, gy - h / 2, [gr.x, gy]],
         [gr.x + gr.w + GAP, bot - h, [gr.x + gr.w, bot - 4]],
         [gr.x - GAP - w, bot - h, [gr.x, bot - 4]],
+        [foot[0] - 14, bot + GAP, foot],
+        [foot[0] - w + 14, bot + GAP, foot],
+        [mid - w / 2, bot + GAP, foot],
       ] as [number, number, Pt][]
     ).map(([x, y, anchor]) => ({ x, y, w, h, anchor }));
+    const opts = stage.narrow ? [...ways.slice(6), ...ways.slice(0, 6)] : ways;
     const o = pick([opts, ...([foot, [mid, gr.y], [gr.x, gy], [gr.x + gr.w, gy]] as Pt[]).map((p) => () => ring(p, w, h, [12, 24]))]);
-    signs.push({ actor: g.actor, r: { x: o.x, y: o.y, w, h }, anchor: o.anchor, rows });
+    signs.push({ actor: g.actor, r: { x: o.x, y: o.y, w, h }, anchor: o.anchor, rows, kick: !!ty.kick });
     taken.push(o);
   }
 
@@ -1161,6 +1162,13 @@ export function layout(sc: Scene, s: State, stage: Stage, cam: Cam, full = false
     return { ...base, r: tr, anchor: o.anchor, line: [nearest(tr, o.anchor), o.anchor], pin: side };
   }
 
+  for (const g of signs) {
+    const tr = tags.find((x) => x.actor === g.actor)?.r,
+      r = g.r;
+    if (!g.kick || !tr || Math.max(tr.x - r.x - r.w, r.x - tr.x - tr.w, tr.y - r.y - r.h, r.y - tr.y - tr.h) > 120) continue;
+    g.kick = false;
+    g.r = { ...r, y: g.anchor[1] > r.y + r.h - 16 ? r.y + 16 : r.y, h: r.h - 16 };
+  }
   bad += devices.filter((d) => !inRegion(d.r) || !offB(d.r)).length + gates.filter((g) => s.summary && !inRegion(g.r)).length;
   const placed: Placed = {
     cam,
@@ -1582,7 +1590,7 @@ export function mountWorld(stage: HTMLElement, fig: FlowProps, resized: () => vo
     });
     signs = lay.signs.map((g) => {
       const e = el('div', 'fw-sign');
-      e.append(el('div', 'fw-sk', sc.actors[g.actor].name));
+      if (g.kick) e.append(el('div', 'fw-sk', sc.actors[g.actor].name));
       const rows = g.rows.map((r) => {
         const row = el('div', 'fw-row'),
           q = el('span', 'fw-q', r.q),
