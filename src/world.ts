@@ -363,6 +363,8 @@ function kit(sc: Scene, s: State) {
   };
 }
 
+const answer = (h: Hop) => h.label.charAt(0).toUpperCase() + h.label.slice(1) || (h.fail ? '✗' : '✓');
+
 const plans = new WeakMap<Scene, Map<string, ReturnType<typeof planOf>>>();
 function plan(sc: Scene, story: number, m: number) {
   const memo = plans.get(sc) ?? new Map<string, ReturnType<typeof planOf>>();
@@ -583,7 +585,7 @@ function planOf(sc: Scene, story: number, m: number) {
       add('answer', i, at, 0, (st) => {
         const g = st.gates[fa],
           row = g.rows.find((r) => r.box === h.from) ?? g.rows[g.rows.push({ box: h.from, q: fb.check, a: '', fail: false }) - 1];
-        Object.assign(row, { a: h.label.charAt(0).toUpperCase() + h.label.slice(1) || (h.fail ? '✗' : '✓'), fail: h.fail });
+        Object.assign(row, { a: answer(h), fail: h.fail });
         g.on = m;
       });
       if (h.fail) {
@@ -682,6 +684,17 @@ function planOf(sc: Scene, story: number, m: number) {
         g.on = m;
       });
       at += 250;
+      const out = hops.some((x) => x.from === h.to)
+        ? undefined
+        : st.moments
+            .slice(m + 1)
+            .flat()
+            .find((x) => x.from === h.to);
+      if (out)
+        add('answer', i, at, 0, (x) => {
+          const row = x.gates[ta].rows.find((r) => r.box === h.to);
+          if (row) Object.assign(row, { a: answer(out), fail: out.fail });
+        });
     }
     set(i, at, reach(ta, tb));
     return at;
@@ -737,6 +750,7 @@ export type Tag = {
   r: Rect;
   anchor: Pt;
   pin?: 'l' | 'r' | 't' | 'b';
+  line: [Pt, Pt];
   name: string;
   status: string;
   mark: Mark;
@@ -762,6 +776,7 @@ const GAP = 12,
   MARGIN = 48,
   TAG_H = 46,
   CHIP_H = 26;
+const nearest = (r: Rect, p: Pt): Pt => [Math.max(r.x, Math.min(p[0], r.x + r.w)), Math.max(r.y, Math.min(p[1], r.y + r.h))];
 const width = (text: string, size: number, bold: boolean) => textWidth(text, size) * (bold ? 1.06 : 1);
 
 export const hit = (a: Rect, b: Rect, pad = 0) =>
@@ -808,8 +823,7 @@ function layout(sc: Scene, s: State, stage: Stage, cam: Cam) {
     k = kit(sc, s),
     { l, t, r, b } = stage.region,
     cx = (l + r) / 2,
-    cy = (t + b) / 2,
-    view = { x: l, y: t, w: r - l, h: b - t };
+    cy = (t + b) / 2;
   const pr = (p: Pt): Pt => [(p[0] - cam.x) * cam.z + cx, (p[1] - cam.y) * cam.z + cy];
   const span = (ps: Pt[]): Rect => {
     const xs = ps.map((p) => pr(p)[0]),
@@ -839,13 +853,10 @@ function layout(sc: Scene, s: State, stage: Stage, cam: Cam) {
           [p[0] + PHONE.w / 2, p[1]],
         ]),
       };
-    })
-    .filter((d) => hit(d.r, view));
+    });
   const arcs = s.arcs.filter((a) => a.t > 0).map((a) => Array.from({ length: 33 }, (_, i) => pr(bez(a, a.t * (0.05 + (0.9 * i) / 32)))));
   const taken: Rect[] = [...devices, ...gates].map((d) => d.r);
-  let bad = 0,
-    hidden = 0,
-    crowd = 0;
+  let bad = 0;
   const inRegion = (o: Rect) => o.x >= l && o.y >= t && o.x + o.w <= r && o.y + o.h <= b;
   const offB = (o: Rect) => !hulls.some((h) => polyHit(h, o, 2)) && !(truck && polyHit(truck, o, 2));
   const offA = (o: Rect) => !arcs.some((arc) => arc.some(([x, y]) => x > o.x - 4 && x < o.x + o.w + 4 && y > o.y - 4 && y < o.y + o.h + 4));
@@ -860,7 +871,6 @@ function layout(sc: Scene, s: State, stage: Stage, cam: Cam) {
 
   const chips: Chip[] = [];
   const chip = (text: string, fail: boolean, opts: Pt[], w: number, around: Pt[]) => {
-    if (!around.some(([x, y]) => x >= l && x <= r && y >= t && y <= b)) return void hidden++;
     for (const [px, py] of around)
       for (const d of [10, 30, 50])
         for (let i = 0; i < 8; i++) {
@@ -924,10 +934,6 @@ function layout(sc: Scene, s: State, stage: Stage, cam: Cam) {
   for (const g of gates) {
     const gs = s.gates[g.actor];
     if (!gs.rows.length || !(gs.on === s.moment || (s.summary && gs.fail && !stage.narrow))) continue;
-    if (!hit(g.r, view)) {
-      hidden++;
-      continue;
-    }
     const rows = gs.rows.map(({ q, a, fail }) => ({ q, a, fail }));
     const w = 22 + Math.max(...rows.map((x) => width(x.q, 15, true) + (x.a ? width(x.a, 13, true) + 40 : 0))),
       h = rows.length * 30 + (rows.length - 1) * 6 + 14;
@@ -993,11 +999,19 @@ function layout(sc: Scene, s: State, stage: Stage, cam: Cam) {
       [ax - 36, ay - g - h],
     ])
       opts.push({ x, y, w, h, anchor });
+    if (stage.narrow)
+      for (const d of [30, 44, 58])
+        for (let i = 0; i < 16; i++) {
+          const c = Math.cos((i * Math.PI) / 8),
+            n = Math.sin((i * Math.PI) / 8),
+            x = ax + c * d - (c > 0.38 ? 0 : c < -0.38 ? w : w / 2),
+            y = ay + n * d - (n > 0.38 ? 0 : n < -0.38 ? h : h / 2);
+          opts.push({ x, y, w, h, anchor });
+        }
     const must = s.hi.includes(a) || (s.summary && story.path.includes(a));
     const base = { actor: a, name, status, mark, quiet: !story.path.includes(a) };
     const out = ax < l || ax > r || ay < t || ay > b;
-    if (must && stage.narrow && (out || !clean(opts))) {
-      if (!out) crowd++;
+    if (must && stage.narrow && out) {
       const tag = pin(base, w, h, [ax, ay]);
       tags.push(tag);
       taken.push(tag.r);
@@ -1005,11 +1019,12 @@ function layout(sc: Scene, s: State, stage: Stage, cam: Cam) {
     }
     const o = must ? pick(opts) : clean(opts);
     if (!o) continue;
-    tags.push({ ...base, r: { x: o.x, y: o.y, w, h }, anchor: o.anchor });
+    const tr = { x: o.x, y: o.y, w, h };
+    tags.push({ ...base, r: tr, anchor: o.anchor, line: [nearest(tr, o.anchor), o.anchor] });
     taken.push(o);
   }
 
-  function pin(base: Omit<Tag, 'r' | 'anchor'>, w: number, h: number, [ax, ay]: Pt): Tag {
+  function pin(base: Omit<Tag, 'r' | 'anchor' | 'line'>, w: number, h: number, [ax, ay]: Pt): Tag {
     const over = { l: l - ax, r: ax - r, t: t - ay, b: ay - b };
     const side = (Object.keys(over) as Tag['pin'][]).reduce((m, e) => (over[e!] > over[m!] ? e : m))!;
     const across = side === 'l' || side === 'r';
@@ -1022,15 +1037,16 @@ function layout(sc: Scene, s: State, stage: Stage, cam: Cam) {
         if (v < lo || v > hi) continue;
         const x = across ? (side === 'l' ? l : r - w) : v,
           y = across ? v : side === 't' ? t : b - h;
-        opts.push({ x, y, w, h, anchor: [Math.max(l, Math.min(r, ax)), Math.max(t, Math.min(b, ay))] });
+        opts.push({ x, y, w, h, anchor: [ax, ay] });
       }
     const o = pick(opts);
-    return { ...base, r: { x: o.x, y: o.y, w, h }, anchor: o.anchor, pin: side };
+    const tr = { x: o.x, y: o.y, w, h };
+    return { ...base, r: tr, anchor: o.anchor, line: [nearest(tr, o.anchor), o.anchor], pin: side };
   }
 
   bad += devices.filter((d) => !inRegion(d.r) || !offB(d.r)).length;
   const placed: Placed = { cam, tags, signs, chips, devices, gates, hulls, truck, arcs };
-  return { placed, bad, hidden, crowd, pts: s.frame.map(pr) };
+  return { placed, bad, pts: s.frame.map(pr) };
 }
 
 export function place(sc: Scene, s: State, stage: Stage): Placed {
@@ -1045,8 +1061,7 @@ export function place(sc: Scene, s: State, stage: Stage): Placed {
   const { l, t, r, b } = stage.region,
     rw = r - l,
     rh = b - t,
-    pad = stage.narrow ? 0 : MARGIN,
-    floor = stage.narrow ? ZMIN : 0;
+    pad = stage.narrow ? 0 : MARGIN;
   const fit = (c: Cam) => {
     const lay = layout(sc, { ...s, frame: pts }, stage, c);
     const rects = [...lay.placed.signs, ...lay.placed.tags, ...lay.placed.devices, ...lay.placed.chips].map((o) => o.r);
@@ -1056,39 +1071,45 @@ export function place(sc: Scene, s: State, stage: Stage): Placed {
       B = Math.max(...rects.map((o) => o.y + o.h), ...lay.pts.map((p) => p[1]));
     return { lay, L, R, T, B };
   };
-  let best: ReturnType<typeof layout> | null = null,
-    last: ReturnType<typeof layout> | undefined;
-  let z = Math.max(floor, Math.min((rw - 2 * pad) / (x1 - x0), (rh - 2 * pad) / (y1 - y0), 1));
-  for (let n = 0; n < 50 && z >= floor; n++, z *= 0.96) {
-    let c: Cam = { x: (x0 + x1) / 2, y: (y0 + y1) / 2, z };
-    for (let round = 0; round < 3; round++) {
-      const f = fit(c);
-      last = f.lay;
-      if (round < 2) {
-        c = { x: c.x + ((f.L + f.R) / 2 - (l + r) / 2) / z, y: c.y + ((f.T + f.B) / 2 - (t + b) / 2) / z, z };
-        continue;
-      }
-      if (f.R - f.L <= rw - 2 * pad && f.B - f.T <= rh - 2 * pad) {
-        if (!f.lay.bad && !f.lay.crowd) return f.lay.placed;
-        if (!best || f.lay.bad < best.bad) best = f.lay;
+  const search = (floor: number, top: number) => {
+    let best: ReturnType<typeof layout> | null = null,
+      last: ReturnType<typeof layout> | undefined;
+    let z = Math.max(floor, Math.min((rw - 2 * pad) / (x1 - x0), (rh - 2 * pad) / (y1 - y0), top));
+    for (let n = 0; n < 60 && z >= floor; n++, z *= 0.96) {
+      let c: Cam = { x: (x0 + x1) / 2, y: (y0 + y1) / 2, z };
+      for (let round = 0; round < 3; round++) {
+        const f = fit(c);
+        last = f.lay;
+        if (round < 2) {
+          c = { x: c.x + ((f.L + f.R) / 2 - (l + r) / 2) / z, y: c.y + ((f.T + f.B) / 2 - (t + b) / 2) / z, z };
+          continue;
+        }
+        if (f.R - f.L <= rw - 2 * pad && f.B - f.T <= rh - 2 * pad) {
+          if (!f.lay.bad) return { lay: f.lay, ok: true };
+          if (!best || f.lay.bad < best.bad) best = f.lay;
+        }
       }
     }
-  }
-  if (!stage.narrow) return (best ?? last!).placed;
-  const aim = focus(sc, s) ?? { x: (x0 + x1) / 2, y: (y0 + y1) / 2 };
-  let follow: { lay: ReturnType<typeof layout>; score: number } | null = best && { lay: best, score: best.bad * 1e6 };
-  for (let z = ZMIN; z <= 1; z += 0.1)
-    for (const dy of SHIFT)
-      for (const dx of SHIFT) {
-        const lay = layout(sc, s, stage, { x: aim.x + dx / z, y: aim.y + dy / z, z });
-        const score =
-          lay.bad * 1e6 +
-          (lay.placed.tags.filter((t) => t.pin).length + lay.hidden + lay.crowd) * 300 +
-          Math.hypot(dx, dy) +
-          (z - ZMIN) * 1000;
-        if (!follow || score < follow.score) follow = { lay, score };
-      }
-  return follow!.lay.placed;
+    return { lay: best ?? last!, ok: false };
+  };
+  const whole = search(stage.narrow ? ZMIN : 0, 1);
+  if (whole.ok || !stage.narrow) return whole.lay.placed;
+  const mid = { x: (x0 + x1) / 2, y: (y0 + y1) / 2 };
+  const grid = (aim: { x: number; y: number }, zs: number[]) => {
+    let follow: { lay: ReturnType<typeof layout>; score: number } | null = null;
+    for (const z of zs)
+      for (const dy of SHIFT)
+        for (const dx of SHIFT) {
+          const lay = layout(sc, s, stage, { x: aim.x + dx / z, y: aim.y + dy / z, z });
+          if (lay.bad) continue;
+          const score = lay.placed.tags.filter((t) => t.pin).length * 300 + Math.hypot(dx, dy) + Math.abs(z - ZMIN) * 1000;
+          if (!follow || score < follow.score) follow = { lay, score };
+        }
+    return follow?.lay;
+  };
+  const zs = [0, 1, 2, 3, 4, 5].map((i) => ZMIN + i * 0.1),
+    far = [0.4, 0.35, 0.3, 0.25];
+  return (grid(focus(sc, s) ?? mid, zs) ?? grid(mid, zs) ?? grid(mid, far) ?? whole.lay).placed;
 }
 const SHIFT = Array.from({ length: 13 }, (_, i) => (i - 6) * 40);
 

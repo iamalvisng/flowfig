@@ -6,7 +6,7 @@ import type { FlowProps } from './model.ts';
 import { cast } from './explain.ts';
 import { HUD } from './looks.ts';
 import { hit, place, polyHit, scene, stageFor, stateAt, timeline } from './world.ts';
-import type { Ev, Placed, Pt, Rect, Stage } from './world.ts';
+import type { Ev, Placed, Pt, Rect, Scene, Stage, State } from './world.ts';
 import oil from '../figures/explain-oil.ts';
 import returns from '../figures/returns-process.ts';
 import checkout from '../figures/checkout.ts';
@@ -147,9 +147,20 @@ test('a hop to a box outside every actor moves nothing and stops nothing', () =>
 });
 
 const near = (r: Rect, p: Pt): Pt => [Math.max(r.x, Math.min(p[0], r.x + r.w)), Math.max(r.y, Math.min(p[1], r.y + r.h))];
+const inside = (p: Pt, poly: Pt[]) => {
+  let o = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i],
+      [xj, yj] = poly[j];
+    if (yi > p[1] !== yj > p[1] && p[0] < ((xj - xi) * (p[1] - yi)) / (yj - yi) + xi) o = !o;
+  }
+  return o;
+};
 
-function audit(p: Placed, st: Stage): string[] {
+function audit(sc: Scene, s: State, p: Placed, st: Stage): string[] {
   const out: string[] = [];
+  const { l, t, r, b } = st.region;
+  const onStage = (o: Rect) => o.x >= l && o.y >= t && o.x + o.w <= r && o.y + o.h <= b;
   const vis = [
     ...p.tags.map((t) => ({ n: `tag ${t.name}`, r: t.r })),
     ...p.signs.map((s) => ({ n: `sign ${s.actor}`, r: s.r })),
@@ -162,21 +173,44 @@ function audit(p: Placed, st: Stage): string[] {
     for (const g of p.gates) if (hit(v.r, g.r)) out.push(`${v.n} x gate ${g.actor}`);
     p.hulls.forEach((h, a) => polyHit(h, v.r) && out.push(`${v.n} x building ${a}`));
     if (p.truck && polyHit(p.truck, v.r)) out.push(`${v.n} x truck`);
-    const { l, t, r, b } = st.region;
-    if (v.r.x < l || v.r.y < t || v.r.x + v.r.w > r || v.r.y + v.r.h > b) out.push(`${v.n} outside the view`);
+    if (!onStage(v.r)) out.push(`${v.n} outside the view`);
     if (!v.n.startsWith('chip'))
       for (const arc of p.arcs)
         if (arc.some(([x, y]) => x > v.r.x && x < v.r.x + v.r.w && y > v.r.y && y < v.r.y + v.r.h)) out.push(`arc x ${v.n}`);
   }
-  for (const o of [...p.tags.filter((t) => !t.pin), ...p.signs]) {
+  const ends = s.arcs.filter((a) => a.t > 0).map((a) => a.near);
+  p.arcs.forEach((arc, k) =>
+    p.hulls.forEach((h, a) => !ends[k].includes(a) && arc.some((q) => inside(q, h)) && out.push(`arc x building ${a}`)),
+  );
+  const reach = st.narrow ? 64.5 : 24.5;
+  for (const o of p.tags) {
+    const [x, y] = o.anchor;
+    if (o.pin && x >= l && x <= r && y >= t && y <= b) out.push(`tag ${o.name} pinned while its actor is in frame`);
+    const [nx, ny] = near(o.r, o.anchor);
+    const len = Math.hypot(nx - x, ny - y);
+    if (!o.pin && len > reach) out.push(`tag ${o.name} leader ${Math.round(len)} px`);
+  }
+  for (const o of p.signs) {
     const [x, y] = near(o.r, o.anchor);
     const len = Math.hypot(x - o.anchor[0], y - o.anchor[1]);
-    if (len > 24.5) out.push(`leader ${Math.round(len)} px`);
+    if (len > 24.5) out.push(`sign ${o.actor} leader ${Math.round(len)} px`);
   }
+  const shown = (what: string, r?: Rect) => (!r ? out.push(`no ${what}`) : !onStage(r) && out.push(`${what} off stage`));
+  sc.actors.forEach((a, i) => {
+    const g = s.gates[i];
+    if (a.checks && g.rows.length && g.on === s.moment) shown(`sign ${i}`, p.signs.find((x) => x.actor === i)?.r);
+  });
+  for (const a of s.hi) shown(`tag ${sc.actors[a].name}`, p.tags.find((x) => x.actor === a)?.r);
+  for (const a of s.dev) if (!(a === sc.truck && p.truck)) shown(`device ${a}`, p.devices.find((x) => x.actor === a)?.r);
+  for (const a of s.arcs)
+    if (a.moment === s.moment && a.t === 1 && a.text) shown(`chip ${a.text}`, p.chips.find((x) => x.text === a.text)?.r);
+  for (const u of Object.values(s.units))
+    if (u.moment === s.moment && (u.where === 'yard' || u.where === 'gate'))
+      shown(`chip ${u.thing}`, p.chips.find((x) => x.text === u.thing)?.r);
   return out;
 }
 
-test('no tag, sign, chip or device overlaps another overlay or a building', () => {
+test('every needed tag, sign, chip and device is on stage, and none overlaps another overlay, a building or an arc', () => {
   const hits: string[] = [];
   for (const fig of [oil, returns]) {
     const sc = scene(fig.props);
@@ -188,13 +222,59 @@ test('no tag, sign, chip or device overlaps another overlay or a building', () =
       const st = stageFor(w, w >= HUD.wide ? Math.min(h, (w * 10) / 16) : Math.min(h, HUD.tall));
       sc.stories.forEach((story, s) =>
         story.moments.forEach((_, m) => {
-          for (const x of audit(place(sc, stateAt(sc, s, m, Infinity), st), st))
-            hits.push(`${fig.title} ${w}x${h} ${story.name} ${m + 1}: ${x}`);
+          const state = stateAt(sc, s, m, Infinity);
+          for (const x of audit(sc, state, place(sc, state, st), st)) hits.push(`${fig.title} ${w}x${h} ${story.name} ${m + 1}: ${x}`);
         }),
       );
     }
   }
   assert.deepEqual(hits, []);
+});
+
+test('a check sign at the rest of a moment always shows its answer', () => {
+  const empty: string[] = [];
+  for (const { title, props } of FIGURES) {
+    const sc = scene(props);
+    sc.stories.forEach((story, s) =>
+      story.moments.forEach((_, m) => {
+        const st = stateAt(sc, s, m, Infinity);
+        for (const g of Object.values(st.gates))
+          if (g.on === m) for (const row of g.rows) if (!row.a) empty.push(`${title} ${story.name} ${m + 1}: ${row.q}`);
+      }),
+    );
+  }
+  assert.deepEqual(empty, []);
+});
+
+test('an unlabeled edge out of a check answers with a check mark or a cross', () => {
+  const sc = scene({
+    layout: {
+      children: [
+        { label: 'Shop', look: 'shop', children: [{ id: 'a', label: 'Sell' }] },
+        {
+          label: 'Bank',
+          children: [
+            { id: 'q', label: 'Paid?', shape: 'decision' },
+            { id: 'ok', label: 'Book' },
+            { id: 'no', label: 'Refuse', tone: 'red' },
+          ],
+        },
+      ],
+    },
+    edges: [
+      { from: 'a', to: 'q' },
+      { from: 'q', to: 'ok' },
+      { from: 'q', to: 'no' },
+    ],
+    steps: [
+      { label: 'Pass', flow: ['a->q', 'q->ok'] },
+      { label: 'Fail', flow: ['a->q', 'q->no'] },
+    ],
+  });
+  const bank = sc.actors.findIndex((a) => a.name === 'Bank');
+  const answer = (story: number) => stateAt(sc, story, 1, Infinity).gates[bank].rows.map((r) => r.a);
+  assert.deepEqual(answer(0), ['✓']);
+  assert.deepEqual(answer(1), ['✗']);
 });
 
 test('a story inside one actor still gets a framed camera', () => {
