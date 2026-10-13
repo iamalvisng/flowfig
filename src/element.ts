@@ -77,33 +77,45 @@ const CSS = [
   '.ff-alert{margin:0;color:var(--flowfig-bad)}',
   '.ff-g{position:relative;box-sizing:border-box;width:100%;height:100%;aspect-ratio:16/10;max-height:100vh;display:flex;flex-direction:column;gap:0;padding:0;border:0;overflow:hidden}',
   '.ff-row:empty{display:none}',
-  '.ff-g>.ff-row{padding:8px 12px 0}',
   '.ff-g>.ff-view{position:relative;flex:1;min-height:0}',
-  '.ff-guide{position:relative;height:100%;overflow:hidden;container:ff-guide/size}',
+  '.ff-guide{position:relative;height:100%;overflow:hidden;container:ff-guide/size;--ff-well:#EDEFE9;--flowfig-border:#D7DAD3;--flowfig-muted:#5B6370}',
+  `:host([theme=dark]) .ff-guide{${tokens(TOKENS.dark)}--ff-well:#2a313c}`,
+  `@media (prefers-color-scheme:dark){:host(:not([theme=light])) .ff-guide{${tokens(TOKENS.dark)}--ff-well:#2a313c}}`,
   '.ff-stage{position:absolute;inset:0}',
   '.ff-stage[data-stage=world]{background:#E8ECE3}',
   '.ff-stage[data-stage=diagram]{background:var(--flowfig-bg)}',
   '.ff-stage>.ff-pane{position:absolute;inset:0;overflow:auto}',
-  `.ff-chips{position:absolute;top:${HUD.pad}px;left:${HUD.pad * 2 + HUD.panel}px;right:${HUD.pad}px;display:flex;gap:8px;overflow-x:auto}`,
-  '.ff-chip{flex:none;font-size:14px}',
-  '.ff-chip[aria-pressed=true]{background:var(--flowfig-ink);border-color:var(--flowfig-ink);color:var(--flowfig-bg)}',
-  `.ff-hud{position:absolute;top:${HUD.pad}px;left:${HUD.pad}px;bottom:${HUD.pad}px;width:${HUD.panel}px;box-sizing:border-box;display:flex;flex-direction:column;gap:12px;padding:20px;overflow:auto;background:var(--flowfig-surface);color:var(--flowfig-ink);border:1px solid var(--flowfig-border);border-radius:8px}`,
+  `.ff-chips{position:absolute;top:${HUD.pad}px;left:${HUD.pad * 2 + HUD.panel}px;max-width:calc(100% - ${HUD.pad * 3 + HUD.panel}px);box-sizing:border-box;display:flex;gap:2px;padding:4px;overflow-x:auto;background:var(--flowfig-surface);border:1px solid var(--flowfig-border);border-radius:10px}`,
+  '.ff-chip,.ff-hd .ff-btn{flex:none;border:0;border-radius:7px;padding:6px 12px;font:500 14px/20px var(--flowfig-font);color:var(--flowfig-muted);background:none}',
+  '.ff-chip[aria-pressed=true],.ff-hd .ff-btn[aria-pressed=true]{background:var(--ff-well);color:var(--flowfig-ink);font-weight:600}',
+  '.ff-hd{display:flex;flex-wrap:wrap;align-items:center;gap:8px}',
+  '.ff-hd>.ff-row{gap:2px;padding:2px;border:1px solid var(--flowfig-border);border-radius:8px}',
+  '.ff-hd .ff-btn{padding:2px 10px;border-radius:6px;font-size:13px;line-height:18px}',
+  `.ff-hud{position:absolute;top:${HUD.pad}px;left:${HUD.pad}px;max-height:calc(100% - ${HUD.pad * 2}px);width:${HUD.panel}px;box-sizing:border-box;display:flex;flex-direction:column;gap:12px;padding:20px;overflow:auto;background:var(--flowfig-surface);color:var(--flowfig-ink);border:1px solid var(--flowfig-border);border-radius:8px}`,
   '.ff-ht{margin:0;font-size:15px;font-weight:600}',
   '.ff-kick{margin:0;font-size:13px;color:var(--flowfig-muted)}',
-  '.ff-say{margin:0;font-size:22px;line-height:1.25;font-weight:650}',
+  '.ff-say{margin:0;font-size:26px;line-height:1.18;font-weight:600;letter-spacing:-0.01em}',
   '.ff-note{margin:0;font-size:15px;line-height:1.4;color:var(--flowfig-muted)}',
   '.ff-note.ff-bad{color:var(--flowfig-bad)}',
   '.ff-code{margin:0;padding:8px 12px;max-height:160px;overflow:auto;font:13px/1.45 ui-monospace,Menlo,monospace;white-space:pre;background:var(--flowfig-bg);border:1px solid var(--flowfig-border);border-radius:6px}',
   '.ff-lbl{margin:0;font-size:13px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--flowfig-muted)}',
-  '.ff-skip ul{margin:6px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:2px;font-size:13px;color:var(--flowfig-muted)}',
+  '.ff-hud .ff-lbl{letter-spacing:0;text-transform:none}',
+  '.ff-skip ul{margin:6px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;font-size:14px;line-height:22px;color:var(--flowfig-muted)}',
   '.ff-moments{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:2px}',
-  '.ff-moments button{display:flex;gap:10px;width:100%;box-sizing:border-box;padding:6px 8px;border:0;border-radius:6px;background:none;font-size:13px;text-align:left}',
-  '.ff-moments button[aria-current=true]{background:var(--flowfig-bg);font-weight:600}',
+  '.ff-skip,.ff-moments{padding-top:16px;border-top:1px solid var(--flowfig-border)}',
+  '.ff-moments button{display:flex;align-items:center;gap:10px;width:100%;box-sizing:border-box;padding:7px 8px;border:0;border-radius:6px;background:none;font-size:14px;text-align:left}',
+  '.ff-moments button[aria-current=true]{background:var(--ff-well);font-weight:600}',
   '.ff-moments .ff-fail{color:var(--flowfig-bad)}',
-  '.ff-mk{flex:none;min-width:14px;text-align:center}',
-  '.ff-ctl{display:flex;flex-wrap:wrap;gap:8px;margin-top:auto}',
-  '.ff-b{padding:6px 16px;font-size:14px;font-weight:600;border-radius:8px}',
-  '.ff-next{background:var(--flowfig-accent);border-color:var(--flowfig-accent);color:var(--flowfig-on-accent)}',
+  '.ff-mk{display:inline-grid;place-items:center;flex:none;width:18px;height:18px;border-radius:4px;font:600 11px/1 var(--flowfig-font);background:var(--ff-well);color:var(--flowfig-ink)}',
+  '[data-s=no]>.ff-mk{background:#FCEBE8;color:#B8322A}',
+  '[data-s=now]>.ff-mk{background:var(--flowfig-ink);color:var(--flowfig-surface)}',
+  '[data-s=next]>.ff-mk{background:none;color:var(--flowfig-muted);box-shadow:inset 0 0 0 1px var(--flowfig-border)}',
+  '.ff-ctl{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}',
+  '.ff-b{padding:9px 16px;font-size:14px;font-weight:600;border-radius:8px}',
+  '.ff-b:disabled{opacity:1;color:#8A919C;background:var(--flowfig-surface)}',
+  '.ff-play{background:var(--flowfig-ink);border-color:var(--flowfig-ink);color:var(--flowfig-surface)}',
+  '.ff-ft{display:flex;gap:16px}',
+  '.ff-txt,.ff-txt[aria-pressed]{border:0;background:none;padding:4px 0;font:500 13px var(--flowfig-font);color:var(--flowfig-muted);text-decoration:underline 1px;text-underline-offset:3px}',
   '.ff-back::before{content:"\\2190  "/""}',
   '.ff-next::after{content:"  \\2192"/""}',
   '.ff-more{display:none}',
@@ -111,8 +123,8 @@ const CSS = [
   '.ff-key li::before{content:"";display:inline-block;width:18px;height:0;margin-right:10px;vertical-align:middle;border-top:2px solid #2456D6}',
   '.ff-key li[data-k=thing]::before{height:10px;border:0;background:#D9822B;border-radius:2px}',
   '.ff-key li[data-k=check]::before{height:10px;border:0;border-top:3px solid #2e3440}',
-  `@container ff-host (width < ${HUD.wide}px){.ff-g{aspect-ratio:auto;height:min(100svh,${HUD.tall}px);max-height:none}.ff-chips{top:8px;left:8px;right:8px}.ff-hud{top:auto;left:0;right:0;bottom:0;width:auto;height:${HUD.sheet}px;gap:8px;padding:12px 16px;border-radius:12px 12px 0 0;font-size:13px}.ff-say{font-size:16px}.ff-note{font-size:13px}.ff-kick,.ff-moments button,.ff-key{font-size:11px}.ff-ht,.ff-code,.ff-tog,.ff-moments:not(.ff-open){display:none}.ff-more{display:inline-block}}`,
-  `@container ff-guide (${HUD.slim * 2}px <= width < ${HUD.wide}px) and (height < ${HUD.short}px){.ff-chips{top:${HUD.pad}px;left:${HUD.pad * 2 + HUD.slim}px;right:${HUD.pad}px}.ff-hud{top:${HUD.pad}px;left:${HUD.pad}px;right:auto;bottom:${HUD.pad}px;width:${HUD.slim}px;height:auto;border-radius:8px}}`,
+  `@container ff-host (width < ${HUD.wide}px){.ff-g{aspect-ratio:auto;height:min(100svh,${HUD.tall}px);max-height:none}.ff-chips{top:8px;left:8px;max-width:calc(100% - 16px)}.ff-hud{top:auto;left:0;right:0;bottom:0;width:auto;height:${HUD.sheet}px;max-height:none;gap:8px;padding:12px 16px;border-radius:12px 12px 0 0;font-size:13px}.ff-say{font-size:16px}.ff-note{font-size:13px}.ff-kick,.ff-moments button,.ff-key{font-size:11px}.ff-ht,.ff-code,.ff-tog,.ff-moments:not(.ff-open),.ff-skip:not(.ff-open){display:none}.ff-more{display:inline-block}}`,
+  `@container ff-guide (${HUD.slim * 2}px <= width < ${HUD.wide}px) and (height < ${HUD.short}px){.ff-chips{top:${HUD.pad}px;left:${HUD.pad * 2 + HUD.slim}px;max-width:calc(100% - ${HUD.pad * 3 + HUD.slim}px)}.ff-hud{top:${HUD.pad}px;left:${HUD.pad}px;right:auto;bottom:auto;width:${HUD.slim}px;height:auto;max-height:calc(100% - ${HUD.pad * 2}px);border-radius:8px}}`,
   '.ff-verdict{padding:12px 16px;background:var(--flowfig-surface);border:1px solid var(--flowfig-border);border-radius:10px;font-size:16px;font-weight:500}',
   '.ff-list{margin:6px 0 0;padding-left:20px;font-size:15px;font-weight:400}',
   '.ff-all{margin-top:8px;font-size:13px;font-weight:400;color:var(--flowfig-muted)}',
@@ -487,19 +499,20 @@ export class FlowfigExplain extends Base {
           const beats = s.flow.map(toBeat);
           return moments(spec, label).map((m, k) => {
             const hops = beats[k]?.hops ?? [];
-            const last = hops.at(-1);
             const code = hops.flatMap((hp) => {
               const e = edges.get(hp.edge);
               return [hp.source, hp.via, e?.source, e?.via, boxes.get(e?.from ?? '')?.source, boxes.get(e?.to ?? '')?.source];
             });
+            const first = hops[0],
+              e = edges.get(first?.edge ?? '');
             return {
               ...m,
               step: label,
               title: m.summary
-                ? 'Outcome'
-                : m.question ||
-                  str(boxes.get((last?.back ? edges.get(last.edge)?.from : edges.get(last?.edge ?? '')?.to) ?? '')?.label) ||
-                  m.say,
+                ? m.summary.outcome
+                : m.stamp
+                  ? m.question!
+                  : str(boxes.get((first?.back ? e?.to : e?.from) ?? '')?.label) || m.say,
               ms: k < beats.length ? beatMs(beats[k], speed) : STEP_HOLD_MS,
               code: [...new Set(code.filter((c): c is string => !!c))],
             };
@@ -514,6 +527,7 @@ export class FlowfigExplain extends Base {
       const asked = this.getAttribute('form') as Form | null;
       const form = asked && forms.includes(asked) ? asked : forms.includes('guide') ? 'guide' : (forms[0] ?? 'diagram');
 
+      this.#view.before(this.#forms);
       this.#forms.replaceChildren(...(forms.length > 1 ? forms.map((f) => button(f, () => this.setAttribute('form', f), f === form)) : []));
       clearTimeout(this.#seekTimer);
       this.#world?.stop();
@@ -626,7 +640,7 @@ export class FlowfigExplain extends Base {
           next: button('Next', () => this.next()),
         };
         this.#ctl.back.className = 'ff-btn ff-b ff-back';
-        this.#ctl.play.className = 'ff-btn ff-b';
+        this.#ctl.play.className = 'ff-btn ff-b ff-play';
         this.#ctl.next.className = 'ff-btn ff-b ff-next';
         const chip = (label: string, onClick: () => void, pressed: boolean) => {
           const b = button(label, onClick, pressed);
@@ -648,6 +662,7 @@ export class FlowfigExplain extends Base {
           tog: chip('Show the code', () => this.toggleAttribute('code'), this.hasAttribute('code')),
           more: button('Moments', () => {
             const on = g.list.classList.toggle('ff-open');
+            g.skip.classList.toggle('ff-open', on);
             g.more.setAttribute('aria-expanded', String(on));
           }),
           stage: h('div', 'ff-stage'),
@@ -658,11 +673,12 @@ export class FlowfigExplain extends Base {
           drawn: '',
         };
         g.ht.hidden = !this.#title;
-        g.tog.className = 'ff-btn ff-chip ff-tog';
+        g.tog.className = 'ff-btn ff-txt ff-tog';
         g.more.className = 'ff-btn ff-b ff-more';
         g.more.setAttribute('aria-expanded', 'false');
         const full = button('Full screen', () => void this.requestFullscreen?.());
-        full.className = 'ff-btn ff-b';
+        full.className = 'ff-btn ff-txt';
+        full.hidden = !document.fullscreenEnabled;
         g.key.hidden = true;
         if (ready) {
           g.stage.dataset.stage = 'world';
@@ -702,14 +718,15 @@ export class FlowfigExplain extends Base {
             'section',
             'ff-hud',
             g.ht,
-            g.kick,
+            h('div', 'ff-hd', this.#forms, g.kick),
             g.say,
             g.note,
             g.code,
             g.skip,
             g.list,
-            h('div', 'ff-ctl', this.#ctl.back, this.#ctl.play, this.#ctl.next, g.more, g.tog, full),
+            h('div', 'ff-ctl', this.#ctl.back, this.#ctl.play, this.#ctl.next, g.more),
             g.key,
+            h('div', 'ff-ft', g.tog, full),
           ),
         );
         guide.addEventListener('click', (e) => {
@@ -760,6 +777,7 @@ export class FlowfigExplain extends Base {
     g.kick.textContent = `${end ? 'Summary' : `Moment ${k + 1} of ${mine.length - 1}`} · ${m.step}`;
     g.say.textContent = m.say;
     g.note.textContent = m.note;
+    g.note.hidden = end && m.say.includes(m.summary!.outcome);
     g.note.classList.toggle('ff-bad', stamp?.mark === '✗' && (end || m.stamp === stamp));
     g.code.hidden = end || !this.hasAttribute('code');
     g.code.textContent = m.code.length ? m.code.join('\n') : 'No source in the spec.';
@@ -774,7 +792,7 @@ export class FlowfigExplain extends Base {
       g.items = mine.map((x, i) => {
         const b = button('', () => (this.moment = first + i));
         b.className = '';
-        b.append(h('span', 'ff-mk', x.stamp?.mark ?? String(i + 1)), h('span', '', x.title));
+        b.append(h('span', 'ff-mk'), h('span', '', x.title));
         if (x.stamp?.mark === '✗') {
           b.classList.add('ff-fail');
           b.setAttribute('aria-label', `${x.title}, failed`);
@@ -784,6 +802,9 @@ export class FlowfigExplain extends Base {
       g.list.replaceChildren(...g.items.map((b) => h('li', '', b)));
     }
     g.items.forEach((b, i) => {
+      const mark = i < k ? mine[i].stamp?.mark : undefined;
+      b.dataset.s = i === k ? 'now' : i > k ? 'next' : mark === '✗' ? 'no' : 'past';
+      b.querySelector('.ff-mk')!.textContent = mark ?? String(i + 1);
       if (i === k) b.setAttribute('aria-current', 'true');
       else b.removeAttribute('aria-current');
     });

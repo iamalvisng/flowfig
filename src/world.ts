@@ -13,7 +13,7 @@ export type Hop = { edge: string; from: string; to: string; label: string; data:
 export type Box = { label: string; actor: number; dead: boolean; check: string };
 export type Device = 'phone' | 'cab' | 'antenna';
 export type SceneActor = { name: string; look?: FigLook; device: Device; lot: Lot; gate: Gate; port: Pt; checks: boolean };
-export type Story = { name: string; moments: Hop[][]; acting: string[]; path: number[] };
+export type Story = { name: string; moments: Hop[][]; acting: string[]; path: number[]; end: string };
 export type Scene = {
   svg: string;
   actors: SceneActor[];
@@ -63,16 +63,14 @@ export function scene(fig: FlowProps): Scene {
     const xs = (k: number) => lots[k].hull.map((p) => p[0]);
     const left = Math.min(...xs(i));
     const prev = i > 0 ? Math.max(...xs(i - 1)) : left - 160;
-    const sx = left - (device === 'phone' ? Math.min(98, (left - prev) * 0.62) : Math.min(44, (left - prev) * 0.28));
-    const d = sx / C + BAR_Y;
-    const y = 4.95;
+    const d = (left - Math.min(44, (left - prev) * 0.28)) / C + BAR_Y;
     return {
       name: a.name,
       look: a.look,
       device,
       lot: lots[i],
       gate: { px: d - GL / 2, ex: d + GL / 2, y: BAR_Y, z: GZ, L: GL },
-      port: [(left - 22) / C + y, y],
+      port: [(left - 28) / C + 4.95, 4.95],
       checks: a.boxes.some((id) => isCheck(byId.get(id))),
     };
   });
@@ -108,7 +106,13 @@ export function scene(fig: FlowProps): Scene {
       return hop;
     };
     const hops = beats.map((b) => b.hops.map(toHop));
-    return { name: label, moments: hops.length ? [...hops, []] : [], acting: moments(fig, label).map((m) => m.actor), path: [...path] };
+    return {
+      name: label,
+      moments: hops.length ? [...hops, []] : [],
+      acting: moments(fig, label).map((m) => m.actor),
+      path: [...path],
+      end: hops.at(-1)?.at(-1)?.to ?? '',
+    };
   });
 
   const hopsAll = stories.flatMap((s) => s.moments.flat());
@@ -174,9 +178,10 @@ export type State = {
   truck: Truck | null;
   gates: Record<number, GateState>;
   dev: number[];
-  screens: Record<number, 'idle' | 'in'>;
+  screens: Record<number, 'idle' | 'in' | 'tx'>;
   frame: Pt[];
   lead?: Pt;
+  fade?: number;
 };
 export type Ev = {
   kind: 'camera' | 'pulse' | 'door' | 'drive' | 'unit' | 'parcel' | 'question' | 'answer' | 'arm' | 'release' | 'fail' | 'reply';
@@ -296,7 +301,7 @@ function fresh(sc: Scene, story: number): State {
     frame: [],
   };
   const depot = sc.truck >= 0 ? sc.actors[sc.truck].lot.depot : null;
-  if (depot) s.truck = { orient: 'y', ty: depot.y - 2.52, x: 0, door: 0, load: [] };
+  if (depot) s.truck = { orient: 'y', ty: depot.y - 1.62, x: 0, door: 1, load: [] };
   sc.actors.forEach((_, a) => (s.gates[a] = { rows: [], deg: 0, fail: false, on: -1 }));
   const seen = new Set<string>();
   for (const h of sc.stories[story].moments.flat()) {
@@ -327,7 +332,7 @@ function kit(sc: Scene, s: State) {
     T = sc.truck,
     depot = T >= 0 ? A[T].lot.depot! : { x: 0, y: 0 },
     YX = depot.x + 0.66;
-  const parked = () => !s.truck || (s.truck.orient === 'y' && s.truck.ty + 2.5 <= depot.y + 0.01);
+  const parked = () => !s.truck || (s.truck.orient === 'y' && s.truck.ty + 2.5 <= depot.y + 0.9);
   const inCab = (a: number) => a === T && !parked();
   const cabBase = (t: Truck) =>
     t.orient === 'y' ? P(YX + TD + 0.03, t.ty + 2.17, 0.58) : P(t.orient === 'R' ? t.x + 2.18 : t.x + 0.31, LANE + 0.41, 0.58);
@@ -349,14 +354,14 @@ function kit(sc: Scene, s: State) {
       const g = A[a].gate;
       return [P(g.ex, g.y, g.z - 0.05), P(g.ex, g.y)];
     },
-    truckPts: (t: Truck): Pt[] => {
+    truckPts: (t: Truck, g = 1): Pt[] => {
       const w =
         t.orient === 'y'
           ? [YX, YX + TD].flatMap((x) => [P(x, t.ty), P(x, t.ty + 2.5), P(x, t.ty, 0.9), P(x, t.ty + 2.5, 1.13)])
           : [t.x, t.x + 2.5].flatMap((x) => [LANE - 0.4, LANE + 0.4].flatMap((y) => [P(x, y), P(x, y, 1.13)]));
       if (s.dev.includes(T)) {
         const b = cabBase(t);
-        w.push([b[0] - 11, b[1] - 40], [b[0] + 11, b[1] - 40]);
+        w.push([b[0] - 11 * g, b[1] - 40 * g], [b[0] + 11 * g, b[1] - 40 * g]);
       }
       return w;
     },
@@ -381,9 +386,9 @@ function planOf(sc: Scene, story: number, m: number) {
     T = sc.truck;
   const start = stateAt(sc, story, m - 1, Infinity);
   start.moment = m;
-  start.arcs = start.arcs.filter((a) => a.hold);
-  start.frame = start.arcs.map((a) => a.b);
   start.summary = !hops.length && m === st.moments.length - 1;
+  start.arcs = start.arcs.filter((a) => a.hold || start.summary);
+  start.frame = start.arcs.filter((a) => !start.summary || a.fail).map((a) => a.b);
   start.hi = [];
   start.dev = [];
   const s = structuredClone(start),
@@ -473,8 +478,9 @@ function planOf(sc: Scene, story: number, m: number) {
       head = (st: State) => front(st.truck!);
     s.frame.push(...truckPts(t));
     if (t.orient === 'y') {
-      const y0 = t.ty;
-      at = add('door', i, at, 500, (st, p) => void (st.truck!.door = p), ease.inOut, head);
+      const y0 = t.ty,
+        y1 = A[T].lot.depot!.y + 0.53;
+      if (t.door < 1) at = add('door', i, at, 500, (st, p) => void (st.truck!.door = p), ease.inOut, head);
       at = add(
         'drive',
         i,
@@ -482,7 +488,7 @@ function planOf(sc: Scene, story: number, m: number) {
         1000,
         (st, p) => {
           const tr = st.truck!;
-          tr.ty = y0 + 3.05 * p;
+          tr.ty = y0 + (y1 - y0) * p;
           if (p === 1) Object.assign(tr, { orient, x: orient === 'R' ? YX - 1.78 : YX });
         },
         ease.inOut,
@@ -590,20 +596,41 @@ function planOf(sc: Scene, story: number, m: number) {
       });
       if (h.fail) {
         for (const u of Object.values(s.units)) if (u.where === 'gate' && u.at === fa) s.frame.push(u.p);
+        add(null, i, at, 160, (st, p) =>
+          st.arcs.forEach((x) => {
+            if (x.gate === fa && x.hold)
+              x.t = p < 1 ? 1 - (8 / segLen(Array.from({ length: 9 }, (_, k) => bez(x, k / 8)))) * Math.sin(Math.PI * p) : 1;
+          }),
+        );
         at = add(
           'fail',
           i,
           at,
-          120,
-          (st) => {
+          90,
+          (st, p) => {
+            st.gates[fa].deg = 12 * p;
+            if (p < 1) return;
             st.gates[fa].fail = true;
             st.arcs.forEach((x) => (x.fail ||= x.gate === fa && x.hold));
             for (const u of Object.values(st.units)) u.fail ||= u.where === 'gate' && u.at === fa;
             st.ever[fa] = { label: fb.label, fail: true };
           },
+          ease.out,
+        );
+        const kw = (2 * Math.PI) / 0.25,
+          kd = kw * Math.sqrt(0.75);
+        at = add(
+          'arm',
+          i,
+          at,
+          290,
+          (st, p) => {
+            const T = p * 0.29;
+            st.gates[fa].deg =
+              p < 1 ? Math.max(0, 12 * Math.exp(-0.5 * kw * T) * (Math.cos(kd * T) + ((0.5 * kw) / kd) * Math.sin(kd * T))) : 0;
+          },
           linear,
         );
-        at += 380 - 120;
         if (ta !== fa) {
           const near: number[] = [];
           at = pulse(
@@ -612,7 +639,7 @@ function planOf(sc: Scene, story: number, m: number) {
             at,
             gateMid(fa),
             endpoint(i, at, ta, h.to, near),
-            { gate: -1, hold: false, fail: true, text: '', dashed: h.async },
+            { gate: -1, hold: false, fail: true, text: tb.label, dashed: h.async },
             near,
           );
         }
@@ -659,8 +686,10 @@ function planOf(sc: Scene, story: number, m: number) {
       const near: number[] = [],
         from = endpoint(i, at, sa, h.from, near),
         to = endpoint(i, at, ta, h.to, near),
-        gate = !!tb.check;
+        gate = !!tb.check,
+        tx = !fb.check && A[sa].device !== 'antenna';
       if (gate) set(i, at, (st) => void (st.gates[ta].on = m));
+      if (tx) set(i, at, (st) => void (st.screens[sa] = 'tx'));
       at = pulse(
         'pulse',
         i,
@@ -670,6 +699,7 @@ function planOf(sc: Scene, story: number, m: number) {
         { gate: gate ? ta : -1, hold: gate, fail: false, text: fb.check ? '' : h.data || h.label, dashed: h.async },
         near,
       );
+      if (tx) set(i, at, (st) => void (st.screens[sa] = 'idle'));
       if (!gate) set(i, at, (st) => void (st.dev.includes(ta) && (st.screens[ta] = 'in')));
     }
     if (tb.check) {
@@ -700,7 +730,20 @@ function planOf(sc: Scene, story: number, m: number) {
     return at;
   };
 
-  add('camera', -1, 0, CAM, () => {}, ease.out);
+  const c0 = s.summary ? 200 : 0;
+  if (s.summary)
+    add(
+      null,
+      -1,
+      0,
+      c0,
+      (st, p) => {
+        st.fade = 1 - p;
+        if (p === 1) st.arcs = st.arcs.filter((a) => a.fail);
+      },
+      linear,
+    );
+  add('camera', -1, c0, s.summary ? 900 : CAM, () => {}, ease.out);
   const ends: number[] = [];
   hops.forEach((h, i) => {
     let dep = -1;
@@ -710,10 +753,10 @@ function planOf(sc: Scene, story: number, m: number) {
   if (s.summary) {
     for (const a of st.path) s.frame.push(...A[a].lot.hull);
     if (s.truck && st.path.includes(T)) s.frame.push(...truckPts(s.truck));
-    for (const u of Object.values(s.units)) if (['yard', 'gate'].includes(u.where)) s.frame.push(u.p, [u.p[0], u.p[1] + 40]);
+    for (const u of Object.values(s.units)) if (['yard', 'gate', 'in'].includes(u.where)) s.frame.push(u.p, [u.p[0], u.p[1] + 40]);
     A.forEach((_, a) => s.gates[a].fail && s.frame.push(...gateEnds(a)));
   }
-  return { steps, start, scratch: s, end: Math.max(CAM, ...ends) };
+  return { steps, start, scratch: s, end: Math.max(s.summary ? c0 + 900 : CAM, ...ends) };
 }
 
 export function timeline(sc: Scene, story: number, moment: number): { events: Ev[]; end: number } {
@@ -755,9 +798,10 @@ export type Tag = {
   status: string;
   mark: Mark;
   quiet: boolean;
+  end: boolean;
 };
 export type Sign = { actor: number; r: Rect; anchor: Pt; rows: { q: string; a: string; fail: boolean }[] };
-export type Chip = { text: string; r: Rect; fail: boolean };
+export type Chip = { text: string; r: Rect; fail: boolean; mark?: Mark };
 export type Placed = {
   cam: Cam;
   tags: Tag[];
@@ -774,11 +818,14 @@ type Opt = Rect & { anchor: Pt };
 
 export const ZMIN = 0.45;
 const GAP = 12,
-  MARGIN = 48,
+  MARGIN = 32,
   TYPE = {
-    big: { name: 14.8, status: 13.8, mark: 18, tag: 46, q: 15, a: 13, row: 30, chip: 13, chipH: 26 },
-    small: { name: 13, status: 12, mark: 16, tag: 41, q: 13, a: 12, row: 24, chip: 12, chipH: 22 },
+    big: { name: 14.8, hero: 16, kick: 12, status: 13.8, mark: 20, tag: 46, q: 15, a: 13, row: 30, chip: 13, chipH: 26 },
+    small: { name: 13, hero: 14, kick: 0, status: 12, mark: 18, tag: 41, q: 13, a: 12, row: 24, chip: 12, chipH: 22 },
   };
+const chipped = (u: Unit, summary: boolean) =>
+  u.where === 'yard' || u.where === 'gate' || (summary && (u.where === 'bed' || u.where === 'in'));
+const phoneScale = (z: number, st: Stage) => (st.narrow ? 1 : Math.min(1.9, Math.max(1, 0.85 / z)));
 const nearest = (r: Rect, p: Pt): Pt => [Math.max(r.x, Math.min(p[0], r.x + r.w)), Math.max(r.y, Math.min(p[1], r.y + r.h))];
 const rings = new Map<string, number[]>();
 function ring(p: Pt, w: number, h: number, ds: number[]): Opt[] {
@@ -807,7 +854,8 @@ const bounds = (ps: Pt[]): Rect => {
     y = Math.min(...ys);
   return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y };
 };
-const width = (text: string, size: number, bold: boolean) => textWidth(text, size) * (bold ? 1.06 : 1);
+// Measured system-ui widths in Chromium run up to 1.105x the textWidth estimate.
+const width = (text: string, size: number, bold: boolean) => textWidth(text, size) * (bold ? 1.06 : 1) * 1.12;
 
 export const hit = (a: Rect, b: Rect, pad = 0) =>
   a.x < b.x + b.w + pad && b.x < a.x + a.w + pad && a.y < b.y + b.h + pad && b.y < a.y + a.h + pad;
@@ -861,7 +909,7 @@ export function stageFor(w: number, h: number): Stage {
 const samples = new WeakMap<Arc[], Pt[][]>();
 const solidsOf = new WeakMap<Scene, { h: Pt[]; box: Rect }[]>();
 
-function layout(sc: Scene, s: State, stage: Stage, cam: Cam, full = false) {
+export function layout(sc: Scene, s: State, stage: Stage, cam: Cam, full = false) {
   const ty = TYPE[stage.w < HUD.slim * 2 ? 'small' : 'big'],
     CHIP_H = ty.chipH;
   const A = sc.actors,
@@ -872,14 +920,15 @@ function layout(sc: Scene, s: State, stage: Stage, cam: Cam, full = false) {
     cy = (t + b) / 2;
   const pr = (p: Pt): Pt => [(p[0] - cam.x) * cam.z + cx, (p[1] - cam.y) * cam.z + cy];
   const span = (ps: Pt[]) => bounds(ps.map(pr));
-  const truckW = s.truck && !k.parked() ? k.truckPts(s.truck) : null;
+  const truckW = s.truck && !k.parked() ? k.truckPts(s.truck, phoneScale(cam.z, stage)) : null;
   const gates = A.flatMap((a, i) => {
     const g = a.gate,
       st = s.gates[i];
     if (!a.checks || (st.on !== s.moment && !st.fail)) return [];
-    const up = st.deg > 1 ? g.z + g.L : g.z + 0.3;
+    const up = st.deg > 1 ? g.z + g.L : st.fail ? g.z + 1 : g.z + 0.3;
     return [{ actor: i, r: span([P(g.px - 0.35, g.y), P(g.ex + 0.12, g.y), P(g.px, g.y, up), P(g.ex, g.y, g.z)]) }];
   });
+  const grow = phoneScale(cam.z, stage);
   const devices = s.dev
     .filter((a) => !k.inCab(a))
     .map((a) => {
@@ -887,8 +936,8 @@ function layout(sc: Scene, s: State, stage: Stage, cam: Cam, full = false) {
       return {
         actor: a,
         r: span([
-          [p[0] - PHONE.w / 2, p[1] - PHONE.h],
-          [p[0] + PHONE.w / 2, p[1]],
+          [p[0] - (PHONE.w * grow) / 2, p[1] - PHONE.h * grow],
+          [p[0] + (PHONE.w * grow) / 2, p[1]],
         ]),
       };
     });
@@ -930,7 +979,7 @@ function layout(sc: Scene, s: State, stage: Stage, cam: Cam, full = false) {
   };
 
   const chips: Chip[] = [];
-  const chip = (text: string, fail: boolean, opts: Pt[], w: number, around: Pt[]) => {
+  const chip = (text: string, fail: boolean, opts: Pt[], w: number, around: Pt[], mark?: Mark) => {
     for (const [px, py] of around)
       for (const d of [10, 30, 50])
         for (let i = 0; i < 8; i++) {
@@ -938,9 +987,10 @@ function layout(sc: Scene, s: State, stage: Stage, cam: Cam, full = false) {
           opts.push([px + Math.cos(u) * (d + w / 2) - w / 2, py + Math.sin(u) * (d + CHIP_H / 2) - CHIP_H / 2]);
         }
     const rs = opts.map(([x, y]) => ({ x, y, w, h: CHIP_H }));
-    const o = rs.find((o) => inRegion(o) && offB(o) && free(o));
+    const fits = (o: Rect) => inRegion(o) && offB(o) && free(o);
+    const o = rs.find(fits) ?? around.flatMap((p) => ring(p, w, CHIP_H, stage.narrow ? [20, 30, 44, 58] : [18, 24])).find(fits);
     if (!o) bad++;
-    chips.push({ text, fail, r: o ?? rs[0] });
+    chips.push({ text, fail, r: o ?? rs[0], mark });
     taken.push(o ?? rs[0]);
   };
   for (const a of s.arcs) {
@@ -968,12 +1018,14 @@ function layout(sc: Scene, s: State, stage: Stage, cam: Cam, full = false) {
   }
   const seen = new Set<string>();
   for (const u of Object.values(s.units)) {
-    if ((u.moment !== s.moment && !s.summary) || u.moment < 0 || (u.where !== 'yard' && u.where !== 'gate') || seen.has(u.thing)) continue;
+    const at = s.summary && u.where === 'bed' ? truckW?.reduce((m, p) => (p[1] < m[1] ? p : m)) : u.p;
+    if ((u.moment !== s.moment && !s.summary) || u.moment < 0 || !at || !chipped(u, s.summary) || seen.has(u.thing)) continue;
     seen.add(u.thing);
-    const w = 20 + width(u.thing, ty.chip, true),
+    const mark = s.summary ? (u.fail ? '✗' : '✓') : undefined,
+      w = 20 + (mark ? ty.mark : 0) + width(u.thing, ty.chip, true),
       g = 10,
       h = CHIP_H,
-      [px, py] = pr([u.p[0], u.p[1] + 6]);
+      [px, py] = pr([at[0], at[1] + 6]);
     chip(
       u.thing,
       u.fail,
@@ -987,6 +1039,7 @@ function layout(sc: Scene, s: State, stage: Stage, cam: Cam, full = false) {
       ],
       w,
       [[px, py]],
+      mark,
     );
   }
 
@@ -995,8 +1048,13 @@ function layout(sc: Scene, s: State, stage: Stage, cam: Cam, full = false) {
     const gs = s.gates[g.actor];
     if (!gs.rows.length || !(gs.on === s.moment || (s.summary && gs.fail && !stage.narrow))) continue;
     const rows = gs.rows.map(({ q, a, fail }) => ({ q, a, fail }));
-    const w = 22 + Math.max(...rows.map((x) => width(x.q, ty.q, true) + (x.a ? width(x.a, ty.a, true) + 40 : 0))),
-      h = rows.length * ty.row + (rows.length - 1) * 6 + 14;
+    const w =
+        22 +
+        Math.max(
+          width(A[g.actor].name, ty.kick, false),
+          ...rows.map((x) => width(x.q, ty.q, true) + (x.a ? width(x.a, ty.a, true) + 40 : 0)),
+        ),
+      h = rows.length * ty.row + (rows.length - 1) * 6 + 14 + (ty.kick && 16);
     const gr = g.r,
       gate = A[g.actor].gate,
       foot = pr(P(gate.ex, gate.y)),
@@ -1029,8 +1087,9 @@ function layout(sc: Scene, s: State, stage: Stage, cam: Cam, full = false) {
       name = A[a].name,
       status = ev ? ev.label : 'Not reached',
       mark: Mark = ev ? (ev.fail ? '✗' : '✓') : '',
-      w = 20 + Math.max(width(name, ty.name, true), ty.mark + width(status, ty.status, false)),
-      h = ty.tag,
+      end = s.summary && sc.boxes[story.end]?.actor === a,
+      w = (end ? 22 : 20) + Math.max(width(name, end ? ty.hero : ty.name, true), ty.mark + width(status, ty.status, false)),
+      h = ty.tag + (end ? 3 : 0),
       g = GAP,
       onTruck = a === sc.truck && truckW,
       top = onTruck ? truckW.reduce((m, p) => (p[1] < m[1] ? p : m)) : A[a].lot.tag,
@@ -1066,7 +1125,7 @@ function layout(sc: Scene, s: State, stage: Stage, cam: Cam, full = false) {
       () => ring(pr(A[a].lot.hull.reduce((m, p) => (p[1] > m[1] ? p : m))), w, h, ds),
     ];
     const must = s.hi.includes(a) || (s.summary && story.path.includes(a));
-    const base = { actor: a, name, status, mark, quiet: !story.path.includes(a) };
+    const base = { actor: a, name, status, mark, quiet: !story.path.includes(a), end };
     const out = ax < l || ax > r || ay < t || ay > b;
     if (must && stage.narrow && out) {
       const tag = pin(base, w, h, [ax, ay]);
@@ -1117,7 +1176,7 @@ function layout(sc: Scene, s: State, stage: Stage, cam: Cam, full = false) {
   return { placed, bad, pr };
 }
 
-export function place(sc: Scene, s: State, stage: Stage): Placed {
+export function place(sc: Scene, s: State, stage: Stage, top = 1): Placed {
   const pts = s.frame.length ? s.frame : sc.actors.flatMap((a) => a.lot.hull);
   const xs = pts.map((p) => p[0]),
     ys = pts.map((p) => p[1]);
@@ -1134,12 +1193,17 @@ export function place(sc: Scene, s: State, stage: Stage): Placed {
     need: [Pt, number][] = [];
   sc.actors.forEach(({ checks, gate: g }, a) => {
     const gs = s.gates[a];
-    if (checks && gs.rows.length && gs.on === s.moment) need.push([P(g.px, g.y), 24], [P(g.ex, g.y), 24]);
+    if (checks && gs.rows.length && (gs.on === s.moment || (s.summary && gs.fail))) need.push([P(g.px, g.y), 24], [P(g.ex, g.y), 24]);
   });
   for (const a of s.dev) if (!k.inCab(a)) need.push([k.devBase(a), 0], [k.devTop(a), 0]);
   for (const a of s.arcs) if (a.moment === s.moment && a.t === 1 && a.text) need.push([bez(a, 0.5), 80]);
   for (const u of Object.values(s.units))
-    if ((u.moment === s.moment || s.summary) && u.moment >= 0 && (u.where === 'yard' || u.where === 'gate')) need.push([u.p, 80]);
+    if ((u.moment === s.moment || s.summary) && u.moment >= 0 && chipped(u, s.summary))
+      need.push([u.where === 'bed' ? k.truckPts(s.truck!).reduce((m, p) => (p[1] < m[1] ? p : m)) : u.p, 80]);
+  const soft = s.dev.filter(k.inCab).map(k.devTop);
+  const arcPts = s.arcs
+    .filter((a) => a.moment === s.moment && a.t > 0)
+    .flatMap((a) => Array.from({ length: 9 }, (_, i) => bez(a, (a.t * i) / 8)));
   const inside = (c: Cam, x: number, y: number, m: number) => {
     const px = (x - c.x) * c.z + (l + r) / 2,
       py = (y - c.y) * c.z + (t + b) / 2;
@@ -1149,14 +1213,14 @@ export function place(sc: Scene, s: State, stage: Stage): Placed {
   const fit = (c: Cam) => {
     const lay = layout(sc, s, stage, c);
     const rects = [...lay.placed.signs, ...lay.placed.tags, ...lay.placed.devices, ...lay.placed.chips].map((o) => o.r);
-    const sp = pts.map(lay.pr);
+    const sp = [...pts, ...arcPts, ...soft].map(lay.pr);
     const L = Math.min(...rects.map((o) => o.x), ...sp.map((p) => p[0])),
       R = Math.max(...rects.map((o) => o.x + o.w), ...sp.map((p) => p[0])),
       T = Math.min(...rects.map((o) => o.y), ...sp.map((p) => p[1])),
       B = Math.max(...rects.map((o) => o.y + o.h), ...sp.map((p) => p[1]));
     return { lay, L, R, T, B };
   };
-  const search = (floor: number, top: number) => {
+  const search = (floor: number) => {
     let best: ReturnType<typeof layout> | null = null,
       last: ReturnType<typeof layout> | undefined;
     let z = Math.max(floor, Math.min((rw - 2 * pad) / (x1 - x0), (rh - 2 * pad) / (y1 - y0), top));
@@ -1177,10 +1241,10 @@ export function place(sc: Scene, s: State, stage: Stage): Placed {
     }
     return { lay: best ?? last!, ok: false };
   };
-  const whole = search(stage.narrow ? ZMIN : 0.3, 1);
+  const whole = search(Math.min(stage.narrow ? ZMIN : 0.3, top));
   const done = (lay: ReturnType<typeof layout>) => layout(sc, s, stage, lay.placed.cam, true).placed;
   if (whole.ok) return done(whole.lay);
-  const ref = stage.narrow ? ZMIN : whole.lay.placed.cam.z;
+  const ref = stage.narrow ? Math.min(ZMIN, top) : whole.lay.placed.cam.z;
   const mid = { x: (x0 + x1) / 2, y: (y0 + y1) / 2 };
   const story = sc.stories[s.story],
     lift = s.truck && !k.parked() ? k.truckPts(s.truck).reduce((m, p) => (p[1] < m[1] ? p : m)) : null,
@@ -1225,9 +1289,21 @@ export function place(sc: Scene, s: State, stage: Stage): Placed {
           ),
         ),
     );
-  const zs = [0, 1, 2, 3, 4, 5].map((i) => (stage.narrow ? ZMIN + i * 0.1 : ref * (1 - i * 0.08))),
+  const zs = [...new Set([0, 1, 2, 3, 4, 5].map((i) => Math.min(top, stage.narrow ? ZMIN + i * 0.1 : ref * (1 - i * 0.08))))],
     far = [0.4, 0.35, 0.3, 0.25].filter((z) => z < Math.min(...zs));
   return done(grid(focus(sc, s) ?? mid, zs) ?? grid(mid, zs) ?? grid(mid, far) ?? refine() ?? whole.lay);
+}
+export function storyCams(sc: Scene, story: number, stage: Stage): Placed[] {
+  const n = sc.stories[story].moments.length,
+    out: Placed[] = [];
+  if (!n) return out;
+  out[n - 1] = place(sc, stateAt(sc, story, n - 1, Infinity), stage);
+  for (let m = n - 2; m >= 0; m--) out[m] = place(sc, stateAt(sc, story, m, Infinity), stage, Math.min(1, out[m + 1].cam.z * 1.2));
+  if (n > 1 && out[n - 1].cam.z > out[n - 2].cam.z * 0.92) {
+    const back = place(sc, stateAt(sc, story, n - 1, Infinity), stage, out[n - 2].cam.z * 0.92);
+    if (!back.faults) out[n - 1] = back;
+  }
+  return out;
 }
 const SHIFT = Array.from({ length: 13 }, (_, i) => (i - 6) * 40),
   NUDGE = [-30, -20, -10, 0, 10, 20, 30],
@@ -1263,8 +1339,10 @@ const OV_CSS = [
   `.fw-tag{padding:4px 9px;border-radius:6px}`,
   `.fw-tn{display:block;font:600 14.8px/19px var(--flowfig-font);color:${OV}}`,
   `.fw-ts{display:flex;font:400 13.8px/17px var(--flowfig-font);color:${OV2}}`,
-  `.fw-mk{flex:none;width:18px;font-style:normal;font-weight:600}`,
-  `.fw-no{color:${INK.fail}}`,
+  `.fw-mk{display:inline-grid;place-items:center;flex:none;width:14px;height:14px;margin:2px 6px 0 0;border-radius:3px;background:${OV};color:#fff;font:700 10px/1 var(--flowfig-font);font-style:normal}`,
+  `.fw-no{color:${INK.fail}}.fw-no>.fw-mk{background:${INK.fail}}.fw-dchip>.fw-mk{margin-top:0}`,
+  `.fw-tag{transition:opacity .2s,border-color .16s .2s,background-color .16s .2s}.fw-end{border:2px solid ${OV};background:#EEF1EA}.fw-end.fw-x{border-color:${INK.fail};background:#FCEBE8}.fw-end .fw-tn{font-size:16px;line-height:20px}`,
+  `.fw-sk{font:500 12px/16px var(--flowfig-font);color:#5B6370}`,
   `.fw-quiet .fw-tn,.fw-quiet .fw-ts{color:${OVM}}`,
   `.fw-sign{padding:6px 10px;border-radius:8px}`,
   `.fw-row{display:flex;align-items:center;justify-content:space-between;height:30px}.fw-row+.fw-row{margin-top:6px}`,
@@ -1272,9 +1350,9 @@ const OV_CSS = [
   `.fw-a{margin-left:12px;padding:0 6px;border-radius:5px;font:600 13px/24px var(--flowfig-font);background:#EEF1EA;color:${OV}}`,
   `.fw-a.fw-no{background:#FCEBE8;color:${INK.fail}}.fw-a.fw-no::before{content:"\\2717";margin-right:4px}`,
   `.fw-dchip{display:flex;align-items:center;padding:0 9px;border-radius:6px;font:600 13px/1 var(--flowfig-font);color:${INK.data}}`,
-  `.fw-dchip.fw-thing{color:${OV}}.fw-dchip.fw-no{color:${INK.fail}}`,
+  `.fw-dchip.fw-thing{color:${OV}}.fw-dchip.fw-no{color:${INK.fail}}.fw-dchip{transition:opacity .2s,scale .2s cubic-bezier(.23,1,.32,1)}.fw-dchip.fw-off{scale:.96}.gt{transition:opacity .2s}`,
   `.fw-off{opacity:0}`,
-  `@container ff-guide (width < ${HUD.slim * 2}px){.fw-tn{font-size:13px;line-height:16px}.fw-ts{font-size:12px;line-height:15px}.fw-mk{width:16px}.fw-row{height:24px}.fw-q{font-size:13px;line-height:17px}.fw-a{font-size:12px;line-height:20px}.fw-dchip{font-size:12px}}`,
+  `@container ff-guide (width < ${HUD.slim * 2}px){.fw-tn{font-size:13px;line-height:16px}.fw-ts{font-size:12px;line-height:15px}.fw-mk{margin:1px 4px 0 0}.fw-sk{display:none}.fw-end .fw-tn{font-size:14px;line-height:17px}.fw-row{height:24px}.fw-q{font-size:13px;line-height:17px}.fw-a{font-size:12px;line-height:20px}.fw-dchip{font-size:12px}}`,
 ].join('');
 
 const f1 = (n: number) => n.toFixed(1);
@@ -1329,7 +1407,7 @@ export function mountWorld(stage: HTMLElement, sc: Scene, resized: () => void): 
   svg.innerHTML =
     `<g class="fw-cam">${sc.svg}${art?.door ?? ''}<g class="fw-units"></g>${art?.road ?? ''}` +
     sc.actors.map((a, i) => (a.device === 'antenna' ? '' : `<g class="fw-dev" data-a="${i}">${PHONE.svg}</g>`)).join('') +
-    `<g class="fw-arcs"></g></g>`;
+    `<g class="fw-arcs"></g>${sc.actors.map((a) => (a.checks ? `<g class="fw-hx">${FAIL_MARK}</g>` : '')).join('')}</g>`;
   const ov = el('div', 'fw-ov');
   stage.append(svg, ov);
   const q = (sel: string) => svg.querySelector<SVGGraphicsElement>(sel);
@@ -1340,7 +1418,9 @@ export function mountWorld(stage: HTMLElement, sc: Scene, resized: () => void): 
   const devs = new Map([...svg.querySelectorAll<SVGGElement>('.fw-dev')].map((g) => [Number(g.dataset.a), g]));
   const arms = [...svg.querySelectorAll('.arm')],
     arms2 = [...svg.querySelectorAll('.armW')],
-    hubs = [...svg.querySelectorAll('.hub')];
+    hubs = [...svg.querySelectorAll('.hub')],
+    gts = [...svg.querySelectorAll<SVGGElement>('.gt')],
+    hxs = [...svg.querySelectorAll('.fw-hx')];
   const checkers = sc.actors.flatMap((a, i) => (a.checks ? [i] : []));
   const unitEls = new Map<string, SVGGElement>();
   const show = (e: Element | null, on: boolean) => e?.setAttribute('display', on ? 'inline' : 'none');
@@ -1353,16 +1433,15 @@ export function mountWorld(stage: HTMLElement, sc: Scene, resized: () => void): 
     raf = 0,
     built = '',
     said = '';
-  const lays = new Map<string, Placed>();
-  let tags: { el: HTMLElement; actor: number; name: string; mk: HTMLElement; st: HTMLElement }[] = [],
+  const lays = new Map<number, Placed[]>();
+  let tags: { el: HTMLElement; actor: number; name: string; mk: HTMLElement; st: HTMLElement; end: boolean; w: string }[] = [],
     signs: { el: HTMLElement; actor: number; rows: { q: HTMLElement; a: HTMLElement }[] }[] = [],
     chips: { el: HTMLElement; text: string }[] = [];
 
   const layoutFor = (story: number, moment: number) => {
-    const key = `${story}/${moment}`;
-    let lay = lays.get(key);
-    if (!lay) lays.set(key, (lay = place(sc, stateAt(sc, story, moment, Infinity), stg)));
-    return lay;
+    let cams = lays.get(story);
+    if (!cams) lays.set(story, (cams = storyCams(sc, story, stg)));
+    return cams[moment];
   };
 
   function draw(s: State, c: Cam) {
@@ -1377,7 +1456,7 @@ export function mountWorld(stage: HTMLElement, sc: Scene, resized: () => void): 
       const tk = s.truck;
       show(q('#truck'), tk.orient === 'L');
       show(q('#truckR'), tk.orient === 'R');
-      show(q('#truckY'), tk.orient === 'y' && out);
+      show(q('#truckY'), tk.orient === 'y');
       for (const id of ['#truck', '#truckR']) q(id)?.setAttribute('transform', `translate(${f1(tk.x * C)} ${f1(tk.x * S)})`);
       move(q('#truckY'), P(k.YX, tk.ty));
       const dy = depot.y + 0.004,
@@ -1423,7 +1502,7 @@ export function mountWorld(stage: HTMLElement, sc: Scene, resized: () => void): 
     for (const [id, g] of unitEls) if (!s.units[id]) show(g, false);
     for (const [a, g] of devs) {
       show(g, s.dev.includes(a));
-      move(g, k.devBase(a), k.inCab(a) ? 0.82 : 1);
+      move(g, k.devBase(a), (k.inCab(a) ? 0.82 : 1) * phoneScale(c.z, stg));
       for (const sc2 of g.querySelectorAll('.scr')) show(sc2, sc2.getAttribute('data-s') === (s.screens[a] ?? 'idle'));
     }
     checkers.forEach((a, n) => {
@@ -1439,6 +1518,9 @@ export function mountWorld(stage: HTMLElement, sc: Scene, resized: () => void): 
         arm.setAttribute('y2', f1(e0[1]));
       }
       arms[n].setAttribute('stroke', st.fail ? INK.fail : '#2e3440');
+      gts[n].style.opacity = st.on === s.moment || st.fail ? '' : '0';
+      move(hxs[n], b0);
+      show(hxs[n].firstElementChild, st.fail);
       hubs[n].setAttribute('cx', f1(b0[0]));
       hubs[n].setAttribute('cy', f1(b0[1]));
     });
@@ -1446,7 +1528,7 @@ export function mountWorld(stage: HTMLElement, sc: Scene, resized: () => void): 
     for (const r of s.arcs) {
       const col = r.fail ? INK.fail : INK.data,
         dash = r.dashed ? ' stroke-dasharray="7 6"' : '';
-      a += `<path d="${arcPart(r, 0, r.t)}" fill="none" stroke="${INK.data}" stroke-opacity="${r.moment === s.moment || r.hold ? 0.38 : 0.16}" stroke-width="2" stroke-linecap="round"${dash}/>`;
+      a += `<path d="${arcPart(r, 0, r.t)}" fill="none" stroke="${INK.data}" stroke-opacity="${s.summary ? (r.fail ? 0.38 : 0.38 * (s.fade ?? 0)) : r.moment === s.moment || r.hold ? 0.38 : 0.16}" stroke-width="2" stroke-linecap="round"${dash}/>`;
       if (r.t < 1)
         a += `<path d="${arcPart(r, Math.max(0, r.t - 0.16), r.t)}" fill="none" stroke="${col}" stroke-width="3.2" stroke-linecap="round"/>`;
       else if (r.fail) a += `<path d="${arcPart(r, 0.86, 1)}" fill="none" stroke="${INK.fail}" stroke-width="3.2" stroke-linecap="round"/>`;
@@ -1480,10 +1562,11 @@ export function mountWorld(stage: HTMLElement, sc: Scene, resized: () => void): 
         ls += `<path d="M-6 0H6L0 8Z" transform="translate(${pt([px, py])}) rotate(${{ l: 90, t: 180, r: -90, b: 0 }[t.pin]})" fill="${OV}"/>`;
       } else
         ls += `<path d="M${pt(t.line[0])}L${pt(t.line[1])}" stroke="${OV}" stroke-opacity=".55"/><circle cx="${f1(t.line[1][0])}" cy="${f1(t.line[1][1])}" r="2.5" fill="${OV}"/>`;
-      return { el: e, actor: t.actor, name: t.name, mk, st };
+      return { el: e, actor: t.actor, name: t.name, mk, st, end: t.end, w: e.style.width };
     });
     signs = lay.signs.map((g) => {
       const e = el('div', 'fw-sign');
+      e.append(el('div', 'fw-sk', sc.actors[g.actor].name));
       const rows = g.rows.map((r) => {
         const row = el('div', 'fw-row'),
           q = el('span', 'fw-q', r.q),
@@ -1496,8 +1579,14 @@ export function mountWorld(stage: HTMLElement, sc: Scene, resized: () => void): 
       ls += `<path d="M${pt(g.anchor)}L${pt(nearest(g.r, g.anchor))}" stroke="#2e3440" stroke-width="2"/>`;
       return { el: e, actor: g.actor, rows };
     });
+    let n = 0;
     chips = lay.chips.map((c) => {
-      const e = el('div', `fw-dchip${sc.things.has(c.text) ? ' fw-thing' : ''}${c.fail ? ' fw-no' : ''}`, c.text);
+      const e = el('div', `fw-dchip${sc.things.has(c.text) ? ' fw-thing' : ''}${c.fail ? ' fw-no' : ''}`);
+      if (c.mark) {
+        e.append(el('i', 'fw-mk', c.mark));
+        e.style.transitionDelay = `${n++ * 60}ms`;
+      }
+      e.append(c.text);
       put(e, c.r);
       return { el: e, text: c.text };
     });
@@ -1506,8 +1595,16 @@ export function mountWorld(stage: HTMLElement, sc: Scene, resized: () => void): 
   }
 
   function sync(s: State, rest: boolean) {
-    const acting = s.summary ? sc.stories[s.story].path : s.hi;
+    const story = sc.stories[s.story],
+      acting = s.summary ? story.path : s.hi,
+      fin = sc.boxes[story.end];
     const spoken = [];
+    if (s.summary && fin) {
+      spoken.push(`End: ${fin.label}${s.ever[fin.actor]?.fail ? ', failed' : ''}.`);
+      const seen = new Set<string>();
+      for (const u of Object.values(s.units))
+        if (u.moment >= 0 && !seen.has(u.thing)) spoken.push(`${seen.add(u.thing) && u.thing}: ${u.fail ? 'stopped' : 'kept'}.`);
+    }
     for (const t of tags) {
       const ev = s.ever[t.actor];
       if (ev && acting.includes(t.actor)) spoken.push(`${t.name}: ${ev.label}${ev.fail ? ', failed' : ''}.`);
@@ -1519,6 +1616,10 @@ export function mountWorld(stage: HTMLElement, sc: Scene, resized: () => void): 
       same(t.mk, ev ? (ev.fail ? '✗' : '✓') : '');
       same(t.st.lastChild!, ev ? ev.label : 'Not reached');
       t.st.classList.toggle('fw-no', !!ev?.fail);
+      t.el.classList.toggle('fw-end', s.summary && rest && t.end);
+      t.el.style.width = rest ? t.w : 'max-content';
+      t.el.style.minWidth = rest ? '' : t.w;
+      t.el.classList.toggle('fw-x', !!ev?.fail);
     }
     for (const g of signs) {
       const gs = s.gates[g.actor];
@@ -1533,8 +1634,7 @@ export function mountWorld(stage: HTMLElement, sc: Scene, resized: () => void): 
     }
     const live = new Set<string>();
     for (const a of s.arcs) if (a.moment === s.moment && a.t === 1 && a.text) live.add(a.text);
-    for (const u of Object.values(s.units))
-      if ((u.moment === s.moment || s.summary) && u.moment >= 0 && (u.where === 'yard' || u.where === 'gate')) live.add(u.thing);
+    for (const u of Object.values(s.units)) if (u.moment === s.moment && (u.where === 'yard' || u.where === 'gate')) live.add(u.thing);
     for (const c of chips) c.el.classList.toggle('fw-off', !rest && !live.has(c.text));
   }
 
@@ -1580,7 +1680,8 @@ export function mountWorld(stage: HTMLElement, sc: Scene, resized: () => void): 
         frame(true, 0);
         return 0;
       }
-      const { end } = timeline(sc, story, moment);
+      const { end, events } = timeline(sc, story, moment),
+        c = events.find((e) => e.kind === 'camera')!;
       const t0 = performance.now();
       const step = (now: number) => {
         const t = now - t0;
@@ -1588,7 +1689,7 @@ export function mountWorld(stage: HTMLElement, sc: Scene, resized: () => void): 
           cam = to;
           return frame(true, 0);
         }
-        const e = ease.out(Math.min(1, t / CAM));
+        const e = ease.out(Math.min(1, Math.max(0, (t - c.start) / (c.end - c.start))));
         cam = { x: from.x + (to.x - from.x) * e, y: from.y + (to.y - from.y) * e, z: from.z + (to.z - from.z) * e };
         frame(false, t);
         raf = requestAnimationFrame(step);

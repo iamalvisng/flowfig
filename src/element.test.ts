@@ -15,7 +15,7 @@ import deliveryBefore from '../figures/explain-delivery-before.ts';
 import deliveryAfter from '../figures/explain-delivery-after.ts';
 import returns from '../figures/returns-process.ts';
 import checkout from '../figures/checkout.ts';
-import { scene, stateAt, place, stageFor } from './world.ts';
+import { scene, stageFor, storyCams } from './world.ts';
 
 const dist = fileURLToPath(new URL('../dist/', import.meta.url));
 const specs: Record<string, object> = {
@@ -275,7 +275,7 @@ test('the drawn overlays sit where the layout put them', { skip: !browser.path }
     })()`);
     const sc = scene(oil.props);
     const s = sc.stories.findIndex((x) => x.name === 'Expired certification');
-    const want = place(sc, stateAt(sc, s, 2, Infinity), stageFor(got.w, got.h));
+    const want = storyCams(sc, s, stageFor(got.w, got.h))[2];
     assert.equal(got.tags.length, want.tags.length);
     for (const t of want.tags) {
       const drawn = got.tags.find((x) => x.actor === t.name);
@@ -329,7 +329,7 @@ test('a story with a faulty frame shows the diagram, and a clean story shows the
           `(() => { const g = ${sr}.querySelector('.ff-stage').getBoundingClientRect(); return { w: g.width, h: g.height }; })()`,
         );
         const st = stageFor(box.w, box.h);
-        const bad = story.moments.some((_, m) => place(sc, stateAt(sc, s, m, Infinity), st).faults > 0);
+        const bad = storyCams(sc, s, st).some((p) => p.faults > 0);
         faulty += bad ? 1 : 0;
         assert.equal(await page.ev(shown), bad, `${story.name} at ${w}x${h}`);
       }
@@ -339,6 +339,34 @@ test('a story with a faulty frame shows the diagram, and a clean story shows the
     await page.done();
   }
 });
+
+test(
+  'on a phone the stage fills the element, and the sheet shows Back, Play and Next at a refused outcome',
+  { skip: !browser.path },
+  async () => {
+    const page = await open(guide('oil'), `${live}.length > 0 && !!${sr}?.querySelector('[data-stage="world"] svg[role="img"]')`);
+    try {
+      await page.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: false });
+      await page.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
+      await page.ev(`${button('Expired certification')}.click()`);
+      await page.ev(`${el}.moment = ${el}.moment + 3`);
+      await page.until(`${live}.includes('Outcome')`, 'the outcome shows');
+      const got = await page.ev(`(() => {
+      const r = (e) => e.getBoundingClientRect();
+      const host = r(${el}), stage = r(${sr}.querySelector('.ff-stage')), hud = r(${sr}.querySelector('.ff-hud'));
+      const cut = ['Back', 'Play', 'Next'].filter((n) => {
+        const b = r([...${sr}.querySelectorAll('.ff-ctl button')].find((x) => x.textContent.trim() === n));
+        return b.height === 0 || b.top < hud.top || b.bottom > hud.bottom;
+      });
+      return { host: host.height, stage: stage.height, cut };
+    })()`);
+      assert.equal(got.stage, got.host, 'the stage height');
+      assert.deepEqual(got.cut, []);
+    } finally {
+      await page.done();
+    }
+  },
+);
 
 test('the world stage and the moments list read a refused check as failed', { skip: !browser.path }, async () => {
   const page = await open(guide('oil'), `!!${sr}?.querySelector('[data-actor]')`);

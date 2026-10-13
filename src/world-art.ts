@@ -608,7 +608,7 @@ export const antenna = ([x, y, z]: P3) => {
     c = '#3b4252';
   let o = `<ellipse cx="${f(b[0])}" cy="${f(b[1])}" rx="4" ry="2" fill="${c}"/>` + line(b, t, c, 2);
   o += line(P(x - 0.16, y, z + 0.6), P(x + 0.16, y, z + 0.6), c, 1.6) + line(P(x, y - 0.16, z + 0.45), P(x, y + 0.16, z + 0.45), c, 1.6);
-  return o + `<circle cx="${f(t[0])}" cy="${f(t[1])}" r="3.4" fill="#ffffff" stroke="#2456D6" stroke-width="2"/>`;
+  return o + `<circle cx="${f(t[0])}" cy="${f(t[1])}" r="3.4" fill="#ffffff" stroke="#3B4252" stroke-width="2"/>`;
 };
 const BUILD: Record<FigLook, (x: number, y: number) => Building> = {
   person: house,
@@ -728,19 +728,12 @@ export function street(looks: (FigLook | undefined)[], withAntenna: boolean[]): 
   for (const x of xs) {
     for (const [dx, y, s, k] of [
       [-4.6, -1.6, 1, 0],
-      [-2.6, 0.2, 0.9, 1],
-      [4.4, -0.8, 0.85, 1],
-      [7.4, -1.6, 1.0, 0],
-      [-6.2, 12.4, 1.1, 0],
-      [-4.4, 13.8, 0.9, 1],
-      [4.6, 13.2, 1.0, 0],
-      [6.6, 12.2, 0.9, 1],
+      [7.4, -1.6, 1, 0],
+      [4.6, 13.2, 1, 0],
     ])
       objs.push([x + dx + y, tree(x + dx, y, s, k)]);
     for (const [dx, r] of [
       [-4.2, 0.34],
-      [-3.6, 0.28],
-      [3.6, 0.3],
       [4.2, 0.36],
     ])
       objs.push([x + dx + 9.2, shrub(x + dx, 9.15, r)]);
@@ -924,6 +917,7 @@ export function truckArt(depot: { x: number; y: number }) {
 }
 
 const screens = `<g class="scr" data-s="idle"><path d="M-6,-5 h12 M-6,0 h9 M-6,5 h7" stroke="${INK.ink}" stroke-opacity=".4" stroke-width="1.6" stroke-linecap="round"/></g>
+<g class="scr" data-s="tx" display="none"><circle r="8" fill="${INK.data}"/><path d="M0,4V-4M-3.5,-.5L0,-4L3.5,-.5" stroke="#fff" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></g>
 <g class="scr" data-s="in" display="none"><rect x="-7" y="-9" width="14" height="9" rx="2" fill="${INK.data}"/><path d="M-6,4 h12 M-6,8 h8" stroke="${INK.ink}" stroke-opacity=".4" stroke-width="1.6" stroke-linecap="round"/></g>`;
 function phone(w: number, h: number) {
   let o = `<rect x="${-w / 2}" y="${-h}" width="${w}" height="${h}" rx="${f(w * 0.2)}" fill="${INK.ink}"/>`;
@@ -937,8 +931,8 @@ export type Gate = { px: number; ex: number; y: number; z: number; L: number };
 export function gateArt(g: Gate) {
   const post = (x: number, h: number) => box(x - 0.09, g.y - 0.09, 0, 0.18, 0.18, h, '#5a6372', '#434b5a', '#2e3440', '#14181e');
   const b = P(g.px, g.y);
-  return `<ellipse cx="${f(b[0] + 4)}" cy="${f(b[1] + 1)}" rx="12" ry="5" fill="${K.ao}"/>
+  return `<g class="gt"><ellipse cx="${f(b[0] + 4)}" cy="${f(b[1] + 1)}" rx="12" ry="5" fill="${K.ao}"/>
   ${post(g.ex, GZ - 0.1)}${box(g.ex - 0.13, g.y - 0.13, GZ - 0.1, 0.26, 0.26, 0.05, '#2e3440', '#2e3440', '#1d222b')}
   ${post(g.px, GZ + 0.12)}${box(g.px - 0.32, g.y - 0.11, GZ - 0.14, 0.24, 0.22, 0.22, '#5a6372', '#434b5a', '#2e3440', '#14181e')}
-  <line class="arm" stroke-width="5" stroke-linecap="round"/><line class="armW" stroke="#ffffff" stroke-width="5" stroke-dasharray="6 6"/><circle class="hub" r="3.5" fill="#2e3440"/>`;
+  <line class="arm" stroke-width="5" stroke-linecap="round"/><line class="armW" stroke="#ffffff" stroke-width="5" stroke-dasharray="6 6"/><circle class="hub" r="3.5" fill="#2e3440"/></g>`;
 }

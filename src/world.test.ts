@@ -5,7 +5,7 @@ import { LOOKS, edgeId, nodes, str } from './model.ts';
 import type { FlowProps } from './model.ts';
 import { cast, worldReady } from './explain.ts';
 import { HUD } from './looks.ts';
-import { hit, place, polyHit, scene, stageFor, stateAt, timeline } from './world.ts';
+import { hit, place, polyHit, scene, stageFor, stateAt, storyCams, timeline } from './world.ts';
 import type { Ev, Placed, Pt, Rect, Scene, Stage, State } from './world.ts';
 import oil from '../figures/explain-oil.ts';
 import returns from '../figures/returns-process.ts';
@@ -61,7 +61,7 @@ test('a thing starts at the actor of its carries.from box or group, with 1 to 4 
 });
 
 test('the device comes from the look, and only an antenna actor has a roof antenna', () => {
-  const mark = 'fill="#ffffff" stroke="#2456D6"';
+  const mark = 'fill="#ffffff" stroke="#3B4252"';
   const expected = [
     { fig: oil, devices: ['phone', 'antenna', 'cab', 'antenna'], antennas: 2 },
     { fig: returns, devices: ['phone', 'antenna', 'antenna', 'antenna'], antennas: 3 },
@@ -101,6 +101,10 @@ test('hops start in cause order, and a gate shows its question, then its answer,
   assert.ok(answer.start - one(refused, 'question', 0).start >= 250, 'the refusal shows after the question');
   assert.equal(one(refused, 'fail', 1).start, answer.start, 'the gate turns red with the answer');
   assert.ok(reply.start - answer.end >= 380, 'the red reply waits after the answer');
+  const kick = one(refused, 'fail', 1);
+  const arm = (t: number) => Object.values(stateAt(sc, story('Expired certification'), 2, t).gates).find((g) => g.fail)?.deg ?? -1;
+  assert.ok(arm(kick.end) > 6, `the refused arm kicks up: ${arm(kick.end)}`);
+  assert.equal(arm(reply.start), 0, 'the refused arm is down again before the reply');
   const next = scene({
     ...oil.props,
     edges: [...oil.props.edges, { from: 'refused', to: 'sign' }],
@@ -203,8 +207,15 @@ function audit(sc: Scene, s: State, p: Placed, st: Stage): string[] {
   const shown = (what: string, r?: Rect) => (!r ? out.push(`no ${what}`) : !onStage(r) && out.push(`${what} off stage`));
   sc.actors.forEach((a, i) => {
     const g = s.gates[i];
-    if (a.checks && g.rows.length && g.on === s.moment) shown(`sign ${i}`, p.signs.find((x) => x.actor === i)?.r);
+    if (a.checks && g.rows.length && (g.on === s.moment || (s.summary && g.fail && !st.narrow)))
+      shown(`sign ${i}`, p.signs.find((x) => x.actor === i)?.r);
+    if (s.summary && g.fail) shown(`failed gate ${i}`, p.gates.find((x) => x.actor === i)?.r);
   });
+  if (s.summary) {
+    shown('outcome tag', p.tags.find((x) => x.end)?.r);
+    for (const u of Object.values(s.units))
+      if (u.moment >= 0) shown(`end chip ${u.thing}`, p.chips.find((x) => x.text === u.thing && x.mark === (u.fail ? '✗' : '✓'))?.r);
+  }
   for (const a of s.hi) shown(`tag ${sc.actors[a].name}`, p.tags.find((x) => x.actor === a)?.r);
   for (const a of s.dev) if (!(a === sc.truck && p.truck)) shown(`device ${a}`, p.devices.find((x) => x.actor === a)?.r);
   for (const a of s.arcs)
@@ -227,20 +238,27 @@ const SIZES = [
   [344, 565],
 ];
 
-test('every needed tag, sign, chip and device is on stage, and none overlaps another overlay, a building or an arc', () => {
+test('every needed tag, sign, chip and device is on stage, none overlaps, and the camera never jumps and pulls back at the outcome', () => {
   const hits: string[] = [];
   for (const fig of FIXTURES) {
     const sc = scene(fig.props);
     for (const [w, h] of worldReady(fig.props) ? SIZES : SIZES.slice(0, 3)) {
       const st = stageFor(w, w >= HUD.wide ? Math.min(h, (w * 10) / 16) : Math.min(h, HUD.tall));
-      sc.stories.forEach((story, s) =>
+      sc.stories.forEach((story, s) => {
+        const cams = storyCams(sc, s, st),
+          z = cams.map((p) => p.cam.z),
+          n = z.length;
+        if (n > 1 && z[n - 1] > z[n - 2] * 0.92 + 1e-6 && !place(sc, stateAt(sc, s, n - 1, Infinity), st, z[n - 2] * 0.92).faults)
+          hits.push(`${fig.title} ${w}x${h} ${story.name}: the outcome does not pull back`);
+        for (let m = 0; m < n - 2; m++)
+          if (z[m] > z[m + 1] * 1.2 + 1e-6) hits.push(`${fig.title} ${w}x${h} ${story.name} ${m + 1}: the zoom jumps out`);
         story.moments.forEach((_, m) => {
           const state = stateAt(sc, s, m, Infinity);
-          const p = place(sc, state, st);
+          const p = cams[m];
           if (p.faults) hits.push(`${fig.title} ${w}x${h} ${story.name} ${m + 1}: place() reports ${p.faults} faults`);
           for (const x of audit(sc, state, p, st)) hits.push(`${fig.title} ${w}x${h} ${story.name} ${m + 1}: ${x}`);
-        }),
-      );
+        });
+      });
     }
   }
   assert.deepEqual(hits, []);
