@@ -13,6 +13,9 @@ import oil from '../figures/explain-oil.ts';
 import sync from '../figures/explain-sync.ts';
 import deliveryBefore from '../figures/explain-delivery-before.ts';
 import deliveryAfter from '../figures/explain-delivery-after.ts';
+import returns from '../figures/returns-process.ts';
+import checkout from '../figures/checkout.ts';
+import { scene, stateAt, place, stageFor } from './world.ts';
 
 const dist = fileURLToPath(new URL('../dist/', import.meta.url));
 const specs: Record<string, object> = {
@@ -20,6 +23,8 @@ const specs: Record<string, object> = {
   sync: sync.props,
   'delivery-before': deliveryBefore.props,
   'delivery-after': deliveryAfter.props,
+  returns: returns.props,
+  checkout: checkout.props,
 };
 const browser = findBrowser({ platform: process.platform, env: process.env, exists: existsSync });
 const pages = new Map<string, string>();
@@ -81,7 +86,10 @@ const sleep = `new Promise((r) => setTimeout(r, 700))`;
 const guide = (spec: string) => `<flowfig-explain src="/spec/${spec}.json"></flowfig-explain>`;
 
 test('guide: moment 1 says the first beat, lifts the lane of its target, and Next moves to moment 2', { skip: !browser.path }, async () => {
-  const page = await open(guide('oil'), `${live}.includes('The customer asks for a pickup in the app.')`);
+  const page = await open(
+    guide('oil'),
+    `${live}.includes('The customer asks for a pickup in the app.') && !!${sr}?.querySelector('[data-actor]')`,
+  );
   try {
     const acting = await page.ev(`[...${sr}.querySelectorAll('[data-actor][aria-current="true"]')].map((a) => a.dataset.actor)`);
     assert.deepEqual(acting, ['Office']);
@@ -96,17 +104,14 @@ test('guide: moment 1 says the first beat, lifts the lane of its target, and Nex
   }
 });
 
-test(
-  'guide: a What if chip on a refusal step ends on ✗, the outcome and the moments it never reached',
-  { skip: !browser.path },
-  async () => {
-    const page = await open(guide('oil'), `${live}.length > 0`);
-    try {
-      const step = 'Too many requests';
-      await page.ev(`window.last = {}; ${el}.addEventListener('flowfig-moment', (e) => (window.last = e.detail))`);
-      await page.ev(`${button(step)}.click()`);
-      await page.until(`window.last.step === ${JSON.stringify(step)}`, 'the chip opens the refusal step');
-      await page.ev(`(async () => {
+test('guide: a story chip on a refusal story ends on ✗, the outcome and the boxes it skipped', { skip: !browser.path }, async () => {
+  const page = await open(guide('oil'), `${live}.length > 0`);
+  try {
+    const step = 'Too many requests';
+    await page.ev(`window.last = {}; ${el}.addEventListener('flowfig-moment', (e) => (window.last = e.detail))`);
+    await page.ev(`${button(step)}.click()`);
+    await page.until(`window.last.step === ${JSON.stringify(step)}`, 'the chip opens the refusal step');
+    await page.ev(`(async () => {
       for (let i = 0; i < 12; i++) {
         const at = window.last.moment;
         ${button('Next')}.click();
@@ -115,14 +120,13 @@ test(
         if (window.last.moment === at) break;
       }
     })()`);
-      const text = await page.ev(`${sr}.textContent`);
-      assert.equal(await page.ev('window.last.step'), step);
-      for (const want of ['✗', 'Told: too many requests', 'not reached']) assert.ok(text.includes(want), want);
-    } finally {
-      await page.done();
-    }
-  },
-);
+    const text = await page.ev(`${sr}.textContent`);
+    assert.equal(await page.ev('window.last.step'), step);
+    for (const want of ['✗', 'Told: too many requests', 'Skipped, because of the refusal']) assert.ok(text.includes(want), want);
+  } finally {
+    await page.done();
+  }
+});
 
 test('diagram: the SVG inside the element equals the toSvg output for the same spec', { skip: !browser.path }, async () => {
   const page = await open(
@@ -209,15 +213,78 @@ test('arrow keys move the moment, and the live region reads the new sentence', {
   }
 });
 
-test('the flowfig/element bundle is at most 45 kB gzip', () => {
-  const seen = new Set<string>();
-  const walk = (file: string) => {
-    if (seen.has(file)) return;
-    seen.add(file);
-    for (const [, , spec] of readFileSync(file, 'utf8').matchAll(/(from|import)\s*\(?\s*['"](\.{1,2}\/[^'"]+)['"]/g))
-      walk(join(dirname(file), spec));
+test('the element core and the world chunk stay in budget', () => {
+  const deps = (file: string) =>
+    [...readFileSync(file, 'utf8').matchAll(/\b(?:from|import)\s*(\()?\s*['"](\.{1,2}\/[^'"]+)['"]/g)].map(([, call, spec]) => ({
+      file: join(dirname(file), spec),
+      lazy: !!call,
+    }));
+  const reach = (start: string, lazy: boolean, seen = new Set<string>()) => {
+    if (seen.has(start)) return seen;
+    seen.add(start);
+    for (const d of deps(start)) if (lazy || !d.lazy) reach(d.file, lazy, seen);
+    return seen;
   };
-  walk(join(dist, 'element.js'));
-  const bytes = [...seen].reduce((sum, f) => sum + gzipSync(readFileSync(f)).length, 0);
-  assert.ok(bytes <= 45_000, `${bytes} bytes gzip in ${seen.size} files`);
+  const gz = (files: Iterable<string>) => [...files].reduce((n, f) => n + gzipSync(readFileSync(f)).length, 0);
+  const entry = join(dist, 'element.js');
+  assert.ok(
+    deps(entry).some((d) => d.lazy && d.file.endsWith('element-world.js')),
+    'element.js loads the world on demand',
+  );
+  const core = reach(entry, false);
+  const world = [...reach(join(dist, 'element-world.js'), true)].filter((f) => !core.has(f));
+  assert.ok(gz(core) <= 45_000, `core: ${gz(core)} B gzip in ${core.size} files`);
+  assert.ok(gz(world) <= 24_000, `world chunk: ${gz(world)} B gzip in ${world.length} files`);
+});
+
+test('a qualifying figure loads the world, and other figures do not', { skip: !browser.path }, async () => {
+  const loaded = `performance.getEntriesByType('resource').some((r) => r.name.endsWith('/dist/element-world.js'))`;
+  const world = await open(guide('oil'), `!!${sr}?.querySelector('[data-stage="world"] svg[role="img"]')`);
+  try {
+    assert.equal(await world.ev(loaded), true);
+  } finally {
+    await world.done();
+  }
+  const plain = await open(guide('checkout'), `!!${sr}?.querySelector('[data-stage="diagram"] svg[role="img"]')`);
+  try {
+    await plain.ev(sleep);
+    assert.equal(await plain.ev(loaded), false);
+  } finally {
+    await plain.done();
+  }
+});
+
+test('the drawn overlays sit where the layout put them', { skip: !browser.path }, async () => {
+  const page = await open(guide('oil'), `${live}.length > 0`);
+  try {
+    await page.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
+    await page.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
+    await page.ev(`${button('Expired certification')}.click()`);
+    await page.ev(`${el}.moment = ${el}.moment + 2`);
+    await page.until(
+      `(${sr}.querySelector('[data-actor="Worker"]')?.textContent ?? '').includes('Record refused')`,
+      'the refusal frame shows',
+    );
+    type Drawn = { actor: string; x: number; y: number; w: number; h: number; fits: boolean };
+    const got: { w: number; h: number; tags: Drawn[] } = await page.ev(`(() => {
+      const g = ${sr}.querySelector('.ff-guide').getBoundingClientRect();
+      return { w: g.width, h: g.height, tags: [...${sr}.querySelectorAll('[data-actor]')].map((t) => {
+        const r = t.getBoundingClientRect();
+        return { actor: t.dataset.actor, x: r.x - g.x, y: r.y - g.y, w: r.width, h: r.height, fits: t.scrollWidth <= t.clientWidth && t.scrollHeight <= t.clientHeight };
+      }) };
+    })()`);
+    const sc = scene(oil.props);
+    const s = sc.stories.findIndex((x) => x.name === 'Expired certification');
+    const want = place(sc, stateAt(sc, s, 2, Infinity), stageFor(got.w, got.h));
+    assert.equal(got.tags.length, want.tags.length);
+    for (const t of want.tags) {
+      const drawn = got.tags.find((x) => x.actor === t.name);
+      assert.ok(drawn, t.name);
+      for (const k of ['x', 'y', 'w', 'h'] as const)
+        assert.ok(Math.abs(drawn[k] - t.r[k]) <= 2, `${t.name} ${k}: ${drawn[k]} vs ${t.r[k]}`);
+      assert.ok(drawn.fits, `${t.name}: the text is wider than its tag`);
+    }
+  } finally {
+    await page.done();
+  }
 });

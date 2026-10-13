@@ -26,7 +26,12 @@ if (!renderToString(createElement(Flow, props)).length) throw new Error('Flow: e
 "
 
 node --input-type=module -e "await import('flowfig/element')"
-! grep -qE "from ['\"]\.\.?/|import\(['\"]\.\.?/" node_modules/flowfig/dist/element.js || { echo 'element.js has a relative import'; exit 1; }
+for f in element.js element-*.js; do
+  for ref in $(grep -oE "(from|import\()\s*['\"]\.\.?/[^'\"]+['\"]" "node_modules/flowfig/dist/$f" | grep -oE "[^/'\"]+\.js"); do
+    case "$ref" in element.js | element-*.js) [ -f "node_modules/flowfig/dist/$ref" ] || { echo "$f imports $ref, which is missing"; exit 1; } ;; *) echo "$f imports $ref, not an element file"; exit 1 ;; esac
+  done
+done
+[ -f node_modules/flowfig/dist/element-world.js ] || { echo 'element-world.js is missing'; exit 1; }
 [ -f node_modules/flowfig/dist/element.d.ts ] || { echo 'element.d.ts is missing'; exit 1; }
 
 spec='{"props":{"layout":{"children":[{"id":"a","label":"A"}]},"edges":[],"steps":[]}}'

@@ -3,7 +3,7 @@ import { edgeId, isGroup, nodes, str } from './model.ts';
 import type { FigLook, FlowProps } from './model.ts';
 import { HUD } from './looks.ts';
 import { textWidth } from './text.ts';
-import { BAR_Y, BED_ROWS, C, GL, GZ, LANE, P, PHONE, S, TD, gateArt, hull, street, truckArt } from './world-art.ts';
+import { BAR_Y, BED_ROWS, C, FAIL_MARK, GL, GZ, INK, LANE, P, PHONE, S, TD, UNIT, gateArt, hull, street, truckArt } from './world-art.ts';
 import type { Gate, Lot, Pt } from './world-art.ts';
 
 export type { Pt };
@@ -1167,4 +1167,337 @@ function focus(sc: Scene, s: State): { x: number; y: number } | null {
   const a = last >= 0 ? sc.boxes[hops[last].to]?.actor : undefined;
   const m = a === undefined ? undefined : mean(sc.actors[a].lot.hull);
   return m ? { x: m[0], y: m[1] } : null;
+}
+
+export type World = { show(story: number, moment: number, motion: boolean): number; fits(story: number): boolean; stop(): void };
+
+const OV = '#141A22',
+  OV2 = '#4B5361',
+  OVM = '#646C79',
+  RIM = 'rgba(20,26,34,.16)';
+const OV_CSS = [
+  `[data-stage=world]{overflow:hidden}[data-stage=world]>svg,.ff-ov>svg{position:absolute;inset:0;width:100%;height:100%}`,
+  `.bld{transition:opacity .3s,filter .3s}.bld.quiet{opacity:.4;filter:saturate(.15)}.pad{opacity:0;transition:opacity .3s}.pad.on{opacity:1}`,
+  `.ff-ov{position:absolute;inset:0;pointer-events:none;overflow:hidden;font-family:var(--flowfig-font);color:${OV}}`,
+  `.ff-tag,.ff-sign,.ff-dchip{position:absolute;left:0;top:0;box-sizing:border-box;overflow:hidden;white-space:nowrap;background:#fff;border:1px solid ${RIM};transition:opacity .2s}`,
+  `.ff-tag{padding:4px 9px;border-radius:6px}`,
+  `.ff-tn{display:block;font:600 14.8px/19px var(--flowfig-font);color:${OV}}`,
+  `.ff-ts{display:flex;font:400 13.8px/17px var(--flowfig-font);color:${OV2}}`,
+  `.ff-mk{flex:none;width:18px;font-style:normal;font-weight:600}`,
+  `.ff-no{color:${INK.fail}}`,
+  `.ff-quiet .ff-tn,.ff-quiet .ff-ts{color:${OVM}}`,
+  `.ff-sign{padding:6px 10px;border-radius:8px}`,
+  `.ff-row{display:flex;align-items:center;justify-content:space-between;height:30px}.ff-row+.ff-row{margin-top:6px}`,
+  `.ff-q{font:600 15px/20px var(--flowfig-font);color:${OV}}`,
+  `.ff-a{margin-left:12px;padding:0 6px;border-radius:5px;font:600 13px/24px var(--flowfig-font);background:#EEF1EA;color:${OV}}`,
+  `.ff-a.ff-no{background:#FCEBE8;color:${INK.fail}}.ff-a.ff-no::before{content:"\\2717";margin-right:4px}`,
+  `.ff-dchip{display:flex;align-items:center;padding:0 9px;border-radius:6px;font:600 13px/1 var(--flowfig-font);color:${INK.data}}`,
+  `.ff-dchip.ff-thing{color:${OV}}.ff-dchip.ff-no{color:${INK.fail}}`,
+  `.ff-off{opacity:0}`,
+].join('');
+
+const f1 = (n: number) => n.toFixed(1);
+const pt = (p: Pt) => `${f1(p[0])},${f1(p[1])}`;
+const arcPart = (r: Route, u0: number, u1: number) =>
+  `M${Array.from({ length: 21 }, (_, i) => pt(bez(r, u0 + ((u1 - u0) * i) / 20))).join('L')}`;
+const NS = 'http://www.w3.org/2000/svg';
+const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, text?: string) => {
+  const e = document.createElement(tag);
+  e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+};
+const put = (e: HTMLElement, r: Rect) => {
+  e.style.transform = `translate(${f1(r.x)}px,${f1(r.y)}px)`;
+  e.style.width = `${f1(r.w)}px`;
+  e.style.height = `${f1(r.h)}px`;
+};
+const same = (e: Node, text: string) => {
+  if (e.textContent !== text) e.textContent = text;
+};
+
+let sheet: CSSStyleSheet | undefined;
+
+export function mountWorld(stage: HTMLElement, sc: Scene): World {
+  const root = stage.getRootNode() as ShadowRoot;
+  if (!sheet) {
+    sheet = new CSSStyleSheet();
+    sheet.replaceSync(OV_CSS);
+  }
+  if (!root.adoptedStyleSheets.includes(sheet)) root.adoptedStyleSheets = [...root.adoptedStyleSheets, sheet];
+  stage.dataset.stage = 'world';
+  const art = sc.truckArt,
+    depot = sc.truck >= 0 ? sc.actors[sc.truck].lot.depot : null;
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('role', 'img');
+  svg.innerHTML =
+    `<g class="ff-cam">${sc.svg}${art?.door ?? ''}<g class="ff-units"></g>${art?.road ?? ''}` +
+    sc.actors.map((a, i) => (a.device === 'antenna' ? '' : `<g class="ff-dev" data-a="${i}">${PHONE.svg}</g>`)).join('') +
+    `<g class="ff-arcs"></g></g>`;
+  const ov = el('div', 'ff-ov');
+  stage.append(svg, ov);
+  const q = (sel: string) => svg.querySelector<SVGGraphicsElement>(sel);
+  const camG = q('.ff-cam')!,
+    unitsG = q('.ff-units')!,
+    arcsG = q('.ff-arcs')!,
+    doorPanel = q('#doorPanel');
+  const devs = new Map([...svg.querySelectorAll<SVGGElement>('.ff-dev')].map((g) => [Number(g.dataset.a), g]));
+  const arms = [...svg.querySelectorAll('.arm')],
+    arms2 = [...svg.querySelectorAll('.armW')],
+    hubs = [...svg.querySelectorAll('.hub')];
+  const checkers = sc.actors.flatMap((a, i) => (a.checks ? [i] : []));
+  const unitEls = new Map<string, SVGGElement>();
+  const show = (e: Element | null, on: boolean) => e?.setAttribute('display', on ? 'inline' : 'none');
+  const move = (e: Element | null, p: Pt, k = 1) =>
+    e?.setAttribute('transform', `translate(${f1(p[0])} ${f1(p[1])})${k === 1 ? '' : ` scale(${k})`}`);
+
+  let stg = stageFor(0, 0),
+    cam: Cam | undefined,
+    cur: { story: number; moment: number } | undefined,
+    raf = 0,
+    built = '';
+  const lays = new Map<string, Placed>();
+  let tags: { el: HTMLElement; actor: number; mk: HTMLElement; st: HTMLElement }[] = [],
+    signs: { el: HTMLElement; actor: number; rows: { q: HTMLElement; a: HTMLElement }[] }[] = [],
+    chips: { el: HTMLElement; text: string }[] = [];
+
+  const layoutFor = (story: number, moment: number) => {
+    const key = `${story}/${moment}`;
+    let lay = lays.get(key);
+    if (!lay) lays.set(key, (lay = place(sc, stateAt(sc, story, moment, Infinity), stg)));
+    return lay;
+  };
+
+  function draw(s: State, c: Cam) {
+    const { l, t, r, b } = stg.region;
+    camG.setAttribute(
+      'transform',
+      `translate(${f1((l + r) / 2)} ${f1((t + b) / 2)}) scale(${c.z.toFixed(4)}) translate(${f1(-c.x)} ${f1(-c.y)})`,
+    );
+    const k = kit(sc, s);
+    const out = !!s.truck && !k.parked();
+    if (s.truck && depot) {
+      const tk = s.truck;
+      show(q('#truck'), tk.orient === 'L');
+      show(q('#truckR'), tk.orient === 'R');
+      show(q('#truckY'), tk.orient === 'y' && out);
+      for (const id of ['#truck', '#truckR']) q(id)?.setAttribute('transform', `translate(${f1(tk.x * C)} ${f1(tk.x * S)})`);
+      move(q('#truckY'), P(k.YX, tk.ty));
+      const dy = depot.y + 0.004,
+        x0 = depot.x + 0.3,
+        x1 = depot.x + 1.8,
+        zb = 1.03 * tk.door;
+      const quad = (z0: number, z1: number, fill: string) =>
+        `<polygon points="${[P(x0, dy, z0), P(x1, dy, z0), P(x1, dy, z1), P(x0, dy, z1)].map(pt).join(' ')}" fill="${fill}"/>`;
+      let o = quad(zb, 1.03, '#3b463d');
+      for (let i = 0; i < 9; i++) {
+        const z = 0.1 + i * 0.105;
+        if (z > zb) o += quad(z, Math.min(1.03, z + 0.035), '#56645a');
+      }
+      if (doorPanel && doorPanel.dataset.k !== o) {
+        doorPanel.innerHTML = o;
+        doorPanel.dataset.k = o;
+      }
+      for (const side of ['l', 'r'])
+        for (let i = 0; i < 8; i++) {
+          const e = q(`#t${side}${i}`),
+            u = tk.load[i] ? sc.things.get(s.units[tk.load[i]].thing)?.form : undefined;
+          if (e && e.dataset.k !== (u ?? '')) {
+            e.innerHTML = u ? UNIT[u] : '';
+            e.dataset.k = u ?? '';
+          }
+        }
+    }
+    for (const [id, u] of Object.entries(s.units)) {
+      let g = unitEls.get(id);
+      if (!g) {
+        g = document.createElementNS(NS, 'g');
+        g.innerHTML = UNIT[sc.things.get(u.thing)?.form ?? 'box'] + FAIL_MARK;
+        unitsG.append(g);
+        unitEls.set(id, g);
+      }
+      const on = u.where === 'yard' || u.where === 'road' || u.where === 'gate' || u.where === 'air';
+      show(g, on);
+      if (on) {
+        move(g, u.p);
+        show(g.querySelector('.failmark'), u.fail);
+      }
+    }
+    for (const [id, g] of unitEls) if (!s.units[id]) show(g, false);
+    for (const [a, g] of devs) {
+      show(g, s.dev.includes(a));
+      move(g, k.devBase(a), k.inCab(a) ? 0.82 : 1);
+      for (const sc2 of g.querySelectorAll('.scr')) show(sc2, sc2.getAttribute('data-s') === (s.screens[a] ?? 'idle'));
+    }
+    checkers.forEach((a, n) => {
+      const g = sc.actors[a].gate,
+        st = s.gates[a],
+        rad = (st.deg * Math.PI) / 180;
+      const b0 = P(g.px, g.y, g.z),
+        e0 = P(g.px + g.L * Math.cos(rad), g.y, g.z + g.L * Math.sin(rad));
+      for (const arm of [arms[n], arms2[n]]) {
+        arm.setAttribute('x1', f1(b0[0]));
+        arm.setAttribute('y1', f1(b0[1]));
+        arm.setAttribute('x2', f1(e0[0]));
+        arm.setAttribute('y2', f1(e0[1]));
+      }
+      arms[n].setAttribute('stroke', st.fail ? INK.fail : '#2e3440');
+      hubs[n].setAttribute('cx', f1(b0[0]));
+      hubs[n].setAttribute('cy', f1(b0[1]));
+    });
+    let a = '';
+    for (const r of s.arcs) {
+      const col = r.fail ? INK.fail : INK.data,
+        dash = r.dashed ? ' stroke-dasharray="7 6"' : '';
+      a += `<path d="${arcPart(r, 0, r.t)}" fill="none" stroke="${INK.data}" stroke-opacity="${r.moment === s.moment || r.hold ? 0.38 : 0.16}" stroke-width="2" stroke-linecap="round"${dash}/>`;
+      if (r.t < 1)
+        a += `<path d="${arcPart(r, Math.max(0, r.t - 0.16), r.t)}" fill="none" stroke="${col}" stroke-width="3.2" stroke-linecap="round"/>`;
+      else if (r.fail) a += `<path d="${arcPart(r, 0.86, 1)}" fill="none" stroke="${INK.fail}" stroke-width="3.2" stroke-linecap="round"/>`;
+      if (r.t > 0 && (r.t < 1 || r.hold))
+        a += `<circle cx="${f1(bez(r, r.t)[0])}" cy="${f1(bez(r, r.t)[1])}" r="7" fill="${col}" stroke="#fff" stroke-width="2.4"/>`;
+    }
+    arcsG.innerHTML = a;
+    sc.actors.forEach((_, i) => {
+      q(`#pad-${i}`)?.classList.toggle('on', s.hi.includes(i) && !(i === sc.truck && out));
+      q(`#b-${i}`)?.classList.toggle('quiet', !sc.stories[s.story].path.includes(i));
+    });
+  }
+
+  function build(lay: Placed, story: Story) {
+    const lead = document.createElementNS(NS, 'svg');
+    let ls = '';
+    tags = lay.tags.map((t) => {
+      const e = el('div', `ff-tag${t.quiet ? ' ff-quiet' : ''}`),
+        mk = el('i', 'ff-mk'),
+        st = el('span', 'ff-ts');
+      e.dataset.actor = t.name;
+      st.append(mk, '');
+      e.append(el('b', 'ff-tn', t.name), st);
+      put(e, t.r);
+      if (story.acting[cur?.moment ?? -1] === t.name) e.setAttribute('aria-current', 'true');
+      if (t.pin) {
+        const { r } = t,
+          [ax, ay] = t.anchor,
+          px = t.pin === 'l' ? r.x : t.pin === 'r' ? r.x + r.w : Math.max(r.x + 9, Math.min(r.x + r.w - 9, ax)),
+          py = t.pin === 't' ? r.y : t.pin === 'b' ? r.y + r.h : Math.max(r.y + 9, Math.min(r.y + r.h - 9, ay));
+        ls += `<path d="M-6 0H6L0 8Z" transform="translate(${pt([px, py])}) rotate(${{ l: 90, t: 180, r: -90, b: 0 }[t.pin]})" fill="${OV}"/>`;
+      } else
+        ls += `<path d="M${pt(t.line[0])}L${pt(t.line[1])}" stroke="${OV}" stroke-opacity=".55"/><circle cx="${f1(t.line[1][0])}" cy="${f1(t.line[1][1])}" r="2.5" fill="${OV}"/>`;
+      return { el: e, actor: t.actor, mk, st };
+    });
+    signs = lay.signs.map((g) => {
+      const e = el('div', 'ff-sign');
+      const rows = g.rows.map((r) => {
+        const row = el('div', 'ff-row'),
+          q = el('span', 'ff-q', r.q),
+          a = el('span', 'ff-a');
+        row.append(q, a);
+        e.append(row);
+        return { q, a };
+      });
+      put(e, g.r);
+      ls += `<path d="M${pt(g.anchor)}L${pt(nearest(g.r, g.anchor))}" stroke="#2e3440" stroke-width="2"/>`;
+      return { el: e, actor: g.actor, rows };
+    });
+    chips = lay.chips.map((c) => {
+      const e = el('div', `ff-dchip${sc.things.has(c.text) ? ' ff-thing' : ''}${c.fail ? ' ff-no' : ''}`, c.text);
+      put(e, c.r);
+      return { el: e, text: c.text };
+    });
+    lead.innerHTML = ls;
+    ov.replaceChildren(lead, ...tags.map((t) => t.el), ...signs.map((g) => g.el), ...chips.map((c) => c.el));
+  }
+
+  function sync(s: State, rest: boolean) {
+    for (const t of tags) {
+      const ev = s.ever[t.actor];
+      t.mk.hidden = !ev;
+      same(t.mk, ev ? (ev.fail ? '✗' : '✓') : '');
+      same(t.st.lastChild!, ev ? ev.label : 'Not reached');
+      t.st.classList.toggle('ff-no', !!ev?.fail);
+    }
+    for (const g of signs) {
+      const gs = s.gates[g.actor];
+      g.el.classList.toggle('ff-off', !rest && !(gs.rows.length && (gs.on === s.moment || s.summary)));
+      g.rows.forEach((r, i) => {
+        const row = gs.rows[i];
+        (r.q.parentElement as HTMLElement).style.visibility = row ? '' : 'hidden';
+        same(r.a, row?.a ?? '');
+        r.a.hidden = !row?.a;
+        r.a.classList.toggle('ff-no', !!row?.fail);
+      });
+    }
+    const live = new Set<string>();
+    for (const a of s.arcs) if (a.moment === s.moment && a.t === 1 && a.text) live.add(a.text);
+    for (const u of Object.values(s.units))
+      if ((u.moment === s.moment || s.summary) && u.moment >= 0 && (u.where === 'yard' || u.where === 'gate')) live.add(u.thing);
+    for (const c of chips) c.el.classList.toggle('ff-off', !rest && !live.has(c.text));
+  }
+
+  function frame(rest: boolean, t: number) {
+    const { story, moment } = cur!;
+    const lay = layoutFor(story, moment);
+    const key = `${story}/${moment}/${stg.w}x${stg.h}`;
+    if (built !== key) {
+      built = key;
+      build(lay, sc.stories[story]);
+    }
+    const s = stateAt(sc, story, moment, rest ? Infinity : t);
+    draw(s, cam!);
+    sync(s, rest);
+  }
+
+  const measure = () => {
+    const { width: w, height: h } = stage.getBoundingClientRect();
+    if (w === stg.w && h === stg.h) return false;
+    stg = stageFor(w, h);
+    lays.clear();
+    svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+    return true;
+  };
+  const observer = new ResizeObserver(() => {
+    if (!measure() || !cur || !stg.w) return;
+    cancelAnimationFrame(raf);
+    cam = layoutFor(cur.story, cur.moment).cam;
+    frame(true, 0);
+  });
+  observer.observe(stage);
+  measure();
+
+  return {
+    show(story, moment, motion) {
+      cancelAnimationFrame(raf);
+      cur = { story, moment };
+      if (!stg.w || !stg.h) return 0;
+      const to = layoutFor(story, moment).cam;
+      const from = cam ?? to;
+      if (!motion) {
+        cam = to;
+        frame(true, 0);
+        return 0;
+      }
+      const { end } = timeline(sc, story, moment);
+      const t0 = performance.now();
+      const step = (now: number) => {
+        const t = now - t0;
+        if (t >= end) {
+          cam = to;
+          return frame(true, 0);
+        }
+        const e = ease.out(Math.min(1, t / CAM));
+        cam = { x: from.x + (to.x - from.x) * e, y: from.y + (to.y - from.y) * e, z: from.z + (to.z - from.z) * e };
+        frame(false, t);
+        raf = requestAnimationFrame(step);
+      };
+      step(t0);
+      return end;
+    },
+    fits(story) {
+      return !stg.w || sc.stories[story].moments.every((_, m) => !layoutFor(story, m).faults);
+    },
+    stop() {
+      cancelAnimationFrame(raf);
+      observer.disconnect();
+    },
+  };
 }

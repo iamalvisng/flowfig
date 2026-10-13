@@ -75,14 +75,6 @@ export function cast(fig: FlowProps): Actor[] {
   return actors;
 }
 
-export function parcel(fig: FlowProps): string {
-  const hop = fig.steps?.length ? hopsOf(fig, fig.steps[0]).flatMap((b) => b.hops)[0] : undefined;
-  if (!hop) return 'Request';
-  if (str(hop.data)) return str(hop.data);
-  const box = str(nodes(fig.layout).find((n) => n.id === hop.source)?.label);
-  return !box || /^\S+ (a|an|the|for|to|in|on|up|out|off|my|our|your)\b/i.test(box) ? 'Request' : box;
-}
-
 export function moments(fig: FlowProps, step: string): Moment[] {
   const s = fig.steps?.find((x) => str(x.label) === step);
   if (!s) return [];

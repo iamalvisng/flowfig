@@ -8,5 +8,6 @@ export default defineConfig({
     outDir: 'dist',
     emptyOutDir: false,
     minify: true,
+    rolldownOptions: { output: { chunkFileNames: 'element-[name].js' } },
   },
 });

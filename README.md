@@ -303,7 +303,7 @@ full reference, run `npx flowfig docs`.
 | `from`   | In a `timeline` figure: the start date of the item, as YYYY-MM-DD. A box with only `from` is a milestone. | none                                |
 | `to`     | In a `timeline` figure: the last day of the item, as YYYY-MM-DD.                                          | none                                |
 | `mark`   | `"start"` draws a dot before the box. `"end"` draws a ring after the box. Use it on a state lifecycle.    | none                                |
-| `look`   | One of the 12 pictures that the guide form draws for this box.                                            | none                                |
+| `look`   | One of the 12 pictures that the guide world draws for this box.                                           | none                                |
 
 ### Groups
 
@@ -318,7 +318,7 @@ full reference, run `npx flowfig docs`.
 | `gap`       | The smallest space between the children in px. It grows to fit the labels of edges that cross the group. | column: 28; row: fits the widest label, at least 56 |
 | `align`     | `"start"`, `"center"` or `"end"`, across the direction.                                                  | `"center"` (a column stretches)                     |
 | `auto`      | On the root layout: `true` makes flowfig place the boxes. See [Automatic layout](#automatic-layout).     | off                                                 |
-| `look`      | One of the 12 pictures that the guide form draws for this group.                                         | none                                                |
+| `look`      | One of the 12 pictures that the guide world draws for this group.                                        | none                                                |
 
 ### Automatic layout
 
@@ -932,6 +932,11 @@ The element has three forms:
 
 For a good guide, give each role a lane or a labeled group. Give each beat a `say`. Use `note` for the reason and `look` for the picture.
 
+The guide form shows a figure as a small world when an edge `carries` a thing, or when an actor has the look
+`person`, `shop` or `truck`. Other figures show the diagram in the guide. The world loads from
+`element-world.js` next to `element.js`. A CDN script tag loads it from the same folder. The world art stays light in
+a dark theme.
+
 | Attribute | Values                                                             | Default                                       |
 | --------- | ------------------------------------------------------------------ | --------------------------------------------- |
 | `src`     | The URL of a spec JSON file, or of an SVG that flowfig wrote.      | required, unless the `spec` property is set   |
@@ -952,7 +957,7 @@ The `theme` key of the spec colors the SVG in the diagram and change forms. It a
 
 The element has a shadow root. The CSS of the host page does not reach inside it. To change the look, set the `--flowfig-*` tokens
 on the element: `--flowfig-bg`, `--flowfig-surface`, `--flowfig-border`, `--flowfig-ink`, `--flowfig-muted`, `--flowfig-accent`,
-`--flowfig-on-accent`, `--flowfig-good`, `--flowfig-bad`, `--flowfig-paper`, `--flowfig-paper-ink`, `--flowfig-play`, `--flowfig-font`, and the picture colors `--flowfig-pic-b1`, `--flowfig-pic-b2`, `--flowfig-pic-b3`, `--flowfig-pic-t1`, `--flowfig-pic-t2`, `--flowfig-pic-t3`, `--flowfig-pic-dk`, `--flowfig-pic-sk`, `--flowfig-pic-hr`, `--flowfig-pic-pa` and `--flowfig-pic-sh`. Only these tokens change the look.
+`--flowfig-on-accent`, `--flowfig-good`, `--flowfig-bad`, `--flowfig-play`, `--flowfig-font`. Only these tokens change the look.
 
 ```css
 flowfig-explain {

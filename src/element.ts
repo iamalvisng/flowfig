@@ -13,38 +13,37 @@ import {
   type FigGroup,
   type FlowProps,
 } from './model.ts';
-import { cast, moments, parcel, type Moment } from './explain.ts';
-import { ART, PIC_CSS, TOKENS } from './looks.ts';
+import { moments, worldReady, type Moment } from './explain.ts';
+import { HUD, TOKENS } from './looks.ts';
+import type { Scene, World } from './world.ts';
 
 type Form = 'diagram' | 'guide' | 'change';
-type Spot = Moment & { step: string; ms: number; code: string[] };
+type Spot = Moment & { step: string; ms: number; code: string[]; title: string };
 type El = HTMLElement;
 type Side = { name: string; spec: FlowProps; svg: SVGSVGElement; out: El; tile: El };
 type Guide = {
+  ht: El;
   kick: El;
   say: El;
   note: El;
   code: El;
-  stage: El;
-  figs: El[];
-  names: string[];
-  count?: El;
-  card: El;
-  paper: El;
-  num: El;
-  stamp?: El;
-  pill?: El;
-  recs?: El;
-  sum: El;
-  prog: El;
-  dt: El;
-  dots: HTMLButtonElement[];
+  skip: El;
+  list: El;
+  key: El;
+  items: HTMLButtonElement[];
   chips: HTMLButtonElement[];
-  at: number;
-  step: string;
-  x: number;
   tog: HTMLButtonElement;
+  more: HTMLButtonElement;
+  stage: El;
+  diagram?: El;
+  ready: boolean;
+  step: string;
+  last: number;
+  lastStep: string;
+  drawn: string;
 };
+
+const KEYS = { data: 'Data through the air', thing: 'Things on the road or by hand', check: 'A check' };
 
 const FORMS: Form[] = ['diagram', 'guide', 'change'];
 const tokens = (t: Record<string, string>) =>
@@ -76,84 +75,43 @@ const CSS = [
   '.ff-pane>svg{display:block;width:100%;height:auto;min-width:var(--ff-min);max-width:var(--ff-max);margin:0 auto}',
   '.ff-live{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}',
   '.ff-alert{margin:0;color:var(--flowfig-bad)}',
-  '.ff-g{position:relative;box-sizing:border-box;width:100%;height:100%;aspect-ratio:16/10;min-height:520px;display:flex;flex-direction:column;gap:0;padding:0;overflow:hidden}',
-  '.ff-g>.ff-title{margin:16px 3% 0}',
-  '.ff-g>.ff-row{padding:12px 3% 0}',
+  '.ff-g{position:relative;box-sizing:border-box;width:100%;height:100%;aspect-ratio:16/10;max-height:100vh;display:flex;flex-direction:column;gap:0;padding:0;border:0;overflow:hidden}',
   '.ff-row:empty{display:none}',
-  '.ff-g>.ff-view{flex:1;min-height:0;container-type:size}',
-  '.ff-guide{height:100%;display:grid;grid-template-rows:minmax(19cqh,auto) minmax(0,1fr) minmax(23cqh,auto)}',
-  '.ff-top{display:flex;gap:20px;align-items:flex-start;padding:2.6cqh 3cqw 0}',
-  '.ff-text{flex:1;min-width:0}',
-  '.ff-kick{font-size:13px;color:var(--flowfig-muted)}',
-  '.ff-say{margin:6px 0 0;font-size:clamp(19px,2.4cqw,30px);line-height:1.22;font-weight:650;letter-spacing:-.01em}',
-  '.ff-note{margin:8px 0 0;font-size:clamp(15px,1.6cqw,20px);line-height:1.35;color:var(--flowfig-muted)}',
-  '.ff-note.ff-bad{color:var(--flowfig-bad)}',
-  '.ff-code{flex:0 0 34%;box-sizing:border-box;max-height:17cqh;overflow:auto;margin:0;padding:8px 12px;font:13px/1.45 ui-monospace,Menlo,monospace;white-space:pre;background:var(--flowfig-surface);border:1px solid var(--flowfig-border);border-radius:10px}',
-  '.ff-stage{--top:195px;position:relative;overflow:auto hidden;scroll-behavior:smooth;container:ff-stage/size}',
-  '.ff-track{position:relative;height:100%;width:max(100%,calc(var(--n) * 132px));container-type:inline-size}',
-  '.ff-cast{position:absolute;left:2cqw;right:2cqw;bottom:1.5cqh;display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);align-items:end}',
-  '.ff-c{display:flex;flex-direction:column;align-items:center;gap:8px}',
-  '.ff-fig{position:relative;box-sizing:border-box;width:max(124px,min(90%,(100cqh - var(--top)) * 1.25));aspect-ratio:5/4;padding:10px 12px 4px;background:var(--flowfig-surface);border:1px solid var(--flowfig-border);border-radius:20px;opacity:.42;filter:saturate(.55);transition:transform .3s,opacity .3s,filter .3s,box-shadow .3s}',
-  '.ff-fig svg{display:block;width:100%;height:100%;overflow:visible}',
-  '.ff-fig[aria-current=true],.ff-fig.ff-on{opacity:1;filter:none}',
-  '.ff-fig[aria-current=true]{transform:translateY(-10px);border-color:var(--flowfig-accent);box-shadow:0 0 0 3px var(--flowfig-accent),0 8px 12px var(--flowfig-pic-sh)}',
-  '.ff-name{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:16px;font-weight:600;color:var(--flowfig-muted)}',
-  '[aria-current=true]+.ff-name{color:var(--flowfig-accent)}',
-  '.ff-count{display:inline-block;margin-left:6px;min-width:22px;padding:0 6px;box-sizing:border-box;font-size:13px;line-height:22px;text-align:center;border-radius:999px;background:var(--flowfig-ink);color:var(--flowfig-bg)}',
-  '.ff-card{position:absolute;top:22px;left:50%;z-index:2;transform:translateX(-50%);transition:left .5s cubic-bezier(.45,0,.2,1)}',
-  '.ff-paper{position:relative;box-sizing:border-box;width:150px;padding:10px 14px 12px;display:flex;flex-direction:column;gap:5px;background:var(--flowfig-paper);color:var(--flowfig-paper-ink);border-radius:6px 18px 6px 6px;box-shadow:0 4px 12px var(--flowfig-pic-sh),0 0 0 1px #0000000f}',
-  '.ff-dn{padding-right:22px;font-size:13px;font-weight:600;line-height:1.3}',
-  '.ff-paper b{font-size:26px;line-height:1;font-weight:750}',
-  '.ff-paper i{height:5px;border-radius:3px;background:#e3e7ee}',
-  '.ff-paper i+i{width:60%}',
-  '.ff-st{position:absolute;top:-18px;right:-30px;width:52px;height:52px;display:grid;place-items:center;border-radius:50%;font-size:28px;font-weight:700;background:var(--flowfig-ink);color:var(--flowfig-bg);box-shadow:0 0 0 3px var(--flowfig-bg);transform:rotate(-8deg);animation:ff-stamp .35s .15s cubic-bezier(.2,1.3,.4,1) backwards}',
-  '.ff-pill{position:absolute;left:50%;bottom:0;transform:translate(-50%,50%);padding:4px 12px;font-size:15px;font-weight:600;white-space:nowrap;border-radius:999px;background:var(--flowfig-ink);color:var(--flowfig-bg);animation:ff-fade .3s .3s backwards}',
-  '.ff-pill.ff-l{left:0;transform:translateY(50%)}',
-  '.ff-pill.ff-r{left:auto;right:0;transform:translateY(50%)}',
-  '.ff-st.ff-x,.ff-pill.ff-x{background:var(--flowfig-bad)}',
-  '.ff-still{animation:none}',
-  '@keyframes ff-stamp{from{opacity:0;transform:scale(1.8) rotate(-18deg)}}',
-  '@keyframes ff-fade{from{opacity:0}}',
-  '.ff-recs{position:absolute;left:50%;top:12%;z-index:1;display:flex;flex-direction:column;align-items:center;gap:4px;transform:translateX(-50%)}',
-  '.ff-rec{padding:3px 8px;font-size:13px;font-weight:600;white-space:nowrap;background:var(--flowfig-paper);color:var(--flowfig-paper-ink);border:1px solid var(--flowfig-border);border-radius:5px;box-shadow:0 2px 6px var(--flowfig-pic-sh);animation:ff-fly .5s cubic-bezier(.45,0,.2,1) backwards}',
-  '@keyframes ff-fly{from{opacity:0;transform:translate(var(--dx),-24cqh)}}',
-  '@container ff-stage (height < 320px){.ff-track{--top:140px}.ff-card{top:16px}.ff-paper{padding:6px 10px 10px}.ff-paper i{display:none}.ff-dn{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ff-paper b{font-size:20px}.ff-st{top:-12px;right:-22px;width:40px;height:40px;font-size:22px}}',
-  '.ff-end .ff-cast{visibility:hidden}',
-  '.ff-end .ff-card{left:calc(3cqw + 75px)!important;top:50%;transform:translate(-50%,-50%)}',
-  '.ff-sum{position:absolute;inset:0 3cqw 2cqh calc(3cqw + 240px);display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:3cqw;align-items:center}',
-  '.ff-one{padding:18px 20px;background:color-mix(in srgb,var(--flowfig-accent) 8%,var(--flowfig-surface));border:1px solid var(--flowfig-accent);border-radius:14px}',
-  '.ff-lbl{margin:0;font-size:13px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--flowfig-muted)}',
-  '.ff-one p+p{margin:8px 0 0;font-size:clamp(17px,1.9cqw,24px);line-height:1.35;font-weight:600}',
-  '.ff-nr{max-height:100%;overflow:auto}',
-  '.ff-nr ul{margin:8px 0 0;padding:0;list-style:none;display:flex;flex-wrap:wrap;gap:6px}',
-  '.ff-nr li{padding:4px 12px;font-size:14px;color:var(--flowfig-muted);border:1px dashed var(--flowfig-muted);border-radius:999px}',
-  '.ff-bot{display:flex;flex-direction:column;justify-content:space-between;gap:8px;padding:1.4cqh 3cqw;border-top:1px solid var(--flowfig-border);background:color-mix(in srgb,var(--flowfig-surface) 55%,var(--flowfig-bg))}',
-  '.ff-prog{display:flex;gap:18px;align-items:flex-end;padding-bottom:24px}',
-  '.ff-pc{display:flex;flex-direction:column;gap:4px;min-width:0;flex:var(--c) 1 0}',
-  '.ff-pc:last-child{flex:none}',
-  '.ff-pl{height:20px;font-size:13px;color:var(--flowfig-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
-  '.ff-dots{position:relative;display:flex;justify-content:space-around;align-items:center;height:24px}',
-  '.ff-dots::before{content:"";position:absolute;left:0;right:0;top:11px;height:2px;background:var(--flowfig-border)}',
-  '.ff-pc:last-child .ff-dots::before{display:none}',
-  '.ff-d{position:relative;width:16px;height:16px;padding:0;border:2px solid var(--flowfig-muted);border-radius:50%;transition:box-shadow .2s}',
-  '.ff-d.ff-past{background:var(--flowfig-muted)}',
-  '.ff-sp{position:relative;padding:1px 10px;font-weight:600}',
-  '.ff-d[aria-current=true],.ff-sp[aria-current=true]{background:var(--flowfig-accent);border-color:var(--flowfig-accent);color:var(--flowfig-on-accent)}',
-  '.ff-d[aria-current=true]{box-shadow:0 0 0 4px color-mix(in srgb,var(--flowfig-accent) 30%,transparent)}',
-  '.ff-dt{position:absolute;top:calc(100% + 8px);left:50%;transform:translateX(-50%);font-size:14px;font-weight:600;white-space:nowrap;color:var(--flowfig-ink);background:color-mix(in srgb,var(--flowfig-surface) 55%,var(--flowfig-bg))}',
-  '.ff-dt.ff-l{left:-2px;transform:none}',
-  '.ff-dt.ff-r{left:auto;right:-2px;transform:none}',
-  '.ff-what{display:flex;gap:10px;align-items:center}',
-  '.ff-wl{font-size:14px;font-weight:600;white-space:nowrap}',
-  '.ff-chips{flex:1;display:flex;flex-wrap:wrap;gap:6px}',
-  '.ff-chip{font-size:14px}',
+  '.ff-g>.ff-row{padding:8px 12px 0}',
+  '.ff-g>.ff-view{position:relative;flex:1;min-height:0}',
+  '.ff-guide{position:relative;height:100%;overflow:hidden}',
+  '.ff-stage{position:absolute;inset:0}',
+  '.ff-stage[data-stage=world]{background:#E8ECE3}',
+  '.ff-stage[data-stage=diagram]{background:var(--flowfig-bg)}',
+  '.ff-stage>.ff-pane{position:absolute;inset:0;overflow:auto}',
+  `.ff-chips{position:absolute;top:${HUD.pad}px;left:${HUD.pad * 2 + HUD.panel}px;right:${HUD.pad}px;display:flex;gap:8px;overflow-x:auto}`,
+  '.ff-chip{flex:none;font-size:14px}',
   '.ff-chip[aria-pressed=true]{background:var(--flowfig-ink);border-color:var(--flowfig-ink);color:var(--flowfig-bg)}',
-  '.ff-ctl{display:flex;gap:8px;justify-content:center}',
-  '.ff-b{min-width:104px;padding:6px 16px;font-size:15px;font-weight:600;border-radius:10px}',
+  `.ff-hud{position:absolute;top:${HUD.pad}px;left:${HUD.pad}px;bottom:${HUD.pad}px;width:${HUD.panel}px;box-sizing:border-box;display:flex;flex-direction:column;gap:12px;padding:20px;overflow:auto;background:var(--flowfig-surface);color:var(--flowfig-ink);border:1px solid var(--flowfig-border);border-radius:8px}`,
+  '.ff-ht{margin:0;font-size:15px;font-weight:600}',
+  '.ff-kick{margin:0;font-size:13px;color:var(--flowfig-muted)}',
+  '.ff-say{margin:0;font-size:22px;line-height:1.25;font-weight:650}',
+  '.ff-note{margin:0;font-size:15px;line-height:1.4;color:var(--flowfig-muted)}',
+  '.ff-note.ff-bad{color:var(--flowfig-bad)}',
+  '.ff-code{margin:0;padding:8px 12px;max-height:160px;overflow:auto;font:13px/1.45 ui-monospace,Menlo,monospace;white-space:pre;background:var(--flowfig-bg);border:1px solid var(--flowfig-border);border-radius:6px}',
+  '.ff-lbl{margin:0;font-size:13px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--flowfig-muted)}',
+  '.ff-skip ul{margin:6px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:2px;font-size:13px;color:var(--flowfig-muted)}',
+  '.ff-moments{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:2px}',
+  '.ff-moments button{display:flex;gap:10px;width:100%;box-sizing:border-box;padding:6px 8px;border:0;border-radius:6px;background:none;font-size:13px;text-align:left}',
+  '.ff-moments button[aria-current=true]{background:var(--flowfig-bg);font-weight:600}',
+  '.ff-moments .ff-fail{color:var(--flowfig-bad)}',
+  '.ff-mk{flex:none;min-width:14px;text-align:center}',
+  '.ff-ctl{display:flex;flex-wrap:wrap;gap:8px;margin-top:auto}',
+  '.ff-b{padding:6px 16px;font-size:14px;font-weight:600;border-radius:8px}',
   '.ff-next{background:var(--flowfig-accent);border-color:var(--flowfig-accent);color:var(--flowfig-on-accent)}',
   '.ff-back::before{content:"\\2190  "/""}',
   '.ff-next::after{content:"  \\2192"/""}',
-  '@container ff-host (width < 900px){.ff-g{aspect-ratio:auto;height:auto}.ff-g>.ff-view{flex:none;container-type:inline-size}.ff-guide{height:auto;grid-template-rows:auto 300px auto}.ff-top{padding:16px 3cqw 0}.ff-bot{padding:10px 3cqw}}',
+  '.ff-more{display:none}',
+  '.ff-key{margin:0;padding:12px 0 0;list-style:none;display:flex;flex-direction:column;gap:4px;border-top:1px solid var(--flowfig-border);font-size:13px;color:var(--flowfig-muted)}',
+  '.ff-key li::before{content:"";display:inline-block;width:18px;height:0;margin-right:10px;vertical-align:middle;border-top:2px solid #2456D6}',
+  '.ff-key li[data-k=thing]::before{height:10px;border:0;background:#D9822B;border-radius:2px}',
+  '.ff-key li[data-k=check]::before{height:10px;border:0;border-top:3px solid #2e3440}',
+  `@container ff-host (width < ${HUD.wide}px){.ff-g{aspect-ratio:auto;height:max(560px,min(100svh,${HUD.tall}px));max-height:none}.ff-chips{top:8px;left:8px;right:8px}.ff-hud{top:auto;left:0;right:0;bottom:0;width:auto;height:${HUD.sheet}px;gap:8px;padding:12px 16px;border-radius:12px 12px 0 0;font-size:13px}.ff-say{font-size:16px}.ff-note{font-size:13px}.ff-kick,.ff-moments button,.ff-key{font-size:11px}.ff-ht,.ff-code,.ff-tog,.ff-moments:not(.ff-open){display:none}.ff-more{display:inline-block}}`,
   '.ff-verdict{padding:12px 16px;background:var(--flowfig-surface);border:1px solid var(--flowfig-border);border-radius:10px;font-size:16px;font-weight:500}',
   '.ff-list{margin:6px 0 0;padding-left:20px;font-size:15px;font-weight:400}',
   '.ff-all{margin-top:8px;font-size:13px;font-weight:400;color:var(--flowfig-muted)}',
@@ -184,13 +142,9 @@ const CSS = [
   'rect[data-diff]{fill:var(--flowfig-accent)}',
   '[data-diff] text{fill:var(--fg)!important}',
   '@media (prefers-reduced-motion:reduce){.ff-guide *{animation:none!important;transition:none!important;scroll-behavior:auto!important}}',
-  PIC_CSS,
 ].join('\n');
 
 let sheet: CSSStyleSheet | undefined;
-
-const PLAIN =
-  '<ellipse class="ff-sh" cx="100" cy="151" rx="56" ry="6"/><rect class="ff-b2" x="48" y="28" width="104" height="120" rx="14"/><rect class="ff-b3" x="62" y="42" width="76" height="92" rx="8"/>';
 
 const clock = (spec: FlowProps, label: string) => {
   const speed = spec.speed ?? 900;
@@ -286,6 +240,11 @@ export class FlowfigExplain extends Base {
   #played?: string;
   #svg?: SVGSVGElement;
   #g?: Guide;
+  #world?: World;
+  #scene?: Scene;
+  #worldLoads = 0;
+  #motion = 0;
+  #seekTimer?: ReturnType<typeof setTimeout>;
   #sides?: Side[];
   #ends: (ReturnType<typeof setTimeout> | undefined)[] = [];
   #tabs: HTMLButtonElement[] = [];
@@ -323,10 +282,14 @@ export class FlowfigExplain extends Base {
       delete (this as Partial<this>)[k];
       (this as Record<typeof k, unknown>)[k] = v;
     }
+    if (this.#spec && this.#g && !this.#world && this.#g.ready) this.#draw();
   }
 
   disconnectedCallback() {
     this.pause();
+    clearTimeout(this.#seekTimer);
+    this.#world?.stop();
+    this.#world = undefined;
   }
 
   attributeChangedCallback(name: string, old: string | null, value: string | null) {
@@ -386,7 +349,7 @@ export class FlowfigExplain extends Base {
       this.#timer = setTimeout(() => {
         this.next();
         tick();
-      }, this.#all[this.#at].ms);
+      }, this.#motion + this.#all[this.#at].ms);
       this.#update();
     };
     tick();
@@ -494,6 +457,10 @@ export class FlowfigExplain extends Base {
 
   #fault(message: string) {
     this.pause();
+    clearTimeout(this.#seekTimer);
+    this.#world?.stop();
+    this.#world = undefined;
+    this.#worldLoads++;
     this.#all = [];
     this.#at = 0;
     this.#svg = undefined;
@@ -520,6 +487,7 @@ export class FlowfigExplain extends Base {
           const beats = s.flow.map(toBeat);
           return moments(spec, label).map((m, k) => {
             const hops = beats[k]?.hops ?? [];
+            const last = hops.at(-1);
             const code = hops.flatMap((hp) => {
               const e = edges.get(hp.edge);
               return [hp.source, hp.via, e?.source, e?.via, boxes.get(e?.from ?? '')?.source, boxes.get(e?.to ?? '')?.source];
@@ -527,6 +495,11 @@ export class FlowfigExplain extends Base {
             return {
               ...m,
               step: label,
+              title: m.summary
+                ? 'Outcome'
+                : m.question ||
+                  str(boxes.get((last?.back ? edges.get(last.edge)?.from : edges.get(last?.edge ?? '')?.to) ?? '')?.label) ||
+                  m.say,
               ms: k < beats.length ? beatMs(beats[k], speed) : STEP_HOLD_MS,
               code: [...new Set(code.filter((c): c is string => !!c))],
             };
@@ -542,8 +515,14 @@ export class FlowfigExplain extends Base {
       const form = asked && forms.includes(asked) ? asked : forms.includes('guide') ? 'guide' : (forms[0] ?? 'diagram');
 
       this.#forms.replaceChildren(...(forms.length > 1 ? forms.map((f) => button(f, () => this.setAttribute('form', f), f === form)) : []));
+      clearTimeout(this.#seekTimer);
+      this.#world?.stop();
+      this.#world = undefined;
+      this.#scene = undefined;
+      this.#worldLoads++;
+      this.#motion = 0;
       this.#heading.textContent = this.#title;
-      this.#heading.hidden = !this.#title;
+      this.#heading.hidden = !this.#title || form === 'guide';
       this.#svg = undefined;
       this.#g = undefined;
       this.#sides = undefined;
@@ -650,68 +629,83 @@ export class FlowfigExplain extends Base {
         this.#ctl.back.className = 'ff-btn ff-b ff-back';
         this.#ctl.play.className = 'ff-btn ff-b';
         this.#ctl.next.className = 'ff-btn ff-b ff-next';
-        const actors = cast(spec);
-        const figs = actors.map((a) => {
-          const fig = h('div', 'ff-fig');
-          fig.dataset.actor = a.name;
-          fig.innerHTML = `<svg viewBox="0 0 200 160" aria-hidden="true">${a.look && Object.hasOwn(ART, a.look) ? ART[a.look] : PLAIN}</svg>`;
-          return fig;
-        });
-        const names = actors.map((a) => a.name);
-        const count = names.includes('Records') ? h('span', 'ff-count') : undefined;
-        const paper = h('div', 'ff-paper', h('span', 'ff-dn', parcel(spec)), h('b', ''), h('i', ''), h('i', ''));
         const chip = (label: string, onClick: () => void, pressed: boolean) => {
           const b = button(label, onClick, pressed);
           b.className = 'ff-btn ff-chip';
           return b;
         };
+        const ready = worldReady(spec);
         const g: Guide = {
-          kick: h('div', 'ff-kick'),
+          ht: h('h2', 'ff-ht', this.#title),
+          kick: h('p', 'ff-kick'),
           say: h('h3', 'ff-say'),
           note: h('p', 'ff-note'),
           code: h('pre', 'ff-code'),
-          stage: h('div', 'ff-stage'),
-          figs,
-          names,
-          count,
-          card: h('div', 'ff-card', paper),
-          paper,
-          num: paper.children[1] as El,
-          sum: h('div', 'ff-sum'),
-          prog: h('div', 'ff-prog'),
-          dt: h('span', 'ff-dt'),
-          dots: [],
+          skip: h('div', 'ff-skip'),
+          list: h('ol', 'ff-moments'),
+          key: h('ul', 'ff-key'),
+          items: [],
           chips: this.#labels().map((label) => chip(label, () => this.show(label), false)),
           tog: chip('Show the code', () => this.toggleAttribute('code'), this.hasAttribute('code')),
-          at: -1,
+          more: button('Moments', () => {
+            const on = g.list.classList.toggle('ff-open');
+            g.more.setAttribute('aria-expanded', String(on));
+          }),
+          stage: h('div', 'ff-stage'),
+          ready,
           step: '',
-          x: -1,
+          last: -1,
+          lastStep: '',
+          drawn: '',
         };
-        const track = h(
-          'div',
-          'ff-track',
-          h(
-            'div',
-            'ff-cast',
-            ...actors.map((a, i) =>
-              h('div', 'ff-c', figs[i], h('div', 'ff-name', a.name, ...(a.name === 'Records' && count ? [count] : []))),
-            ),
-          ),
-          g.card,
-        );
-        track.style.setProperty('--n', String(actors.length));
-        g.stage.append(track, g.sum);
+        g.ht.hidden = !this.#title;
+        g.tog.className = 'ff-btn ff-chip ff-tog';
+        g.more.className = 'ff-btn ff-b ff-more';
+        g.more.setAttribute('aria-expanded', 'false');
+        const full = button('Full screen', () => void this.requestFullscreen?.());
+        full.className = 'ff-btn ff-b';
+        g.key.hidden = true;
+        if (ready) {
+          g.stage.dataset.stage = 'world';
+          const load = ++this.#worldLoads;
+          import('./world.ts')
+            .then((w) => {
+              if (load !== this.#worldLoads || this.#g !== g) return;
+              this.#scene = w.scene(spec);
+              g.key.replaceChildren(
+                ...this.#scene.keys.map((k) => {
+                  const li = h('li', '', KEYS[k]);
+                  li.dataset.k = k;
+                  return li;
+                }),
+              );
+              this.#world = w.mountWorld(g.stage, this.#scene);
+              g.drawn = '';
+              this.#update();
+            })
+            .catch((e) => this.#fault(`${this.#name}: ${(e as Error).message}`));
+        } else {
+          g.stage.dataset.stage = 'diagram';
+          g.stage.append(pane(spec));
+          g.diagram = g.stage;
+        }
         const guide = h(
           'div',
           'ff-guide',
-          h('div', 'ff-top', h('div', 'ff-text', g.kick, g.say, g.note), g.code),
           g.stage,
+          h('div', 'ff-chips', ...g.chips),
           h(
-            'div',
-            'ff-bot',
-            g.prog,
-            h('div', 'ff-what', h('span', 'ff-wl', 'What if…'), h('div', 'ff-chips', ...g.chips), g.tog),
-            h('div', 'ff-ctl', this.#ctl.back, this.#ctl.play, this.#ctl.next),
+            'section',
+            'ff-hud',
+            g.ht,
+            g.kick,
+            g.say,
+            g.note,
+            g.code,
+            g.skip,
+            g.list,
+            h('div', 'ff-ctl', this.#ctl.back, this.#ctl.play, this.#ctl.next, g.more, g.tog, full),
+            g.key,
           ),
         );
         guide.addEventListener('click', (e) => {
@@ -766,101 +760,64 @@ export class FlowfigExplain extends Base {
     g.code.hidden = end || !this.hasAttribute('code');
     g.code.textContent = m.code.length ? m.code.join('\n') : 'No source in the spec.';
     for (const c of g.chips) c.setAttribute('aria-pressed', String(c.textContent === m.step));
-    if (g.at === this.#at) return;
-    g.at = this.#at;
-
+    const skipped = m.summary?.notReached ?? [];
+    g.skip.hidden = !skipped.length;
+    g.skip.replaceChildren(
+      ...(skipped.length ? [h('p', 'ff-lbl', 'Skipped, because of the refusal'), h('ul', '', ...skipped.map((t) => h('li', '', t)))] : []),
+    );
     if (g.step !== m.step) {
       g.step = m.step;
-      const runs: number[][] = [];
-      for (let i = 0; i < mine.length - 1; i++) {
-        if (i && mine[i].actor === mine[i - 1].actor) runs.at(-1)!.push(first + i);
-        else runs.push([first + i]);
-      }
-      const go = (i: number, name: string, cls: string, label?: string) => {
-        const b = button(name, () => (this.moment = i));
-        b.className = cls;
-        if (label) b.setAttribute('aria-label', label);
+      g.items = mine.map((x, i) => {
+        const b = button('', () => (this.moment = first + i));
+        b.className = '';
+        b.append(h('span', 'ff-mk', x.stamp?.mark ?? String(i + 1)), h('span', '', x.title));
+        if (x.stamp?.mark === '✗') {
+          b.classList.add('ff-fail');
+          b.setAttribute('aria-label', `${x.title}, failed`);
+        }
         return b;
-      };
-      g.dots = runs.flatMap((run) =>
-        run.map((i) => go(i, '', 'ff-d', `Moment ${i - first + 1} of ${mine.length - 1}: ${this.#all[i].say}`)),
-      );
-      g.dots.push(go(first + mine.length - 1, 'Summary', 'ff-btn ff-sp'));
-      let d = 0;
-      const pc = (label: string, n: number) => {
-        const col = h('div', 'ff-pc', h('span', 'ff-pl', label), h('div', 'ff-dots', ...g.dots.slice(d, (d += n))));
-        col.style.setProperty('--c', String(n));
-        return col;
-      };
-      g.prog.replaceChildren(...runs.map((run) => pc(mine[run[0] - first].actor, run.length)), pc('', 1));
+      });
+      g.list.replaceChildren(...g.items.map((b) => h('li', '', b)));
     }
-    g.dots.forEach((d, i) => {
-      const at = first + i;
-      d.classList.toggle('ff-past', at < this.#at);
-      if (at === this.#at) d.setAttribute('aria-current', 'true');
-      else d.removeAttribute('aria-current');
+    g.items.forEach((b, i) => {
+      if (i === k) b.setAttribute('aria-current', 'true');
+      else b.removeAttribute('aria-current');
     });
-    const words = m.say
-      .split(/(?<=[.!?])\s/)[0]
-      .replace(/[.!?]$/, '')
-      .split(/\s+/);
-    g.dt.textContent = words.slice(0, 4).join(' ') + (words.length > 4 ? '…' : '');
-    g.dt.classList.toggle('ff-l', k === 0);
-    g.dt.classList.toggle('ff-r', k > 0 && k === mine.length - 2);
-    if (end) g.dt.remove();
-    else g.dots[k].append(g.dt);
+    this.#stage(g, m, k);
+  }
 
-    const n = g.names.length;
-    const i = g.names.indexOf(m.actor);
-    const rec = g.names.indexOf('Records');
-    const from = g.x;
-    g.figs.forEach((f, j) => {
-      if (j === i && !end) f.setAttribute('aria-current', 'true');
-      else f.removeAttribute('aria-current');
-      f.classList.toggle('ff-on', j === rec && m.records.length > 0);
-    });
-    if (i >= 0) {
-      g.x = i;
-      g.card.style.left = `clamp(83px, ${2 + (96 * (i + 0.5)) / n}cqw, calc(100cqw - 113px))`;
+  #stage(g: Guide, m: Spot, k: number) {
+    const world = this.#world;
+    if (g.ready && !world) return;
+    const key = `${world ? 'w' : 'd'}/${this.#at}`;
+    if (g.drawn === key) return;
+    const motion = !still() && g.lastStep === m.step && g.last === this.#at - 1;
+    [g.drawn, g.last, g.lastStep] = [key, this.#at, m.step];
+    clearTimeout(this.#seekTimer);
+    const story = this.#labels().indexOf(m.step);
+    if (world?.fits(story)) {
+      if (g.diagram) g.diagram.hidden = true;
+      g.key.hidden = false;
+      this.#motion = world.show(story, k, motion);
+      return;
     }
-    g.stage.scrollLeft = end ? 0 : (g.stage.scrollWidth * (2 + (96 * (g.x + 0.5)) / n)) / 100 - g.stage.clientWidth / 2;
-    g.num.textContent = `#${this.#labels().indexOf(m.step) + 1}`;
-    g.stamp?.remove();
-    g.pill?.remove();
-    g.stamp = g.pill = undefined;
-    if (stamp) {
-      const cls = `${stamp.mark === '✗' ? ' ff-x' : ''}${m.stamp === stamp ? '' : ' ff-still'}`;
-      g.stamp = h('span', `ff-st${cls}`, stamp.mark);
-      g.paper.append(g.stamp);
-      const pill = [asked.question, stamp.label].filter(Boolean).join(' → ');
-      const side = end || g.x === 0 ? ' ff-l' : g.x === n - 1 ? ' ff-r' : '';
-      if (pill) g.card.append((g.pill = h('span', `ff-pill${cls}${side}`, pill)));
+    this.#motion = 0;
+    g.key.hidden = true;
+    if (!g.diagram) {
+      g.diagram = h('div', 'ff-stage', pane(this.#spec!));
+      g.diagram.dataset.stage = 'diagram';
+      g.stage.after(g.diagram);
     }
-    g.recs?.remove();
-    g.recs = undefined;
-    if (rec >= 0 && m.records.length) {
-      g.recs = h('div', 'ff-recs', ...m.records.map((r) => h('span', 'ff-rec', r)));
-      g.recs.style.setProperty('--dx', `${(96 * ((from < 0 ? rec : from) - rec)) / n}cqw`);
-      g.figs[rec].append(g.recs);
-    }
-    if (g.count) {
-      const filed = mine.slice(0, k + 1).reduce((a, s) => a + s.records.length, 0);
-      g.count.textContent = String(filed);
-      g.count.hidden = !filed;
-    }
-    g.stage.classList.toggle('ff-end', end);
-    g.sum.replaceChildren();
-    if (m.summary) {
-      g.sum.append(
-        h('div', 'ff-one', h('p', 'ff-lbl', 'Outcome'), h('p', '', m.summary.outcome)),
-        h(
-          'div',
-          'ff-nr',
-          h('p', 'ff-lbl', 'not reached'),
-          h('ul', '', ...(m.summary.notReached.length ? m.summary.notReached : ['none']).map((t) => h('li', '', t))),
-        ),
-      );
-    }
+    g.diagram.hidden = false;
+    const svg = g.diagram.querySelector('svg')!;
+    const spec = this.#spec!;
+    const beats = (spec.steps?.find((x) => str(x.label) === m.step)?.flow ?? []).map(toBeat);
+    if (m.summary || k >= beats.length) return seek(svg, endOf(spec, m.step));
+    const start = clock(spec, m.step)[0] + beats.slice(0, k).reduce((a, b) => a + beatMs(b, spec.speed ?? 900), 0);
+    const end = start + beatMs(beats[k], spec.speed ?? 900);
+    if (still()) return seek(svg, end);
+    seek(svg, start, true);
+    this.#seekTimer = setTimeout(() => seek(svg, end), (end - start) / BASE_RATE);
   }
 
   #emit() {
