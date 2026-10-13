@@ -224,6 +224,7 @@ const SIZES = [
   [880, 700],
   [740, 431],
   [360, 600],
+  [344, 565],
 ];
 
 test('every needed tag, sign, chip and device is on stage, and none overlaps another overlay, a building or an arc', () => {
@@ -243,6 +244,14 @@ test('every needed tag, sign, chip and device is on stage, and none overlaps ano
     }
   }
   assert.deepEqual(hits, []);
+});
+
+test('a stage too small for the overlays gives a frame with faults, not an error', () => {
+  const sc = scene(oil.props);
+  const faults = sc.stories.flatMap((story, s) =>
+    story.moments.map((_, m) => place(sc, stateAt(sc, s, m, Infinity), stageFor(374, 300)).faults),
+  );
+  assert.ok(faults.every((n) => n > 0));
 });
 
 test('a check sign at the rest of a moment always shows its answer', () => {

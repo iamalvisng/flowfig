@@ -57,7 +57,7 @@ after(async () => {
   if (dir) rmSync(dir, { recursive: true, force: true });
 });
 
-async function open(body: string, ready: string, size?: [number, number]) {
+async function open(body: string, ready: string) {
   const path = `/page-${pages.size}`;
   pages.set(path, `<!doctype html><body><script type="module" src="/dist/element.js"></script>${body}</body>`);
   const { targetId } = await cdp.send('Target.createTarget', { url: origin + path });
@@ -72,7 +72,6 @@ async function open(body: string, ready: string, size?: [number, number]) {
     for (let t = Date.now(); !(await ev(e).catch(() => false)); await new Promise((r) => setTimeout(r, 50)))
       assert.ok(Date.now() - t < ms, what);
   };
-  if (size) await send('Emulation.setDeviceMetricsOverride', { width: size[0], height: size[1], deviceScaleFactor: 1, mobile: false });
   await until(`!!customElements.get('flowfig-explain')`, 'the page defines <flowfig-explain>');
   await until(ready, 'the element shows its first view');
   return { send, ev, until, done: () => cdp.send('Target.closeTarget', { targetId }) };
