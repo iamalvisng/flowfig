@@ -366,3 +366,19 @@ test('a story inside one actor still gets a framed camera', () => {
     assert.ok(Number.isFinite(cam.x) && Number.isFinite(cam.y) && cam.z > 0 && cam.z <= 1.2, JSON.stringify(cam));
   }
 });
+
+test('an unknown look draws a plain building and still gives a world', () => {
+  const fig: FlowProps = {
+    layout: {
+      children: [
+        { label: 'Shop', look: 'shop', children: [{ id: 'a', label: 'Sell' }] },
+        { label: 'Fort', look: 'castle' as 'shop', children: [{ id: 'b', label: 'Guard' }] },
+      ],
+    },
+    edges: [{ from: 'a', to: 'b' }],
+    steps: [{ label: 'Visit', flow: ['a->b'] }],
+  };
+  const sc = scene(fig);
+  assert.equal(sc.actors[1].lot.hull.length > 2, true);
+  assert.equal(storyCams(sc, 0, stageFor(1440, 900)).length, 2);
+});

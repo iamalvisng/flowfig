@@ -707,7 +707,7 @@ export function street(looks: (FigLook | undefined)[], withAntenna: boolean[], p
     lots: Lot[] = [];
   looks.forEach((look, i) => {
     const x = xs[i],
-      b = (look ? BUILD[look] : plain)(x, BY),
+      b = ((look && BUILD[look]) || plain)(x, BY),
       tip: P3 = [b.ant[0], b.ant[1], b.ant[2] + (b.own ? 0 : 0.8)];
     if (withAntenna[i] && !b.own) b.svg += antenna(b.ant);
     const hl = hull((withAntenna[i] ? [...b.pts, tip] : b.pts).map((p) => P(...p))).map(([u, v]): Pt => [f(u), f(v)]);
