@@ -79,7 +79,7 @@ const CSS = [
   '.ff-row:empty{display:none}',
   '.ff-g>.ff-row{padding:8px 12px 0}',
   '.ff-g>.ff-view{position:relative;flex:1;min-height:0}',
-  '.ff-guide{position:relative;height:100%;overflow:hidden}',
+  '.ff-guide{position:relative;height:100%;overflow:hidden;container:ff-guide/size}',
   '.ff-stage{position:absolute;inset:0}',
   '.ff-stage[data-stage=world]{background:#E8ECE3}',
   '.ff-stage[data-stage=diagram]{background:var(--flowfig-bg)}',
@@ -112,6 +112,7 @@ const CSS = [
   '.ff-key li[data-k=thing]::before{height:10px;border:0;background:#D9822B;border-radius:2px}',
   '.ff-key li[data-k=check]::before{height:10px;border:0;border-top:3px solid #2e3440}',
   `@container ff-host (width < ${HUD.wide}px){.ff-g{aspect-ratio:auto;height:min(100svh,${HUD.tall}px);max-height:none}.ff-chips{top:8px;left:8px;right:8px}.ff-hud{top:auto;left:0;right:0;bottom:0;width:auto;height:${HUD.sheet}px;gap:8px;padding:12px 16px;border-radius:12px 12px 0 0;font-size:13px}.ff-say{font-size:16px}.ff-note{font-size:13px}.ff-kick,.ff-moments button,.ff-key{font-size:11px}.ff-ht,.ff-code,.ff-tog,.ff-moments:not(.ff-open){display:none}.ff-more{display:inline-block}}`,
+  `@container ff-guide (${HUD.slim * 2}px <= width < ${HUD.wide}px) and (height < ${HUD.short}px){.ff-chips{top:${HUD.pad}px;left:${HUD.pad * 2 + HUD.slim}px;right:${HUD.pad}px}.ff-hud{top:${HUD.pad}px;left:${HUD.pad}px;right:auto;bottom:${HUD.pad}px;width:${HUD.slim}px;height:auto;border-radius:8px}}`,
   '.ff-verdict{padding:12px 16px;background:var(--flowfig-surface);border:1px solid var(--flowfig-border);border-radius:10px;font-size:16px;font-weight:500}',
   '.ff-list{margin:6px 0 0;padding-left:20px;font-size:15px;font-weight:400}',
   '.ff-all{margin-top:8px;font-size:13px;font-weight:400;color:var(--flowfig-muted)}',
@@ -677,7 +678,12 @@ export class FlowfigExplain extends Base {
                   return li;
                 }),
               );
-              this.#world = w.mountWorld(g.stage, scene);
+              this.#world = w.mountWorld(g.stage, scene, () => {
+                const m = this.#all[this.#at];
+                if (this.#g !== g || !m) return;
+                g.drawn = '';
+                this.#guide(g, m);
+              });
               g.drawn = '';
               this.#update();
             })

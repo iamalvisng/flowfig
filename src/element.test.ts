@@ -90,7 +90,6 @@ test('guide: moment 1 says the first beat, lifts the lane of its target, and Nex
   const page = await open(
     guide('oil'),
     `${live}.includes('The customer asks for a pickup in the app.') && !!${sr}?.querySelector('[data-actor]')`,
-    [1280, 800],
   );
   try {
     const acting = await page.ev(`[...${sr}.querySelectorAll('[data-actor][aria-current="true"]')].map((a) => a.dataset.actor)`);
@@ -259,7 +258,7 @@ test('a qualifying figure loads the world, and other figures do not', { skip: !b
 test('the drawn overlays sit where the layout put them', { skip: !browser.path }, async () => {
   const page = await open(guide('oil'), `${live}.length > 0`);
   try {
-    await page.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
+    await page.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: false });
     await page.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
     await page.ev(`${button('Expired certification')}.click()`);
     await page.ev(`${el}.moment = ${el}.moment + 2`);
@@ -291,6 +290,25 @@ test('the drawn overlays sit where the layout put them', { skip: !browser.path }
   }
 });
 
+test('a resize that makes the frame faulty shows the diagram, and a resize back shows the world', { skip: !browser.path }, async () => {
+  const page = await open(guide('oil'), `${live}.length > 0 && !!${sr}?.querySelector('[data-stage="world"] svg[role="img"]')`);
+  try {
+    await page.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
+    const shown = `(() => { const d = ${sr}.querySelector('[data-stage="diagram"]'); return !!d && !d.hidden; })()`;
+    for (const [w, h, diagram] of [
+      [390, 844, false],
+      [390, 300, true],
+      [390, 844, false],
+    ] as const) {
+      await page.send('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: 1, mobile: false });
+      await page.until(`${shown} === ${diagram}`, `${diagram ? 'the diagram' : 'the world'} shows at ${w}x${h}`);
+    }
+    assert.equal(await page.ev(shown), false);
+  } finally {
+    await page.done();
+  }
+});
+
 test('a story with a faulty frame shows the diagram, and a clean story shows the world', { skip: !browser.path }, async () => {
   const page = await open(guide('oil'), `${live}.length > 0 && !!${sr}?.querySelector('[data-stage="world"] svg[role="img"]')`);
   try {
@@ -302,7 +320,7 @@ test('a story with a faulty frame shows the diagram, and a clean story shows the
       [390, 300],
       [390, 844],
     ]) {
-      await page.send('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: 1, mobile: true });
+      await page.send('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: 1, mobile: false });
       await page.ev(`new Promise((r) => setTimeout(r, 400))`);
       for (const [s, story] of sc.stories.entries()) {
         await page.ev(`${button(story.name)}.click()`);

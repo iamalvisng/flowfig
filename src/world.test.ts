@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { LOOKS, edgeId, nodes, str } from './model.ts';
 import type { FlowProps } from './model.ts';
-import { cast } from './explain.ts';
+import { cast, worldReady } from './explain.ts';
 import { HUD } from './looks.ts';
 import { hit, place, polyHit, scene, stageFor, stateAt, timeline } from './world.ts';
 import type { Ev, Placed, Pt, Rect, Scene, Stage, State } from './world.ts';
@@ -215,15 +215,22 @@ function audit(sc: Scene, s: State, p: Placed, st: Stage): string[] {
   return out;
 }
 
+const SIZES = [
+  [1440, 900],
+  [2000, 1150],
+  [390, 844],
+  [1280, 720],
+  [1024, 640],
+  [880, 700],
+  [740, 431],
+  [360, 600],
+];
+
 test('every needed tag, sign, chip and device is on stage, and none overlaps another overlay, a building or an arc', () => {
   const hits: string[] = [];
   for (const fig of FIXTURES) {
     const sc = scene(fig.props);
-    for (const [w, h] of [
-      [1440, 900],
-      [2000, 1150],
-      [390, 844],
-    ]) {
+    for (const [w, h] of worldReady(fig.props) ? SIZES : SIZES.slice(0, 3)) {
       const st = stageFor(w, w >= HUD.wide ? Math.min(h, (w * 10) / 16) : Math.min(h, HUD.tall));
       sc.stories.forEach((story, s) =>
         story.moments.forEach((_, m) => {

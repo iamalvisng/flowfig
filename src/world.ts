@@ -778,17 +778,26 @@ const GAP = 12,
   TAG_H = 46,
   CHIP_H = 26;
 const nearest = (r: Rect, p: Pt): Pt => [Math.max(r.x, Math.min(p[0], r.x + r.w)), Math.max(r.y, Math.min(p[1], r.y + r.h))];
+const rings = new Map<string, number[]>();
 function ring(p: Pt, w: number, h: number, ds: number[]): Opt[] {
+  const key = `${w},${h},${ds}`;
+  let off = rings.get(key);
+  if (!off) {
+    const side = (c: number, size: number) => (c > 0.38 ? [0] : c < -0.38 ? [size] : [size / 2, size * 0.1, size * 0.9]);
+    off = [];
+    for (const d of ds)
+      for (let i = 0; i < 16; i++) {
+        const c = Math.cos((i * Math.PI) / 8),
+          n = Math.sin((i * Math.PI) / 8);
+        for (const sx of side(c, w)) for (const sy of side(n, h)) off.push(c * d - sx, n * d - sy);
+      }
+    rings.set(key, off);
+  }
   const out: Opt[] = [];
-  const side = (c: number, size: number) => (c > 0.38 ? [0] : c < -0.38 ? [size] : [size / 2, size * 0.1, size * 0.9]);
-  for (const d of ds)
-    for (let i = 0; i < 16; i++) {
-      const c = Math.cos((i * Math.PI) / 8),
-        n = Math.sin((i * Math.PI) / 8);
-      for (const sx of side(c, w)) for (const sy of side(n, h)) out.push({ x: p[0] + c * d - sx, y: p[1] + n * d - sy, w, h, anchor: p });
-    }
+  for (let i = 0; i < off.length; i += 2) out.push({ x: p[0] + off[i], y: p[1] + off[i + 1], w, h, anchor: p });
   return out;
 }
+type Cands<T> = (T[] | (() => T[]))[];
 const bounds = (ps: Pt[]): Rect => {
   const xs = ps.map((p) => p[0]),
     ys = ps.map((p) => p[1]),
@@ -802,37 +811,48 @@ export const hit = (a: Rect, b: Rect, pad = 0) =>
   a.x < b.x + b.w + pad && b.x < a.x + a.w + pad && a.y < b.y + b.h + pad && b.y < a.y + a.h + pad;
 
 export function polyHit(poly: Pt[], r: Rect, pad = 0): boolean {
-  const R: Pt[] = [
-    [r.x - pad, r.y - pad],
-    [r.x + r.w + pad, r.y - pad],
-    [r.x + r.w + pad, r.y + r.h + pad],
-    [r.x - pad, r.y + r.h + pad],
-  ];
-  const axes: Pt[] = [
-    [1, 0],
-    [0, 1],
-  ];
-  poly.forEach((p, i) => {
-    const o = poly[(i + 1) % poly.length];
-    axes.push([o[1] - p[1], p[0] - o[0]]);
-  });
-  for (const [ax, ay] of axes) {
-    const pa = poly.map((p) => p[0] * ax + p[1] * ay),
-      pb = R.map((p) => p[0] * ax + p[1] * ay);
-    if (Math.max(...pa) <= Math.min(...pb) || Math.max(...pb) <= Math.min(...pa)) return false;
+  const x0 = r.x - pad,
+    y0 = r.y - pad,
+    x1 = r.x + r.w + pad,
+    y1 = r.y + r.h + pad;
+  let px0 = Infinity,
+    px1 = -Infinity,
+    py0 = Infinity,
+    py1 = -Infinity;
+  for (const [x, y] of poly) {
+    px0 = Math.min(px0, x);
+    px1 = Math.max(px1, x);
+    py0 = Math.min(py0, y);
+    py1 = Math.max(py1, y);
+  }
+  if (px1 <= x0 || x1 <= px0 || py1 <= y0 || y1 <= py0) return false;
+  for (let i = 0; i < poly.length; i++) {
+    const [ax, ay] = poly[i],
+      [bx, by] = poly[(i + 1) % poly.length],
+      nx = by - ay,
+      ny = ax - bx;
+    let p0 = Infinity,
+      p1 = -Infinity;
+    for (const [x, y] of poly) {
+      const v = x * nx + y * ny;
+      p0 = Math.min(p0, v);
+      p1 = Math.max(p1, v);
+    }
+    const c = [x0 * nx + y0 * ny, x1 * nx + y0 * ny, x1 * nx + y1 * ny, x0 * nx + y1 * ny];
+    if (p1 <= Math.min(...c) || Math.max(...c) <= p0) return false;
   }
   return true;
 }
 
 export function stageFor(w: number, h: number): Stage {
-  const narrow = w < HUD.wide;
+  const side = w >= HUD.wide || (h < HUD.short && w >= HUD.slim * 2);
   return {
     w,
     h,
-    narrow,
-    region: narrow
-      ? { l: 8, t: HUD.chips + 8, r: w - 8, b: h - HUD.sheet - 8 }
-      : { l: HUD.pad * 2 + HUD.panel, t: HUD.chips + HUD.pad, r: w - HUD.pad, b: h - HUD.pad },
+    narrow: w < HUD.roomy,
+    region: side
+      ? { l: HUD.pad * 2 + (w >= HUD.wide ? HUD.panel : HUD.slim), t: HUD.chips + HUD.pad, r: w - HUD.pad, b: h - HUD.pad }
+      : { l: 8, t: HUD.chips + 8, r: w - 8, b: h - HUD.sheet - 8 },
   };
 }
 
@@ -875,12 +895,16 @@ function layout(sc: Scene, s: State, stage: Stage, cam: Cam) {
   const offB = (o: Rect) => !solids.some(({ h, box }) => hit(box, o, 2) && polyHit(h, o, 2));
   const offA = (o: Rect) => !arcs.some((arc) => arc.some(([x, y]) => x > o.x - 4 && x < o.x + o.w + 4 && y > o.y - 4 && y < o.y + o.h + 4));
   const free = (o: Rect) => !taken.some((x) => hit(x, o, 6));
-  const clean = <T extends Rect>(opts: T[]) => opts.find((o) => inRegion(o) && free(o) && offA(o) && offB(o));
-  const pick = <T extends Rect>(opts: T[]): T => {
-    const o = clean(opts);
+  const ok = (o: Rect) => inRegion(o) && free(o) && offA(o) && offB(o);
+  const scan = <T extends Rect>(cands: Cands<T>, test: (o: T) => boolean) => {
+    for (const c of cands) for (const o of typeof c === 'function' ? c() : c) if (test(o)) return o;
+  };
+  const clean = <T extends Rect>(cands: Cands<T>) => scan(cands, ok);
+  const pick = <T extends Rect>(cands: Cands<T>): T => {
+    const o = scan(cands, ok);
     if (o) return o;
     bad++;
-    return opts.find((o) => inRegion(o) && free(o)) ?? opts[0];
+    return scan(cands, (o) => inRegion(o) && free(o)) ?? (cands[0] as T[])[0];
   };
 
   const chips: Chip[] = [];
@@ -970,8 +994,7 @@ function layout(sc: Scene, s: State, stage: Stage, cam: Cam) {
         [gr.x - GAP - w, bot - h, [gr.x, bot - 4]],
       ] as [number, number, Pt][]
     ).map(([x, y, anchor]) => ({ x, y, w, h, anchor }));
-    for (const p of [foot, [mid, gr.y], [gr.x, gy], [gr.x + gr.w, gy]] as Pt[]) opts.push(...ring(p, w, h, [12, 24]));
-    const o = pick(opts);
+    const o = pick([opts, ...([foot, [mid, gr.y], [gr.x, gy], [gr.x + gr.w, gy]] as Pt[]).map((p) => () => ring(p, w, h, [12, 24]))]);
     signs.push({ actor: g.actor, r: { x: o.x, y: o.y, w, h }, anchor: o.anchor, rows });
     taken.push(o);
   }
@@ -1015,15 +1038,17 @@ function layout(sc: Scene, s: State, stage: Stage, cam: Cam) {
     ])
       opts.push({ x, y, w, h, anchor });
     const ds = stage.narrow ? [12, 20, 30, 44, 58] : [12, 18, 24];
-    opts.push(
-      ...ring(anchor, w, h, ds),
-      ...ring(
-        hulls[a].reduce((m, p) => (p[1] > m[1] ? p : m)),
-        w,
-        h,
-        ds,
-      ),
-    );
+    const cands: Cands<Opt> = [
+      opts,
+      () => ring(anchor, w, h, ds),
+      () =>
+        ring(
+          hulls[a].reduce((m, p) => (p[1] > m[1] ? p : m)),
+          w,
+          h,
+          ds,
+        ),
+    ];
     const must = s.hi.includes(a) || (s.summary && story.path.includes(a));
     const base = { actor: a, name, status, mark, quiet: !story.path.includes(a) };
     const out = ax < l || ax > r || ay < t || ay > b;
@@ -1033,7 +1058,7 @@ function layout(sc: Scene, s: State, stage: Stage, cam: Cam) {
       taken.push(tag.r);
       continue;
     }
-    const o = must ? pick(opts) : clean(opts);
+    const o = must ? pick(cands) : clean(cands);
     if (!o) continue;
     const tr = { x: o.x, y: o.y, w, h };
     tags.push({ ...base, r: tr, anchor: o.anchor, line: [nearest(tr, o.anchor), o.anchor] });
@@ -1055,7 +1080,7 @@ function layout(sc: Scene, s: State, stage: Stage, cam: Cam) {
           y = across ? v : side === 't' ? t : b - h;
         opts.push({ x, y, w, h, anchor: [ax, ay] });
       }
-    const o = pick(opts);
+    const o = pick([opts]);
     const tr = { x: o.x, y: o.y, w, h };
     return { ...base, r: tr, anchor: o.anchor, line: [nearest(tr, o.anchor), o.anchor], pin: side };
   }
@@ -1124,7 +1149,7 @@ export function place(sc: Scene, s: State, stage: Stage): Placed {
     }
     return { lay: best ?? last!, ok: false };
   };
-  const whole = search(stage.narrow ? ZMIN : 0, 1);
+  const whole = search(stage.narrow ? ZMIN : 0.3, 1);
   if (whole.ok) return whole.lay.placed;
   const ref = stage.narrow ? ZMIN : whole.lay.placed.cam.z;
   const mid = { x: (x0 + x1) / 2, y: (y0 + y1) / 2 };
@@ -1233,7 +1258,7 @@ const same = (e: Node, text: string) => {
 
 let sheet: CSSStyleSheet | undefined;
 
-export function mountWorld(stage: HTMLElement, sc: Scene): World {
+export function mountWorld(stage: HTMLElement, sc: Scene, resized: () => void): World {
   const root = stage.getRootNode() as ShadowRoot;
   if (!sheet) {
     sheet = new CSSStyleSheet();
@@ -1473,8 +1498,7 @@ export function mountWorld(stage: HTMLElement, sc: Scene): World {
   const observer = new ResizeObserver(() => {
     if (!measure() || !cur || !stg.w) return;
     cancelAnimationFrame(raf);
-    cam = layoutFor(cur.story, cur.moment).cam;
-    frame(true, 0);
+    resized();
   });
   observer.observe(stage);
   measure();

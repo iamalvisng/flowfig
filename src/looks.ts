@@ -31,4 +31,4 @@ export const TOKENS: { light: Record<string, string>; dark: Record<string, strin
   },
 };
 
-export const HUD = { wide: 880, panel: 376, pad: 16, chips: 52, sheet: 236, tall: 760 };
+export const HUD = { wide: 880, roomy: 1200, panel: 376, slim: 300, pad: 16, chips: 52, sheet: 210, short: 560, tall: 760 };
