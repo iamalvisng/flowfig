@@ -1202,9 +1202,8 @@ export function place(sc: Scene, s: State, stage: Stage, top = stage.narrow ? 1 
     if ((u.moment === s.moment || s.summary) && u.moment >= 0 && chipped(u, s.summary))
       need.push([u.where === 'bed' ? k.truckPts(s.truck!).reduce((m, p) => (p[1] < m[1] ? p : m)) : u.p, 80]);
   const soft = s.dev.filter(k.inCab).map(k.devTop);
-  const arcPts = s.arcs
-    .filter((a) => a.moment === s.moment && a.t > 0)
-    .flatMap((a) => Array.from({ length: 9 }, (_, i) => bez(a, (a.t * i) / 8)));
+  const arcPts = s.arcs.filter((a) => a.t > 0).flatMap((a) => Array.from({ length: 9 }, (_, i) => bez(a, (a.t * i) / 8)));
+  if (!stage.narrow) for (const p of arcPts) need.push([p, -14]);
   const inside = (c: Cam, x: number, y: number, m: number) => {
     const px = (x - c.x) * c.z + (l + r) / 2,
       py = (y - c.y) * c.z + (t + b) / 2;
@@ -1235,7 +1234,7 @@ export function place(sc: Scene, s: State, stage: Stage, top = stage.narrow ? 1 
           continue;
         }
         if (f.R - f.L <= rw - 2 * pad && f.B - f.T <= rh - 2 * pad) {
-          if (!f.lay.bad) return { lay: f.lay, ok: true };
+          if (!f.lay.bad && holds(c)) return { lay: f.lay, ok: true };
           if (!best || f.lay.bad < best.bad) best = f.lay;
         }
       }

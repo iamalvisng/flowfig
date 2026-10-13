@@ -187,6 +187,7 @@ function audit(sc: Scene, s: State, p: Placed, st: Stage): string[] {
       for (const arc of p.arcs)
         if (arc.some(([x, y]) => x > v.r.x && x < v.r.x + v.r.w && y > v.r.y && y < v.r.y + v.r.h)) out.push(`arc x ${v.n}`);
   }
+  if (!st.narrow && p.arcs.some((arc) => arc.some(([, y]) => y < t + 12))) out.push('arc under the story bar');
   const ends = s.arcs.filter((a) => a.t > 0).map((a) => a.near);
   p.arcs.forEach((arc, k) =>
     p.hulls.forEach((h, a) => !ends[k].includes(a) && arc.some((q) => inside(q, h)) && out.push(`arc x building ${a}`)),
