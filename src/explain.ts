@@ -7,6 +7,7 @@ export type Moment = {
   say: string;
   note: string;
   stamp?: { mark: '✓' | '✗'; label: string };
+  question?: string;
   records: string[];
   summary?: { outcome: string; notReached: string[] };
 };
@@ -55,6 +56,14 @@ export function cast(fig: FlowProps): Actor[] {
   return actors;
 }
 
+export function parcel(fig: FlowProps): string {
+  const hop = fig.steps?.length ? hopsOf(fig, fig.steps[0]).flatMap((b) => b.hops)[0] : undefined;
+  if (!hop) return 'Request';
+  if (str(hop.data)) return str(hop.data);
+  const box = str(nodes(fig.layout).find((n) => n.id === hop.source)?.label);
+  return !box || /^\S+ (a|an|the|for|to|in|on|up|out|off|my|our|your)\b/i.test(box) ? 'Request' : box;
+}
+
 export function moments(fig: FlowProps, step: string): Moment[] {
   const s = fig.steps?.find((x) => str(x.label) === step);
   if (!s) return [];
@@ -91,6 +100,7 @@ export function moments(fig: FlowProps, step: string): Moment[] {
       const dead =
         end === last && !sources.has(end.target) && [byId.get(end.target)?.tone, end.tone].some((t) => t === 'red' || t === 'gray');
       moment.stamp = { mark: dead ? '✗' : '✓', label: str(end.edge.label) };
+      moment.question = labelOf(end.source);
     }
     for (const h of hops) {
       const store = byId.get(h.target);

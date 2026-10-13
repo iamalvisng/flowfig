@@ -13,7 +13,7 @@ import {
   type FigGroup,
   type FlowProps,
 } from './model.ts';
-import { cast, moments, type Moment } from './explain.ts';
+import { cast, moments, parcel, type Moment } from './explain.ts';
 import { ART, PIC_CSS, TOKENS } from './looks.ts';
 
 type Form = 'diagram' | 'guide' | 'change';
@@ -31,13 +31,13 @@ type Guide = {
   count?: El;
   card: El;
   paper: El;
-  dn: El;
   num: El;
   stamp?: El;
   pill?: El;
   recs?: El;
   sum: El;
   prog: El;
+  dt: El;
   dots: HTMLButtonElement[];
   chips: HTMLButtonElement[];
   at: number;
@@ -108,6 +108,8 @@ const CSS = [
   '.ff-paper i+i{width:60%}',
   '.ff-st{position:absolute;top:-18px;right:-30px;width:52px;height:52px;display:grid;place-items:center;border-radius:50%;font-size:28px;font-weight:700;background:var(--flowfig-ink);color:var(--flowfig-bg);box-shadow:0 0 0 3px var(--flowfig-bg);transform:rotate(-8deg);animation:ff-stamp .35s .15s cubic-bezier(.2,1.3,.4,1) backwards}',
   '.ff-pill{position:absolute;left:50%;bottom:0;transform:translate(-50%,50%);padding:4px 12px;font-size:15px;font-weight:600;white-space:nowrap;border-radius:999px;background:var(--flowfig-ink);color:var(--flowfig-bg);animation:ff-fade .3s .3s backwards}',
+  '.ff-pill.ff-l{left:0;transform:translateY(50%)}',
+  '.ff-pill.ff-r{left:auto;right:0;transform:translateY(50%)}',
   '.ff-st.ff-x,.ff-pill.ff-x{background:var(--flowfig-bad)}',
   '.ff-still{animation:none}',
   '@keyframes ff-stamp{from{opacity:0;transform:scale(1.8) rotate(-18deg)}}',
@@ -118,7 +120,7 @@ const CSS = [
   '@container ff-stage (height < 320px){.ff-track{--top:140px}.ff-card{top:16px}.ff-paper{padding:6px 10px 10px}.ff-paper i{display:none}.ff-dn{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ff-paper b{font-size:20px}.ff-st{top:-12px;right:-22px;width:40px;height:40px;font-size:22px}}',
   '.ff-end .ff-cast{visibility:hidden}',
   '.ff-end .ff-card{left:calc(3cqw + 75px)!important;top:50%;transform:translate(-50%,-50%)}',
-  '.ff-sum{position:absolute;inset:0 3cqw 2cqh calc(3cqw + 200px);display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:3cqw;align-items:center}',
+  '.ff-sum{position:absolute;inset:0 3cqw 2cqh calc(3cqw + 240px);display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:3cqw;align-items:center}',
   '.ff-one{padding:18px 20px;background:color-mix(in srgb,var(--flowfig-accent) 8%,var(--flowfig-surface));border:1px solid var(--flowfig-accent);border-radius:14px}',
   '.ff-lbl{margin:0;font-size:13px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--flowfig-muted)}',
   '.ff-one p+p{margin:8px 0 0;font-size:clamp(17px,1.9cqw,24px);line-height:1.35;font-weight:600}',
@@ -126,18 +128,21 @@ const CSS = [
   '.ff-nr ul{margin:8px 0 0;padding:0;list-style:none;display:flex;flex-wrap:wrap;gap:6px}',
   '.ff-nr li{padding:4px 12px;font-size:14px;color:var(--flowfig-muted);border:1px dashed var(--flowfig-muted);border-radius:999px}',
   '.ff-bot{display:flex;flex-direction:column;justify-content:space-between;gap:8px;padding:1.4cqh 3cqw;border-top:1px solid var(--flowfig-border);background:color-mix(in srgb,var(--flowfig-surface) 55%,var(--flowfig-bg))}',
-  '.ff-prog{display:flex;gap:18px;align-items:flex-end}',
+  '.ff-prog{display:flex;gap:18px;align-items:flex-end;padding-bottom:24px}',
   '.ff-pc{display:flex;flex-direction:column;gap:4px;min-width:0;flex:var(--c) 1 0}',
   '.ff-pc:last-child{flex:none}',
-  '.ff-pl{height:20px;font-size:13px;font-weight:600;color:var(--flowfig-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+  '.ff-pl{height:20px;font-size:13px;color:var(--flowfig-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
   '.ff-dots{position:relative;display:flex;justify-content:space-around;align-items:center;height:24px}',
   '.ff-dots::before{content:"";position:absolute;left:0;right:0;top:11px;height:2px;background:var(--flowfig-border)}',
   '.ff-pc:last-child .ff-dots::before{display:none}',
-  '.ff-d{position:relative;width:16px;height:16px;padding:0;border:2px solid var(--flowfig-muted);border-radius:50%;transition:transform .2s}',
+  '.ff-d{position:relative;width:16px;height:16px;padding:0;border:2px solid var(--flowfig-muted);border-radius:50%;transition:box-shadow .2s}',
   '.ff-d.ff-past{background:var(--flowfig-muted)}',
   '.ff-sp{position:relative;padding:1px 10px;font-weight:600}',
   '.ff-d[aria-current=true],.ff-sp[aria-current=true]{background:var(--flowfig-accent);border-color:var(--flowfig-accent);color:var(--flowfig-on-accent)}',
-  '.ff-d[aria-current=true]{transform:scale(1.35)}',
+  '.ff-d[aria-current=true]{box-shadow:0 0 0 4px color-mix(in srgb,var(--flowfig-accent) 30%,transparent)}',
+  '.ff-dt{position:absolute;top:calc(100% + 8px);left:50%;transform:translateX(-50%);font-size:14px;font-weight:600;white-space:nowrap;color:var(--flowfig-ink);background:color-mix(in srgb,var(--flowfig-surface) 55%,var(--flowfig-bg))}',
+  '.ff-dt.ff-l{left:-2px;transform:none}',
+  '.ff-dt.ff-r{left:auto;right:-2px;transform:none}',
   '.ff-what{display:flex;gap:10px;align-items:center}',
   '.ff-wl{font-size:14px;font-weight:600;white-space:nowrap}',
   '.ff-chips{flex:1;display:flex;flex-wrap:wrap;gap:6px}',
@@ -654,7 +659,7 @@ export class FlowfigExplain extends Base {
         });
         const names = actors.map((a) => a.name);
         const count = names.includes('Records') ? h('span', 'ff-count') : undefined;
-        const paper = h('div', 'ff-paper', h('span', 'ff-dn'), h('b', ''), h('i', ''), h('i', ''));
+        const paper = h('div', 'ff-paper', h('span', 'ff-dn', parcel(spec)), h('b', ''), h('i', ''), h('i', ''));
         const chip = (label: string, onClick: () => void, pressed: boolean) => {
           const b = button(label, onClick, pressed);
           b.className = 'ff-btn ff-chip';
@@ -671,10 +676,10 @@ export class FlowfigExplain extends Base {
           count,
           card: h('div', 'ff-card', paper),
           paper,
-          dn: paper.children[0] as El,
           num: paper.children[1] as El,
           sum: h('div', 'ff-sum'),
           prog: h('div', 'ff-prog'),
+          dt: h('span', 'ff-dt'),
           dots: [],
           chips: this.#labels().map((label) => chip(label, () => this.show(label), false)),
           tog: chip('Show the code', () => this.toggleAttribute('code'), this.hasAttribute('code')),
@@ -749,10 +754,11 @@ export class FlowfigExplain extends Base {
     const first = this.#all.indexOf(mine[0]);
     const k = this.#at - first;
     const end = !!m.summary;
-    const stamp = mine
+    const asked = mine
       .slice(0, k + 1)
       .reverse()
-      .find((s) => s.stamp)?.stamp;
+      .find((s) => s.stamp);
+    const stamp = asked?.stamp;
     g.kick.textContent = `${end ? 'Summary' : `Moment ${k + 1} of ${mine.length - 1}`} · ${m.step}`;
     g.say.textContent = m.say;
     g.note.textContent = m.note;
@@ -776,7 +782,9 @@ export class FlowfigExplain extends Base {
         if (label) b.setAttribute('aria-label', label);
         return b;
       };
-      g.dots = runs.flatMap((run) => run.map((i) => go(i, '', 'ff-d', `Moment ${i - first + 1} of ${mine.length - 1}`)));
+      g.dots = runs.flatMap((run) =>
+        run.map((i) => go(i, '', 'ff-d', `Moment ${i - first + 1} of ${mine.length - 1}: ${this.#all[i].say}`)),
+      );
       g.dots.push(go(first + mine.length - 1, 'Summary', 'ff-btn ff-sp'));
       let d = 0;
       const pc = (label: string, n: number) => {
@@ -792,6 +800,15 @@ export class FlowfigExplain extends Base {
       if (at === this.#at) d.setAttribute('aria-current', 'true');
       else d.removeAttribute('aria-current');
     });
+    const words = m.say
+      .split(/(?<=[.!?])\s/)[0]
+      .replace(/[.!?]$/, '')
+      .split(/\s+/);
+    g.dt.textContent = words.slice(0, 4).join(' ') + (words.length > 4 ? '…' : '');
+    g.dt.classList.toggle('ff-l', k === 0);
+    g.dt.classList.toggle('ff-r', k > 0 && k === mine.length - 2);
+    if (end) g.dt.remove();
+    else g.dots[k].append(g.dt);
 
     const n = g.names.length;
     const i = g.names.indexOf(m.actor);
@@ -807,7 +824,6 @@ export class FlowfigExplain extends Base {
       g.card.style.left = `clamp(83px, ${2 + (96 * (i + 0.5)) / n}cqw, calc(100cqw - 113px))`;
     }
     g.stage.scrollLeft = end ? 0 : (g.stage.scrollWidth * (2 + (96 * (g.x + 0.5)) / n)) / 100 - g.stage.clientWidth / 2;
-    g.dn.textContent = m.step;
     g.num.textContent = `#${this.#labels().indexOf(m.step) + 1}`;
     g.stamp?.remove();
     g.pill?.remove();
@@ -816,7 +832,9 @@ export class FlowfigExplain extends Base {
       const cls = `${stamp.mark === '✗' ? ' ff-x' : ''}${m.stamp === stamp ? '' : ' ff-still'}`;
       g.stamp = h('span', `ff-st${cls}`, stamp.mark);
       g.paper.append(g.stamp);
-      if (stamp.label) g.card.append((g.pill = h('span', `ff-pill${cls}`, stamp.label)));
+      const pill = [asked.question, stamp.label].filter(Boolean).join(' → ');
+      const side = end || g.x === 0 ? ' ff-l' : g.x === n - 1 ? ' ff-r' : '';
+      if (pill) g.card.append((g.pill = h('span', `ff-pill${cls}${side}`, pill)));
     }
     g.recs?.remove();
     g.recs = undefined;

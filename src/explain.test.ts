@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { FlowProps } from './model.ts';
-import { cast, moments } from './explain.ts';
+import { cast, moments, parcel } from './explain.ts';
 import oil from '../figures/explain-oil.ts';
 import sync from '../figures/explain-sync.ts';
 import before from '../figures/explain-delivery-before.ts';
@@ -20,6 +20,16 @@ test('a beat that leaves a decision stamps the card with the edge label, and a d
   assert.deepEqual(pickup[4].stamp, { mark: '✓', label: 'yes' });
   assert.deepEqual(moments(oil.props, 'Too many requests')[0].stamp, { mark: '✗', label: 'no' });
   assert.deepEqual(moments(oil.props, 'Expired certification')[2].stamp, { mark: '✗', label: 'expired' });
+});
+
+test('a decision stamp carries the question it answers', () => {
+  assert.equal(moments(oil.props, 'Expired certification')[0].question, 'Worker free?');
+  assert.equal(moments(sync.props, 'Sent twice')[1].question, 'Saved before?');
+});
+
+test('the card names the first box of the first step, or "Request" when that label reads as an action', () => {
+  assert.equal(parcel(sync.props), 'Worker app');
+  assert.equal(parcel(oil.props), 'Request');
 });
 
 test('each edge into a store files one card to Records: the data, else the edge label, else the store label', () => {
