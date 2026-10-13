@@ -408,3 +408,28 @@ test('more units than the truck bed holds stay in the yard, with finite position
   ])
     for (const p of storyCams(sc, 0, stageFor(w, h))) assert.ok(Number.isFinite(p.cam.z) && p.faults >= 0);
 });
+
+test('an unlabeled refusal into another actor names the check on the failed tag', () => {
+  const sc = scene({
+    layout: {
+      children: [
+        {
+          label: 'Shop',
+          look: 'shop',
+          children: [
+            { id: 'a', label: 'Sell' },
+            { id: 'no', label: 'Refuse', tone: 'red' },
+          ],
+        },
+        { label: 'Bank', children: [{ id: 'q', label: 'Paid?', shape: 'decision' }] },
+      ],
+    },
+    edges: [
+      { from: 'a', to: 'q' },
+      { from: 'q', to: 'no' },
+    ],
+    steps: [{ label: 'Fail', flow: ['a->q', 'q->no'] }],
+  });
+  const bank = sc.actors.findIndex((a) => a.name === 'Bank');
+  assert.equal(stateAt(sc, 0, 1, Infinity).ever[bank].label, 'Paid?');
+});

@@ -619,7 +619,7 @@ function planOf(sc: Scene, story: number, m: number) {
             st.gates[fa].fail = true;
             st.arcs.forEach((x) => (x.fail ||= x.gate === fa && x.hold));
             for (const u of Object.values(st.units)) u.fail ||= u.where === 'gate' && u.at === fa;
-            st.ever[fa] = { label: ta === fa || !h.label ? tb.label : answer(h), fail: true };
+            st.ever[fa] = { label: ta === fa ? tb.label : h.label ? answer(h) : fb.label, fail: true };
           },
           ease.out,
         );
