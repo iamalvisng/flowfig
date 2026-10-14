@@ -670,9 +670,10 @@ function draw(spec: FlowProps, opts: SvgOptions, at?: At) {
           ? `<path d="M${n2(p.x)} ${n2(p.y + 12)} a ${n2(p.w / 2)} 12 0 0 1 ${n2(p.w)} 0 v ${n2(p.h - 24)} a ${n2(p.w / 2)} 12 0 0 1 ${n2(-p.w)} 0 z" fill="${fill0}" stroke="${stroke0}"${stroke}/>` +
             `<path d="M${n2(p.x)} ${n2(p.y + 12)} a ${n2(p.w / 2)} 12 0 0 0 ${n2(p.w)} 0" fill="none" stroke="${stroke0}"${rim}/>`
           : `<rect x="${n2(p.x)}" y="${n2(p.y)}" width="${n2(p.w)}" height="${n2(p.h)}" rx="10" fill="${fill0}" stroke="${stroke0}"${port ? ' stroke-dasharray="4 3"' : ''}${stroke}/>`;
-    const opens = at?.owners.has(item.id)
-      ? `<rect x="${n2(p.x + 3)}" y="${n2(p.y + 3)}" width="${n2(p.w)}" height="${n2(p.h)}" rx="10" fill="var(--bg)" stroke="var(--border)"/>`
-      : '';
+    const opens =
+      at?.owners.has(item.id) && item.shape !== 'decision'
+        ? `<rect x="${n2(p.x + 3)}" y="${n2(p.y + 3)}" width="${n2(p.w)}" height="${n2(p.h)}" rx="10" fill="var(--bg)" stroke="var(--border)"/>`
+        : '';
     const lines = labelLines(item, p.w);
     const extra = (lines.length - 1) * LABEL_LINE;
     const firstY = item.shape === 'store' || contents || dl ? labelY : labelY - extra / 2;

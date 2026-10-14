@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
-import { nodeWidth, type FlowProps } from './model.ts';
+import { n2, nodeWidth, type FlowProps } from './model.ts';
 import { check, render as toSvgScene } from './svg.ts';
 
 // Server markup shows the first frame only; clicks and the clock need a DOM.
@@ -381,5 +381,35 @@ test('only the selected tab is in the tab order, and each tab controls a tabpane
   for (const t of tabs) {
     const id = /aria-controls="([^"]+)"/.exec(t)![1];
     assert.match(html, new RegExp(`role="tabpanel" id="${id}"`));
+  }
+});
+
+test('a box with parts shows the stack of parts in the player and the SVG, and a diamond shows none in both', () => {
+  const inside = { layout: { children: [{ id: 'p', label: 'Part' }] } };
+  const parts: FlowProps = {
+    layout: {
+      children: [
+        { id: 'a', label: 'Orders', inside },
+        { id: 'd', label: 'Paid?', shape: 'decision', inside },
+      ],
+    },
+    edges: [{ id: 'e', from: 'a', to: 'd' }],
+  };
+  const html = render(parts);
+  const { svg, scene } = toSvgScene(parts);
+  for (const [id, stack] of [
+    ['a', true],
+    ['d', false],
+  ] as const) {
+    const style = new RegExp(
+      `<div[^>]*data-fig="${id}"[^>]*style="[^"]*3px 3px 0 -1px|<div[^>]*style="[^"]*3px 3px 0 -1px[^"]*"[^>]*data-fig="${id}"`,
+    );
+    assert.equal(style.test(html), stack, `player ${id}`);
+    const r = scene.boxes.find((b) => b.id === id)!.rect;
+    assert.equal(
+      svg.includes(`<rect x="${n2(r.x + 3)}" y="${n2(r.y + 3)}" width="${n2(r.w)}" height="${n2(r.h)}" rx="10" fill="var(--bg)"`),
+      stack,
+      `SVG ${id}`,
+    );
   }
 });
