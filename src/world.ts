@@ -25,6 +25,7 @@ export type Scene = {
   truckArt: ReturnType<typeof truckArt> | null;
   things: Map<string, { form: Carry['form']; count: number }>;
   keys: ('data' | 'thing' | 'check')[];
+  clear: number;
 };
 
 const FORMS: readonly Carry['form'][] = ['box', 'barrel', 'notes'];
@@ -57,7 +58,7 @@ export function scene(fig: FlowProps, form: Form = 'narrow'): Scene {
     } = street(
       cs.map((a) => a.look),
       devices.map((d) => d === 'antenna'),
-      form === 'wide' ? 9 : 10.5,
+      form === 'wide' ? 8.5 : 10.5,
       stack ? (form === 'spread' ? 15 : 12) : 0,
     );
 
@@ -135,6 +136,7 @@ export function scene(fig: FlowProps, form: Form = 'narrow'): Scene {
 
   const art = truck >= 0 ? truckArt(lots[truck].depot!) : null;
   return {
+    clear: form === 'wide' ? 64 : CLEAR,
     bends,
     svg:
       ground +
@@ -167,6 +169,7 @@ export type Arc = {
   dashed: boolean;
   moment: number;
   near: number[];
+  to: number;
 };
 export type Unit = {
   thing: string;
@@ -282,22 +285,22 @@ function topAt(poly: Pt[], x: number) {
   }
   return y;
 }
-function clears(r: Route, hulls: Pt[][], near: number[]) {
+function clears(r: Route, hulls: Pt[][], near: number[], cl = CLEAR) {
   for (let n = 0; n <= 160; n++) {
     const p = bez(r, n / 160);
     if (Math.hypot(p[0] - r.a[0], p[1] - r.a[1]) < 10 || Math.hypot(p[0] - r.b[0], p[1] - r.b[1]) < 10) continue;
     for (let i = 0; i < hulls.length; i++) {
       if (near.includes(i)) continue;
       const y = topAt(hulls[i], p[0]);
-      if (inPoly(p, hulls[i]) || (p[1] < y && y - p[1] < CLEAR)) return false;
+      if (inPoly(p, hulls[i]) || (p[1] < y && y - p[1] < cl)) return false;
     }
   }
   return true;
 }
-function route(a: Pt, b: Pt, hulls: Pt[][], near: number[]): Route {
+function route(a: Pt, b: Pt, hulls: Pt[][], near: number[], cl = CLEAR): Route {
   for (let top = Math.min(a[1], b[1]) - 80; ; top -= 20) {
     const r: Route = { a, b, c1: [a[0], top], c2: [b[0], top] };
-    if (top < -1200 || clears(r, hulls, near)) return r;
+    if (top < -1200 || clears(r, hulls, near, cl)) return r;
   }
 }
 
@@ -522,12 +525,12 @@ function planOf(sc: Scene, story: number, m: number) {
     at: number,
     a: Pt,
     b: Pt,
-    extra: Pick<Arc, 'gate' | 'hold' | 'fail' | 'text' | 'dashed'>,
+    extra: Pick<Arc, 'gate' | 'hold' | 'fail' | 'text' | 'dashed' | 'to'>,
     near: number[],
   ) => {
     const r = sc.bends.length
         ? (tall(a, b, hulls, near, CLEAR, 14, mid) ?? tall(a, b, hulls, near, 0, 0, mid) ?? route(a, b, hulls, near))
-        : route(a, b, hulls, near),
+        : route(a, b, hulls, near, sc.clear),
       ps = Array.from({ length: 9 }, (_, k) => bez(r, k / 8));
     s.frame.push(...ps);
     return add(
@@ -727,7 +730,7 @@ function planOf(sc: Scene, story: number, m: number) {
             at,
             gateMid(fa),
             endpoint(i, at, ta, h.to, near),
-            { gate: -1, hold: false, fail: true, text: tb.label, dashed: h.async },
+            { gate: -1, hold: false, fail: true, text: tb.label, dashed: h.async, to: ta },
             near,
           );
         }
@@ -784,7 +787,7 @@ function planOf(sc: Scene, story: number, m: number) {
         at,
         from,
         to,
-        { gate: gate ? ta : -1, hold: gate, fail: false, text: fb.check ? '' : h.data || h.label, dashed: h.async },
+        { gate: gate ? ta : -1, hold: gate, fail: false, text: fb.check ? '' : h.data || h.label, dashed: h.async, to: ta },
         near,
       );
       if (tx) set(i, at, (st) => void (st.screens[sa] = 'idle'));
@@ -887,6 +890,7 @@ export type Tag = {
   mark: Mark;
   quiet: boolean;
   end: boolean;
+  cargo: { thing: string; fail: boolean }[];
 };
 export type Sign = { actor: number; r: Rect; anchor: Pt; rows: { q: string; a: string; fail: boolean }[]; kick: boolean };
 export type Chip = { text: string; r: Rect; fail: boolean; mark?: Mark };
@@ -1099,119 +1103,23 @@ export function layout(sc: Scene, s: State, stage: Stage, cam: Cam, full = false
     return scan(cands, (o) => inRegion(o) && free(o)) ?? (cands[0] as T[])[0];
   };
 
-  const chips: Chip[] = [];
-  const chip = (text: string, fail: boolean, opts: Pt[], w: number, around: Pt[], mark?: Mark) => {
-    for (const [px, py] of around)
-      for (const d of [10, 30, 50])
-        for (let i = 0; i < 8; i++) {
-          const u = (i * Math.PI) / 4;
-          opts.push([px + Math.cos(u) * (d + w / 2) - w / 2, py + Math.sin(u) * (d + CHIP_H / 2) - CHIP_H / 2]);
-        }
-    const rs = opts.map(([x, y]) => ({ x, y, w, h: CHIP_H }));
-    const fits = (o: Rect) => inRegion(o) && offB(o) && free(o);
-    const o = rs.find(fits) ?? around.flatMap((p) => ring(p, w, CHIP_H, stage.narrow ? [20, 30, 44, 58] : [18, 24])).find(fits);
-    if (!o && ++bad > cap) throw OVER;
-    chips.push({ text, fail, r: o ?? rs[0], mark });
-    taken.push(o ?? rs[0]);
-  };
-  for (const a of s.arcs) {
-    if (a.moment !== s.moment || a.t !== 1 || !a.text) continue;
-    const w = 20 + width(a.text, ty.chip, true),
-      g = 10;
-    let top = a.a;
-    for (let i = 0; i <= 40; i++) {
-      const p = bez(a, i / 40);
-      if (p[1] < top[1]) top = p;
-    }
-    const [px, py] = pr(top);
-    const opts: Pt[] = [[px - w / 2, py - CHIP_H - g]];
-    for (const u of [0.8, 0.2, 0.65, 0.35]) {
-      const [qx, qy] = pr(bez(a, u));
-      opts.push([qx + g, qy - CHIP_H / 2], [qx - g - w, qy - CHIP_H / 2]);
-    }
-    chip(
-      a.text,
-      a.fail,
-      opts,
-      w,
-      [0.5, 0.3, 0.7].map((u) => pr(bez(a, u))),
-    );
-  }
-  const seen = new Set<string>();
-  for (const u of Object.values(s.units)) {
-    const at = s.summary && u.where === 'bed' ? truckW?.reduce((m, p) => (p[1] < m[1] ? p : m)) : u.p;
-    if ((u.moment !== s.moment && !s.summary) || u.moment < 0 || !at || !chipped(u, s.summary) || seen.has(u.thing)) continue;
-    seen.add(u.thing);
-    const mark = s.summary ? (u.fail ? '✗' : '✓') : undefined,
-      w = 20 + (mark ? ty.mark : 0) + width(u.thing, ty.chip, true),
-      g = 10,
-      h = CHIP_H,
-      [px, py] = pr([at[0], at[1] + 6]);
-    chip(
-      u.thing,
-      u.fail,
-      [
-        [px - w / 2, py + g],
-        [px + g, py - h / 2],
-        [px - g - w, py - h / 2],
-        [px + g, py + g],
-        [px - g - w, py + g],
-        [px - w / 2, py + 3 * g],
-      ],
-      w,
-      [[px, py]],
-      mark,
-    );
-  }
-
-  const signs: Sign[] = [];
-  for (const g of gates) {
-    const gs = s.gates[g.actor];
-    if (!gs.rows.length || !(gs.on === s.moment || (s.summary && gs.fail && !stage.narrow))) continue;
-    const rows = gs.rows.map(({ q, a, fail }) => ({ q, a, fail }));
-    const w =
-        22 +
-        Math.max(
-          width(A[g.actor].name, ty.kick, false),
-          ...rows.map((x) => width(x.q, ty.q, true) + (x.a ? width(x.a, ty.a, true) + 40 : 0)),
-        ),
-      h = rows.length * ty.row + (rows.length - 1) * 6 + 14 + (ty.kick && 16);
-    const gr = g.r,
-      gate = A[g.actor].gate,
-      foot = pr(P(gate.ex, gate.y)),
-      bot = gr.y + gr.h,
-      mid = gr.x + gr.w / 2,
-      gy = gr.y + gr.h / 2;
-    const ways = (
-      [
-        [mid - 14, gr.y - GAP - h, [mid, gr.y]],
-        [mid - w + 14, gr.y - GAP - h, [mid, gr.y]],
-        [gr.x + gr.w + GAP, gy - h / 2, [gr.x + gr.w, gy]],
-        [gr.x - GAP - w, gy - h / 2, [gr.x, gy]],
-        [gr.x + gr.w + GAP, bot - h, [gr.x + gr.w, bot - 4]],
-        [gr.x - GAP - w, bot - h, [gr.x, bot - 4]],
-        [foot[0] - 14, bot + GAP, foot],
-        [foot[0] - w + 14, bot + GAP, foot],
-        [mid - w / 2, bot + GAP, foot],
-      ] as [number, number, Pt][]
-    ).map(([x, y, anchor]) => ({ x, y, w, h, anchor }));
-    const opts = stage.narrow ? [...ways.slice(6), ...ways.slice(0, 6)] : ways;
-    const o = pick([opts, ...([foot, [mid, gr.y], [gr.x, gy], [gr.x + gr.w, gy]] as Pt[]).map((p) => () => ring(p, w, h, [12, 24]))]);
-    signs.push({ actor: g.actor, r: { x: o.x, y: o.y, w, h }, anchor: o.anchor, rows, kick: !!ty.kick });
-    taken.push(o);
-  }
-
   const tags: Tag[] = [];
-  const rank = (a: number) => (s.hi.includes(a) ? 0 : story.path.includes(a) ? 1 : 2);
-  const order = A.map((_, a) => a).sort((p, q) => rank(p) - rank(q));
-  for (const a of order) {
+  const tagOf = (a: number) => {
     const ev = s.ever[a],
       name = A[a].name,
       status = ev ? ev.label : 'Not reached',
       mark: Mark = ev ? (ev.fail ? '✗' : '✓') : '',
       end = s.summary && sc.boxes[story.end]?.actor === a,
-      w = (end ? 22 : 20) + Math.max(width(name, end ? ty.hero : ty.name, true), ty.mark + width(status, ty.status, false)),
-      h = ty.tag + (end ? 3 : 0),
+      bed = !stage.narrow && s.summary && a === sc.truck ? Object.values(s.units).filter((u) => u.where === 'bed' && u.moment >= 0) : [],
+      cargo = [...new Set(bed.map((u) => u.thing))].map((thing) => ({ thing, fail: bed.some((u) => u.thing === thing && u.fail) })),
+      w =
+        (end ? 22 : 20) +
+        Math.max(
+          width(name, end ? ty.hero : ty.name, true),
+          ty.mark + width(status, ty.status, false),
+          ...cargo.map((c) => 20 + width(c.thing, 13, true)),
+        ),
+      h = ty.tag + (end ? 3 : 0) + cargo.length * 20,
       g = GAP,
       onTruck = a === sc.truck && truckW,
       top = onTruck ? truckW.reduce((m, p) => (p[1] < m[1] ? p : m)) : A[a].lot.tag,
@@ -1244,23 +1152,139 @@ export function layout(sc: Scene, s: State, stage: Stage, cam: Cam, full = false
     const cands: Cands<Opt> = [
       opts,
       () => ring(anchor, w, h, ds),
-      () => ring(pr(A[a].lot.hull.reduce((m, p) => (p[1] > m[1] ? p : m))), w, h, ds),
+      () => (onTruck ? ring(pr(truckW.reduce((m, p) => (p[1] > m[1] ? p : m))), w, h, ds) : []),
+      () => (onTruck && !stage.narrow ? [] : ring(pr(A[a].lot.hull.reduce((m, p) => (p[1] > m[1] ? p : m))), w, h, ds)),
     ];
     const must = s.hi.includes(a) || (s.summary && story.path.includes(a));
-    const base = { actor: a, name, status, mark, quiet: !story.path.includes(a), end };
+    const base = { actor: a, name, status, mark, quiet: !story.path.includes(a), end, cargo };
     const out = ax < l || ax > r || ay < t || ay > b;
     if (must && stage.narrow && out) {
       const tag = pin(base, w, h, [ax, ay]);
       tags.push(tag);
       taken.push(tag.r);
-      continue;
+      return;
     }
     const o = must ? pick(cands) : clean(cands);
-    if (!o) continue;
+    if (!o) return;
     const tr = { x: o.x, y: o.y, w, h };
     tags.push({ ...base, r: tr, anchor: o.anchor, line: [nearest(tr, o.anchor), o.anchor] });
     taken.push(o);
+  };
+  if (!stage.narrow && truckW && s.hi.includes(sc.truck)) tagOf(sc.truck);
+
+  const chips: Chip[] = [];
+  const chip = (text: string, fail: boolean, opts: Pt[], w: number, around: Pt[], mark?: Mark) => {
+    for (const [px, py] of around)
+      for (const d of [10, 30, 50])
+        for (let i = 0; i < 8; i++) {
+          const u = (i * Math.PI) / 4;
+          opts.push([px + Math.cos(u) * (d + w / 2) - w / 2, py + Math.sin(u) * (d + CHIP_H / 2) - CHIP_H / 2]);
+        }
+    const rs = opts.map(([x, y]) => ({ x, y, w, h: CHIP_H }));
+    const fits = (o: Rect) => inRegion(o) && offB(o) && free(o);
+    const o = rs.find(fits) ?? around.flatMap((p) => ring(p, w, CHIP_H, stage.narrow ? [20, 30, 44, 58] : [18, 24])).find(fits);
+    if (!o && ++bad > cap) throw OVER;
+    chips.push({ text, fail, r: o ?? rs[0], mark });
+    taken.push(o ?? rs[0]);
+  };
+  for (const a of s.arcs) {
+    if (a.moment !== s.moment || a.t !== 1 || !a.text || s.ever[a.to]?.label === a.text) continue;
+    const w = 20 + width(a.text, ty.chip, true),
+      g = 10;
+    let top = a.a;
+    for (let i = 0; i <= 40; i++) {
+      const p = bez(a, i / 40);
+      if (p[1] < top[1]) top = p;
+    }
+    const [px, py] = pr(top);
+    const opts: Pt[] = [[px - w / 2, py - CHIP_H - g]];
+    for (const u of [0.8, 0.2, 0.65, 0.35]) {
+      const [qx, qy] = pr(bez(a, u));
+      opts.push([qx + g, qy - CHIP_H / 2], [qx - g - w, qy - CHIP_H / 2]);
+    }
+    chip(
+      a.text,
+      a.fail,
+      opts,
+      w,
+      [0.5, 0.3, 0.7].map((u) => pr(bez(a, u))),
+    );
   }
+  const seen = new Set<string>();
+  for (const u of Object.values(s.units)) {
+    const at = s.summary && u.where === 'bed' ? truckW?.reduce((m, p) => (p[1] < m[1] ? p : m)) : u.p;
+    if (
+      (u.moment !== s.moment && !s.summary) ||
+      u.moment < 0 ||
+      !at ||
+      !chipped(u, s.summary) ||
+      seen.has(u.thing) ||
+      (!stage.narrow && s.summary && u.where === 'bed')
+    )
+      continue;
+    seen.add(u.thing);
+    const mark = s.summary ? (u.fail ? '✗' : '✓') : undefined,
+      w = 20 + (mark ? ty.mark : 0) + width(u.thing, ty.chip, true),
+      g = 10,
+      h = CHIP_H,
+      [px, py] = pr([at[0], at[1] + 6]);
+    chip(
+      u.thing,
+      u.fail,
+      [
+        [px - w / 2, py + g],
+        [px + g, py - h / 2],
+        [px - g - w, py - h / 2],
+        [px + g, py + g],
+        [px - g - w, py + g],
+        [px - w / 2, py + 3 * g],
+      ],
+      w,
+      [[px, py]],
+      mark,
+    );
+  }
+
+  const signs: Sign[] = [];
+  for (const g of gates) {
+    const gs = s.gates[g.actor];
+    if (!gs.rows.length || !(gs.on === s.moment || (s.summary && gs.fail && !stage.narrow))) continue;
+    const rows = gs.rows.map(({ q, a, fail }) => ({ q, a: s.ever[g.actor]?.label === a ? '' : a, fail }));
+    const w =
+        22 +
+        Math.max(
+          width(A[g.actor].name, ty.kick, false),
+          ...rows.map((x) => width(x.q, ty.q, true) + (x.a ? width(x.a, ty.a, true) + 40 : 26)),
+        ),
+      h = rows.length * ty.row + (rows.length - 1) * 6 + 14 + (ty.kick && 16);
+    const gr = g.r,
+      gate = A[g.actor].gate,
+      foot = pr(P(gate.ex, gate.y)),
+      bot = gr.y + gr.h,
+      mid = gr.x + gr.w / 2,
+      gy = gr.y + gr.h / 2;
+    const ways = (
+      [
+        [mid - 14, gr.y - GAP - h, [mid, gr.y]],
+        [mid - w + 14, gr.y - GAP - h, [mid, gr.y]],
+        [gr.x + gr.w + GAP, gy - h / 2, [gr.x + gr.w, gy]],
+        [gr.x - GAP - w, gy - h / 2, [gr.x, gy]],
+        [gr.x + gr.w + GAP, bot - h, [gr.x + gr.w, bot - 4]],
+        [gr.x - GAP - w, bot - h, [gr.x, bot - 4]],
+        [foot[0] - 14, bot + GAP, foot],
+        [foot[0] - w + 14, bot + GAP, foot],
+        [mid - w / 2, bot + GAP, foot],
+      ] as [number, number, Pt][]
+    ).map(([x, y, anchor]) => ({ x, y, w, h, anchor }));
+    const opts = stage.narrow ? [...ways.slice(6), ...ways.slice(0, 6)] : ways;
+    const o = pick([opts, ...([foot, [mid, gr.y], [gr.x, gy], [gr.x + gr.w, gy]] as Pt[]).map((p) => () => ring(p, w, h, [12, 24]))]);
+    signs.push({ actor: g.actor, r: { x: o.x, y: o.y, w, h }, anchor: o.anchor, rows, kick: !!ty.kick });
+    taken.push(o);
+  }
+
+  const rank = (a: number) => (s.hi.includes(a) ? 0 : story.path.includes(a) ? 1 : 2);
+  const order = A.map((_, a) => a).sort((p, q) => rank(p) - rank(q));
+  for (const a of order) if (!tags.some((x) => x.actor === a)) tagOf(a);
 
   function pin(base: Omit<Tag, 'r' | 'anchor' | 'line'>, w: number, h: number, [ax, ay]: Pt): Tag {
     const over = { l: l - ax, r: ax - r, t: t - ay, b: ay - b };
@@ -1305,7 +1329,7 @@ export function layout(sc: Scene, s: State, stage: Stage, cam: Cam, full = false
   return { placed, bad, pr };
 }
 
-export function place(sc: Scene, s: State, stage: Stage, top = stage.narrow ? 1 : 1.2): Placed {
+export function place(sc: Scene, s: State, stage: Stage, top = stage.narrow ? 1 : stage.w >= 1800 ? 1.3 : 1.2): Placed {
   const kt = kit(sc, s),
     last = s.summary && stage.w < HUD.wide ? sc.stories[s.story].moments.slice(-3, -1).flat() : [],
     near = [...new Set(last.flatMap((h) => [sc.boxes[h.from]?.actor, sc.boxes[h.to]?.actor]))].filter((a) => a !== undefined),
@@ -1350,7 +1374,9 @@ export function place(sc: Scene, s: State, stage: Stage, top = stage.narrow ? 1 
   const holds = (c: Cam) => need.every(([[x, y], m]) => inside(c, x, y, m));
   const fit = (c: Cam) => {
     const lay = layout(sc, s, stage, c);
-    const rects = [...lay.placed.signs, ...lay.placed.tags, ...lay.placed.devices, ...lay.placed.chips].map((o) => o.r);
+    const rects = (stage.narrow ? [...lay.placed.signs, ...lay.placed.tags, ...lay.placed.devices, ...lay.placed.chips] : []).map(
+      (o) => o.r,
+    );
     const sp = [...pts, ...arcPts, ...soft].map(lay.pr);
     const L = Math.min(...rects.map((o) => o.x), ...sp.map((p) => p[0])),
       R = Math.max(...rects.map((o) => o.x + o.w), ...sp.map((p) => p[0])),
@@ -1361,7 +1387,7 @@ export function place(sc: Scene, s: State, stage: Stage, top = stage.narrow ? 1 
   const search = (floor: number) => {
     let best: ReturnType<typeof layout> | null = null,
       last: ReturnType<typeof layout> | undefined;
-    let z = Math.max(floor, Math.min((rw - 2 * pad) / (x1 - x0), (rh - 2 * pad) / (y1 - y0), top));
+    let z = Math.max(floor, Math.min((rw - pad) / (x1 - x0), (rh - 2 * pad) / (y1 - y0), top));
     for (let n = 0; n < 60 && z >= floor; n++, z *= 0.96) {
       let c: Cam = { x: (x0 + x1) / 2, y: (y0 + y1) / 2, z };
       for (let round = 0; round < 3; round++) {
@@ -1371,7 +1397,7 @@ export function place(sc: Scene, s: State, stage: Stage, top = stage.narrow ? 1 
           c = { x: c.x + ((f.L + f.R) / 2 - (l + r) / 2) / z, y: c.y + ((f.T + f.B) / 2 - (t + b) / 2) / z, z };
           continue;
         }
-        if (f.R - f.L <= rw - 2 * pad && f.B - f.T <= rh - 2 * pad) {
+        if (f.R - f.L <= rw - pad && f.B - f.T <= rh - 2 * pad) {
           if (!f.lay.bad && holds(c)) return { lay: f.lay, ok: true };
           if (!best || f.lay.bad < best.bad) best = f.lay;
         }
@@ -1446,7 +1472,7 @@ export function storyCams(sc: Scene, story: number, stage: Stage): Placed[] {
       sc,
       stateAt(sc, story, m, Infinity),
       stage,
-      Math.min(stage.narrow ? 1 : 1.2, out[m + 1].cam.z * (m === n - 2 && stage.w < HUD.wide ? 1 : 1.2)),
+      Math.min(stage.narrow ? 1 : stage.w >= 1800 ? 1.3 : 1.2, out[m + 1].cam.z * (m === n - 2 && stage.w < HUD.wide ? 1 : 1.2)),
     );
   const fit = out[n - 1].cam.z,
     xs = sc.stories[story].path.flatMap((a) => sc.actors[a].lot.hull.map((p) => p[0])),
@@ -1455,7 +1481,7 @@ export function storyCams(sc: Scene, story: number, stage: Stage): Placed[] {
         ? out[n - 2].cam.z * 2
         : (Math.max(...xs) - Math.min(...xs)) * fit < 0.7 * (stage.region.r - stage.region.l)
           ? out[n - 2].cam.z * 0.92
-          : out[n - 2].cam.z;
+          : out[n - 2].cam.z * 1.2;
   const end = stateAt(sc, story, n - 1, Infinity);
   if (fit > aim) {
     const back = place(sc, end, stage, aim);
@@ -1509,6 +1535,7 @@ const OV_CSS = [
   `.fw-mk{display:inline-grid;place-items:center;flex:none;width:14px;height:14px;margin:2px 6px 0 0;border-radius:3px;background:${OV};color:#fff;font:700 10px/1 var(--flowfig-font);font-style:normal}`,
   `.fw-no{color:${INK.fail}}.fw-no>.fw-mk{background:${INK.fail}}.fw-dchip>.fw-mk{margin-top:0}`,
   `.fw-tag{transition:opacity .2s,border-color .16s .2s,background-color .16s .2s}.fw-end{border:2px solid ${OV};background:#EEF1EA}.fw-end.fw-x{border-color:${INK.fail};background:#FCEBE8}.fw-end .fw-tn{font-size:16px;line-height:20px}`,
+  `.fw-cg{font:500 13px/20px var(--flowfig-font)}.fw-cg.fw-no{color:${OV2}}`,
   `.fw-sk{font:500 12px/16px var(--flowfig-font);color:#5B6370}`,
   `.fw-quiet .fw-tn,.fw-quiet .fw-ts{color:${OVM}}`,
   `.fw-sign{padding:6px 10px;border-radius:8px}`,
@@ -1516,6 +1543,7 @@ const OV_CSS = [
   `.fw-q{font:600 15px/20px var(--flowfig-font);color:${OV}}`,
   `.fw-a{margin-left:12px;padding:0 6px;border-radius:5px;font:600 13px/24px var(--flowfig-font);background:#EEF1EA;color:${OV}}`,
   `.fw-a.fw-no{background:#FCEBE8;color:${INK.fail}}.fw-a.fw-no::before{content:"\\2717";margin-right:4px}`,
+  `.fw-a.fw-m{display:inline-grid;place-items:center;width:14px;height:14px;padding:0;border-radius:3px;font:700 10px/1 var(--flowfig-font)}.fw-a.fw-m::before{content:none}`,
   `.fw-dchip{display:flex;align-items:center;padding:0 9px;border-radius:6px;font:600 13px/1 var(--flowfig-font);color:${INK.data}}`,
   `.fw-dchip.fw-thing{color:${OV}}.fw-dchip.fw-no{color:${INK.fail}}.fw-dchip{transition:opacity .2s,scale .2s cubic-bezier(.23,1,.32,1)}.fw-dchip.fw-off{scale:.96}.gt{transition:opacity .2s}`,
   `.fw-off{opacity:0}`,
@@ -1612,7 +1640,7 @@ export function mountWorld(stage: HTMLElement, fig: FlowProps, resized: () => vo
     said = '';
   const lays = new Map<number, ReturnType<typeof storyView>>();
   let tags: { el: HTMLElement; actor: number; name: string; mk: HTMLElement; st: HTMLElement; end: boolean; w: string }[] = [],
-    signs: { el: HTMLElement; actor: number; rows: { q: HTMLElement; a: HTMLElement }[] }[] = [],
+    signs: { el: HTMLElement; actor: number; rows: { q: HTMLElement; a: HTMLElement; m: boolean }[] }[] = [],
     chips: { el: HTMLElement; text: string }[] = [];
 
   const viewFor = (story: number) => lays.get(story) ?? lays.set(story, storyView(get, story, stg)).get(story)!;
@@ -1742,6 +1770,11 @@ export function mountWorld(stage: HTMLElement, fig: FlowProps, resized: () => vo
       e.dataset.actor = t.name;
       st.append(mk, '');
       e.append(el('b', 'fw-tn', t.name), st);
+      for (const c of t.cargo) {
+        const row = el('span', `fw-ts fw-cg${c.fail ? ' fw-no' : ''}`);
+        row.append(el('i', 'fw-mk', c.fail ? '✗' : '✓'), c.thing);
+        e.append(row);
+      }
       put(e, t.r);
       if (story.acting[cur?.moment ?? -1] === t.name) e.setAttribute('aria-current', 'true');
       if (t.pin) {
@@ -1760,10 +1793,10 @@ export function mountWorld(stage: HTMLElement, fig: FlowProps, resized: () => vo
       const rows = g.rows.map((r) => {
         const row = el('div', 'fw-row'),
           q = el('span', 'fw-q', r.q),
-          a = el('span', 'fw-a');
+          a = el('span', r.a ? 'fw-a' : 'fw-a fw-m');
         row.append(q, a);
         e.append(row);
-        return { q, a };
+        return { q, a, m: !r.a };
       });
       put(e, g.r);
       ls += `<path d="M${pt(g.anchor)}L${pt(nearest(g.r, g.anchor))}" stroke="#2e3440" stroke-width="2"/>`;
@@ -1817,7 +1850,7 @@ export function mountWorld(stage: HTMLElement, fig: FlowProps, resized: () => vo
       g.rows.forEach((r, i) => {
         const row = gs.rows[i];
         (r.q.parentElement as HTMLElement).style.visibility = row ? '' : 'hidden';
-        same(r.a, row?.a ?? '');
+        same(r.a, r.m && row?.a ? (row.fail ? '✗' : '✓') : (row?.a ?? ''));
         r.a.hidden = !row?.a;
         r.a.classList.toggle('fw-no', !!row?.fail);
       });

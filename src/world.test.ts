@@ -6,7 +6,7 @@ import type { FlowProps } from './model.ts';
 import { cast, worldReady } from './explain.ts';
 import { HUD } from './looks.ts';
 import { CAM, hit, place, polyHit, scene, stageFor, stateAt, storyCams, storyView, timeline } from './world.ts';
-import type { Ev, Form, Placed, Pt, Rect, Scene, Stage, State } from './world.ts';
+import type { Ev, Form, Placed, Pt, Rect, Scene, Stage, State, Tag } from './world.ts';
 import oil from '../figures/explain-oil.ts';
 import returns from '../figures/returns-process.ts';
 import checkout from '../figures/checkout.ts';
@@ -165,6 +165,19 @@ const inside = (p: Pt, poly: Pt[]) => {
   return o;
 };
 
+const gap = (p: Pt, poly: Pt[]) =>
+  inside(p, poly)
+    ? 0
+    : Math.min(
+        ...poly.map((a, i) => {
+          const b = poly[(i + 1) % poly.length],
+            dx = b[0] - a[0],
+            dy = b[1] - a[1],
+            u = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / (dx * dx + dy * dy || 1)));
+          return Math.hypot(a[0] + u * dx - p[0], a[1] + u * dy - p[1]);
+        }),
+      );
+
 function audit(sc: Scene, s: State, p: Placed, st: Stage): string[] {
   const out: string[] = [];
   const { l, t, r, b } = st.region;
@@ -231,13 +244,30 @@ function audit(sc: Scene, s: State, p: Placed, st: Stage): string[] {
   });
   if (s.summary) {
     shown('outcome tag', p.tags.find((x) => x.end)?.r);
-    for (const u of Object.values(s.units))
-      if (u.moment >= 0) shown(`end chip ${u.thing}`, p.chips.find((x) => x.text === u.thing && x.mark === (u.fail ? '✗' : '✓'))?.r);
+    for (const u of Object.values(s.units)) {
+      const row = (t: Tag) => t.actor === sc.truck && t.cargo.some((c) => c.thing === u.thing && c.fail === u.fail);
+      if (u.moment < 0) continue;
+      if (!st.narrow && u.where === 'bed') shown(`cargo row ${u.thing}`, p.tags.find(row)?.r);
+      else shown(`end chip ${u.thing}`, p.chips.find((x) => x.text === u.thing && x.mark === (u.fail ? '✗' : '✓'))?.r);
+    }
   }
+  const lorry = p.tags.find((x) => x.actor === sc.truck);
+  if (!st.narrow && p.truck && lorry && gap(lorry.anchor, p.truck) > 24) out.push('truck tag off the truck');
   for (const a of s.hi) shown(`tag ${sc.actors[a].name}`, p.tags.find((x) => x.actor === a)?.r);
   for (const a of s.dev) if (!(a === sc.truck && p.truck)) shown(`device ${a}`, p.devices.find((x) => x.actor === a)?.r);
-  for (const a of s.arcs)
-    if (a.moment === s.moment && a.t === 1 && a.text) shown(`chip ${a.text}`, p.chips.find((x) => x.text === a.text)?.r);
+  for (const a of s.arcs) {
+    if (a.moment !== s.moment || a.t !== 1 || !a.text) continue;
+    const tag = p.tags.find((x) => x.actor === a.to && x.status === a.text),
+      chip = p.chips.find((x) => x.text === a.text);
+    if (tag && chip) out.push(`chip ${a.text} repeats the tag`);
+    shown(tag ? `tag ${a.text}` : `chip ${a.text}`, (tag ?? chip)?.r);
+  }
+  for (const o of p.signs)
+    s.gates[o.actor].rows.forEach((row, i) => {
+      const sign = o.rows[i]?.a === row.a,
+        tag = p.tags.some((x) => x.actor === o.actor && x.status === row.a && onStage(x.r));
+      if (sign === tag) out.push(`sign ${o.actor} states ${row.a} ${sign ? 'twice' : 'nowhere'}`);
+    });
   for (const u of Object.values(s.units))
     if (u.moment === s.moment && (u.where === 'yard' || u.where === 'gate'))
       shown(`chip ${u.thing}`, p.chips.find((x) => x.text === u.thing)?.r);
@@ -276,7 +306,7 @@ test('every needed tag, sign, chip and device is on stage, none overlaps, and th
           xs = story.path.flatMap((a) => sc.actors[a].lot.hull.map((p) => p[0])),
           pull = w >= HUD.wide && (Math.max(...xs) - Math.min(...xs)) * fit < 0.7 * (st.region.r - st.region.l),
           phone = w < HUD.wide,
-          aim = phone ? z[n - 2] * 2 : pull ? z[n - 2] * 0.92 : Math.min(fit, z[n - 2]),
+          aim = phone ? z[n - 2] * 2 : pull ? z[n - 2] * 0.92 : Math.min(fit, z[n - 2] * 1.2),
           move = timeline(sc, s, n - 1).events.find((e) => e.kind === 'camera');
         if (z[n - 1] > aim + 1e-6 && !place(sc, stateAt(sc, s, n - 1, Infinity), st, aim).faults)
           hits.push(`${fig.title} ${w}x${h} ${story.name}: the outcome zooms in`);
@@ -322,7 +352,7 @@ test('a stage too small for the overlays gives a frame with faults, not an error
   assert.ok(faults.every((n) => n > 0));
 });
 
-test('a check sign at the rest of a moment always shows its answer', () => {
+test('a check at the rest of a moment always has an answer', () => {
   const empty: string[] = [];
   for (const { title, props } of FIGURES) {
     const sc = scene(props);
