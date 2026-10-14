@@ -684,7 +684,8 @@ function planOf(sc: Scene, story: number, m: number) {
     const fa = fb.actor,
       ta = tb.actor,
       sa = (h.carry && Object.values(s.units).find((u) => u.thing === h.carry!.thing)?.at) ?? fa;
-    const reach = (a: number, b: Box) => (st: State) => void (st.ever[a] = { label: b.label, fail: b.dead, done: b.done });
+    const reach = (a: number, b: Box) => (st: State) =>
+      void (st.ever[a] = { label: b.label, fail: b.dead, done: b.done ?? (b.check ? b.label.replace(/\?$/, '') : undefined) });
     set(i, at, reach(fa, fb));
     hl(sa, ta);
     if (fb.check) {

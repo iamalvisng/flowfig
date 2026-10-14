@@ -569,6 +569,25 @@ test('the ending frame names the state of the last box of each actor, and a mome
   assert.deepEqual(status(1), ['Shop: Sold', 'Bank: Book']);
 });
 
+test('no ending tag asks a question: a passed check shows its question as a state with a check mark', () => {
+  const asks: string[] = [];
+  for (const { title, props } of FIGURES) {
+    const sc = scene(props);
+    sc.stories.forEach((story, s) => {
+      const end = stateAt(sc, s, story.moments.length - 1, Infinity);
+      for (const t of place(sc, end, stageFor(1440, 900)).tags)
+        if (t.status.endsWith('?')) asks.push(`${title} ${story.name}: ${t.name} ${t.status}`);
+    });
+  }
+  assert.deepEqual(asks, []);
+  const sc = scene(oil.props),
+    s = sc.stories.findIndex((x) => x.name === 'Paid in cash'),
+    office = place(sc, stateAt(sc, s, sc.stories[s].moments.length - 1, Infinity), stageFor(1440, 900)).tags.find(
+      (t) => t.name === 'Office',
+    )!;
+  assert.deepEqual([office.mark, office.status], ['✓', 'Paid in cash']);
+});
+
 test('an unlabeled refusal into another actor names the check on the failed tag', () => {
   const sc = scene({
     layout: {
