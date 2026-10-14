@@ -193,6 +193,9 @@ beat is an edge id or an array of edge ids that run at the same time. A beat can
 ## Inside a box
 
 - Add \`inside\` to a box if the user asks what happens in that box.
+- If the user asks what box X does "call by call", "inside" or "step by step", put those calls as parts in the
+  \`inside\` of X, in the order that the code runs them. Do not draw a second, flat figure.
+- A helper is a part inside the part that calls it, not one level up.
 - Add \`inside\` if the root needs more than 12 boxes to be faithful. Move the inner calls into the box that owns them.
 - Give each part one \`source\`. Find the parts with \`npx flowfig trace <source>\`.
 - An inside edge can start at an outer neighbor X only if the root has the edge X -> box. It can end at an outer neighbor Y
@@ -450,6 +453,8 @@ The fields below change only the element. The SVG does not show them.
   \`done\` of the last box that the actor reached. Without \`done\`, the tag shows the box label.
 - Write only a state that the code or the document gives. If a box only asks for a refund, the state is "Refund asked", not
   "Refunded".
+- \`done\` states only what the source says did happen. "Can", "may" or "should" is not "did". If you are not sure, leave
+  \`done\` out.
 - Put a refusal box in the lane of the actor that refuses, with the tone \`red\`. The tag of that actor then shows the refusal.
 
 The element shows a small world if an edge carries a thing, or if an actor has the look \`person\`, \`shop\` or \`truck\`. Else it
@@ -460,6 +465,9 @@ The check rules:
 
 - \`bad-carries\`: \`thing\` is empty, \`form\` is not \`box\`, \`barrel\` or \`notes\`, or \`count\` is not 1 to 4.
 - \`thing-no-road\`: both ends of a thing edge are at one actor. Set \`carries.from\` to the box where the thing starts.
+
+In the reply, give one command line that serves the page locally, such as \`python3 -m http.server\`, and the page URL.
+If no edge carries a thing, also say that the page shows the diagram because only data moves.
 `,
 };
 
