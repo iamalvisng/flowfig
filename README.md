@@ -295,6 +295,7 @@ full reference, run `npx flowfig docs`.
 | `sub`    | A smaller line under the label.                                                                           | none                                |
 | `shape`  | `"box"`, `"decision"` (a diamond) or `"store"` (a data cylinder).                                         | `"box"`                             |
 | `check`  | The question on the gate in the guide world. The labels of the edges out of the box are the answers.      | the label, for a `decision` box     |
+| `done`   | The state after the box, such as "Oil in stock". The ending tags of the guide world show it.              | the label                           |
 | `source` | The code this draws: `path` or `path#symbol`. `flowfig verify` checks it.                                 | none                                |
 | `detail` | A more detailed figure: the SVG path from the repo root. `flowfig atlas` links the box to it.             | none                                |
 | `lines`  | The least number of text lines that a content card keeps.                                                 | none                                |

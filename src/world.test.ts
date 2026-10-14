@@ -22,7 +22,7 @@ const FIXTURES: { title: string; props: FlowProps }[] = await Promise.all(
 );
 
 test('the world scene code holds no word from any figure', () => {
-  const FIELDS = ['label', 'from', 'to', 'id', 'check', 'carries', 'thing', 'form', 'count', 'outcome', 'look', 'tone'];
+  const FIELDS = ['label', 'from', 'to', 'id', 'check', 'done', 'carries', 'thing', 'form', 'count', 'outcome', 'look', 'tone'];
   const stop = new Set<string>([...LOOKS, ...FIELDS, 'shape', 'data', 'box', 'barrel', 'notes', 'edges', 'steps', 'say', 'note']);
   const terms = new Set<string>();
   const add = (v: unknown) => {
@@ -30,7 +30,7 @@ test('the world scene code holds no word from any figure', () => {
     if (t && !stop.has(t)) terms.add(t);
   };
   for (const { props: p } of FIGURES) {
-    for (const n of nodes(p.layout)) [n.id, n.label].forEach(add);
+    for (const n of nodes(p.layout)) [n.id, n.label, n.done].forEach(add);
     for (const a of cast(p)) add(a.name);
     for (const e of p.edges) [edgeId(e), e.label, typeof e.carries === 'object' ? e.carries.thing : ''].forEach(add);
     for (const s of p.steps ?? []) add(s.label);
@@ -263,7 +263,7 @@ function audit(sc: Scene, s: State, p: Placed, st: Stage): string[] {
   if (s.summary) {
     shown('outcome tag', p.tags.find((x) => x.end)?.r);
     for (const u of Object.values(s.units)) {
-      const row = (t: Tag) => t.actor === sc.truck && t.cargo.some((c) => c.thing === u.thing && c.fail === u.fail);
+      const row = (t: Tag) => t.actor === sc.truck && t.cargo.includes(u.thing);
       if (u.moment < 0) continue;
       if (!st.narrow && u.where === 'bed') shown(`cargo row ${u.thing}`, p.tags.find(row)?.r);
       else shown(`end chip ${u.thing}`, p.chips.find((x) => x.text === u.thing && x.mark === (u.fail ? undefined : '✓'))?.r);
@@ -380,6 +380,23 @@ test('on a phone, the stacked street shows every building of the "Expired certif
     );
     assert.ok(w >= 78, `${sc.actors[a].name}: ${Math.round(w)} px`);
   }
+});
+
+test('on a phone, every ending frame shows each path building at least 90 px wide, or 78 px when the truck is out', () => {
+  const small: string[] = [];
+  for (const fig of [oil, returns]) {
+    const st = stageFor(390, Math.min(844, HUD.tall), 179);
+    scene(fig.props).stories.forEach((_, s) => {
+      const { sc, cams } = storyView((f) => scene(fig.props, f), s, st),
+        p = cams.at(-1)!,
+        floor = p.truck ? 78 : 90;
+      for (const a of sc.stories[s].path) {
+        const w = Math.max(...p.hulls[a].map((q) => q[0])) - Math.min(...p.hulls[a].map((q) => q[0]));
+        if (w < floor) small.push(`${sc.stories[s].name}: ${sc.actors[a].name} ${Math.round(w)} px`);
+      }
+    });
+  }
+  assert.deepEqual(small, []);
 });
 
 test('a stage too small for the overlays gives a frame with faults, not an error', () => {

@@ -901,7 +901,7 @@ export type Tag = {
   mark: Mark;
   quiet: boolean;
   end: boolean;
-  cargo: { thing: string; fail: boolean }[];
+  cargo: string[];
 };
 export type Sign = { actor: number; r: Rect; anchor: Pt; rows: { q: string; a: string; fail: boolean }[]; kick: boolean };
 export type Chip = { text: string; r: Rect; mark?: Mark };
@@ -1157,13 +1157,13 @@ export function layout(sc: Scene, s: State, stage: Stage, cam: Cam, full = false
       mark: Mark = ev ? (ev.fail ? '✗' : '✓') : '',
       end = s.summary && sc.boxes[story.end]?.actor === a,
       bed = !stage.narrow && s.summary && a === sc.truck ? Object.values(s.units).filter((u) => u.where === 'bed' && u.moment >= 0) : [],
-      cargo = [...new Set(bed.map((u) => u.thing))].map((thing) => ({ thing, fail: bed.some((u) => u.thing === thing && u.fail) })),
+      cargo = [...new Set(bed.map((u) => u.thing))],
       w =
         (end ? 22 : 20) +
         Math.max(
           width(name, end ? ty.hero : ty.name, true),
           ty.mark + width(status, ty.status, false),
-          ...cargo.map((c) => 20 + width(c.thing, 13, true)),
+          ...cargo.map((c) => 20 + width(c, 13, true)),
         ),
       h = ty.tag + (end ? 3 : 0) + cargo.length * 20,
       g = GAP,
@@ -1816,8 +1816,7 @@ export function mountWorld(stage: HTMLElement, fig: FlowProps, resized: () => vo
       e.append(el('b', 'fw-tn', t.name), st);
       for (const c of t.cargo) {
         const row = el('span', 'fw-ts fw-cg');
-        if (!c.fail) row.append(el('i', 'fw-mk', '✓'));
-        row.append(c.thing);
+        row.append(el('i', 'fw-mk', '✓'), c);
         e.append(row);
       }
       put(e, t.r);

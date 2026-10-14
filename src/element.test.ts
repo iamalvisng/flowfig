@@ -406,6 +406,49 @@ test('the world stage and the moments list read a refused check as failed', { sk
   }
 });
 
+test('a refusal ending draws red marks only on the tags and the sign', { skip: !browser.path }, async () => {
+  const extra: string[] = [];
+  for (const [fig, names] of [
+    ['oil', ['Too many requests', 'No worker free', 'Expired certification']],
+    ['returns', ['rejected: late', 'rejected: damaged']],
+  ] as const)
+    for (const [w, h] of [
+      [1440, 900],
+      [390, 844],
+    ]) {
+      const page = await open(guide(fig), `${live}.length > 0 && !!${sr}?.querySelector('[data-stage="world"] svg[role="img"]')`);
+      try {
+        await page.send('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: 1, mobile: false });
+        await page.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
+        for (const name of names) {
+          await page.ev(`${button(name)}.click()`);
+          await page.ev(`${el}.moment = ${el}.moment + ${sr}.querySelectorAll('.ff-moments li').length - 1`);
+          await page.ev(`new Promise((r) => setTimeout(r, 300))`);
+          const red: { kind: string; actor: string }[] = await page.ev(`(() => {
+            const w = ${sr}.querySelector('[data-stage="world"]');
+            const seen = (e) => { for (let n = e; n && n !== w; n = n.parentNode) { const c = getComputedStyle(n); if (c.display === 'none' || c.opacity === '0' || n.getAttribute?.('display') === 'none') return false; } return e.getBoundingClientRect().width > 0; };
+            const out = [];
+            for (const e of w.querySelectorAll('*')) {
+              if (!seen(e)) continue;
+              const own = [...e.childNodes].some((c) => c.nodeType === 3 && c.textContent.includes('\u2717')) || (e.matches('.fw-a.fw-no') && getComputedStyle(e, '::before').content.includes('\u2717'));
+              const fill = e instanceof SVGElement && !e.closest('.fw-arcs, [id^=truck]') && (e.getAttribute('fill') ?? '').toLowerCase() === '#b8322a';
+              if (own || fill) out.push({ kind: e.closest('.fw-tag') ? 'tag' : e.closest('.fw-sign') ? 'sign' : e instanceof SVGElement ? 'svg ' + e.tagName : e.className, actor: e.closest('[data-actor]')?.dataset.actor ?? '' });
+            }
+            return out;
+          })()`);
+          const tags = red.filter((r) => r.kind === 'tag'),
+            signs = red.filter((r) => r.kind === 'sign'),
+            other = red.filter((r) => r.kind !== 'tag' && r.kind !== 'sign');
+          if (other.length || tags.length > 2 || signs.length > 1)
+            extra.push(`${fig} ${w}x${h} ${name}: ${red.map((r) => `${r.kind} ${r.actor}`).join(', ')}`);
+        }
+      } finally {
+        await page.done();
+      }
+    }
+  assert.deepEqual(extra, []);
+});
+
 test('on a phone, every line of every moment ends above the bottom padding of the sheet', { skip: !browser.path }, async () => {
   const cut: string[] = [];
   for (const fig of ['oil', 'returns'])
