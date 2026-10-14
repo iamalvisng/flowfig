@@ -969,13 +969,13 @@ as `flowfig verify`.
 </flowfig-explain>
 ```
 
-![The guide form at moment 5 of 6: four actors, and the server acts](docs/explain-guide.png)
+![The guide form as a small world: the last moment of a refused pickup, with the check gate at the server](docs/explain-guide.png)
 
 The element has three forms:
 
 - `diagram` shows the figure that `toSvg` draws, with the step tabs of the player.
-- `guide` shows one moment at a time. The cast comes from the lanes. Else it comes from the labeled top-level groups.
-  Else it comes from the boxes that the steps visit. A store box adds the actor "Records" at the end. When the cast comes from the boxes, the cast holds at most 6 actors, and "Records" takes one of the 6 places. The actor that acts is outlined. "Next:" names the next different actor. In a figure
+- `guide` shows one moment at a time. The actors are the cast. The cast comes from the lanes. Else it comes from the labeled top-level groups.
+  Else it comes from the boxes that the steps visit. A store box adds the actor "Records" at the end. When the cast comes from the boxes, the cast holds at most 6 actors, and "Records" takes one of the 6 places. In a figure
   without lanes, a decision box is not an actor.
 - `change` shows the older and the newer spec side by side, with the differences marked. Below the diagrams, an outcome row
   compares Before and After: red for an end box with the tone `red` or `gray`, green for the tone `green`. A step that only one
@@ -983,10 +983,12 @@ The element has three forms:
 
 For a good guide, give each role a lane or a labeled group. Give each beat a `say`. Use `note` for the reason and `look` for the picture.
 
-The guide form shows a figure as a small world when an edge `carries` a thing, or when an actor has the look
-`person`, `shop` or `truck`. Other figures show the diagram in the guide. The world loads from
-`element-world.js` next to `element.js`, with a shared chunk (`element-looks.js`). A CDN script tag loads them from the same folder. The world art stays light in
-a dark theme.
+The guide form shows a figure as a small isometric world when an edge `carries` a thing, or when an actor has the look
+`person`, `shop` or `truck`. Each actor stands in a building along a road. A thing moves by road or by hand. Data flies as an arc
+through the air. A check is a gate at the door of its owner. Each story ends on an outcome frame, with the `outcome` sentence and
+one tag for each actor. On a phone, the road runs down the screen as a stacked street. Other figures show the diagram in the guide.
+The world loads from `element-world.js` next to `element.js`, with a shared chunk (`element-looks.js`). A CDN script tag loads
+them from the same folder. The world art stays light in a dark theme.
 
 | Attribute | Values                                                             | Default                                       |
 | --------- | ------------------------------------------------------------------ | --------------------------------------------- |
