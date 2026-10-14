@@ -686,7 +686,7 @@ test('check warns when a thing edge has a bad name, form or count, names an unkn
             { id: 'b', label: 'Label', check: 'isPaid()' },
           ],
         },
-        { label: 'Home', children: [{ id: 'c', label: 'Receive' }] },
+        { label: 'Home', children: [{ id: 'c', label: 'Receive', done: 'setReceived()' }] },
       ],
     },
     edges: [
@@ -709,4 +709,5 @@ test('check warns when a thing edge has a bad name, form or count, names an unkn
   assert.deepEqual(said('unknown-id'), ['edge "c->a" has carries.from "till", which names no box and no group']);
   assert.ok(found.filter((f) => f.rule === 'bad-carries' || f.rule === 'thing-no-road').every((f) => f.severity === 'warning'));
   assert.ok(found.some((f) => f.rule === 'plain-text' && f.message.startsWith('box "b": check')));
+  assert.ok(found.some((f) => f.rule === 'plain-text' && f.message.startsWith('box "c": done')));
 });

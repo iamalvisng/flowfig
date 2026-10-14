@@ -14,7 +14,7 @@ const props: Figure['props'] = {
         look: 'person',
         children: [
           { id: 'open', label: 'Open return', sub: '30 days', source: `${sop}#step-1-open-a-return` },
-          { id: 'ship', label: 'Ship item', sub: '14 days', source: `${sop}#step-4-ship-the-item` },
+          { id: 'ship', label: 'Ship item', sub: '14 days', done: 'Item shipped', source: `${sop}#step-4-ship-the-item` },
         ],
       },
       {
@@ -25,19 +25,28 @@ const props: Figure['props'] = {
           { id: 'review', label: 'Review', sub: 'date, reason', check: 'Within 30 days?', source: `${sop}#step-2-review-the-request` },
           { id: 'label', label: 'Send label', sub: 'prepaid', source: `${sop}#step-3-send-the-label` },
           { id: 'rejected', label: 'Rejected', sub: 'email reason', tone: 'red', at: 5, source: `${sop}#rejected` },
-          { id: 'close', label: 'Close', sub: 'confirmation', source: `${sop}#step-7-close` },
+          { id: 'close', label: 'Close', sub: 'confirmation', done: 'Closed', source: `${sop}#step-7-close` },
         ],
       },
       {
         id: 'warehouse',
         label: 'Warehouse',
         look: 'queue',
-        children: [{ id: 'inspect', label: 'Inspect', sub: '2 working days', check: 'Item OK?', source: `${sop}#step-5-inspect-the-item` }],
+        children: [
+          {
+            id: 'inspect',
+            label: 'Inspect',
+            sub: '2 working days',
+            check: 'Item OK?',
+            done: 'Inspected',
+            source: `${sop}#step-5-inspect-the-item`,
+          },
+        ],
       },
       {
         id: 'finance',
         label: 'Finance',
-        children: [{ id: 'refund', label: 'Refund', sub: '3 working days', source: `${sop}#step-6-refund` }],
+        children: [{ id: 'refund', label: 'Refund', sub: '3 working days', done: 'Refunded', source: `${sop}#step-6-refund` }],
       },
     ],
   },

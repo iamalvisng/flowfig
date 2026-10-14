@@ -10,7 +10,7 @@ export type { Pt };
 
 export type Carry = { thing: string; form: 'box' | 'barrel' | 'notes'; count: number; from: number };
 export type Hop = { edge: string; from: string; to: string; label: string; data: string; async: boolean; fail: boolean; carry?: Carry };
-export type Box = { label: string; actor: number; dead: boolean; check: string };
+export type Box = { label: string; actor: number; dead: boolean; check: string; done?: string };
 export type Device = 'phone' | 'cab' | 'antenna';
 export type SceneActor = { name: string; look?: FigLook; device: Device; lot: Lot; gate: Gate; port: Pt; checks: boolean };
 export type Story = { name: string; moments: Hop[][]; acting: string[]; path: number[]; end: string };
@@ -91,7 +91,7 @@ export function scene(fig: FlowProps, form: Form = 'narrow'): Scene {
   cs.forEach((a, i) =>
     a.boxes.forEach((id) => {
       const n = byId.get(id);
-      if (n) boxes[id] = { label: str(n.label), actor: i, dead: n.tone === 'red' || n.tone === 'gray', check: question(n) };
+      if (n) boxes[id] = { label: str(n.label), actor: i, dead: n.tone === 'red' || n.tone === 'gray', check: question(n), done: n.done };
     }),
   );
 
@@ -155,7 +155,8 @@ export function scene(fig: FlowProps, form: Form = 'narrow'): Scene {
   };
 }
 
-export type Status = { label: string; fail: boolean };
+export type Status = { label: string; fail: boolean; done?: string };
+const named = (ev: Status, summary: boolean) => (summary && ev.done) || ev.label;
 export type Arc = {
   a: Pt;
   c1: Pt;
@@ -683,7 +684,7 @@ function planOf(sc: Scene, story: number, m: number) {
     const fa = fb.actor,
       ta = tb.actor,
       sa = (h.carry && Object.values(s.units).find((u) => u.thing === h.carry!.thing)?.at) ?? fa;
-    const reach = (a: number, b: Box) => (st: State) => void (st.ever[a] = { label: b.label, fail: b.dead });
+    const reach = (a: number, b: Box) => (st: State) => void (st.ever[a] = { label: b.label, fail: b.dead, done: b.done });
     set(i, at, reach(fa, fb));
     hl(sa, ta);
     if (fb.check) {
@@ -1128,7 +1129,7 @@ export function layout(sc: Scene, s: State, stage: Stage, cam: Cam, full = false
   const tagOf = (a: number) => {
     const ev = s.ever[a],
       name = A[a].name,
-      status = ev ? ev.label : 'Not reached',
+      status = ev ? named(ev, s.summary) : 'Not reached',
       mark: Mark = ev ? (ev.fail ? '✗' : '✓') : '',
       end = s.summary && sc.boxes[story.end]?.actor === a,
       bed = !stage.narrow && s.summary && a === sc.truck ? Object.values(s.units).filter((u) => u.where === 'bed' && u.moment >= 0) : [],
@@ -1852,14 +1853,14 @@ export function mountWorld(stage: HTMLElement, fig: FlowProps, resized: () => vo
     }
     for (const t of tags) {
       const ev = s.ever[t.actor];
-      if (ev && acting.includes(t.actor)) spoken.push(`${t.name}: ${ev.label}${ev.fail ? ', failed' : ''}.`);
+      if (ev && acting.includes(t.actor)) spoken.push(`${t.name}: ${named(ev, s.summary)}${ev.fail ? ', failed' : ''}.`);
     }
     svg.setAttribute('aria-label', spoken.join(' ') || said);
     for (const t of tags) {
       const ev = s.ever[t.actor];
       t.mk.hidden = !ev;
       same(t.mk, ev ? (ev.fail ? '✗' : '✓') : '');
-      same(t.st.lastChild!, ev ? ev.label : 'Not reached');
+      same(t.st.lastChild!, ev ? named(ev, s.summary) : 'Not reached');
       t.st.classList.toggle('fw-no', !!ev?.fail);
       t.el.classList.toggle('fw-end', s.summary && rest && t.end);
       t.el.style.width = rest ? t.w : 'max-content';

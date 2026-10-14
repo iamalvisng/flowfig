@@ -37,6 +37,8 @@ export type FigNode = {
   look?: FigLook;
   /** The question on the gate in <flowfig-explain>. Default: the label of a `decision` box. */
   check?: string;
+  /** The state after this box, such as "Oil in stock". The <flowfig-explain> ending shows it. */
+  done?: string;
 };
 /** A frame that lays out its children in a row or a column. */
 export type FigGroup = {

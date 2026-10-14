@@ -76,6 +76,7 @@ function plainText(fig: FlowProps): Finding[] {
     check(`box "${n.id}"`, 'label', n.label, { source: n.source, command: true });
     check(`box "${n.id}"`, 'sub', n.sub);
     check(`box "${n.id}"`, 'check', n.check);
+    check(`box "${n.id}"`, 'done', n.done);
   }
   const groupLabels = (g: FigGroup): void => {
     if (g.label != null) check(`group "${g.id ?? str(g.label)}"`, 'label', g.label);

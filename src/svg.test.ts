@@ -1609,7 +1609,7 @@ test('a scoped figure points its arrows at its own marker, so two figures on one
 
 test('the explain fields change no diagram', () => {
   const strip = (p: FlowProps): FlowProps =>
-    JSON.parse(JSON.stringify(p, (k, v) => (['carries', 'check', 'outcome', 'look'].includes(k) ? undefined : v)));
+    JSON.parse(JSON.stringify(p, (k, v) => (['carries', 'check', 'done', 'outcome', 'look'].includes(k) ? undefined : v)));
   for (const f of [oil, returns, checkout, sync, deliveryBefore, deliveryAfter])
     assert.equal(toSvg(f.props), toSvg(strip(f.props)), f.title);
   assert.notDeepEqual(strip(oil.props), oil.props);

@@ -484,6 +484,26 @@ test('more units than the truck bed holds stay in the yard, with finite position
     for (const p of storyCams(sc, 0, stageFor(w, h))) assert.ok(Number.isFinite(p.cam.z) && p.faults >= 0);
 });
 
+test('the ending frame names the state of the last box of each actor, and a moment names the box', () => {
+  const sc = scene({
+    layout: {
+      children: [
+        { label: 'Shop', look: 'shop', children: [{ id: 'a', label: 'Sell', done: 'Sold' }] },
+        { label: 'Bank', children: [{ id: 'b', label: 'Book' }] },
+      ],
+    },
+    edges: [{ from: 'a', to: 'b' }],
+    steps: [{ label: 'Sale', flow: ['a->b'] }],
+  });
+  const status = (m: number) =>
+    place(sc, stateAt(sc, 0, m, Infinity), stageFor(1440, 900))
+      .tags.map((t) => `${t.name}: ${t.status}`)
+      .sort()
+      .reverse();
+  assert.deepEqual(status(0), ['Shop: Sell', 'Bank: Book']);
+  assert.deepEqual(status(1), ['Shop: Sold', 'Bank: Book']);
+});
+
 test('an unlabeled refusal into another actor names the check on the failed tag', () => {
   const sc = scene({
     layout: {

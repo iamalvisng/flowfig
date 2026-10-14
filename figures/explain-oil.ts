@@ -9,10 +9,10 @@ const props: Figure['props'] = {
         label: 'Customer',
         look: 'person',
         children: [
-          { id: 'ask', label: 'Ask for a pickup', at: 0 },
+          { id: 'ask', label: 'Ask for a pickup', at: 0, done: 'Pickup asked' },
           { id: 'toomany', label: 'Told: too many requests', at: 2, tone: 'gray' },
           { id: 'nofree', label: 'Told: no worker free', at: 4, tone: 'gray' },
-          { id: 'paid', label: 'Gets paid', at: 12 },
+          { id: 'paid', label: 'Gets paid', at: 12, done: 'Paid' },
         ],
       },
       {
@@ -22,9 +22,9 @@ const props: Figure['props'] = {
           { id: 'many', label: 'Under the limit?', shape: 'decision', at: 1 },
           { id: 'accept', label: 'Accept the request', at: 2 },
           { id: 'free', label: 'Worker free?', shape: 'decision', at: 3 },
-          { id: 'assign', label: 'Assign the job', at: 4 },
+          { id: 'assign', label: 'Assign the job', at: 4, done: 'Job assigned' },
           { id: 'cash', label: 'Paid in cash?', shape: 'decision', at: 10 },
-          { id: 'settle', label: 'Settle the voucher', at: 11 },
+          { id: 'settle', label: 'Settle the voucher', at: 11, done: 'Voucher settled' },
         ],
       },
       {
@@ -33,7 +33,7 @@ const props: Figure['props'] = {
         children: [
           { id: 'collect', label: 'Pump and weigh', at: 5 },
           { id: 'sign', label: 'Customer signs', at: 6 },
-          { id: 'sync', label: 'Phone syncs', at: 7 },
+          { id: 'sync', label: 'Phone syncs', at: 7, done: 'Record synced' },
           { id: 'refused', label: 'Record refused', at: 9, tone: 'gray' },
         ],
       },
@@ -42,8 +42,8 @@ const props: Figure['props'] = {
         look: 'server',
         children: [
           { id: 'cert', label: 'Allowed to sell?', shape: 'decision', at: 8 },
-          { id: 'save', label: 'Save collection and voucher', sub: 'all or nothing', at: 9 },
-          { id: 'stock', label: 'Add to stock', at: 10 },
+          { id: 'save', label: 'Save collection and voucher', sub: 'all or nothing', at: 9, done: 'Records saved' },
+          { id: 'stock', label: 'Add to stock', at: 10, done: 'Oil in stock' },
         ],
       },
     ],
