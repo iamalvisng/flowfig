@@ -309,11 +309,17 @@ test('as an <img>, the README form shows the Orders level at its tour time, and 
       await sleep(at - (Date.now() - loaded));
       const img = await shot(`document.querySelector('img')`);
       assert.deepEqual([img.width, img.height], [still.width, still.height]);
-      let differ = 0;
-      for (let i = 0; i < img.data.length; i += 4)
-        if (Math.max(...[0, 1, 2].map((k) => Math.abs(img.data[i + k] - still.data[i + k]))) > 32) differ++;
-      // Measured: text antialias alone makes 0.6 % of pixels differ between an img and inline.
-      assert.ok(differ / (img.width * img.height) < 0.02, `${differ} pixels differ`);
+      let differ = 0,
+        all = 0;
+      for (let y = 0; y + 8 <= img.height; y += 8)
+        for (let x = 0; x + 8 <= img.width; x += 8, all++) {
+          let d = 0;
+          for (let yy = y; yy < y + 8; yy++)
+            for (let i = (yy * img.width + x) * 4; i < (yy * img.width + x + 8) * 4; i++) if (i % 4 < 3) d += img.data[i] - still.data[i];
+          if (Math.abs(d) / 192 > 12) differ++;
+        }
+      // Measured: a wrong level changes 4.4 % of blocks, antialias 0.9 %.
+      assert.ok(differ / all < 0.02, `${differ} of ${all} blocks differ`);
     });
   } finally {
     rmSync(dir, { recursive: true, force: true });

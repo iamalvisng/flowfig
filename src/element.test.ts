@@ -56,7 +56,7 @@ before(async () => {
 after(async () => {
   server?.close();
   await close?.();
-  if (dir) rmSync(dir, { recursive: true, force: true });
+  if (dir) rmSync(dir, { recursive: true, force: true, maxRetries: 10 });
 });
 
 async function open(body: string, ready: string) {

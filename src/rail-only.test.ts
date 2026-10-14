@@ -19,13 +19,14 @@ test(
       const pane = `document.querySelector('[data-rail-row]').closest('div')`;
       const now = `document.querySelector('[data-rail-row][data-state="now"]')`;
       await load(390);
-      await until(`!!document.querySelector('[data-rail-row]')`, 'the rail renders');
-      await new Promise((r) => setTimeout(r, 300));
+      await until(
+        `!!document.querySelector('[data-rail-row]') && ${pane}.scrollWidth > ${pane}.clientWidth`,
+        'the rail pane scrolls sideways',
+      );
       const smallest =
         await ev(`(() => { const svg = ${pane}.firstElementChild, k = svg.getBoundingClientRect().width / svg.viewBox.baseVal.width;
       return Math.min(...[...svg.querySelectorAll('text')].filter((t) => t.textContent.trim()).map((t) => parseFloat(getComputedStyle(t).fontSize) * k)); })()`);
       assert.ok(smallest >= 11 - 0.01, `the smallest rail text is ${smallest} px`);
-      assert.ok(await ev(`${pane}.scrollWidth > ${pane}.clientWidth`), 'the rail pane scrolls sideways');
       assert.ok(
         !(await ev('document.documentElement.scrollWidth > document.documentElement.clientWidth')),
         'the page does not scroll sideways',
