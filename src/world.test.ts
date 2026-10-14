@@ -91,8 +91,22 @@ test('hops start in cause order, and a gate shows its question, then its answer,
   const chain = timeline(sc, story('Normal pickup'), 2).events;
   assert.ok(chain.some((e) => e.hop === 0) && chain.some((e) => e.hop === 1));
   assert.ok(first(chain, 1) >= last(chain, 0), 'assign->collect waits for free->assign');
-  const pair = timeline(sc, story('Normal pickup'), 5).events;
-  assert.equal(first(pair, 0), first(pair, 1), 'save->stock and save->cash start together');
+  const fan = scene({
+    layout: {
+      children: [
+        { label: 'Shop', look: 'shop', children: [{ id: 'a', label: 'Sell' }] },
+        { label: 'Bank', children: [{ id: 'b', label: 'Book' }] },
+        { label: 'Home', look: 'person', children: [{ id: 'c', label: 'Get' }] },
+      ],
+    },
+    edges: [
+      { from: 'a', to: 'b' },
+      { from: 'a', to: 'c' },
+    ],
+    steps: [{ label: 'Sale', flow: [{ edges: ['a->b', 'a->c'] }] }],
+  });
+  const pair = timeline(fan, 0, 0).events;
+  assert.equal(first(pair, 0), first(pair, 1), 'two hops out of one box start together');
   const passed = timeline(sc, story('Normal pickup'), 4).events;
   assert.ok(one(passed, 'answer', 1).start - one(passed, 'question', 0).start >= 250, 'the answer shows after the question');
   const refused = timeline(sc, story('Expired certification'), 2).events;

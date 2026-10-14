@@ -1202,6 +1202,7 @@ export function layout(sc: Scene, s: State, stage: Stage, cam: Cam, full = false
       () => ring(anchor, w, h, ds),
       () => (onTruck ? ring(pr(truckW.reduce((m, p) => (p[1] > m[1] ? p : m))), w, h, ds) : []),
       () => (onTruck && (!stage.narrow || phone) ? [] : ring(pr(A[a].lot.hull.reduce((m, p) => (p[1] > m[1] ? p : m))), w, h, ds)),
+      () => (s.dev.includes(a) && !k.inCab(a) ? ring(pr(k.devTop(a)), w, h, ds) : []),
     ];
     const must = s.hi.includes(a) || (s.summary && story.path.includes(a));
     const part = share((onTruck ? truckHull! : A[a].lot.hull).map(pr), stage.region) < 0.6;

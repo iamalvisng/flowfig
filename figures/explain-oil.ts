@@ -33,7 +33,7 @@ const props: Figure['props'] = {
         children: [
           { id: 'collect', label: 'Pump and weigh', at: 5 },
           { id: 'sign', label: 'Customer signs', at: 6 },
-          { id: 'sync', label: 'Phone syncs', at: 7, done: 'Record synced' },
+          { id: 'sync', label: 'Phone syncs', at: 7, done: 'Oil collected' },
           { id: 'refused', label: 'Record refused', at: 9, tone: 'gray' },
         ],
       },
@@ -43,7 +43,7 @@ const props: Figure['props'] = {
         children: [
           { id: 'cert', label: 'Allowed to sell?', shape: 'decision', at: 8 },
           { id: 'save', label: 'Save collection and voucher', sub: 'all or nothing', at: 9, done: 'Records saved' },
-          { id: 'stock', label: 'Add to stock', at: 10, done: 'Oil in stock' },
+          { id: 'stock', label: 'Add to stock', at: 10, done: 'Stock updated' },
         ],
       },
     ],
@@ -61,7 +61,7 @@ const props: Figure['props'] = {
     { from: 'sync', to: 'cert' },
     { from: 'cert', to: 'save', label: 'yes' },
     { from: 'cert', to: 'refused', label: 'expired' },
-    { from: 'save', to: 'stock', carries: { thing: 'used oil', from: 'collect' } },
+    { from: 'save', to: 'stock' },
     { from: 'save', to: 'cash' },
     { from: 'cash', to: 'paid', label: 'yes', carries: { thing: 'cash', form: 'notes', from: 'collect' } },
     { from: 'cash', to: 'settle', label: 'no' },
@@ -79,7 +79,7 @@ const props: Figure['props'] = {
         { edges: ['sync->cert', 'cert->save'], say: 'The server checks the client and saves both records together.' },
         {
           edges: ['save->stock', 'save->cash', 'cash->settle', 'settle->paid'],
-          say: 'The oil goes into stock. The office settles the voucher.',
+          say: 'The server adds the oil to the stock record. The office settles the voucher.',
         },
       ],
     },
