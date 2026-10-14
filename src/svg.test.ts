@@ -1670,16 +1670,18 @@ test('two renders of a figure with parts give the same bytes', () => {
   assert.equal(toSvg(shopFig, { script: true }), first);
 });
 
-test('two scoped renders of a figure with parts on one page share no animation name and no linked id', () => {
+test('two scoped renders of one figure on one page share no animation name and no linked id, with or without parts', () => {
   const names = (svg: string) => {
     const refs = [...svg.matchAll(/(?:href="#|url\(#)([^")]+)/g)].map((m) => m[1]);
     const ids = new Set([...svg.matchAll(/ id="([^"]+)"/g)].map((m) => m[1]));
     for (const r of refs) assert.ok(ids.has(r), `#${r} has no target`);
     return new Set([...refs, ...[...svg.matchAll(/@keyframes (\S+)/g)].map((m) => m[1])]);
   };
-  const a = names(toSvg(shopFig, { scope: 'a' }));
-  const shared = [...names(toSvg(shopFig, { scope: 'b' }))].filter((n) => a.has(n));
-  assert.deepEqual(shared, []);
+  for (const f of [shopFig, deliveryAfter.props]) {
+    const a = names(toSvg(f, { scope: 'a' }));
+    const shared = [...names(toSvg(f, { scope: 'b' }))].filter((n) => a.has(n));
+    assert.deepEqual(shared, []);
+  }
 });
 
 test('marks: the step caption sits above the diff legend, not on it', () => {
