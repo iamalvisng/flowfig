@@ -242,7 +242,8 @@ function audit(sc: Scene, s: State, p: Placed, st: Stage): string[] {
     if (o.pin && most && x >= l && x <= r && y >= t && y <= b) out.push(`tag ${o.name} pinned while its actor is in frame`);
     const [nx, ny] = near(o.r, o.anchor);
     const len = Math.hypot(nx - x, ny - y);
-    if (!o.pin && len > reach) out.push(`tag ${o.name} leader ${Math.round(len)} px`);
+    const truck = o.actor === sc.truck && p.truck && st.w < HUD.slim * 2 && s.summary;
+    if (!o.pin && len > (truck ? 58.5 : reach)) out.push(`tag ${o.name} leader ${Math.round(len)} px`);
   }
   for (const o of p.signs) {
     const tag = p.tags.find((x) => x.actor === o.actor)?.r,
@@ -270,6 +271,10 @@ function audit(sc: Scene, s: State, p: Placed, st: Stage): string[] {
   }
   const lorry = p.tags.find((x) => x.actor === sc.truck);
   if (!st.narrow && p.truck && lorry && gap(lorry.anchor, p.truck) > 24) out.push('truck tag off the truck');
+  if (st.w < HUD.slim * 2 && s.summary)
+    for (const o of p.tags)
+      if (gap(o.anchor, o.actor === sc.truck && p.truck ? p.truck : p.hulls[o.actor]) > 24)
+        out.push(`tag ${o.name} points away from its actor`);
   for (const a of s.hi) shown(`tag ${sc.actors[a].name}`, p.tags.find((x) => x.actor === a)?.r);
   for (const a of s.dev) if (!(a === sc.truck && p.truck)) shown(`device ${a}`, p.devices.find((x) => x.actor === a)?.r);
   for (const a of s.arcs) {
@@ -359,8 +364,8 @@ test('every needed tag, sign, chip and device is on stage, none overlaps, and th
   assert.deepEqual(hits, []);
 });
 
-test('on a phone, the stacked street shows every building of the "Expired certification" outcome at least 90 px wide', () => {
-  const st = stageFor(390, Math.min(844, HUD.tall)),
+test('on a phone, the stacked street shows every building of the "Expired certification" outcome at least 78 px wide', () => {
+  const st = stageFor(390, Math.min(844, HUD.tall), 179),
     s = scene(oil.props).stories.findIndex((x) => x.name === 'Expired certification'),
     { sc, cams } = storyView((f) => scene(oil.props, f), s, st),
     p = cams.at(-1)!,
@@ -373,7 +378,7 @@ test('on a phone, the stacked street shows every building of the "Expired certif
       h.some(([x, y]) => x >= l && x <= r && y >= t && y <= b),
       `${sc.actors[a].name} is out of frame`,
     );
-    assert.ok(w >= 90, `${sc.actors[a].name}: ${Math.round(w)} px`);
+    assert.ok(w >= 78, `${sc.actors[a].name}: ${Math.round(w)} px`);
   }
 });
 

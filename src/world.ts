@@ -1194,12 +1194,14 @@ export function layout(sc: Scene, s: State, stage: Stage, cam: Cam, full = false
       [ax - 36, ay - g - h],
     ])
       opts.push({ x, y, w, h, anchor });
-    const ds = stage.w < HUD.wide && s.summary ? [12, 20, 30, 40] : stage.narrow ? [12, 20, 30, 44, 58] : [12, 18, 24];
+    const phone = stage.w < HUD.slim * 2 && s.summary;
+    const ds =
+      stage.w < HUD.wide && s.summary && !(onTruck && phone) ? [12, 20, 30, 40] : stage.narrow ? [12, 20, 30, 44, 58] : [12, 18, 24];
     const cands: Cands<Opt> = [
       opts,
       () => ring(anchor, w, h, ds),
       () => (onTruck ? ring(pr(truckW.reduce((m, p) => (p[1] > m[1] ? p : m))), w, h, ds) : []),
-      () => (onTruck && !stage.narrow ? [] : ring(pr(A[a].lot.hull.reduce((m, p) => (p[1] > m[1] ? p : m))), w, h, ds)),
+      () => (onTruck && (!stage.narrow || phone) ? [] : ring(pr(A[a].lot.hull.reduce((m, p) => (p[1] > m[1] ? p : m))), w, h, ds)),
     ];
     const must = s.hi.includes(a) || (s.summary && story.path.includes(a));
     const part = share((onTruck ? truckHull! : A[a].lot.hull).map(pr), stage.region) < 0.6;
@@ -1219,7 +1221,7 @@ export function layout(sc: Scene, s: State, stage: Stage, cam: Cam, full = false
     tags.push({ ...base, r: tr, anchor: o.anchor, line: [nearest(tr, o.anchor), o.anchor] });
     taken.push(o);
   };
-  if (!stage.narrow && truckW && s.hi.includes(sc.truck)) tagOf(sc.truck);
+  if ((!stage.narrow || (stage.w < HUD.slim * 2 && s.summary)) && truckW && s.hi.includes(sc.truck)) tagOf(sc.truck);
 
   const chips: Chip[] = [];
   const chip = (text: string, opts: Pt[], w: number, around: Pt[], mark?: Mark) => {
