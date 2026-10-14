@@ -225,8 +225,8 @@ test('during the open only the border moves, and the ports then the parts appear
 
 test('with reduced motion, open and back change the view in one frame and no animation runs', { skip }, async () => {
   await withReactPage(entry, async (page) => {
-    await page.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
     await show(page, 1400, { autoplay: false });
+    await page.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
     await page.ev('plain()');
     await page.until(`!!${box('solo')}`, 'the plain figure renders');
     assert.notEqual(
