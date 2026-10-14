@@ -865,7 +865,6 @@ function notes() {
   return o;
 }
 export const UNIT: Record<'box' | 'barrel' | 'notes', string> = { barrel: barrel(), box: carton(), notes: notes() };
-export const FAIL_MARK = `<g class="failmark" display="none"><circle cx="0" cy="-30" r="8" fill="${INK.fail}" stroke="#fff" stroke-width="2"/><path d="M-3.2,-33.2 l6.4,6.4 M3.2,-33.2 l-6.4,6.4" stroke="#fff" stroke-width="2" stroke-linecap="round"/></g>`;
 
 export function truckArt(depot: { x: number; y: number }) {
   const ty = LANE - TD / 2,

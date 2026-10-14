@@ -248,7 +248,7 @@ function audit(sc: Scene, s: State, p: Placed, st: Stage): string[] {
       const row = (t: Tag) => t.actor === sc.truck && t.cargo.some((c) => c.thing === u.thing && c.fail === u.fail);
       if (u.moment < 0) continue;
       if (!st.narrow && u.where === 'bed') shown(`cargo row ${u.thing}`, p.tags.find(row)?.r);
-      else shown(`end chip ${u.thing}`, p.chips.find((x) => x.text === u.thing && x.mark === (u.fail ? '✗' : '✓'))?.r);
+      else shown(`end chip ${u.thing}`, p.chips.find((x) => x.text === u.thing && x.mark === (u.fail ? undefined : '✓'))?.r);
     }
   }
   const lorry = p.tags.find((x) => x.actor === sc.truck);
@@ -262,6 +262,14 @@ function audit(sc: Scene, s: State, p: Placed, st: Stage): string[] {
     if (tag && chip) out.push(`chip ${a.text} repeats the tag`);
     shown(tag ? `tag ${a.text}` : `chip ${a.text}`, (tag ?? chip)?.r);
   }
+  for (const c of p.chips) if (c.mark === '✗') out.push(`chip ${c.text} has a red mark`);
+  sc.actors.forEach((_, i) => {
+    if (!s.gates[i].fail) return;
+    const red =
+      p.tags.filter((x) => x.actor === i && x.mark === '✗').length +
+      (p.signs.find((x) => x.actor === i)?.rows.filter((r) => r.fail).length ?? 0);
+    if (red > 2) out.push(`refusal at ${sc.actors[i].name}: ${red} red marks`);
+  });
   for (const o of p.signs)
     s.gates[o.actor].rows.forEach((row, i) => {
       const sign = o.rows[i]?.a === row.a,

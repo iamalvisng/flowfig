@@ -3,7 +3,7 @@ import { edgeId, isGroup, nodes, str } from './model.ts';
 import type { FigLook, FlowProps } from './model.ts';
 import { HUD } from './looks.ts';
 import { textWidth } from './text.ts';
-import { BAR_Y, BED_ROWS, C, FAIL_MARK, GL, GZ, INK, LANE, P, PHONE, S, TD, UNIT, gateArt, hull, street, truckArt } from './world-art.ts';
+import { BAR_Y, BED_ROWS, C, GL, GZ, INK, LANE, P, PHONE, S, TD, UNIT, gateArt, hull, street, truckArt } from './world-art.ts';
 import type { Gate, Lot, Pt } from './world-art.ts';
 
 export type { Pt };
@@ -904,7 +904,7 @@ export type Tag = {
   cargo: { thing: string; fail: boolean }[];
 };
 export type Sign = { actor: number; r: Rect; anchor: Pt; rows: { q: string; a: string; fail: boolean }[]; kick: boolean };
-export type Chip = { text: string; r: Rect; fail: boolean; mark?: Mark };
+export type Chip = { text: string; r: Rect; mark?: Mark };
 export type Placed = {
   cam: Cam;
   tags: Tag[];
@@ -1195,7 +1195,7 @@ export function layout(sc: Scene, s: State, stage: Stage, cam: Cam, full = false
   if (!stage.narrow && truckW && s.hi.includes(sc.truck)) tagOf(sc.truck);
 
   const chips: Chip[] = [];
-  const chip = (text: string, fail: boolean, opts: Pt[], w: number, around: Pt[], mark?: Mark) => {
+  const chip = (text: string, opts: Pt[], w: number, around: Pt[], mark?: Mark) => {
     for (const [px, py] of around)
       for (const d of [10, 30, 50])
         for (let i = 0; i < 8; i++) {
@@ -1206,7 +1206,7 @@ export function layout(sc: Scene, s: State, stage: Stage, cam: Cam, full = false
     const fits = (o: Rect) => inRegion(o) && offB(o) && free(o);
     const o = rs.find(fits) ?? around.flatMap((p) => ring(p, w, CHIP_H, stage.narrow ? [20, 30, 44, 58] : [18, 24])).find(fits);
     if (!o && ++bad > cap) throw OVER;
-    chips.push({ text, fail, r: o ?? rs[0], mark });
+    chips.push({ text, r: o ?? rs[0], mark });
     taken.push(o ?? rs[0]);
   };
   for (const a of s.arcs) {
@@ -1226,7 +1226,6 @@ export function layout(sc: Scene, s: State, stage: Stage, cam: Cam, full = false
     }
     chip(
       a.text,
-      a.fail,
       opts,
       w,
       [0.5, 0.3, 0.7].map((u) => pr(bez(a, u))),
@@ -1245,14 +1244,13 @@ export function layout(sc: Scene, s: State, stage: Stage, cam: Cam, full = false
     )
       continue;
     seen.add(u.thing);
-    const mark = s.summary ? (u.fail ? '✗' : '✓') : undefined,
+    const mark = s.summary && !u.fail ? '✓' : undefined,
       w = 20 + (mark ? ty.mark : 0) + width(u.thing, ty.chip, true),
       g = 10,
       h = CHIP_H,
       [px, py] = pr([at[0], at[1] + 6]);
     chip(
       u.thing,
-      u.fail,
       [
         [px - w / 2, py + g],
         [px + g, py - h / 2],
@@ -1557,7 +1555,7 @@ const OV_CSS = [
   `.fw-mk{display:inline-grid;place-items:center;flex:none;width:14px;height:14px;margin:2px 6px 0 0;border-radius:3px;background:${OV};color:#fff;font:700 10px/1 var(--flowfig-font);font-style:normal}`,
   `.fw-no{color:${INK.fail}}.fw-no>.fw-mk{background:${INK.fail}}.fw-dchip>.fw-mk{margin-top:0}`,
   `.fw-tag{transition:opacity .2s,border-color .16s .2s,background-color .16s .2s}.fw-end{border:2px solid ${OV};background:#EEF1EA}.fw-end.fw-x{border-color:${INK.fail};background:#FCEBE8}.fw-end .fw-tn{font-size:16px;line-height:20px}`,
-  `.fw-cg{font:500 13px/20px var(--flowfig-font)}.fw-cg.fw-no{color:${OV2}}`,
+  `.fw-cg{font:500 13px/20px var(--flowfig-font)}`,
   `.fw-sk{font:500 12px/16px var(--flowfig-font);color:#5B6370}`,
   `.fw-quiet .fw-tn,.fw-quiet .fw-ts{color:${OVM}}`,
   `.fw-sign{padding:6px 10px;border-radius:8px}`,
@@ -1567,7 +1565,7 @@ const OV_CSS = [
   `.fw-a.fw-no{background:#FCEBE8;color:${INK.fail}}.fw-a.fw-no::before{content:"\\2717";margin-right:4px}`,
   `.fw-a.fw-m{display:inline-grid;place-items:center;width:14px;height:14px;padding:0;border-radius:3px;font:700 10px/1 var(--flowfig-font)}.fw-a.fw-m::before{content:none}`,
   `.fw-dchip{display:flex;align-items:center;padding:0 9px;border-radius:6px;font:600 13px/1 var(--flowfig-font);color:${INK.data}}`,
-  `.fw-dchip.fw-thing{color:${OV}}.fw-dchip.fw-no{color:${INK.fail}}.fw-dchip{transition:opacity .2s,scale .2s cubic-bezier(.23,1,.32,1)}.fw-dchip.fw-off{scale:.96}.gt{transition:opacity .2s}`,
+  `.fw-dchip.fw-thing{color:${OV}}.fw-dchip{transition:opacity .2s,scale .2s cubic-bezier(.23,1,.32,1)}.fw-dchip.fw-off{scale:.96}.gt{transition:opacity .2s}`,
   `.fw-off{opacity:0}`,
   `@container ff-guide (width < ${HUD.slim * 2}px){.fw-tn{font-size:13px;line-height:16px}.fw-ts{font-size:12px;line-height:15px}.fw-mk{margin:1px 4px 0 0}.fw-sk{display:none}.fw-end .fw-tn{font-size:14px;line-height:17px}.fw-row{height:24px}.fw-q{font-size:13px;line-height:17px}.fw-a{font-size:12px;line-height:20px}.fw-dchip{font-size:12px}}`,
 ].join('');
@@ -1631,7 +1629,7 @@ export function mountWorld(stage: HTMLElement, fig: FlowProps, resized: () => vo
     svg.innerHTML =
       `<g class="fw-cam">${sc.svg}${art?.door ?? ''}<g class="fw-units"></g>${art?.road ?? ''}` +
       sc.actors.map((a, i) => (a.device === 'antenna' ? '' : `<g class="fw-dev" data-a="${i}">${PHONE.svg}</g>`)).join('') +
-      `<g class="fw-arcs"></g>${sc.actors.map((a) => (a.checks ? `<g class="fw-hx">${FAIL_MARK}</g>` : '')).join('')}</g>`;
+      `<g class="fw-arcs"></g></g>`;
     unitEls.clear();
     return {
       art,
@@ -1645,7 +1643,6 @@ export function mountWorld(stage: HTMLElement, fig: FlowProps, resized: () => vo
       arms2: [...svg.querySelectorAll('.armW')],
       hubs: [...svg.querySelectorAll('.hub')],
       gts: [...svg.querySelectorAll<SVGGElement>('.gt')],
-      hxs: [...svg.querySelectorAll('.fw-hx')],
       checkers: sc.actors.flatMap((a, i) => (a.checks ? [i] : [])),
     };
   };
@@ -1729,16 +1726,13 @@ export function mountWorld(stage: HTMLElement, fig: FlowProps, resized: () => vo
       let g = unitEls.get(id);
       if (!g) {
         g = document.createElementNS(NS, 'g');
-        g.innerHTML = UNIT[sc.things.get(u.thing)?.form ?? 'box'] + FAIL_MARK;
+        g.innerHTML = UNIT[sc.things.get(u.thing)?.form ?? 'box'];
         d.unitsG.append(g);
         unitEls.set(id, g);
       }
       const on = u.where === 'yard' || u.where === 'road' || u.where === 'gate' || u.where === 'air';
       show(g, on);
-      if (on) {
-        move(g, u.p);
-        show(g.querySelector('.failmark'), u.fail);
-      }
+      if (on) move(g, u.p);
     }
     for (const [id, g] of unitEls) if (!s.units[id]) show(g, false);
     for (const [a, g] of d.devs) {
@@ -1760,8 +1754,6 @@ export function mountWorld(stage: HTMLElement, fig: FlowProps, resized: () => vo
       }
       d.arms[n].setAttribute('stroke', st.fail ? INK.fail : '#2e3440');
       d.gts[n].style.opacity = st.on === s.moment || st.fail ? '' : '0';
-      move(d.hxs[n], b0);
-      show(d.hxs[n].firstElementChild, st.fail);
       d.hubs[n].setAttribute('cx', f1(b0[0]));
       d.hubs[n].setAttribute('cy', f1(b0[1]));
     });
@@ -1794,8 +1786,9 @@ export function mountWorld(stage: HTMLElement, fig: FlowProps, resized: () => vo
       st.append(mk, '');
       e.append(el('b', 'fw-tn', t.name), st);
       for (const c of t.cargo) {
-        const row = el('span', `fw-ts fw-cg${c.fail ? ' fw-no' : ''}`);
-        row.append(el('i', 'fw-mk', c.fail ? '✗' : '✓'), c.thing);
+        const row = el('span', 'fw-ts fw-cg');
+        if (!c.fail) row.append(el('i', 'fw-mk', '✓'));
+        row.append(c.thing);
         e.append(row);
       }
       put(e, t.r);
@@ -1827,7 +1820,7 @@ export function mountWorld(stage: HTMLElement, fig: FlowProps, resized: () => vo
     });
     let n = 0;
     chips = lay.chips.map((c) => {
-      const e = el('div', `fw-dchip${sc.things.has(c.text) ? ' fw-thing' : ''}${c.fail ? ' fw-no' : ''}`);
+      const e = el('div', `fw-dchip${sc.things.has(c.text) ? ' fw-thing' : ''}`);
       if (c.mark) {
         e.append(el('i', 'fw-mk', c.mark));
         e.style.transitionDelay = `${n++ * 60}ms`;
