@@ -9,6 +9,8 @@ import { atlasFiles } from './atlas.ts';
 import { findBrowser, launch } from './browser.ts';
 import { svgWithSpec } from './load.ts';
 import type { FlowProps } from './model.ts';
+import { withReactPage } from './react-page.ts';
+import shop from '../figures/inside-shop.ts';
 
 const cli = join(dirname(dirname(fileURLToPath(import.meta.url))), 'scripts', 'figure-svg.mjs');
 
@@ -142,4 +144,36 @@ test('the Details list opens the target by keyboard, and a click on the box open
       await close();
     }
   });
+});
+
+test('an atlas page opens a box with parts in place, and the Details list keeps the detail link', { skip: !browser.path }, async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'atlas-'));
+  try {
+    const props = structuredClone(shop.props) as FlowProps;
+    const orders = props.layout.children.flatMap((c) => ('children' in c ? c.children : [c])).find((c) => 'id' in c && c.id === 'orders')!;
+    Object.assign(orders, { detail: 'docs/flows/orders.svg' });
+    mkdirSync(join(dir, 'docs/flows'), { recursive: true });
+    writeFileSync(join(dir, 'docs/shop.svg'), svgWithSpec(props));
+    writeFileSync(join(dir, 'docs/flows/orders.svg'), svgWithSpec(fig('up', 'Whole system', 'docs/shop.svg')));
+    const out = join(dir, 'site');
+    assert.equal(spawnSync(process.execPath, [cli, 'atlas', '--root', dir, '--out', out]).status, 0);
+    const page = pathToFileURL(join(out, 'docs/shop.html')).href;
+    await withReactPage('', async ({ send, ev, until, open }) => {
+      await open(page, 1400);
+      await until(`!!document.querySelector('[role="button"][aria-label^="Open Orders"]')`, 'the Orders box is a button');
+      const [x, y] = await ev(
+        `(() => { const r = document.querySelector('[role="button"][aria-label^="Open Orders"]').getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })()`,
+      );
+      for (const type of ['mousePressed', 'mouseReleased'])
+        await send('Input.dispatchMouseEvent', { type, x, y, button: 'left', clickCount: 1 });
+      await until(
+        `(() => { for (let e = document.getElementById('s-orders'); e && e.nodeType === 1; e = e.parentElement) if (+getComputedStyle(e).opacity < 0.99) return false; return true; })()`,
+        'the Orders level shows on the page',
+      );
+      assert.equal(await ev('location.href'), page);
+      assert.ok(await ev(`!!document.querySelector('li a[href="flows/orders.html"]')`), 'the Details list keeps the detail link');
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

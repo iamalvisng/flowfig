@@ -1,4 +1,4 @@
-import { beatTimes, DARK, edgeId, LIGHT, n2, nodes, str, toBeat, type FlowProps } from './model.ts';
+import { beatTimes, DARK, edgeId, LIGHT, n2, nodes, scenes, str, toBeat, tourPlan, type FlowProps } from './model.ts';
 import { esc } from './page.ts';
 import { textWidth } from './text.ts';
 
@@ -8,8 +8,9 @@ type Grid = { cols: number; rows: number; tile: number; tileH: number; width: nu
 export function keyFrames(fig: FlowProps, o: { fps: number; every?: number; step?: number }): { tiles: Tile[]; frames: number } {
   const steps = fig.steps ?? [];
   const beats = steps.map((s) => s.flow.map(toBeat));
-  const model = beatTimes(beats, fig.speed ?? 900);
-  const loop = model.ends.at(-1) ?? 0;
+  const tour = scenes(fig).length > 1 ? tourPlan(fig) : undefined;
+  const model = tour?.times ?? beatTimes(beats, fig.speed ?? 900);
+  const loop = tour ? tour.ms / 1000 : (model.ends.at(-1) ?? 0);
   const dur = n2(loop || 1);
   const scale = loop ? dur / loop : 1;
   const times = {

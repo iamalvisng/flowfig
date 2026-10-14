@@ -5,9 +5,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
-import { altText, type FlowProps } from './model.ts';
+import { altText, isGroup, nodes, str, type FigGroup, type FlowProps } from './model.ts';
 import { toSvg } from './svg.ts';
 import { findBrowser, launch } from './browser.ts';
+import shop from '../figures/inside-shop.ts';
 
 const { Flow } = await import(new URL('../dist/index.js', import.meta.url).href);
 
@@ -49,6 +50,24 @@ test('the transcript lists each say line in step order and names a silent hop by
     'Hit.',
     'Browser to Cache <hot> & "warm"',
   ]);
+});
+
+test('the transcript names every level with its path and its parts', () => {
+  const levels = (g: FigGroup, line: string): { line: string; parts: string[] }[] =>
+    g.children.flatMap((c) => {
+      if (isGroup(c)) return levels(c, line);
+      if (!c.inside) return [];
+      const path = line ? `${line} > ${str(c.label)}` : str(c.label);
+      return [{ line: path, parts: nodes(c.inside.layout).map((p) => str(p.label)) }, ...levels(c.inside.layout, path)];
+    });
+  const lines = altText(shop.props as FlowProps).desc.split('\n');
+  const all = levels(shop.props.layout, '');
+  assert.equal(all.length, 9);
+  for (const { line, parts } of all) {
+    const text = lines.find((l) => l.startsWith(`${line}:`));
+    assert.ok(text, `no line for ${line}`);
+    for (const p of parts) assert.ok(text.includes(p), `${line} names ${p}`);
+  }
 });
 
 test('the SVG escapes the title and transcript and stays valid XML text', () => {

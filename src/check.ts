@@ -11,8 +11,11 @@ import {
   validAt,
   laneColumns,
   nodes,
+  scenes,
   str,
   toBeat,
+  MAX_LEVEL,
+  type FigScene,
   type FigGroup,
   type FigNode,
   type FigTheme,
@@ -21,7 +24,7 @@ import {
 } from './model.ts';
 import type { Finding, Scene, SceneEdge } from './scene.ts';
 import { layoutRail } from './rail.ts';
-import type { SvgOptions } from './svg.ts';
+import type { Level, SvgOptions } from './svg.ts';
 import { crosses, samples, type Pt, type Rect } from './geometry.ts';
 import { textWidth } from './text.ts';
 import { owners, parseSource } from './source.ts';
@@ -94,6 +97,119 @@ function plainText(fig: FlowProps): Finding[] {
 
 /** Faults in the spec: dangling ids, duplicate ids, empty steps. The renderers skip them silently. */
 export function checkSpec(fig: FlowProps): Finding[] {
+  const own = specRules(fig);
+  if (!nodes(fig.layout).some((n) => n.inside)) return own;
+  return [...own, ...insideRules(fig)];
+}
+
+function insideRules(fig: FlowProps): Finding[] {
+  const out: Finding[] = [];
+  const form = fig.timeline
+    ? 'timeline; a timeline does not'
+    : fig.lanes
+      ? 'lanes; lanes do not'
+      : fig.rail === 'only'
+        ? 'rail: "only"; a rail-only figure does not'
+        : null;
+  if (form) {
+    for (const n of nodes(fig.layout))
+      if (n.inside)
+        out.push(warn('parts-ignored', [n.id], `the figure sets ${form} open boxes, so the renderers ignore inside on "${n.id}"`));
+    return out;
+  }
+  let total = 0;
+  const limits = (g: FigGroup, level: number): void => {
+    for (const n of nodes(g)) {
+      if (!n.inside) continue;
+      if (level === MAX_LEVEL) {
+        out.push(
+          err(
+            'part-limit',
+            [n.id],
+            `box "${n.id}" is at level ${MAX_LEVEL}, so its parts are at level ${MAX_LEVEL + 1}; the limit is ${MAX_LEVEL} levels`,
+          ),
+        );
+        continue;
+      }
+      const count = nodes(n.inside.layout).length;
+      total += count;
+      if (!count) out.push(err('part-limit', [n.id], `box "${n.id}": inside has no parts`));
+      else if (count > 16) out.push(err('part-limit', [n.id], `box "${n.id}" has ${count} parts; the limit is 16`));
+      limits(n.inside.layout, level + 1);
+    }
+  };
+  limits(fig.layout, 1);
+  if (total > 60) out.push(err('part-limit', [], `the figure has ${total} parts; the limit is 60`));
+
+  const all = scenes(fig);
+  const seen: Record<string, Map<string, Map<string, string>>> = { boxes: new Map(), groups: new Map(), edges: new Map() };
+  const partsOf = (s: FigScene) => {
+    const ports = new Set(s.ports.map((p) => p.id));
+    return nodes(s.props.layout).filter((n) => !ports.has(n.id));
+  };
+  for (const s of all) {
+    const add = (m: Map<string, Map<string, string>>, ids: string[]) =>
+      ids.forEach((id) => m.set(id, (m.get(id) ?? new Map()).set(s.path.join('>'), s.line || 'the root')));
+    add(
+      seen.boxes,
+      partsOf(s).map((n) => n.id),
+    );
+    add(seen.groups, groupIds(s.props.layout));
+    add(seen.edges, s.props.edges.map(edgeId));
+  }
+  for (const [kind, m] of Object.entries(seen))
+    for (const [id, lines] of m)
+      if (lines.size > 1) out.push(err('duplicate-id', [id], `two ${kind} have the id "${id}": ${[...lines.values()].join(' and ')}`));
+
+  const byKey = new Map(all.map((s) => [s.path.join('>'), s]));
+  for (const s of all.slice(1)) {
+    const parent = byKey.get(s.path.slice(0, -1).join('>'))!;
+    const owner = s.path.at(-1)!;
+    const found = specRules(s.props).filter((f) => f.rule !== 'bad-source');
+    const parts = new Set(partsOf(s).map((n) => n.id));
+    for (const n of partsOf(s)) if (n.source == null) found.push(warn('part-no-source', [n.id], `part "${n.id}" has no source`));
+    const outerIn = parent.props.edges.filter((e) => e.to === owner);
+    const outerOut = parent.props.edges.filter((e) => e.from === owner);
+    for (const e of s.props.edges) {
+      const id = edgeId(e);
+      if (!parts.has(e.from) && !parts.has(e.to)) found.push(err('part-edge-mismatch', [id], `edge "${id}" has no part at either end`));
+      else if (!parts.has(e.from) && !outerIn.some((o) => o.from === e.from))
+        found.push(
+          err(
+            'part-edge-mismatch',
+            [id, e.from],
+            `edge "${id}" comes in from "${e.from}", but no edge goes from "${e.from}" to "${owner}"`,
+          ),
+        );
+      else if (!parts.has(e.to) && !outerOut.some((o) => o.to === e.to))
+        found.push(
+          err('part-edge-mismatch', [id, e.to], `edge "${id}" goes out to "${e.to}", but no edge goes from "${owner}" to "${e.to}"`),
+        );
+    }
+    for (const o of outerIn)
+      if (!s.props.edges.some((e) => e.from === o.from))
+        found.push(
+          warn(
+            'part-edge-mismatch',
+            [edgeId(o)],
+            `edge "${edgeId(o)}" comes in, but no edge inside "${owner}" starts at "${o.from}"; the open view cannot show where the flow comes in`,
+          ),
+        );
+    for (const o of outerOut)
+      if (!s.props.edges.some((e) => e.to === o.to))
+        found.push(
+          warn(
+            'part-edge-mismatch',
+            [edgeId(o)],
+            `edge "${edgeId(o)}" goes out, but no edge inside "${owner}" ends at "${o.to}"; the open view cannot show where the flow goes out`,
+          ),
+        );
+    out.push(...found.map((f) => ({ ...f, scene: s.line })));
+  }
+  return out;
+}
+
+function specRules(fig: FlowProps): Finding[] {
   const out: Finding[] = [];
   const boxIds = nodes(fig.layout).map((n) => n.id);
   const groups = groupIds(fig.layout);
@@ -426,7 +542,7 @@ export function planFor(fig: FlowProps, opts: SvgOptions): LanePlan | null {
   return lanePlan(fig, { width: opts.width, minText: opts.minText, padding: opts.padding ?? 24, floor });
 }
 
-export function checkRendered(fig: FlowProps, opts: SvgOptions & CheckOptions, scene: Scene): Finding[] {
+export function checkRendered(fig: FlowProps, opts: SvgOptions & CheckOptions, scene: Scene, levels?: Level[]): Finding[] {
   const lost = (planFor(fig, opts)?.lost ?? []).map((id): Finding => ({
     rule: 'lane-end-block',
     severity: 'warning',
@@ -435,7 +551,14 @@ export function checkRendered(fig: FlowProps, opts: SvgOptions & CheckOptions, s
   }));
   return [
     ...checkSpec(fig),
-    ...checkScene(scene, { ...opts, auto: opts.auto ?? fig.layout.auto }),
+    ...(levels
+      ? levels.flatMap((l, i) =>
+          checkScene(
+            { ...l.scene, width: Math.max(...levels.map((x) => x.scene.width)) },
+            { ...opts, auto: opts.auto ?? l.props.layout.auto },
+          ).map((f) => (i ? { ...f, scene: l.line } : f)),
+        )
+      : checkScene(scene, { ...opts, auto: opts.auto ?? fig.layout.auto })),
     ...lost,
     ...checkTheme({ ...fig.theme, ...opts.theme }),
   ];

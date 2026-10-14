@@ -4,10 +4,11 @@ import { spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { checkRendered, checkSpec, checkScene, checkTheme, contrast } from './check.ts';
-import { TONES, toneFill, type FlowProps } from './model.ts';
-import type { Scene, SceneBox } from './scene.ts';
+import { isGroup, TONES, toneFill, type FigGroup, type FigNode, type FlowProps } from './model.ts';
+import type { Finding, Scene, SceneBox } from './scene.ts';
 import type { Pt } from './geometry.ts';
-import { render } from './svg.ts';
+import { check, render } from './svg.ts';
+import shop from '../figures/inside-shop.ts';
 import { PLAIN_EXAMPLES } from './guide.ts';
 
 const fig: FlowProps = {
@@ -671,4 +672,228 @@ test('an edge to a group with no boxes fails check --strict', () => {
   const r = spawnSync(process.execPath, [cli, 'check', '-', '--strict'], { input: JSON.stringify(spec), encoding: 'utf8' });
   assert.equal(r.status, 1);
   assert.match(r.stdout, /edge "a->g" ends at group "g", which has no boxes/);
+});
+
+const shopFig = shop.props as FlowProps;
+const find = (g: FigGroup, id: string): FigNode | undefined => {
+  for (const c of g.children) {
+    const n = isGroup(c) ? find(c, id) : c.id === id ? c : c.inside && find(c.inside.layout, id);
+    if (n) return n;
+  }
+};
+const edit = (fig: FlowProps, id: string, change: (n: FigNode) => void): FlowProps => {
+  const f = structuredClone(fig);
+  change(find(f.layout, id)!);
+  return f;
+};
+const more = (n: FigNode, count: number) =>
+  n.inside!.layout.children.push(
+    ...Array.from({ length: count }, (_, i) => ({
+      id: `${n.id}-extra-${i}`,
+      label: `Extra ${i}`,
+      source: `examples/shop/extra.ts#extra${i}`,
+    })),
+  );
+
+test('each Inside rule fires on its fault and stays quiet on a figure with three levels', () => {
+  assert.deepEqual(check(shopFig), []);
+  const cases: [string, FlowProps, Partial<Finding> & { scene?: string }][] = [
+    [
+      'an inside edge from a box that is no neighbor',
+      edit(shopFig, 'orders', (n) => n.inside!.edges!.push({ from: 'browser', to: 'validate' })),
+      {
+        rule: 'part-edge-mismatch',
+        severity: 'error',
+        scene: 'Orders',
+        message: 'edge "browser->validate" comes in from "browser", but no edge goes from "browser" to "orders"',
+      },
+    ],
+    [
+      'an inside edge with no part at either end',
+      edit(shopFig, 'orders', (n) => n.inside!.edges!.push({ from: 'gateway', to: 'payments' })),
+      {
+        rule: 'part-edge-mismatch',
+        severity: 'error',
+        scene: 'Orders',
+        message: 'edge "gateway->payments" has no part at either end',
+      },
+    ],
+    [
+      'an outer edge that no inside edge continues',
+      edit(shopFig, 'mail', (n) => {
+        n.inside!.edges = n.inside!.edges!.filter((e) => e.from !== 'payments');
+        n.inside!.steps![0].flow = n.inside!.steps![0].flow.slice(1);
+      }),
+      {
+        rule: 'part-edge-mismatch',
+        severity: 'warning',
+        scene: 'Mail',
+        message:
+          'edge "payments->mail" comes in, but no edge inside "mail" starts at "payments"; the open view cannot show where the flow comes in',
+      },
+    ],
+    [
+      'a part with no source',
+      edit(shopFig, 'save', (n) => delete n.source),
+      { rule: 'part-no-source', severity: 'warning', scene: 'Orders', message: 'part "save" has no source' },
+    ],
+    [
+      'a box with 17 parts',
+      edit(shopFig, 'orders', (n) => more(n, 12)),
+      { rule: 'part-limit', severity: 'error', message: 'box "orders" has 17 parts; the limit is 16' },
+    ],
+    [
+      'a figure with 61 parts',
+      edit(
+        edit(shopFig, 'mail', (n) => more(n, 12)),
+        'cart',
+        (n) => more(n, 9),
+      ),
+      { rule: 'part-limit', severity: 'error', message: 'the figure has 61 parts; the limit is 60' },
+    ],
+    [
+      'a part at level 4',
+      edit(shopFig, 'read-token', (n) => {
+        n.inside = { layout: { children: [{ id: 'deep', label: 'Deep', source: 'examples/shop/auth.ts#deep' }] } };
+      }),
+      { rule: 'part-limit', severity: 'error', ids: ['read-token'] },
+    ],
+    [
+      'an inside with no parts',
+      edit(shopFig, 'mail', (n) => {
+        n.inside = { layout: { children: [] } };
+      }),
+      { rule: 'part-limit', severity: 'error', message: 'box "mail": inside has no parts' },
+    ],
+    [
+      'an inside in a lanes figure',
+      {
+        lanes: true,
+        layout: {
+          direction: 'column',
+          children: [
+            {
+              id: 'shop',
+              label: 'Shop',
+              children: [
+                { id: 'gateway', label: 'Gateway' },
+                {
+                  id: 'orders',
+                  label: 'Orders',
+                  inside: { layout: { children: [{ id: 'save', label: 'Save', source: 'examples/shop/orders.ts#save' }] } },
+                },
+              ],
+            },
+          ],
+        },
+        edges: [{ from: 'gateway', to: 'orders' }],
+      },
+      {
+        rule: 'parts-ignored',
+        severity: 'warning',
+        message: 'the figure sets lanes; lanes do not open boxes, so the renderers ignore inside on "orders"',
+      },
+    ],
+  ];
+  for (const [fault, fig, want] of cases) {
+    const found = checkSpec(fig);
+    assert.ok(
+      found.some((f) => Object.entries(want).every(([k, v]) => JSON.stringify(f[k as keyof typeof f]) === JSON.stringify(v))),
+      `${fault}: ${JSON.stringify(found)}`,
+    );
+  }
+});
+
+test('duplicate-id fires on one id at two levels and names both paths', () => {
+  const twice = edit(shopFig, 'validate', (n) =>
+    n.inside!.layout.children.push({ id: 'route', label: 'Route', source: 'examples/shop/validate.ts#route' }),
+  );
+  const f = checkSpec(twice).filter((x) => x.rule === 'duplicate-id');
+  assert.equal(f.length, 1, JSON.stringify(f));
+  assert.equal(f[0].severity, 'error');
+  assert.ok(/\bGateway\b/.test(f[0].message) && f[0].message.includes('Orders > Check the cart'), f[0].message);
+});
+
+test('duplicate-id fires on two parts or two edges with one id inside one box', () => {
+  const parts = edit(shopFig, 'orders', (n) =>
+    n.inside!.layout.children.push({ id: 'save', label: 'Save again', source: 'examples/shop/orders.ts#insertOrder' }),
+  );
+  const edges = edit(shopFig, 'orders', (n) => n.inside!.edges!.push({ from: 'gateway', to: 'validate' }));
+  for (const [twice, id] of [
+    [parts, 'save'],
+    [edges, 'gateway->validate'],
+  ] as const) {
+    const f = checkSpec(twice).filter((x) => x.rule === 'duplicate-id');
+    assert.deepEqual(
+      f.map((x) => [x.ids, x.scene]),
+      [[[id], 'Orders']],
+    );
+  }
+});
+
+test('duplicate-id fires on one part id in two boxes with one label', () => {
+  const svc = (id: string): FigNode => ({ id, label: 'Svc', inside: { layout: { children: [{ id: 'a', label: 'A', source: 'a.ts' }] } } });
+  const f = checkSpec({ layout: { children: [svc('s1'), svc('s2')] }, edges: [] }).filter((x) => x.rule === 'duplicate-id');
+  assert.deepEqual(
+    f.map((x) => x.ids),
+    [['a']],
+  );
+});
+
+test('a bad source on a level 3 part gives one finding with the full level path', () => {
+  const bad = edit(shopFig, 'read-token', (n) => (n.source = 'auth.ts#read token'));
+  const f = checkSpec(bad).filter((x) => x.rule === 'bad-source');
+  assert.deepEqual(
+    f.map((x) => x.message),
+    ['part "read-token" [Gateway > Sign in]: source "auth.ts#read token" is not path or path#symbol'],
+  );
+});
+
+test('small-text on an inner level uses the width of the widest level, because the image scales as one', () => {
+  const step = (i: number) => ({ id: `step-${i}`, label: `Step ${i}`, source: `examples/shop/orders.ts#step${i}` });
+  const wide: FlowProps = {
+    layout: {
+      children: [
+        { id: 'gateway', label: 'Gateway', source: 'examples/shop/gateway.ts#checkout' },
+        {
+          direction: 'column',
+          children: [
+            {
+              id: 'orders',
+              label: 'Orders',
+              source: 'examples/shop/orders.ts#createOrder',
+              inside: {
+                layout: { children: Array.from({ length: 16 }, (_, i) => step(i)) },
+                edges: Array.from({ length: 16 }, (_, i) => ({ from: i ? `step-${i - 1}` : 'gateway', to: `step-${i}` })),
+              },
+            },
+            {
+              id: 'mail',
+              label: 'Mail',
+              source: 'examples/shop/mail.ts#sendReceipt',
+              inside: {
+                layout: {
+                  children: [
+                    { id: 'queue', label: 'Queue', source: 'examples/shop/mail.ts#queue' },
+                    { id: 'send', label: 'Send', source: 'examples/shop/mail.ts#send' },
+                  ],
+                },
+                edges: [
+                  { from: 'gateway', to: 'queue' },
+                  { from: 'queue', to: 'send' },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    },
+    edges: [
+      { from: 'gateway', to: 'orders' },
+      { from: 'gateway', to: 'mail' },
+    ],
+  };
+  const small = (f: Finding[]) => f.filter((x) => x.rule === 'small-text').map((x) => x.scene);
+  assert.ok(small(check(wide)).includes('Mail'), JSON.stringify(check(wide)));
+  assert.deepEqual(small(check(wide, { scene: 'mail' })), []);
 });

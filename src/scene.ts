@@ -30,4 +30,11 @@ export type Scene = {
   lanes?: { id: string; rect: Rect }[];
 };
 /** One fault that `flowfig check` found. `ids` name the boxes or edges. */
-export type Finding = { rule: string; severity: 'error' | 'warning'; ids: string[]; message: string };
+export type Finding = {
+  rule: string;
+  severity: 'error' | 'warning';
+  ids: string[];
+  message: string;
+  /** The path line of the level, for a finding inside a box. */
+  scene?: string;
+};

@@ -30,6 +30,8 @@ export type FigNode = {
   source?: string;
   /** A figure with more detail: an SVG path from the repo root. */
   detail?: string;
+  /** The parts inside the box, down to 3 levels. */
+  inside?: FigInside;
 };
 /** A frame that lays out its children in a row or a column. */
 export type FigGroup = {
@@ -47,6 +49,15 @@ export type FigGroup = {
   children: (FigNode | FigGroup)[];
   /** On the root layout: flowfig places the boxes. A labeled group is a frame. */
   auto?: true;
+};
+/** The parts inside a box. A reader opens the box to see them. */
+export type FigInside = {
+  /** The parts and how they line up. The rules of `FlowProps.layout` apply, `auto` too. */
+  layout: FigGroup;
+  /** The arrows between the parts. One end can name an outer neighbor. */
+  edges?: FigEdge[];
+  /** The stories inside the box. Each step is a tab when the box is open. */
+  steps?: FigStep[];
 };
 /** An arrow from one box to another. */
 export type FigEdge = {
@@ -262,6 +273,178 @@ export const beatTimes = (beats: Beat[][], speedMs: number) => {
   return { beats: times, ends };
 };
 export const nodes = (g: FigGroup): FigNode[] => g.children.flatMap((c) => (isGroup(c) ? nodes(c) : [c]));
+
+export type FigPort = { id: string; way: 'in' | 'out' | 'in and out'; name: string };
+export type FigScene = { path: string[]; name: string; line: string; props: FlowProps; ports: FigPort[]; parts: number };
+// Measured: a 56 px gap makes the Orders level of figures/inside-shop.ts fail small-text.
+export const PORT_GAP = 28;
+export const MAX_LEVEL = 3;
+
+export const portLabel = (p: FigPort) =>
+  p.way === 'in' ? `in: from ${p.name}` : p.way === 'out' ? `out: to ${p.name}` : `in and out: ${p.name}`;
+
+export function scenes(fig: FlowProps): FigScene[] {
+  const root: FigScene = { path: [], name: '', line: '', props: fig, ports: [], parts: 0 };
+  if (fig.lanes || fig.timeline || fig.rail === 'only') return [root];
+  const real = new Map<string, FigNode>();
+  const index = (g: FigGroup, level: number): void =>
+    nodes(g).forEach((n) => {
+      real.set(n.id, n);
+      if (n.inside && level < MAX_LEVEL) index(n.inside.layout, level + 1);
+    });
+  index(fig.layout, 1);
+  const name = (id: string) => str(real.get(id)?.label) || id;
+  const { theme, speed, rail } = fig;
+  const out = [root];
+  const open = (parent: FigScene): void => {
+    for (const b of nodes(parent.props.layout)) {
+      const parts = b.inside ? nodes(b.inside.layout) : [];
+      if (!b.inside || !parts.length) continue;
+      const ids = new Set(parts.map((n) => n.id));
+      const edges = b.inside.edges ?? [];
+      const ins: string[] = [],
+        outs: string[] = [];
+      for (const e of edges) {
+        if (ids.has(e.from) === ids.has(e.to)) continue;
+        if (!ids.has(e.from) && !ins.includes(e.from)) ins.push(e.from);
+        if (!ids.has(e.to) && !outs.includes(e.to)) outs.push(e.to);
+      }
+      const ports: FigPort[] = [...ins, ...outs.filter((id) => !ins.includes(id))].map((id) => ({
+        id,
+        way: !ins.includes(id) ? 'out' : outs.includes(id) ? 'in and out' : 'in',
+        name: name(id),
+      }));
+      const box = (p: FigPort): FigNode => {
+        const source = real.get(p.id)?.source;
+        return { id: p.id, label: portLabel(p), ...(source != null && { source }) };
+      };
+      const before = ports.filter((p) => p.way !== 'out').map(box),
+        after = ports.filter((p) => p.way === 'out').map(box);
+      const l = b.inside.layout;
+      const layout: FigGroup = l.auto
+        ? { ...l, children: [...before, ...l.children, ...after] }
+        : { direction: l.direction === 'column' ? 'column' : 'row', gap: PORT_GAP, children: [...before, l, ...after] };
+      const path = [...parent.path, b.id];
+      const s: FigScene = {
+        path,
+        name: name(b.id),
+        line: path.map(name).join(' > '),
+        props: { layout, edges, steps: b.inside.steps, theme, speed, rail },
+        ports,
+        parts: ids.size,
+      };
+      out.push(s);
+      if (path.length + 1 < MAX_LEVEL) open(s);
+    }
+  };
+  open(root);
+  return out;
+}
+
+export const OPEN_MS = { fade: 120, grow: 360, stagger: 50, hide: 120, shrink: 300 };
+export type Times = { beats: { t0: number; t1: number; tEnd: number }[][]; ends: number[] };
+export type TourOpen = {
+  path: string[];
+  step: number;
+  open: [number, number];
+  grown: number;
+  loop: [number, number][];
+  back: [number, number];
+  times: Times;
+};
+export type Tour = { ms: number; loop: [number, number][]; times: Times; opens: TourOpen[] };
+
+const hopEnds = (e: FigEdge, back: boolean) => (back ? [e.to, e.from] : [e.from, e.to]);
+
+export function insideStep(s: FigScene, port?: string): number {
+  const byId = new Map(s.props.edges.map((e) => [edgeId(e), e]));
+  const at = (s.props.steps ?? []).findIndex((st) => {
+    const h = st.flow.length ? toBeat(st.flow[0]).hops[0] : undefined;
+    const e = h && byId.get(h.edge);
+    return e != null && hopEnds(e, h!.back)[0] === port;
+  });
+  return Math.max(at, 0);
+}
+
+export function flowOrder(s: FigScene): string[] {
+  const cols = laneColumns(s.props);
+  const ids = nodes(s.props.layout)
+    .map((n) => n.id)
+    .sort((a, b) => cols.get(a)! - cols.get(b)!);
+  const port = new Set(s.ports.map((p) => p.id));
+  return [...ids.filter((id) => port.has(id)), ...ids.filter((id) => !port.has(id))];
+}
+
+export function tourPlan(fig: FlowProps, speed = fig.speed ?? 900): Tour {
+  const all = scenes(fig);
+  const byKey = new Map(all.map((s) => [s.path.join('>'), s]));
+  const opens: TourOpen[] = [];
+  const done = new Set<string>();
+  const cut = (from: number, to: number, spans: [number, number][]) => {
+    const out: [number, number][] = [];
+    let at = from;
+    for (const [a, b] of spans) {
+      if (a > at) out.push([at, a]);
+      at = b;
+    }
+    if (to > at) out.push([at, to]);
+    return out;
+  };
+  const play = (s: FigScene, steps: FigStep[], at: number) => {
+    const beats = steps.map((st) => st.flow.map(toBeat));
+    const base = beatTimes(beats, speed);
+    const byId = new Map(s.props.edges.map((e) => [edgeId(e), e]));
+    const spans: [number, number][] = [];
+    let shift = 0;
+    const openAt = (id: string, port: string | undefined, p: number) => {
+      const key = [...s.path, id].join('>');
+      const inner = byKey.get(key);
+      if (!inner || done.has(key)) return;
+      const L = openBox(inner, port, p);
+      spans.push([p, p + L]);
+      shift += L;
+    };
+    const times: Times = { beats: [], ends: [] };
+    beats.forEach((row, si) => {
+      times.beats.push(
+        row.map((b, bi) => {
+          const t = base.beats[si][bi];
+          const t0 = at + t.t0 * 1000 + shift,
+            t1 = at + t.t1 * 1000 + shift;
+          for (const h of b.hops) {
+            const e = byId.get(h.edge);
+            if (e) openAt(hopEnds(e, h.back)[1], hopEnds(e, h.back)[0], at + t.tEnd * 1000 + shift);
+          }
+          return { t0: t0 / 1000, t1: t1 / 1000, tEnd: (at + t.tEnd * 1000 + shift) / 1000 };
+        }),
+      );
+      times.ends.push((at + base.ends[si] * 1000 + shift) / 1000);
+    });
+    const last = at + (base.ends.at(-1) ?? 0) * 1000;
+    for (const n of nodes(s.props.layout)) openAt(n.id, undefined, last + shift);
+    if (times.ends.length) times.ends[times.ends.length - 1] = (last + shift) / 1000;
+    return { times, end: last + shift, spans };
+  };
+  const openBox = (sc: FigScene, port: string | undefined, p: number): number => {
+    done.add(sc.path.join('>'));
+    const grown = p + readMs(sc.name) + OPEN_MS.fade + OPEN_MS.grow;
+    const count = nodes(sc.props.layout).length;
+    const loopAt = grown + OPEN_MS.stagger * (count - 1) + readMs([sc.line, ...sc.ports.map(portLabel)].join(' '));
+    const steps = sc.props.steps ?? [];
+    const step = steps.length ? insideStep(sc, port) : -1;
+    const entry: TourOpen = { path: sc.path, step, open: [p, loopAt], grown, loop: [], back: [0, 0], times: { beats: [], ends: [] } };
+    opens.push(entry);
+    const r = play(sc, step === -1 ? [] : [steps[step]], loopAt);
+    const up = sc.path.length > 1 ? `back to ${byKey.get(sc.path.slice(0, -1).join('>'))!.name}` : 'Back';
+    const end = r.end + readMs(up) + OPEN_MS.hide + OPEN_MS.shrink + OPEN_MS.fade;
+    entry.loop = cut(loopAt, r.end, r.spans);
+    entry.back = [r.end, end];
+    entry.times = r.times;
+    return end - p;
+  };
+  const root = play(all[0], fig.steps ?? [], 0);
+  return { ms: root.end, loop: cut(0, root.end, root.spans), times: root.times, opens };
+}
 export const LANE_GAP = 56,
   LANE_PAD = 24,
   LANE_ROW_GAP = 20;
@@ -768,9 +951,16 @@ export const altText = (fig: FlowProps): { title: string; desc: string } => {
       });
     }),
   ]);
+  const levels = scenes(fig)
+    .slice(1)
+    .map((s) => {
+      const port = new Set(s.ports.map((p) => p.id));
+      const parts = nodes(s.props.layout).filter((n) => !port.has(n.id));
+      return `${s.line}: ${parts.map((n) => str(n.label) || n.id).join(', ')}.${s.ports.length ? ` Ports: ${s.ports.map(portLabel).join(', ')}.` : ''}`;
+    });
   return {
     title: `Flow figure: ${boxes.join(', ')}.${steps.length ? ` Steps: ${steps.map((s) => str(s.label)).join(', ')}.` : ''}`,
-    desc: [`The figure has these boxes: ${boxes.join(', ')}.`, ...lines].join('\n'),
+    desc: [`The figure has these boxes: ${boxes.join(', ')}.`, ...lines, ...levels].join('\n'),
   };
 };
 

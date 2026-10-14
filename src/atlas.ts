@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, posix, resolve } from 'node:path';
 import { coverageLines, coverageReport, type FigureHealth } from './coverage.ts';
 import { loadSpec, specOf } from './load.ts';
-import { altText, nodes, str, type FlowProps } from './model.ts';
+import { altText, nodes, scenes, str, type FlowProps } from './model.ts';
 import { openFile } from './open.ts';
 import { esc, pageHtml } from './page.ts';
 import { toSvg } from './svg.ts';
@@ -55,7 +55,11 @@ export function atlasFiles({ root = process.cwd(), figures }: AtlasOptions = {})
       return to && specs.has(to) ? [{ n, to }] : [];
     });
     const hrefs = new Map(targets.map(({ n, to }) => [n.id, hrefTo(page, pageOf(to))]));
-    const svg = toSvg(spec, { links: Object.fromEntries(hrefs) });
+    const owners = new Set(scenes(spec).flatMap((s) => (s.path.length === 1 ? s.path : [])));
+    const svg = toSvg(spec, {
+      links: Object.fromEntries([...hrefs].filter(([id]) => !owners.has(id))),
+      ...(owners.size && { script: true }),
+    });
     const details = nodes(spec.layout)
       .filter((n) => typeof n.detail === 'string')
       .map((n) => {

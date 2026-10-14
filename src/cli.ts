@@ -21,7 +21,7 @@ import { loadSpec, reportLines, sortFindings, specOf, summaryLines, svgWithSpec,
 import type { FlowProps } from './model.ts';
 import { check, render, toSvg, type Finding } from './svg.ts';
 import { checkRendered } from './check.ts';
-import { coverageLine, links, parseSource, unsureLines, verifyReport, type Coverage, type Link } from './verify.ts';
+import { coverageLine, levelLines, links, parseSource, unsureLines, verifyReport, type Coverage, type Link } from './verify.ts';
 import { VERSION } from './version.ts';
 import { trace, traceLines } from './trace.ts';
 import { coverageLines, coverageReport } from './coverage.ts';
@@ -42,7 +42,7 @@ const USAGE = `usage: flowfig <-|spec.json|figure.ts> [out.svg] [--open]   rende
        flowfig from-mermaid <file.mmd|file.md|-> [--out <dir>]   convert Mermaid diagrams to specs
        flowfig gif <figure.svg> [out.gif] [--step <n>] [--dark] [--fps <n>] [--scale <n>] [--mp4]   write an animated GIF
        flowfig frames <figure.svg> [out.png] [--step <n>] [--dark] [--fps <n>] [--every <ms>] [--scale <n>] [--open]   write one PNG sheet of the key frames
-flags for render and check: --strict (warnings are errors), --json, --width <px>, --min-text <px>, --no-check (render only), --no-verify (render only)
+flags for render and check: --strict (warnings are errors), --json, --width <px>, --min-text <px>, --no-check (render only), --no-verify (render only), --scene <id> (render one level), --script (add the script that opens a box on a click)
 flowfig --version, -v                               print the version`;
 function usage(message: string): never {
   console.error(message);
@@ -204,10 +204,12 @@ if (args[0] === 'verify') {
   if (json) console.log(JSON.stringify({ findings, links: all, coverage }, null, 2));
   else {
     const n = (k: number, word: string) => `${k} ${word}${k === 1 ? '' : 's'}`;
-    for (const f of findings) console.log(`${f.severity.padEnd(8)} ${f.rule.padEnd(18)} ${f.figure}: ${f.message}`);
+    for (const f of findings)
+      console.log(`${f.severity.padEnd(8)} ${f.rule.padEnd(18)} ${f.figure}: ${f.scene ? `[${f.scene}] ` : ''}${f.message}`);
     console.log(`${n(errors, 'error')}, ${n(findings.length - errors, 'warning')}`);
     for (const c of coverage) {
       console.log(coverageLine(c.figure, c));
+      for (const l of levelLines(c)) console.log(l);
       for (const l of unsureLines(c)) console.log(l);
     }
   }
@@ -463,7 +465,7 @@ const json = flag('--json'),
   skipVerify = flag('--no-verify'),
   open = flag('--open');
 if (command === 'check' && open) usage('--open works with a render, not with check');
-const opts = { width: value('--width'), minText: value('--min-text') };
+const opts = { width: value('--width'), minText: value('--min-text'), scene: option('--scene'), script: flag('--script') };
 const unknown = args.find((a) => a.startsWith('-') && a !== '-');
 if (unknown) usage(`unknown flag ${unknown}`);
 const [input, out] = args;
@@ -471,8 +473,16 @@ if (!input) usage(USAGE);
 
 const props = await load(input);
 
-const rendered = skip ? undefined : render(props, opts);
-const findings: Finding[] = rendered ? sortFindings(checkRendered(props, opts, rendered.scene), strict) : [];
+const drawn = () => {
+  try {
+    return render(props, opts);
+  } catch (e) {
+    if (!(e as Error).message.endsWith('has no level to open')) throw e;
+    return usage((e as Error).message);
+  }
+};
+const rendered = skip ? undefined : drawn();
+const findings: Finding[] = rendered ? sortFindings(checkRendered(props, opts, rendered.scene, rendered.levels), strict) : [];
 const errors = findings.filter((f) => f.severity === 'error').length;
 
 const report = (print: (s: string) => void, tty: boolean | undefined, extra: string[] = []) => {
@@ -490,7 +500,7 @@ if (command === 'check') {
 const dest = out ?? (input === '-' ? 'figure.svg' : input.replace(/\.[^./\\]+$/, '') + '.svg');
 report(console.error, process.stderr.isTTY, errors ? [] : [...summaryLines(props), ...(skipVerify ? [] : verifyLines(props, dest))]);
 if (errors) process.exit(1);
-const withSpec = svgWithSpec(props, opts, rendered?.svg);
+const withSpec = svgWithSpec(props, opts, (rendered ?? drawn()).svg);
 writeFileSync(dest, withSpec);
 console.log(`${dest} — ${(withSpec.length / 1024).toFixed(1)} kB`);
 if (open) {

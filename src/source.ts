@@ -1,5 +1,5 @@
 // No Node import: the React and SVG entries must stay browser-safe.
-import { edgeId, nodes, toBeat, type FlowProps } from './model.ts';
+import { edgeId, nodes, scenes, toBeat, type FlowProps } from './model.ts';
 
 /** `path` or `path#symbol`. No spaces, one `#` at most, both parts non-empty. `null` for a bad form. */
 export function parseSource(s: string): { path: string; symbol?: string } | null {
@@ -15,25 +15,31 @@ export const headingSlug = (text: string): string =>
     .replace(/[^\p{L}\p{N} -]/gu, '')
     .replace(/ /g, '-');
 
-export type Link = { owner: string; source: string; path: string; symbol?: string };
+export type Link = { owner: string; source: string; path: string; symbol?: string; level?: string };
 
-/** Every box, edge and hop with its raw `source`, well-formed or not. The one owner list that `links` and `checkSpec` share. */
-export function owners(fig: FlowProps): [string, string | undefined, string | undefined][] {
-  return [
-    ...nodes(fig.layout).map((n): [string, string | undefined, string | undefined] => [`box "${n.id}"`, n.source, undefined]),
-    ...fig.edges.map((e): [string, string | undefined, string | undefined] => [`edge "${edgeId(e)}"`, e.source, e.via]),
-    ...(fig.steps ?? []).flatMap((s) =>
-      s.flow.flatMap((b) =>
-        toBeat(b).hops.map((h): [string, string | undefined, string | undefined] => [`hop on "${h.edge}"`, h.source, h.via]),
+type Owner = [string, string | undefined, string | undefined, string];
+
+export function owners(fig: FlowProps): Owner[] {
+  return scenes(fig).flatMap((s) => {
+    const ports = new Set(s.ports.map((p) => p.id));
+    const at = s.line ? ` [${s.line}]` : '';
+    const kind = s.line ? 'part' : 'box';
+    return [
+      ...nodes(s.props.layout)
+        .filter((n) => !ports.has(n.id))
+        .map((n): Owner => [`${kind} "${n.id}"${at}`, n.source, undefined, s.path.join('>')]),
+      ...s.props.edges.map((e): Owner => [`edge "${edgeId(e)}"${at}`, e.source, e.via, s.path.join('>')]),
+      ...(s.props.steps ?? []).flatMap((st) =>
+        st.flow.flatMap((b) => toBeat(b).hops.map((h): Owner => [`hop on "${h.edge}"${at}`, h.source, h.via, s.path.join('>')])),
       ),
-    ),
-  ];
+    ];
+  });
 }
 
 /** Every well-formed link in the figure, with the box, edge or hop that carries it. `bad-source` covers the rest. */
 export function links(fig: FlowProps): Link[] {
-  return owners(fig).flatMap(([owner, source]) => {
+  return owners(fig).flatMap(([owner, source, , level]) => {
     const p = source == null ? null : parseSource(source);
-    return p ? [{ owner, source: source!, ...p }] : [];
+    return p ? [{ owner, source: source!, ...p, ...(level && { level }) }] : [];
   });
 }

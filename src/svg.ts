@@ -73,6 +73,13 @@ import {
   type FigTone,
   type FlowProps,
   edgeTip,
+  scenes,
+  tourPlan,
+  flowOrder,
+  OPEN_MS,
+  type FigScene,
+  type Times,
+  type TourOpen,
 } from './model.ts';
 
 export { LIGHT, DARK } from './model.ts';
@@ -276,6 +283,10 @@ export type SvgOptions = {
   marks?: DiffMarks;
   /** Links a box to an href, by box id. `flowfig atlas` sets it. */
   links?: Record<string, string>;
+  /** Draws the level of this box as a plain figure: no tour, no script. */
+  scene?: string;
+  /** Adds the script that opens a box on a click, for a figure with parts. */
+  script?: boolean;
 };
 
 const MARK_COLOR: Record<DiffMark, string> = { added: TONES.green, removed: TONES.red, changed: TONES.orange };
@@ -309,9 +320,18 @@ function legendSvg(items: { color: string; text: string }[], W: number, H: numbe
 
 const SYSTEM_FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
 
-/** The SVG string and the scene it drew. The scene shape may change; use `toSvg` for the SVG only. */
-export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; scene: Scene } {
+type At = {
+  prefix: string;
+  ports: Set<string>;
+  owners: Map<string, number>;
+  fades?: Map<string, string>;
+  times?: Times;
+  total?: number;
+};
+
+function draw(spec: FlowProps, opts: SvgOptions, at?: At) {
   const fig = autoLayout(spec);
+  const pre = at?.prefix ?? '';
   const pad = opts.padding ?? 24;
   const tl = fig.timeline && isLanesLayout(fig.layout) ? timelineLayout(fig, TL_AXIS_W) : null;
   const synthetic = tl != null && !fig.steps?.length && !opts.marks;
@@ -458,7 +478,7 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
     tEnd: number;
   }[] = [];
   const edgeOf = Object.fromEntries(fig.edges.map((e, i) => [ids[i], e]));
-  const times = beatTimes(beats, opts.speed ?? fig.speed ?? 900);
+  const times = at?.times ?? beatTimes(beats, opts.speed ?? fig.speed ?? 900);
   beats.forEach((stepBeats, si) => {
     stepBeats.forEach((b, bi) => {
       const { t0, t1, tEnd } = times.beats[si][bi];
@@ -481,7 +501,7 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
       segs.push({ t0, t1: bi === stepBeats.length - 1 ? times.ends[si] : tEnd, si, bi });
     });
   });
-  const total = times.ends.at(-1) || 1;
+  const total = at?.total ?? (times.ends.at(-1) || 1);
 
   const shownAt = segs.map(
     ({ si, bi }) => Object.assign({}, ...beats[si].slice(0, bi + 1).map((b) => b.show)) as Record<string, FigContent>,
@@ -520,7 +540,7 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
     if (!segs.length || on.every((x) => !x)) return '';
     const key = prefix + on.map((x) => (x ? 1 : 0)).join('');
     if (!seen.has(key)) {
-      const name = `a${seen.size}`;
+      const name = `${pre}a${seen.size}`;
       seen.set(key, name);
       const frames = runs(on.map((x) => (x ? onCss : offCss)));
       css.push(`@keyframes ${name} { ${frames} }\n.${name} { animation: ${name} ${n2(total)}s infinite step-end; }`);
@@ -537,7 +557,7 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
     if (!segs.length || values.every((v) => v === base)) return '';
     const key = prefix + values.join('|');
     if (!seen.has(key)) {
-      const name = `a${seen.size}`;
+      const name = `${pre}a${seen.size}`;
       seen.set(key, name);
       const kf = runs(values);
       css.push(`@keyframes ${name} { ${kf} }\n.${name} { animation: ${name} ${n2(total)}s infinite step-end; }`);
@@ -592,7 +612,7 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
     const kf = merged.map((f) => `${pct(f.a / total)},${pct(f.b / total - 0.0001)} { ${f.css} }`);
     const key = (shape ? 'B' : 'R') + kf.join(' ');
     if (!seen.has(key)) {
-      const name = `a${seen.size}`;
+      const name = `${pre}a${seen.size}`;
       seen.set(key, name);
       css.push(`@keyframes ${name} { ${kf.join(' ')} }\n.${name} { animation: ${name} ${n2(total)}s infinite linear; }`);
     }
@@ -612,9 +632,11 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
     }
     const diffMark = opts.marks?.boxes[item.id];
     const href = opts.links?.[item.id];
+    const fade = at?.fades?.get(item.id);
     const tip = (inner: string) => {
       const body = marked(diffMark, item.source ? `<g><title>${esc(item.source)}</title>${inner}</g>` : inner);
-      return href == null ? body : `<a href="${esc(href)}" tabindex="-1">${body}</a>`;
+      const linked = href == null ? body : `<a href="${esc(href)}" tabindex="-1">${body}</a>`;
+      return fade ? `<g class="${fade}">${linked}</g>` : linked;
     };
     const bt = diffMark ? MARK_COLOR[diffMark] : item.tone && TONES[item.tone];
     const stroke = cls(boxAnim(item.id, true, bt));
@@ -632,6 +654,7 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
       return tip(shape + `<text x="${n2(tx)}" y="${n2(cy + 4.5)}" class="bar">${esc(label)}</text>`);
     }
     const rim = item.shape === 'store' ? cls(boxAnim(item.id, false, bt)) : '';
+    const port = at?.ports.has(item.id);
     const fill0 = bt ? toneTint(bt, 'var(--bg)') : 'var(--bg)';
     const stroke0 = bt ?? 'var(--border)';
     const cx = p.x + p.w / 2;
@@ -646,11 +669,17 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
         : item.shape === 'store'
           ? `<path d="M${n2(p.x)} ${n2(p.y + 12)} a ${n2(p.w / 2)} 12 0 0 1 ${n2(p.w)} 0 v ${n2(p.h - 24)} a ${n2(p.w / 2)} 12 0 0 1 ${n2(-p.w)} 0 z" fill="${fill0}" stroke="${stroke0}"${stroke}/>` +
             `<path d="M${n2(p.x)} ${n2(p.y + 12)} a ${n2(p.w / 2)} 12 0 0 0 ${n2(p.w)} 0" fill="none" stroke="${stroke0}"${rim}/>`
-          : `<rect x="${n2(p.x)}" y="${n2(p.y)}" width="${n2(p.w)}" height="${n2(p.h)}" rx="10" fill="${fill0}" stroke="${stroke0}"${stroke}/>`;
+          : `<rect x="${n2(p.x)}" y="${n2(p.y)}" width="${n2(p.w)}" height="${n2(p.h)}" rx="10" fill="${fill0}" stroke="${stroke0}"${port ? ' stroke-dasharray="4 3"' : ''}${stroke}/>`;
+    const opens =
+      at?.owners.has(item.id) && item.shape !== 'decision'
+        ? `<rect x="${n2(p.x + 3)}" y="${n2(p.y + 3)}" width="${n2(p.w)}" height="${n2(p.h)}" rx="10" fill="var(--bg)" stroke="var(--border)"/>`
+        : '';
     const lines = labelLines(item, p.w);
     const extra = (lines.length - 1) * LABEL_LINE;
     const firstY = item.shape === 'store' || contents || dl ? labelY : labelY - extra / 2;
-    const label = lines.map((l, i) => `<text x="${n2(cx)}" y="${n2(firstY + i * LABEL_LINE)}" class="label">${esc(l)}</text>`).join('');
+    const label = lines
+      .map((l, i) => `<text x="${n2(cx)}" y="${n2(firstY + i * LABEL_LINE)}"${cls('label', port && 'muted')}>${esc(l)}</text>`)
+      .join('');
     const sub = dl
       ? dl.subs.map((l) => `<text x="${n2(cx)}" y="${n2(p.y + p.h / 2 + l.dy)}" class="sub">${esc(l.text)}</text>`).join('')
       : item.sub
@@ -666,7 +695,7 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
         : item.mark === 'end'
           ? `<circle cx="${mx}" cy="${my}" r="6.25" fill="none" stroke="${dot}" stroke-width="1.5"/><circle cx="${mx}" cy="${my}" r="4" fill="${dot}"/>`
           : '';
-    return tip(shape + label + sub + mark + (contents ? card(p as Rect & { item: FigNode }, cardTop, contents) : ''));
+    return tip(opens + shape + label + sub + mark + (contents ? card(p as Rect & { item: FigNode }, cardTop, contents) : ''));
   });
 
   function card(p: Rect & { item: FigNode }, top: number, contents: FigContent[]): string {
@@ -790,7 +819,7 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
       t1 = Math.min(h.t1 / total, 1),
       tEnd = h.tEnd / total,
       reach = n4((t1 - t0) / (h.t1 / total - t0));
-    const name = `p${i}`;
+    const name = `${pre}p${i}`;
     css.push(
       `@keyframes ${name} { 0%,${pct(t0)} { opacity: 0 } ${pct(t0 + 0.0001)},${pct(tEnd - 0.0001)} { opacity: 1 } ${pct(tEnd)},100% { opacity: 0 } }\n` +
         `.${name} { animation: ${name} ${n2(total)}s infinite step-end; }`,
@@ -866,7 +895,7 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
           at = home;
         }
       });
-      const name = `a${seen.size}`;
+      const name = `${pre}a${seen.size}`;
       seen.set('playhead', name);
       const kf = pts.map(([t, x]) => `${pct(t / total)} { transform: translateX(${n2(x - home)}px) }`).join(' ');
       css.push(`@keyframes ${name} { ${kf} }\n.${name} { animation: ${name} ${n2(total)}s infinite linear; }`);
@@ -875,7 +904,7 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
         const on = dates.map((x) => x.d === d);
         const key = `d${d}${on.map((x) => (x ? 1 : 0)).join('')}`;
         if (!seen.has(key)) {
-          const nm = `a${seen.size}`;
+          const nm = `${pre}a${seen.size}`;
           seen.set(key, nm);
           const fr = dates
             .map(
@@ -913,18 +942,19 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
   const shift = (W - (bounds.w + pad * 2 + arcL + arcR)) / 2 + arcL;
   const railX = rail ? (W - rail.width) / 2 : 0;
 
+  const still = (on: boolean[]) => !!at?.fades && on.every(Boolean);
   const labels =
     rail || synthetic
       ? []
       : steps.map((_, si) => {
           const on = segs.map((s) => s.si === si);
-          return `<text x="${n2(W / 2)}" y="${n2(H - capH + 16)}" opacity="0"${cls('steplabel', anim(on, 'opacity: 1', 'opacity: 0', 's'))}>${esc(str(steps[si].label))}</text>`;
+          return `<text x="${n2(W / 2)}" y="${n2(H - capH + 16)}"${still(on) ? '' : ' opacity="0"'}${cls('steplabel', !still(on) && anim(on, 'opacity: 1', 'opacity: 0', 's'))}>${esc(str(steps[si].label))}</text>`;
         });
   const said = [...new Set(captions)].map((text) => {
     const on = captions.map((c) => c === text);
     const lines = wrap(text, wrapW, 13.5);
     return (
-      `<g opacity="0"${cls(anim(on, 'opacity: 1', 'opacity: 0', 'y'))}>` +
+      `<g${still(on) ? '' : ` opacity="0"${cls(anim(on, 'opacity: 1', 'opacity: 0', 'y'))}`}>` +
       lines.map((l, li) => `<text x="${n2(W / 2)}" y="${n2(H - capH + capTop + 16 + li * 20)}" class="caption">${esc(l)}</text>`).join('') +
       `</g>`
     );
@@ -1017,43 +1047,11 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
         return `<g transform="translate(${n2(railX)} 0)">${parts.join('')}</g>`;
       })();
 
-  const { font, ...t0 } = { ...LIGHT, ...fig.theme, ...opts.theme };
-  const alt = altText(fig);
   const holdAt = beats[0]?.length ? n2(segs[beats[0].length - 1].t1 - 0.1) : 0;
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${n2(W)}" height="${n2(H)}" viewBox="0 0 ${n2(W)} ${n2(H)}" font-family="${esc(font ?? SYSTEM_FONT)}" role="img">
-<title>${esc(alt.title)}</title>
-<desc>${esc(alt.desc)}</desc>
-<style>
-svg { ${vars(t0, '#eef5fd')} }
-@media (prefers-color-scheme: dark) { svg { ${vars(DARK, '#1d2733')} } }
-.label { fill: var(--fg); font-size: 14px; font-weight: 500; text-anchor: middle; }
-.sub { fill: var(--muted); font-size: 12px; text-anchor: middle; }
-.frame { fill: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: .04em; }
-.edgelabel { fill: var(--muted); font-size: 11px; text-anchor: middle; font-family: ui-monospace, Menlo, monospace; }
-.row { fill: var(--fg); font-size: 11px; }
-.row.mono { font-size: 10.5px; font-family: ui-monospace, Menlo, monospace; }
-.muted { fill: var(--muted); }
-.bar { fill: var(--fg); font-size: 13px; font-weight: 500; }
-.tick { fill: var(--muted); font-size: 11px; }
-.today { fill: var(--accent); font-size: 11px; font-weight: 600; }
-.tag { font-size: 9px; font-weight: 600; letter-spacing: .03em; text-anchor: middle; }
-.mark { fill: var(--accent); font-size: 11px; font-weight: 600; text-anchor: end; }
-.chip { fill: ${ON_ACCENT}; font-size: 11.5px; text-anchor: middle; }
-.steplabel { fill: var(--fg); font-size: 13px; font-weight: 600; text-anchor: middle; font-family: ui-monospace, Menlo, monospace; }
-.caption { fill: var(--muted); font-size: 13.5px; text-anchor: middle; }
-.railcol { fill: var(--fg); font-size: 12px; font-weight: 500; text-anchor: middle; }
-.railphase { fill: var(--fg); font-size: 13px; font-weight: 600; font-family: ui-monospace, Menlo, monospace; }
-.railphase.muted { fill: var(--muted); }
-.end { text-anchor: end; }
-${css.join('\n')}
-@media (prefers-reduced-motion: reduce) { * { animation-play-state: paused !important; animation-delay: -${holdAt}s !important; } }
-</style>
-<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 1 L 9 5 L 0 9 z" fill="context-stroke"/></marker></defs>
-<rect width="100%" height="100%" fill="var(--bg)"/>
-${
-  only
-    ? ''
-    : `<g transform="translate(${n2(shift)} ${arcT})">
+  const body = `${
+    only
+      ? ''
+      : `<g transform="translate(${n2(shift)} ${arcT})">
 ${axisSvg}
 ${tl ? boxes.filter((b, i) => b && isGroup(placed[i].item)).join('\n') : ''}${lineSvg && `\n${lineSvg}`}
 ${tl ? edgeSvg.join('\n') : ''}
@@ -1063,11 +1061,10 @@ ${packets.join('\n')}
 ${todaySvg}
 </g>
 `
-}${railSvg}
+  }${railSvg}
 ${labels.join('\n')}
 ${said.join('\n')}
-${legendSvg(legend, W, H)}</svg>
-`;
+${legendSvg(legend, W, H)}`;
   if (rail) fonts.push(12, 13);
   if (legend.length) fonts.push(12);
   const scene: Scene = {
@@ -1115,7 +1112,208 @@ ${legendSvg(legend, W, H)}</svg>
       lanes: placed.filter((p) => p.lane).map((p) => ({ id: str((p.item as FigGroup).label), rect: { x: p.x, y: p.y, w: p.w, h: p.h } })),
     }),
   };
-  return { svg, scene };
+  const frame = { x: shift - arcL, w: bounds.w + pad * 2 + arcL + arcR, h: mapH };
+  return { W, H, css: css.join('\n'), body, holdAt, scene, fig, frame };
+}
+
+const page = (fig: FlowProps, opts: SvgOptions, W: number, H: number, css: string, holdAt: number, body: string) => {
+  const { font, ...t0 } = { ...LIGHT, ...fig.theme, ...opts.theme };
+  const alt = altText(fig);
+  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${n2(W)}" height="${n2(H)}" viewBox="0 0 ${n2(W)} ${n2(H)}" font-family="${esc(font ?? SYSTEM_FONT)}" role="img">
+<title>${esc(alt.title)}</title>
+<desc>${esc(alt.desc)}</desc>
+<style>
+svg { ${vars(t0, '#eef5fd')} }
+@media (prefers-color-scheme: dark) { svg { ${vars(DARK, '#1d2733')} } }
+.label { fill: var(--fg); font-size: 14px; font-weight: 500; text-anchor: middle; }
+.sub { fill: var(--muted); font-size: 12px; text-anchor: middle; }
+.frame { fill: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: .04em; }
+.edgelabel { fill: var(--muted); font-size: 11px; text-anchor: middle; font-family: ui-monospace, Menlo, monospace; }
+.row { fill: var(--fg); font-size: 11px; }
+.row.mono { font-size: 10.5px; font-family: ui-monospace, Menlo, monospace; }
+.muted { fill: var(--muted); }
+.bar { fill: var(--fg); font-size: 13px; font-weight: 500; }
+.tick { fill: var(--muted); font-size: 11px; }
+.today { fill: var(--accent); font-size: 11px; font-weight: 600; }
+.tag { font-size: 9px; font-weight: 600; letter-spacing: .03em; text-anchor: middle; }
+.mark { fill: var(--accent); font-size: 11px; font-weight: 600; text-anchor: end; }
+.chip { fill: ${ON_ACCENT}; font-size: 11.5px; text-anchor: middle; }
+.steplabel { fill: var(--fg); font-size: 13px; font-weight: 600; text-anchor: middle; font-family: ui-monospace, Menlo, monospace; }
+.caption { fill: var(--muted); font-size: 13.5px; text-anchor: middle; }
+.railcol { fill: var(--fg); font-size: 12px; font-weight: 500; text-anchor: middle; }
+.railphase { fill: var(--fg); font-size: 13px; font-weight: 600; font-family: ui-monospace, Menlo, monospace; }
+.railphase.muted { fill: var(--muted); }
+.end { text-anchor: end; }
+${css}
+@media (prefers-reduced-motion: reduce) { * { animation-play-state: paused !important; animation-delay: -${holdAt}s !important; } }
+</style>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 1 L 9 5 L 0 9 z" fill="context-stroke"/></marker></defs>
+<rect width="100%" height="100%" fill="var(--bg)"/>
+${body}</svg>
+`;
+};
+
+export type Level = { line: string; props: FlowProps; scene: Scene };
+const SCRIPT = `(()=>{const s=document.currentScript.closest('svg'),G=[...s.querySelectorAll('.scene')],S=[G[0]],R=matchMedia('(prefers-reduced-motion: reduce)').matches,
+W=(g,k)=>g.dataset[k].split(' ').map(p=>p.split(',').map(Number));let q=[],L=W(G[0],'loop'),w=[0,-1],o,t=0,p=performance.now();
+const seek=t=>{s.pauseAnimations();s.setCurrentTime(t);for(const a of s.getAnimations({subtree:true}))a.pause(),a.currentTime=t*1e3+a.effect.getTiming().delay},
+tick=n=>{if(t>=w[1]){o=q.length>0;if(!o)q=L.slice();w=q.shift();t=w[0]}seek(R?w[1]:Math.min(t,w[1]));t+=R?(o?1e9:0):(n-p)/1e3;p=n;requestAnimationFrame(tick)},
+show=()=>{const c=S.at(-1);for(const g of G){g.style.pointerEvents=g==c?'':'none';for(const x of g.querySelectorAll('.hit,.back'))x.setAttribute('role','button'),x.setAttribute('tabindex',g==c?0:-1)}},
+go=(a,b)=>{q=a;L=b;w=[0,-1];t=0;show()},
+back=()=>{if(S.length>1){const g=S.pop();go(W(g,'back'),W(S.at(-1),'loop'))}},
+act=e=>{const x=e.target.closest('.hit,.back');if(!x||x.closest('.scene')!=S.at(-1))return;if(x.classList.contains('back'))back();else{const g=G.find(g=>g.id=='s-'+x.dataset.open);S.push(g);go(W(g,'open'),W(g,'loop'))}return 1};
+s.setAttribute('role','group');s.addEventListener('click',act);
+s.addEventListener('keydown',e=>{const k=e.key;if(k=='Escape'||k=='Backspace')back();else if(!((k=='Enter'||k==' ')&&act(e)))return;e.preventDefault()});
+show();requestAnimationFrame(tick)})()`;
+const BAND = 28;
+
+/** The SVG string and the scene it drew. The scene shape may change; use `toSvg` for the SVG only. */
+export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; scene: Scene; levels?: Level[] } {
+  const { scene: one, script, ...rest } = opts;
+  const all = scenes(spec);
+  const key = (path: string[]) => path.join('>');
+  const under = <T extends { path: string[] }>(list: T[], path: string[]) =>
+    list.filter((x) => x.path.length === path.length + 1 && key(x.path.slice(0, -1)) === key(path));
+  const at = (s: FigScene) => ({
+    ports: new Set(s.ports.map((p) => p.id)),
+    owners: new Map(under(all, s.path).map((x) => [x.path.at(-1)!, x.parts])),
+  });
+  if (one != null) {
+    const s = all.find((x) => x.path.at(-1) === one);
+    if (!s) throw new Error(`box "${one}" has no level to open`);
+    const plain = (g: FigGroup): FigGroup => ({
+      ...g,
+      children: g.children.map((c) => (isGroup(c) ? plain(c) : { ...c, inside: undefined })),
+    });
+    const d = draw({ ...s.props, layout: plain(s.props.layout) }, rest, { prefix: '', ...at(s) });
+    return { svg: page(d.fig, rest, d.W, d.H, d.css, d.holdAt, d.body), scene: d.scene };
+  }
+  if (all.length < 2) {
+    const d = draw(spec, rest);
+    return { svg: page(d.fig, rest, d.W, d.H, d.css, d.holdAt, d.body), scene: d.scene };
+  }
+  const plan = tourPlan(spec, opts.speed ?? spec.speed);
+  const total = plan.ms / 1000,
+    eps = plan.ms / 10000;
+  const { fade, grow, stagger, hide, shrink } = OPEN_MS;
+  const tour: string[] = [];
+  const uid = `f${([...JSON.stringify(spec)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) | 0, 7) >>> 0).toString(36)}`;
+  const track = (pts: [number, string, string?][]) => {
+    const name = `${uid}t${tour.length}`;
+    const kf = pts.map(([t, v, ease]) => `${pct(t / plan.ms)} { ${v}${ease ? `; animation-timing-function: ${ease}` : ''} }`).join(' ');
+    tour.push(`@keyframes ${name} { ${kf} }\n.${name} { animation: ${name} ${n2(total)}s infinite linear; }`);
+    return name;
+  };
+  const fadeAt = (o: TourOpen) => o.grown - grow - fade;
+  const dips = (path: string[]): [number, number][] =>
+    under(plan.opens, path).flatMap((n): [number, number][] => [
+      [fadeAt(n), 1],
+      [fadeAt(n) + fade, 0],
+      [n.back[1] - fade, 0],
+      [n.back[1], 1],
+    ]);
+  const drawn = all.map((s, i) => {
+    const o = plan.opens.find((x) => key(x.path) === key(s.path));
+    const props = o ? { ...s.props, steps: o.step === -1 ? [] : [s.props.steps![o.step]] } : spec;
+    const fades =
+      o &&
+      new Map(
+        flowOrder(s).map((id, k) => {
+          const t = o.grown + stagger * k;
+          return [
+            id,
+            track([
+              [0, 'opacity: 0'],
+              [t, 'opacity: 0'],
+              [t + fade, 'opacity: 1'],
+              [plan.ms, 'opacity: 1'],
+            ]),
+          ];
+        }),
+      );
+    const times = o ? o.times : plan.times;
+    return { s, o, props, d: draw(props, rest, { prefix: `${uid}s${i}`, ...at(s), fades, times, total }) };
+  });
+  const W = Math.max(...drawn.map((x) => x.d.W)),
+    H = Math.max(...drawn.map((x) => x.d.H)) + BAND;
+  const off = (d: { W: number; H: number }) => [(W - d.W) / 2, (H + BAND - d.H) / 2];
+  const windows = (w: [number, number][], at: number) =>
+    (w.length ? w : [[at, at]]).map(([a, b]) => `${n2(a / 1000)},${n2(b / 1000)}`).join(' ');
+  const groups = drawn.map(({ s, o, d }) => {
+    const shown: [number, number][] = o
+      ? [
+          [0, 0],
+          [o.grown, 0],
+          [o.grown + eps, 1],
+          ...dips(s.path),
+          [o.back[1] - fade - shrink - hide, 1],
+          [o.back[1] - fade - shrink, 0],
+          [plan.ms, 0],
+        ]
+      : [[0, 1], ...dips(s.path), [plan.ms, 1]];
+    const band = o
+      ? `<text class="back ${uid}back" x="16" y="19">Back</text><text class="${uid}path" x="${n2(16 + textWidth('Back', 14) + 12)}" y="19">${esc(s.line)}</text>`
+      : '';
+    const area = d.scene.area!;
+    const hits = !script
+      ? ''
+      : under(all, s.path)
+          .map((x) => {
+            const r = d.scene.boxes.find((b) => b.id === x.path.at(-1))!.rect;
+            return `<rect class="hit" x="${n2(r.x - area.x)}" y="${n2(r.y - area.y)}" width="${n2(r.w)}" height="${n2(r.h)}" fill="transparent" tabindex="0" role="button" aria-label="Open ${esc(x.name)}, ${x.parts} parts" data-open="${esc(x.path.at(-1)!)}"/>`;
+          })
+          .join('');
+    const data = !script
+      ? ''
+      : o
+        ? ` data-open="${windows([o.open], 0)}" data-loop="${windows(o.loop, o.open[1])}" data-back="${windows([o.back], 0)}"`
+        : ` data-loop="${windows(plan.loop, 0)}"`;
+    return (
+      `<g class="${track(shown.map(([t, v]) => [t, `opacity: ${v}`]))}"><g class="scene"${o ? ` id="s-${esc(s.path.at(-1)!)}"` : ''}${data}>${band}` +
+      `<g transform="translate(${n2(off(d)[0])} ${n2(off(d)[1])})">\n${d.body}${hits}</g></g></g>`
+    );
+  });
+  const frames = drawn.slice(1).map(({ s, o, d }) => {
+    const parent = drawn.find((x) => key(x.s.path) === key(s.path.slice(0, -1)))!.d;
+    const r = parent.scene.boxes.find((b) => b.id === s.path.at(-1))!.rect;
+    const [px, py] = off(parent),
+      fx = off(d)[0] + d.frame.x,
+      fy = off(d)[1];
+    const dx = px + r.x - parent.scene.area!.x - fx,
+      dy = py + r.y - parent.scene.area!.y - fy;
+    const small = `transform: translate(${n2(dx)}px, ${n2(dy)}px) scale(${n4(r.w / d.frame.w)}, ${n4(r.h / d.frame.h)})`;
+    const full = 'transform: translate(0px, 0px) scale(1, 1)';
+    const from = fadeAt(o!),
+      shut = o!.back[1] - fade;
+    const name = track([
+      [0, `opacity: 0; ${small}`],
+      [from, `opacity: 0; ${small}`],
+      [from + eps, `opacity: 1; ${small}`],
+      [from + fade, `opacity: 1; ${small}`, 'cubic-bezier(0.2, 0, 0, 1)'],
+      [o!.grown, `opacity: 1; ${full}`],
+      ...dips(s.path).map(([t, v]): [number, string] => [t, `opacity: ${v}; ${full}`]),
+      [shut - shrink, `opacity: 1; ${full}`, 'cubic-bezier(0.4, 0, 1, 1)'],
+      [shut, `opacity: 1; ${small}`],
+      [shut + eps, `opacity: 0; ${small}`],
+      [plan.ms, `opacity: 0; ${small}`],
+    ]);
+    return (
+      `<rect class="open-frame ${name}" data-for="${esc(s.path.at(-1)!)}" x="${n2(fx)}" y="${n2(fy)}" width="${n2(d.frame.w)}" height="${n2(d.frame.h)}" rx="10"` +
+      ` fill="none" stroke="var(--border)" vector-effect="non-scaling-stroke" style="transform-box: view-box; transform-origin: ${n2(fx)}px ${n2(fy)}px"/>`
+    );
+  });
+  const root = drawn[0].d;
+  const css = [
+    ...drawn.map((x) => x.d.css),
+    `.${uid}back { fill: var(--accent); font-size: 14px; }\n.${uid}path { fill: var(--fg); font-size: 14px; }`,
+    ...tour,
+  ];
+  const body = `${groups.join('\n')}\n<g pointer-events="none">${frames.join('')}</g>\n${script ? `<script><![CDATA[${SCRIPT}]]></script>\n` : ''}`;
+  return {
+    svg: page(root.fig, rest, W, H, css.join('\n'), root.holdAt, body),
+    scene: root.scene,
+    levels: drawn.map(({ s, props, d }) => ({ line: s.line, props, scene: d.scene })),
+  };
 }
 
 /** One self-contained animated SVG string for the figure. Needs no React and no browser. */
@@ -1125,5 +1323,6 @@ export function toSvg(fig: FlowProps, opts: SvgOptions = {}): string {
 
 /** Every fault `flowfig check` knows about, for this figure as the SVG lays it out. */
 export function check(fig: FlowProps, opts: SvgOptions & CheckOptions = {}): Finding[] {
-  return checkRendered(fig, opts, render(fig, opts).scene);
+  const r = render(fig, opts);
+  return checkRendered(fig, opts, r.scene, r.levels);
 }

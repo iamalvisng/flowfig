@@ -7,6 +7,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { GUIDE, TOPICS } from './guide.ts';
 import { VERSION } from './version.ts';
+import { isGroup, tourPlan, type FigGroup, type FigNode, type FlowProps } from './model.ts';
+import shop from '../figures/inside-shop.ts';
 
 const cli = join(dirname(dirname(fileURLToPath(import.meta.url))), 'scripts', 'figure-svg.mjs');
 const SPEC = {
@@ -623,6 +625,159 @@ test('a render prints the edge summary and the verify counts; --no-verify drops 
       /^figure: .*\na -> b: write\nstep "write": 1 hop\nalt: Flow figure: Client, Server\. Steps: write\.\nerror {4}missing-file {7}out\.svg: box "b" -> gone\.ts: file not found\nout\.svg: 1 of 2 boxes defined; edges: .*\n$/m,
     );
     assert.doesNotMatch(go('--no-verify').stderr, /boxes defined/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+const shopFig = shop.props as FlowProps;
+const find = (g: FigGroup, id: string): FigNode | undefined => {
+  for (const c of g.children) {
+    const n = isGroup(c) ? find(c, id) : c.id === id ? c : c.inside && find(c.inside.layout, id);
+    if (n) return n;
+  }
+};
+const edit = (fig: FlowProps, id: string, change: (n: FigNode) => void): FlowProps => {
+  const f = structuredClone(fig);
+  change(find(f.layout, id)!);
+  return f;
+};
+const LEVELS = [
+  'Gateway',
+  'Gateway > Sign in',
+  'Cart',
+  'Cart > Price the cart',
+  'Orders',
+  'Orders > Check the cart',
+  'Payments',
+  'Payments > Charge the card',
+  'Mail',
+];
+
+test('a render of a figure with parts writes one SVG and prints a line per level and the tour length', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'figure-svg-'));
+  try {
+    const r = run(['inside-shop', join(dir, 'shop.svg')]);
+    assert.equal(r.status, 0, r.stderr);
+    assert.deepEqual(readdirSync(dir), ['shop.svg']);
+    const lines = r.stderr.split('\n');
+    for (const level of LEVELS)
+      assert.ok(
+        lines.some((l) => l.startsWith(`[${level}]`)),
+        `a line for ${level}`,
+      );
+    const tour = Math.round(tourPlan(shopFig).ms / 1000);
+    assert.match(r.stderr, new RegExp(`^figure: .*; 3 levels, 10 scenes, 40 parts; tour ${tour} s$`, 'm'));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('check exits 1 with part-edge-mismatch and the level path when an inside edge names a box with no outer edge', () => {
+  const spec = edit(shopFig, 'orders', (n) => n.inside!.edges!.push({ from: 'browser', to: 'validate' }));
+  const r = run(['check', '-'], JSON.stringify({ props: spec }));
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.match(
+    r.stdout,
+    /error +part-edge-mismatch +\[Orders\] edge "browser->validate" comes in from "browser", but no edge goes from "browser" to "orders"/,
+  );
+});
+
+test('check --strict exits 1 on a part with no source, and check alone exits 0', () => {
+  const spec = JSON.stringify({ props: edit(shopFig, 'save', (n) => delete n.source) });
+  const plain = run(['check', '-'], spec);
+  assert.equal(plain.status, 0, plain.stdout + plain.stderr);
+  assert.match(plain.stdout, /warning +part-no-source +\[Orders\] part "save" has no source/);
+  assert.equal(run(['check', '-', '--strict'], spec).status, 1);
+});
+
+test('verify exits 1 with missing-symbol and the level path when a part symbol is gone, and prints a coverage line per level', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'figure-svg-'));
+  try {
+    mkdirSync(join(dir, 'src'));
+    writeFileSync(join(dir, 'src/gateway.ts'), 'export function checkout() {}\n');
+    writeFileSync(join(dir, 'src/orders.ts'), 'export function createOrder() {}\n');
+    writeFileSync(join(dir, 'src/validate.ts'), 'export function validateCart() {}\n');
+    writeFileSync(join(dir, 'src/repo.ts'), 'export function readOrder() {}\n');
+    const spec: FlowProps = {
+      layout: {
+        children: [
+          { id: 'gateway', label: 'Gateway', source: 'src/gateway.ts#checkout' },
+          {
+            id: 'orders',
+            label: 'Orders',
+            source: 'src/orders.ts#createOrder',
+            inside: {
+              layout: {
+                children: [
+                  { id: 'validate', label: 'Check the cart', source: 'src/validate.ts#validateCart' },
+                  { id: 'save', label: 'Save the order', source: 'src/repo.ts#insertOrder' },
+                ],
+              },
+              edges: [
+                { from: 'gateway', to: 'validate' },
+                { from: 'validate', to: 'save' },
+              ],
+            },
+          },
+        ],
+      },
+      edges: [{ from: 'gateway', to: 'orders' }],
+    };
+    writeFileSync(join(dir, 'shop.json'), JSON.stringify({ props: spec }));
+    const r = run(['verify', join(dir, 'shop.json'), '--root', dir]);
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    assert.match(r.stdout, /missing-symbol +.*part "save" \[Orders\] -> src\/repo\.ts#insertOrder: symbol not defined/);
+    assert.match(r.stdout, /^\[Orders\] 1 of 2 parts defined; edges: /m);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('diff lists an added part with its level path and a moved part as moved from one box to another', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'figure-svg-'));
+  try {
+    let moved: FigNode;
+    const next = edit(
+      edit(shopFig, 'cart', (n) => {
+        const parts = n.inside!.layout.children;
+        moved = parts.splice(
+          parts.findIndex((p) => !isGroup(p) && p.id === 'save-cart'),
+          1,
+        )[0] as FigNode;
+      }),
+      'orders',
+      (n) =>
+        n.inside!.layout.children.push(moved, { id: 'ship-label', label: 'Print the label', source: 'examples/shop/orders.ts#printLabel' }),
+    );
+    writeFileSync(join(dir, 'old.json'), JSON.stringify({ props: shopFig }));
+    writeFileSync(join(dir, 'new.json'), JSON.stringify({ props: next }));
+    const r = run(['diff', join(dir, 'old.json'), join(dir, 'new.json')]);
+    assert.equal(r.status, 0, r.stderr);
+    const lines = r.stdout.split('\n');
+    assert.ok(
+      lines.some((l) => l.includes('[Orders]') && l.includes('added') && l.includes('ship-label')),
+      r.stdout,
+    );
+    assert.ok(
+      lines.some((l) => l.includes('save-cart') && l.includes('moved from Cart to Orders')),
+      r.stdout,
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('render --scene writes the one level of that box as a plain figure with no script', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'figure-svg-'));
+  try {
+    const out = join(dir, 'orders.svg');
+    const r = run(['inside-shop', out, '--scene', 'orders']);
+    assert.equal(r.status, 0, r.stderr);
+    const svg = readFileSync(out, 'utf8').replace(/<metadata id="figure-spec">[\s\S]*?<\/metadata>/, '');
+    assert.doesNotMatch(svg, /<script/);
+    for (const text of ['in: from Gateway', 'out: to Payments', 'Reserve the stock']) assert.ok(svg.includes(text), text);
+    for (const text of ['Parse the cart', 'Find the cart', 'Rate limit']) assert.ok(!svg.includes(text), text);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

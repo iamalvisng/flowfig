@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
-import { altText, counts, toBeat, type FlowProps } from './model.ts';
-import { coverageLine, detailFindings, owners, unsureLines, verifyReport } from './verify.ts';
+import { altText, counts, scenes, toBeat, tourPlan, type FlowProps } from './model.ts';
+import { coverageLine, detailFindings, levelLines, owners, unsureLines, verifyReport } from './verify.ts';
 import { toSvg, type Finding, type SvgOptions } from './svg.ts';
 
 const SPEC_OPEN = '<metadata id="figure-spec"><![CDATA[';
@@ -48,12 +48,17 @@ const n = (k: number, word: string) => `${k} ${word}${k === 1 ? '' : 's'}`;
 
 /** One line per finding, the counts line (unless `withCounts` is false), and the `figure:` line. No color: the CLI adds it. */
 export function reportLines(props: FlowProps, findings: Finding[], withCounts = true): string[] {
-  const out = findings.map((f) => `${f.severity.padEnd(8)} ${f.rule.padEnd(18)} ${f.message}`);
+  const out = findings.map((f) => `${f.severity.padEnd(8)} ${f.rule.padEnd(18)} ${f.scene ? `[${f.scene}] ` : ''}${f.message}`);
   const errors = findings.filter((f) => f.severity === 'error').length;
   if (withCounts) out.push(`${n(errors, 'error')}, ${n(findings.length - errors, 'warning')}`);
   const c = counts(props);
+  const all = scenes(props);
+  const levels =
+    all.length > 1
+      ? `; ${1 + Math.max(...all.map((s) => s.path.length))} levels, ${all.length} scenes, ${all.reduce((k, s) => k + s.parts, 0)} parts; tour ${Math.round(tourPlan(props).ms / 1000)} s`
+      : '';
   out.push(
-    `figure: ${n(c.boxes, 'box').replace('boxs', 'boxes')}, ${n(c.groups, 'group')}, ${n(c.edges, 'edge')}, ${n(c.steps, 'step')}, ${n(c.messages, 'message')}`,
+    `figure: ${n(c.boxes, 'box').replace('boxs', 'boxes')}, ${n(c.groups, 'group')}, ${n(c.edges, 'edge')}, ${n(c.steps, 'step')}, ${n(c.messages, 'message')}${levels}`,
   );
   return out;
 }
@@ -80,6 +85,7 @@ export function verifyLines(props: FlowProps, figure: string, root = process.cwd
   return [
     ...findings.map((f) => `${f.severity.padEnd(8)} ${f.rule.padEnd(18)} ${figure}: ${f.message}`),
     coverageLine(figure, coverage),
+    ...levelLines(coverage),
     ...unsureLines(coverage),
   ];
 }

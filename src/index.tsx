@@ -1,5 +1,17 @@
 'use client';
-import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+  type RefObject,
+} from 'react';
 import { arcRoom, avoidOf, markSide, route, type Pt, type Rect, type Routed, type Side } from './geometry.ts';
 import { foldedLabel, groupBox, layoutRail, railState, RAIL } from './rail.ts';
 import { textWidth } from './text.ts';
@@ -65,6 +77,13 @@ import {
   textFloor,
   specKey,
   nextWide,
+  scenes,
+  insideStep,
+  flowOrder,
+  readMs,
+  portLabel,
+  OPEN_MS,
+  type FigScene,
 } from './model.ts';
 
 export type * from './model.ts';
@@ -153,7 +172,17 @@ const HIDDEN: CSSProperties = {
  * Use `toSvg` from `flowfig/svg` for a static animated SVG.
  */
 export function Flow(props: FlowProps) {
-  const { layout, edges, steps, lanes, timeline } = props;
+  const all = useMemo(
+    () => scenes(props),
+    [props.layout, props.edges, props.steps, props.lanes, props.timeline, props.rail, props.theme, props.speed],
+  );
+  const [path, setPath] = useState<string[]>([]);
+  const [full, setFull] = useState(false);
+  const [start, setStart] = useState<Start>();
+  const memo = useRef<Record<string, Start>>({});
+  const at = path.join('>');
+  const s = all.find((x) => x.path.join('>') === at) ?? all[0];
+  const { layout, edges, steps, lanes, timeline } = s.props;
   const key = useMemo(() => specKey(layout, edges, steps), [layout, edges, steps]);
   const [narrow, setNarrow] = useState({ wide: 0, key: '' });
   const fold = !lanes && !timeline && props.rail !== 'only';
@@ -163,10 +192,83 @@ export function Flow(props: FlowProps) {
     () => autoLayout({ layout: wide > 0 ? { ...layout, auto: true, direction: 'column' } : layout, edges, steps, lanes, timeline }),
     [wide, layout, edges, steps, lanes, timeline],
   );
+  const level =
+    all.length > 1
+      ? {
+          scene: s,
+          owners: new Map(
+            all.filter((x) => x.path.slice(0, -1).join('>') === at && x.path.length > s.path.length).map((x) => [x.path.at(-1)!, x.parts]),
+          ),
+          path: s.path.map((id, i) => ({ id, name: all.find((x) => x.path.join('>') === s.path.slice(0, i + 1).join('>'))!.name })),
+          onOpen: (id: string, from: Start) => {
+            memo.current[at] = from;
+            const child = all.find((x) => x.path.join('>') === [...s.path, id].join('>'))!;
+            setStart({
+              step: child.props.steps?.length ? insideStep(child, from.port) : null,
+              beat: 0,
+              playing: from.playing,
+              rect: from.rect,
+            });
+            setPath([...s.path, id]);
+          },
+          onUp: (depth: number) => {
+            const to = s.path.slice(0, depth);
+            const { step, beat, playing } = memo.current[to.join('>')];
+            const beats = step == null ? 1 : (all.find((x) => x.path.join('>') === to.join('>'))!.props.steps?.[step].flow.length ?? 1);
+            setStart({ step, beat: Math.min(beat + 1, beats - 1), playing, box: s.path[depth] });
+            setPath(to);
+          },
+        }
+      : undefined;
+  const figure = useRef<HTMLElement>(null);
+  const descId = useId();
+  const alt = useMemo(() => altText({ layout: placed.layout, edges: placed.edges, steps }), [placed, steps]);
   return (
-    <FlowBody {...props} layout={placed.layout} edges={placed.edges} written={props} wide={wide} setWide={fold ? setWide : undefined} />
+    <figure
+      ref={figure}
+      className="flowfig"
+      data-inside={level ? '' : undefined}
+      aria-label={alt.title}
+      aria-describedby={descId}
+      style={{
+        ...(Object.fromEntries(Object.entries(props.theme ?? {}).map(([k, val]) => [`--fig-${k}`, val])) as CSSProperties),
+        position: full ? 'fixed' : 'relative',
+        inset: full ? 0 : undefined,
+        zIndex: full ? 1000 : undefined,
+        overflow: full ? 'auto' : undefined,
+        margin: full ? 0 : '24px 0',
+        padding: full ? '48px 24px 24px' : '20px 16px 16px',
+        border: full ? 'none' : `1px solid ${v('border')}`,
+        borderRadius: full ? 0 : 16,
+        background: v('bg'),
+        fontFamily: v('font'),
+        color: v('fg'),
+      }}
+    >
+      <div id={descId} style={HIDDEN}>
+        {alt.desc}
+      </div>
+      <FlowBody
+        {...props}
+        {...s.props}
+        key={at}
+        layout={placed.layout}
+        edges={placed.edges}
+        written={s.props}
+        wide={wide}
+        setWide={fold ? setWide : undefined}
+        full={full}
+        setFull={setFull}
+        level={level}
+        start={start}
+        figure={figure}
+      />
+    </figure>
   );
 }
+
+type Start = { step: number | null; beat: number; playing: boolean; box?: string; port?: string; rect?: Rect };
+const reduced = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 // The ASYNC tag is 9 px.
 const RAIL_TEXT = 9;
@@ -192,10 +294,28 @@ function FlowBody({
   written,
   wide,
   setWide,
-}: FlowProps & { written: FlowProps; wide: number; setWide?: (w: number) => void }) {
+  full,
+  setFull,
+  level,
+  start,
+  figure,
+}: FlowProps & {
+  written: FlowProps;
+  wide: number;
+  setWide?: (w: number) => void;
+  full: boolean;
+  setFull: (f: boolean) => void;
+  level?: {
+    scene: FigScene;
+    owners: Map<string, number>;
+    path: { id: string; name: string }[];
+    onOpen: (id: string, at: Start) => void;
+    onUp: (depth: number) => void;
+  };
+  start?: Start;
+  figure: RefObject<HTMLElement | null>;
+}) {
   const tl = timeline && isLanesLayout(layout);
-  const alt = useMemo(() => altText({ layout, edges, steps: stepsIn }), [layout, edges, stepsIn]);
-  const descId = useId();
   const tabsId = useId();
   const synthetic = tl && !stepsIn.length;
   const steps = useMemo(
@@ -207,17 +327,59 @@ function FlowBody({
   const root = useRef<HTMLDivElement>(null);
   const outer = useRef<HTMLDivElement>(null);
   const [fit, setFit] = useState({ scale: 1, height: 0, scroll: false });
-  const [full, setFull] = useState(false);
+  const backBtn = useRef<HTMLButtonElement>(null);
+  const ghost = useRef<HTMLDivElement>(null);
+  const place = (n: Element): Rect => {
+    const f = figure.current!,
+      a = f.getBoundingClientRect(),
+      r = n.getBoundingClientRect();
+    return { x: r.left - a.left - f.clientLeft + f.scrollLeft, y: r.top - a.top - f.clientTop + f.scrollTop, w: r.width, h: r.height };
+  };
+  const showGhost = (r: Rect) => {
+    Object.assign(ghost.current!.style, { display: 'block', left: `${r.x}px`, top: `${r.y}px`, width: `${r.w}px`, height: `${r.h}px` });
+    return ghost.current!;
+  };
+  const toward = (from: Rect, to: Rect) => `translate(${from.x - to.x}px, ${from.y - to.y}px) scale(${from.w / to.w}, ${from.h / to.h})`;
+  const moving = useRef(false);
+  const goUp = (depth: number) => {
+    const map = root.current,
+      r = start?.rect;
+    if (moving.current) return;
+    if (reduced() || !map || !r) return level!.onUp(depth);
+    moving.current = true;
+    map.animate([{ opacity: 1 }, { opacity: 0 }], { duration: OPEN_MS.hide, fill: 'forwards' });
+    const to = place(map);
+    showGhost(to).animate([{ transform: 'none' }, { transform: toward(r, to) }], {
+      duration: OPEN_MS.shrink,
+      delay: OPEN_MS.hide,
+      easing: 'cubic-bezier(0.4, 0, 1, 1)',
+      fill: 'forwards',
+    }).onfinish = () => level!.onUp(depth);
+  };
+  const up = level?.path.length ? () => goUp(level.path.length - 1) : undefined;
   useEffect(() => {
-    if (!full) return;
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setFull(false);
+    if (!full && !up) return;
+    const onKey = (e: KeyboardEvent) => {
+      const at = document.activeElement;
+      const inside = !!at && !!figure.current?.contains(at);
+      if (e.key === 'Escape' && up && (inside || full)) up();
+      else if (e.key === 'Escape') setFull(false);
+      else if (e.key === 'Backspace' && up && inside && !at!.closest('input,textarea,[contenteditable]')) {
+        e.preventDefault();
+        up();
+      }
+    };
     addEventListener('keydown', onKey);
     return () => removeEventListener('keydown', onKey);
-  }, [full]);
+  }, [full, up]);
+  useEffect(() => {
+    if (start?.box) figure.current?.querySelector<HTMLElement>(`[data-fig="${CSS.escape(start.box)}"]`)?.focus();
+    else if (level?.path.length) backBtn.current?.focus();
+  }, []);
   const dots = useRef<(SVGGElement | null)[]>([]);
   const chips = useRef<(HTMLDivElement | null)[]>([]);
   const bar = useRef<HTMLDivElement>(null);
-  const [beat, setBeat] = useState(0);
+  const [beat, setBeat] = useState(start?.beat ?? 0);
   const [holding, setHolding] = useState(false);
   const [returning, setReturning] = useState(false);
   const firstLabel = useRef<string | null>('');
@@ -236,8 +398,8 @@ function FlowBody({
         : null,
     [lanes, tl, layout, edges, steps, withRail],
   );
-  const [active, setActive] = useState<number | null>(steps.length ? 0 : null);
-  const [playing, setPlaying] = useState(autoplay);
+  const [active, setActive] = useState<number | null>(start ? start.step : steps.length ? 0 : null);
+  const [playing, setPlaying] = useState(start ? start.playing : autoplay);
   const playingRef = useRef(playing);
   playingRef.current = playing;
   const [rate, setRate] = useState<1 | 2>(1);
@@ -282,7 +444,6 @@ function FlowBody({
     return at;
   }, [beats, beat]);
 
-  const figure = useRef<HTMLElement>(null);
   const [mapW, setMapW] = useState(0);
   const railOnly = withRail === 'only';
   const rail = useMemo(
@@ -297,7 +458,35 @@ function FlowBody({
   const user = useRef(false);
   const left = useRef(0);
   const busy = useRef(0);
-  const jump = useRef<number | null>(null);
+  const jump = useRef<number | null>(start?.beat ?? null);
+  const wait = useRef(
+    start?.rect && start.playing
+      ? OPEN_MS.grow +
+          OPEN_MS.stagger * (nodes(layout).length - 1) +
+          readMs([level!.scene.line, ...level!.scene.ports.map(portLabel)].join(' '))
+      : 0,
+  );
+  useLayoutEffect(() => {
+    const map = root.current;
+    if (!map || reduced()) return;
+    if (start?.box) return void map.animate([{ opacity: 0 }, { opacity: 1 }], { duration: OPEN_MS.fade });
+    if (!start?.rect) return;
+    const to = place(map);
+    showGhost(to).animate([{ transform: toward(start.rect, to) }, { transform: 'none' }], {
+      duration: OPEN_MS.grow,
+      easing: 'cubic-bezier(0.2, 0, 0, 1)',
+    });
+    for (const e of map.querySelectorAll(':scope > svg'))
+      e.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 1, delay: OPEN_MS.grow, fill: 'backwards' });
+    const shows = flowOrder(level!.scene).map((id, k) =>
+      map.querySelector(`[data-fig="${CSS.escape(id)}"]`)?.animate([{ opacity: 0 }, { opacity: 1 }], {
+        duration: OPEN_MS.fade,
+        delay: OPEN_MS.grow + OPEN_MS.stagger * k,
+        fill: 'backwards',
+      }),
+    );
+    shows.at(-1)?.finished.then(() => ghost.current && (ghost.current.style.display = 'none'));
+  }, []);
   const [hoverEdge, setHoverEdge] = useState<string | null>(null);
   const [still, setStill] = useState(false);
   useEffect(() => setStill(window.matchMedia('(prefers-reduced-motion: reduce)').matches), []);
@@ -569,7 +758,8 @@ function FlowBody({
     if (clock.current.beats !== beats) {
       const j = jump.current ?? 0;
       jump.current = null;
-      clock.current = { beats, elapsed: beats.slice(0, j).reduce((t, b) => t + beatMs(b, speed), 0) };
+      clock.current = { beats, elapsed: beats.slice(0, j).reduce((t, b) => t + beatMs(b, speed), 0) - wait.current * BASE_RATE };
+      wait.current = 0;
       setBeat(j);
     }
     if (!beats.length || (!noMap && !routed.length && !(tl && !edges.length))) return;
@@ -589,7 +779,7 @@ function FlowBody({
         if (steps.length > 1) return setActive((a) => ((a ?? 0) + 1) % steps.length);
         clock.current.elapsed = 0;
       }
-      const t = clock.current.elapsed;
+      const t = Math.max(0, clock.current.elapsed);
       if (bar.current) bar.current.style.transform = `scaleX(${Math.min(1, t / total)})`;
       const next = ends.findIndex((e) => t < e);
       const i = next === -1 ? beats.length - 1 : next;
@@ -685,8 +875,6 @@ function FlowBody({
     }
   };
   const focus = hover != null || hoverEdge != null || step != null;
-
-  const vars = Object.fromEntries(Object.entries(theme ?? {}).map(([k, val]) => [`--fig-${k}`, val])) as CSSProperties;
 
   const timelineFig = useMemo(
     () => (tl ? timelineLayout({ layout, edges, timeline, today }, axisW) : null),
@@ -1042,8 +1230,24 @@ function FlowBody({
     const card = carded.has(item.id);
     const dl = diamond && !card ? diamondLines(item, nodeWidth(item, false) + 70) : null;
     const w = diamond || card || item.width != null || str(item.label) ? nodeWidth(item, card, cap) + (diamond ? 70 : 0) : undefined;
-    const lines = w != null && str(item.label) ? labelLines(item, w) : null;
     const bt = item.tone && TONES[item.tone];
+    const parts = level?.owners.get(item.id);
+    const port = level?.scene.ports.some((p) => p.id === item.id);
+    const lines = w != null && str(item.label) ? labelLines(item, w) : null;
+    const open = () => {
+      const hop = cur?.hops.find((h) => (h.back ? edges[ids.indexOf(h.edge)]?.from : edges[ids.indexOf(h.edge)]?.to) === item.id);
+      const e = hop && edges[ids.indexOf(hop.edge)];
+      const at: Start = { step: active, beat, playing, port: e ? (hop.back ? e.to : e.from) : undefined };
+      const map = root.current,
+        n = map?.querySelector(`[data-fig="${CSS.escape(item.id)}"]`);
+      if (moving.current) return;
+      if (reduced() || !map || !n) return level!.onOpen(item.id, at);
+      moving.current = true;
+      const rect = place(n);
+      showGhost(rect);
+      map.animate([{ opacity: 1 }, { opacity: 0 }], { duration: OPEN_MS.fade, fill: 'forwards' }).onfinish = () =>
+        level!.onOpen(item.id, { ...at, rect });
+    };
     return (
       <div
         key={item.id}
@@ -1052,6 +1256,17 @@ function FlowBody({
         data-diamond={diamond || undefined}
         onMouseEnter={() => setHover(item.id)}
         onMouseLeave={() => setHover(null)}
+        {...(parts != null && {
+          role: 'button',
+          tabIndex: 0,
+          'aria-label': `Open ${str(item.label) || item.id}, ${parts} parts`,
+          onClick: open,
+          onKeyDown: (e: { key: string; preventDefault: () => void }) => {
+            if (e.key !== 'Enter' && e.key !== ' ') return;
+            e.preventDefault();
+            open();
+          },
+        })}
         style={{
           position: 'relative',
           isolation: 'isolate',
@@ -1065,19 +1280,23 @@ function FlowBody({
           justifyContent: 'center',
           padding: diamond
             ? '22px 34px'
-            : `calc(${store ? 24 : 10}px - var(--ff-b, 0px)) calc(${card ? 10 : 16}px - var(--ff-b, 0px)) calc(10px - var(--ff-b, 0px))`,
+            : `calc(${store ? 23 : 9}px - var(--ff-b, 0px)) calc(${card ? 10 : 16}px - var(--ff-b, 0px)) calc(9px - var(--ff-b, 0px))`,
           textAlign: 'center',
           background: diamond ? undefined : bt ? toneTint(bt, v('bg')) : v('bg'),
-          color: v('fg'),
-          border: diamond ? undefined : `1px solid ${bt ?? (lit ? v('accent') : v('border'))}`,
+          color: port ? v('muted') : v('fg'),
+          border: diamond ? undefined : `1px ${port ? 'dashed' : 'solid'} ${bt ?? (lit ? v('accent') : v('border'))}`,
           ...(bt && { '--ff-box': bt }),
-          boxShadow: diamond ? undefined : '0 1px 2px rgba(0,0,0,.06)',
+          boxShadow: diamond
+            ? undefined
+            : parts != null
+              ? `3px 3px 0 -1px ${v('bg')}, 3px 3px 0 0 ${v('border')}`
+              : '0 1px 2px rgba(0,0,0,.06)',
           opacity: focus && !lit ? 0.7 : 1,
           borderRadius: store ? '50% / 12px' : 10,
           fontSize: 14,
           fontWeight: 500,
           transition: 'border-color .4s, background .4s, box-shadow .4s, border-width .4s, padding .4s, opacity .25s',
-          cursor: 'default',
+          cursor: parts != null ? 'pointer' : 'default',
         }}
       >
         {diamond && (
@@ -1138,7 +1357,16 @@ function FlowBody({
             }}
           />
         )}
-        {lines ? (
+        {lines && port ? (
+          <div style={{ lineHeight: `${LABEL_LINE}px`, width: 'min-content', margin: '0 auto' }}>
+            {lines.map((l, i) => (
+              <Fragment key={i}>
+                {i > 0 && ' '}
+                <span style={{ whiteSpace: 'nowrap' }}>{l}</span>
+              </Fragment>
+            ))}
+          </div>
+        ) : lines ? (
           lines.map((l, i) => (
             <div key={i} style={{ whiteSpace: 'nowrap', lineHeight: `${LABEL_LINE}px` }}>
               {l}
@@ -1202,34 +1430,12 @@ function FlowBody({
   };
 
   return (
-    <figure
-      ref={figure}
-      className="flowfig"
-      aria-label={alt.title}
-      aria-describedby={descId}
-      style={{
-        ...vars,
-        position: full ? 'fixed' : 'relative',
-        inset: full ? 0 : undefined,
-        zIndex: full ? 1000 : undefined,
-        overflow: full ? 'auto' : undefined,
-        margin: full ? 0 : '24px 0',
-        padding: full ? '48px 24px 24px' : '20px 16px 16px',
-        border: full ? 'none' : `1px solid ${v('border')}`,
-        borderRadius: full ? 0 : 16,
-        background: v('bg'),
-        fontFamily: v('font'),
-        color: v('fg'),
-      }}
-    >
-      <div id={descId} style={HIDDEN}>
-        {alt.desc}
-      </div>
+    <>
       <button
         type="button"
         aria-label={full ? 'Close full screen' : 'Full screen'}
         title={full ? 'Close (Esc)' : 'Full screen'}
-        onClick={() => setFull((f) => !f)}
+        onClick={() => setFull(!full)}
         style={{
           ...iconBtn,
           position: 'absolute',
@@ -1246,8 +1452,26 @@ function FlowBody({
         {'@keyframes flowfig-label{from{opacity:0}to{opacity:0}}@keyframes flowfig-in{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}' +
           // The 2 px active border takes 1 px of padding, so the box size stays.
           `.${ACTIVE}:not([data-diamond]){--ff-b:1px;border-width:2px!important;background:color-mix(in srgb, ${hue} 10%, ${v('surface')})!important;box-shadow:${glow}!important;border-color:${hue}!important}` +
-          `.${ACTIVE} polygon{fill:color-mix(in srgb, ${hue} 10%, ${v('surface')});stroke:${hue};stroke-width:2px}`}
+          `.${ACTIVE} polygon{fill:color-mix(in srgb, ${hue} 10%, ${v('surface')});stroke:${hue};stroke-width:2px}` +
+          (level
+            ? '@media (prefers-reduced-motion: reduce){.flowfig[data-inside] *{transition:none!important;animation:none!important}}'
+            : '')}
       </style>
+      {level && (
+        <div
+          ref={ghost}
+          style={{
+            display: 'none',
+            position: 'absolute',
+            zIndex: 4,
+            boxSizing: 'border-box',
+            border: `1.5px solid ${v('accent')}`,
+            borderRadius: 10,
+            transformOrigin: '0 0',
+            pointerEvents: 'none',
+          }}
+        />
+      )}
       {!noMap && (
         <>
           <div
@@ -1260,6 +1484,39 @@ function FlowBody({
               backgroundSize: '14px 14px',
             }}
           >
+            {up && (
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12, fontSize: 13, color: v('muted') }}>
+                <button ref={backBtn} type="button" onClick={up} style={{ ...iconBtn, width: 'auto', padding: '0 12px', font: 'inherit' }}>
+                  Back
+                </button>
+                {level!.path.map((p, i) =>
+                  i < level!.path.length - 1 ? (
+                    <Fragment key={p.id}>
+                      <button
+                        type="button"
+                        onClick={() => goUp(i + 1)}
+                        style={{ border: 0, padding: 0, background: 'none', font: 'inherit', color: v('accent'), cursor: 'pointer' }}
+                      >
+                        {p.name}
+                      </button>
+                      {' > '}
+                    </Fragment>
+                  ) : (
+                    <span key={p.id} style={{ color: v('fg') }}>
+                      {p.name}
+                    </span>
+                  ),
+                )}
+                <div aria-live="polite" style={HIDDEN}>
+                  {`${level!.scene.line}: ${level!.scene.parts} parts.` +
+                    level!.scene.ports
+                      .map((p) =>
+                        p.way === 'in' ? ` In from ${p.name}.` : p.way === 'out' ? ` Out to ${p.name}.` : ` In and out: ${p.name}.`,
+                      )
+                      .join('')}
+                </div>
+              </div>
+            )}
             <div
               ref={outer}
               role="tabpanel"
@@ -1754,7 +2011,7 @@ function FlowBody({
           )}
         </figcaption>
       )}
-    </figure>
+    </>
   );
 }
 
