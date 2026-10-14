@@ -129,7 +129,6 @@ const CSS = [
   '.ff-more{display:none}',
   '.ff-key{margin:0;padding:12px 0 0;list-style:none;display:flex;flex-direction:column;gap:4px;border-top:1px solid var(--flowfig-border);font-size:13px;color:var(--flowfig-muted)}',
   '.ff-key li{display:flex;align-items:center;gap:10px}',
-  '.ff-skip li::before{content:"\\2717";margin-right:8px;color:var(--flowfig-bad)}',
   `@container ff-host (width < ${HUD.wide}px){.ff-g{aspect-ratio:auto;height:min(100svh,${HUD.tall}px);max-height:none}.ff-chips{top:8px;left:8px;max-width:calc(100% - 16px)}.ff-hud{top:auto;left:0;right:0;bottom:0;width:auto;height:${HUD.sheet}px;max-height:none;gap:8px;padding:12px 16px;border-radius:12px 12px 0 0;font-size:13px}.ff-say{font-size:16px}.ff-note{font-size:13px}.ff-moments button,.ff-key{font-size:11px}.ff-ht,.ff-kick,.ff-code,.ff-ft,.ff-key,.ff-moments:not(.ff-open),.ff-skip:not(.ff-open){display:none}.ff-hd{order:-3}.ff-say,.ff-note{order:-2}.ff-ctl{order:-1}.ff-more{display:inline-block}}`,
   `@container ff-guide (${HUD.slim * 2}px <= width < ${HUD.wide}px) and (height < ${HUD.short}px){.ff-chips{top:${HUD.pad}px;left:${HUD.pad * 2 + HUD.slim}px;max-width:calc(100% - ${HUD.pad * 3 + HUD.slim}px)}.ff-hud{top:${HUD.pad}px;left:${HUD.pad}px;right:auto;bottom:auto;width:${HUD.slim}px;height:auto;max-height:calc(100% - ${HUD.pad * 2}px);border-radius:8px}}`,
   '.ff-verdict{padding:12px 16px;background:var(--flowfig-surface);border:1px solid var(--flowfig-border);border-radius:10px;font-size:16px;font-weight:500}',

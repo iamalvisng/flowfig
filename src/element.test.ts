@@ -106,14 +106,17 @@ test('guide: moment 1 says the first beat, lifts the lane of its target, and Nex
   }
 });
 
-test('guide: a story chip on a refusal story ends on ✗, the outcome and the boxes it skipped', { skip: !browser.path }, async () => {
-  const page = await open(guide('oil'), `${live}.length > 0`);
-  try {
-    const step = 'Too many requests';
-    await page.ev(`window.last = {}; ${el}.addEventListener('flowfig-moment', (e) => (window.last = e.detail))`);
-    await page.ev(`${button(step)}.click()`);
-    await page.until(`window.last.step === ${JSON.stringify(step)}`, 'the chip opens the refusal step');
-    await page.ev(`(async () => {
+test(
+  'guide: a story chip on a refusal story ends on ✗, the outcome and the boxes it skipped as plain lines',
+  { skip: !browser.path },
+  async () => {
+    const page = await open(guide('oil'), `${live}.length > 0`);
+    try {
+      const step = 'Too many requests';
+      await page.ev(`window.last = {}; ${el}.addEventListener('flowfig-moment', (e) => (window.last = e.detail))`);
+      await page.ev(`${button(step)}.click()`);
+      await page.until(`window.last.step === ${JSON.stringify(step)}`, 'the chip opens the refusal step');
+      await page.ev(`(async () => {
       for (let i = 0; i < 12; i++) {
         const at = window.last.moment;
         ${button('Next')}.click();
@@ -122,13 +125,18 @@ test('guide: a story chip on a refusal story ends on ✗, the outcome and the bo
         if (window.last.moment === at) break;
       }
     })()`);
-    const text = await page.ev(`${sr}.textContent`);
-    assert.equal(await page.ev('window.last.step'), step);
-    for (const want of ['✗', 'Told: too many requests', 'Skipped, because of the refusal']) assert.ok(text.includes(want), want);
-  } finally {
-    await page.done();
-  }
-});
+      const text = await page.ev(`${sr}.textContent`);
+      assert.equal(await page.ev('window.last.step'), step);
+      for (const want of ['✗', 'Told: too many requests', 'Skipped, because of the refusal']) assert.ok(text.includes(want), want);
+      const marks = await page.ev(
+        `[...${sr}.querySelectorAll('.ff-skip li')].map((li) => getComputedStyle(li, '::before').content).filter((c) => c !== 'none')`,
+      );
+      assert.deepEqual(marks, [], 'the skipped boxes are plain lines');
+    } finally {
+      await page.done();
+    }
+  },
+);
 
 test('diagram: the SVG inside the element equals the toSvg output for the same spec', { skip: !browser.path }, async () => {
   const page = await open(
