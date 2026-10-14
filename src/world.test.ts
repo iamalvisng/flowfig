@@ -178,6 +178,22 @@ const gap = (p: Pt, poly: Pt[]) =>
         }),
       );
 
+const onStageShare = (poly: Pt[], { l, t, r, b }: Stage['region']) => {
+  const xs = poly.map((q) => q[0]),
+    ys = poly.map((q) => q[1]),
+    [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+  let all = 0,
+    seen = 0;
+  for (let i = 0; i < 40; i++)
+    for (let j = 0; j < 40; j++) {
+      const q: Pt = [x0 + ((i + 0.5) * (x1 - x0)) / 40, y0 + ((j + 0.5) * (y1 - y0)) / 40];
+      if (!inside(q, poly)) continue;
+      all++;
+      if (q[0] >= l && q[0] <= r && q[1] >= t && q[1] <= b) seen++;
+    }
+  return all ? seen / all : 1;
+};
+
 function audit(sc: Scene, s: State, p: Placed, st: Stage): string[] {
   const out: string[] = [];
   const { l, t, r, b } = st.region;
@@ -222,7 +238,8 @@ function audit(sc: Scene, s: State, p: Placed, st: Stage): string[] {
   const reach = st.w < HUD.wide && s.summary ? 40.5 : st.narrow ? 64.5 : 24.5;
   for (const o of p.tags) {
     const [x, y] = o.anchor;
-    if (o.pin && x >= l && x <= r && y >= t && y <= b) out.push(`tag ${o.name} pinned while its actor is in frame`);
+    const most = onStageShare(o.actor === sc.truck && p.truck ? p.truck : p.hulls[o.actor], st.region) >= 0.6;
+    if (o.pin && most && x >= l && x <= r && y >= t && y <= b) out.push(`tag ${o.name} pinned while its actor is in frame`);
     const [nx, ny] = near(o.r, o.anchor);
     const len = Math.hypot(nx - x, ny - y);
     if (!o.pin && len > reach) out.push(`tag ${o.name} leader ${Math.round(len)} px`);
@@ -263,6 +280,10 @@ function audit(sc: Scene, s: State, p: Placed, st: Stage): string[] {
     shown(tag ? `tag ${a.text}` : `chip ${a.text}`, (tag ?? chip)?.r);
   }
   for (const c of p.chips) if (c.mark === '✗') out.push(`chip ${c.text} has a red mark`);
+  for (const o of p.tags) {
+    const share = onStageShare(o.actor === sc.truck && p.truck ? p.truck : p.hulls[o.actor], st.region);
+    if (!o.pin && share < 0.6) out.push(`tag ${o.name} on an actor ${Math.round(share * 100)}% on stage`);
+  }
   sc.actors.forEach((_, i) => {
     if (!s.gates[i].fail) return;
     const red =

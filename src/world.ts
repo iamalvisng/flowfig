@@ -951,6 +951,30 @@ function ring(p: Pt, w: number, h: number, ds: number[]): Opt[] {
   return out;
 }
 type Cands<T> = (T[] | (() => T[]))[];
+const area = (ps: Pt[]) =>
+  Math.abs(ps.reduce((n, p, i) => n + p[0] * ps[(i + 1) % ps.length][1] - ps[(i + 1) % ps.length][0] * p[1], 0)) / 2;
+function share(ps: Pt[], { l, t, r, b }: Stage['region']) {
+  let out = ps;
+  for (const [k, v, lo] of [
+    [0, l, 1],
+    [0, r, 0],
+    [1, t, 1],
+    [1, b, 0],
+  ] as const) {
+    const keep = (p: Pt) => (lo ? p[k] >= v : p[k] <= v),
+      next: Pt[] = [];
+    out.forEach((p, i) => {
+      const q = out[(i + 1) % out.length];
+      if (keep(p)) next.push(p);
+      if (keep(p) !== keep(q)) {
+        const u = (v - p[k]) / (q[k] - p[k]);
+        next.push([p[0] + (q[0] - p[0]) * u, p[1] + (q[1] - p[1]) * u]);
+      }
+    });
+    out = next;
+  }
+  return out.length > 2 ? area(out) / area(ps) : 0;
+}
 const bounds = (ps: Pt[]): Rect => {
   const xs = ps.map((p) => p[0]),
     ys = ps.map((p) => p[1]),
@@ -1178,14 +1202,17 @@ export function layout(sc: Scene, s: State, stage: Stage, cam: Cam, full = false
       () => (onTruck && !stage.narrow ? [] : ring(pr(A[a].lot.hull.reduce((m, p) => (p[1] > m[1] ? p : m))), w, h, ds)),
     ];
     const must = s.hi.includes(a) || (s.summary && story.path.includes(a));
+    const part = share((onTruck ? truckHull! : A[a].lot.hull).map(pr), stage.region) < 0.6;
+    if (part && !must) return;
     const base = { actor: a, name, status, mark, quiet: !story.path.includes(a), end, cargo };
     const out = ax < l || ax > r || ay < t || ay > b;
-    if (must && stage.narrow && out) {
+    if (must && stage.narrow && (out || part)) {
       const tag = pin(base, w, h, [ax, ay]);
       tags.push(tag);
       taken.push(tag.r);
       return;
     }
+    if (part && ++bad > cap) throw OVER;
     const o = must ? pick(cands) : clean(cands);
     if (!o) return;
     const tr = { x: o.x, y: o.y, w, h };
