@@ -39,6 +39,8 @@ for (const m of ['error', 'warn']) {
     const { targetId } = await cdp.send('Target.createTarget', { url: 'about:blank' });
     const { sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true });
     const send = (m: string, p?: object) => cdp.send(m, p, sessionId);
+    // The Windows CI runner reports reduced motion, so the player shows no active message.
+    await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }] });
     const ev = async (e: string) => (await send('Runtime.evaluate', { expression: e, returnByValue: true })).result.value;
     const until = async (e: string, what: string) => {
       for (let t = Date.now(); !(await ev(e)); await new Promise((r) => setTimeout(r, 50))) assert.ok(Date.now() - t < 4000, what);
@@ -47,8 +49,6 @@ for (const m of ['error', 'warn']) {
     const load = async (width: number) => {
       await noErrors();
       await send('Emulation.setDeviceMetricsOverride', { width, height: 844, deviceScaleFactor: 1, mobile: false });
-      // The Windows CI runner reports reduced motion, so the player shows no active message.
-      await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }] });
       const { frameTree } = await send('Page.getFrameTree');
       await send('Page.setDocumentContent', { frameId: frameTree.frame.id, html });
     };
