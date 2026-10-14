@@ -76,6 +76,7 @@ A topic gives the detail for one kind of figure. Before you write that kind of s
 - \`lanes\`: a process that several roles do (a ticket, an order, a refund), or an SOP.
 - \`verify\`: a verify finding in the render output, or a check in CI.
 - \`inside\`: the parts inside a box, down to functions.
+- \`explain\`: a web page that explains a flow one moment at a time (\`<flowfig-explain>\`).
 
 ## Workflow
 
@@ -417,6 +418,48 @@ The check rules:
 
 \`npx flowfig --scene <id> ...\` renders only the scene of the box \`<id>\`, as a plain figure. The default render adds no script.
 \`--script\` adds the script that opens the boxes.
+`,
+  explain: `# flowfig topic: explain
+
+Read this topic when the user wants a web page that explains a flow one moment at a time, to a reader who does not know the
+code.
+
+Write the spec and render the SVG as usual. The SVG carries the spec. Then add the element to the page:
+
+\`\`\`html
+<script type="module" src="https://cdn.jsdelivr.net/npm/flowfig/dist/element.js"></script>
+<flowfig-explain src="returns.svg" form="guide"></flowfig-explain>
+\`\`\`
+
+The element takes its actors from the lanes, else from the labeled groups. Use \`lanes: true\` or one labeled group per actor.
+The fields below change only the element. The SVG does not show them.
+
+- \`look\` (box, group or lane): the picture of the actor. Use one of: \`person\`, \`shop\`, \`desk\`, \`truck\`, \`phone\`, \`server\`,
+  \`cabinet\`, \`team\`, \`tower\`, \`queue\`, \`gear\`, \`cloud\`.
+- \`note\` (beat): one line under the \`say\`, 15 words or fewer. Give the reason for the beat.
+- \`carries\` (edge): what moves on the edge. Leave it out for data: a message, a request, a record, a file, an email, a
+  payment. The default is data.
+- Write \`carries\` only when a physical thing moves: goods, a vehicle, paper, cash. Example:
+  \`{ "thing": "used oil", "form": "barrel", "count": 4 }\`.
+- \`form\` is \`box\` (the default), \`barrel\` or \`notes\` (cash). \`count\` is 1 to 4. The default is 1.
+- If the thing starts at a box that is not the edge \`from\`, set \`carries.from\` to the id of that box.
+- \`check\` (box): the question that a box asks before the flow goes on, when the box is not a \`decision\`. The labels of the
+  edges out of the box are the answers. A \`decision\` box shows its label as the question.
+- \`outcome\` (step): one sentence of 15 words or fewer that says how the story ends.
+- \`done\` (box): the state after the box, in a short phrase, such as "Oil in stock". The ending tag of each actor shows the
+  \`done\` of the last box that the actor reached. Without \`done\`, the tag shows the box label.
+- Write only a state that the code or the document gives. If a box only asks for a refund, the state is "Refund asked", not
+  "Refunded".
+- Put a refusal box in the lane of the actor that refuses, with the tone \`red\`. The tag of that actor then shows the refusal.
+
+The element shows a small world if an edge carries a thing, or if an actor has the look \`person\`, \`shop\` or \`truck\`. Else it
+shows the diagram. If only data moves, the diagram is the better form. Then give a user on a browser or an app the look
+\`phone\`, not \`person\`. Never add a thing or a look only to get the world.
+
+The check rules:
+
+- \`bad-carries\`: \`thing\` is empty, \`form\` is not \`box\`, \`barrel\` or \`notes\`, or \`count\` is not 1 to 4.
+- \`thing-no-road\`: both ends of a thing edge are at one actor. Set \`carries.from\` to the box where the thing starts.
 `,
 };
 
