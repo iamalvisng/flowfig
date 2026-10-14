@@ -341,6 +341,23 @@ test('a story with a faulty frame shows the diagram, and a clean story shows the
   }
 });
 
+test('on a phone the sheet shows the Full screen button, uncut', { skip: !browser.path }, async () => {
+  const page = await open(guide('oil'), `${live}.length > 0 && !!${sr}?.querySelector('[data-stage="world"] svg[role="img"]')`);
+  try {
+    await page.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: false });
+    await page.ev(sleep);
+    const got = await page.ev(`(() => {
+      const b = [...${sr}.querySelectorAll('button')].find((x) => x.textContent.trim() === 'Full screen');
+      if (!b) return null;
+      const r = b.getBoundingClientRect(), hud = ${sr}.querySelector('.ff-hud').getBoundingClientRect();
+      return { name: b.textContent.trim(), shown: r.width > 0 && r.height > 0, cut: r.top < hud.top || r.bottom > hud.bottom || r.right > hud.right || b.scrollWidth > b.clientWidth };
+    })()`);
+    assert.deepEqual(got, { name: 'Full screen', shown: true, cut: false });
+  } finally {
+    await page.done();
+  }
+});
+
 test(
   'on a phone the world keeps 58% of the element above the sheet, and the sheet shows Back, Play and Next in a moment and at a refused outcome',
   { skip: !browser.path },

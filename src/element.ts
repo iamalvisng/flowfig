@@ -118,7 +118,7 @@ const CSS = [
   '[data-s=no]>.ff-mk{background:#FCEBE8;color:#B8322A}',
   '[data-s=now]>.ff-mk{background:var(--flowfig-ink);color:var(--flowfig-surface)}',
   '[data-s=next]>.ff-mk{background:none;color:var(--flowfig-muted);box-shadow:inset 0 0 0 1px var(--flowfig-border)}',
-  '.ff-ctl{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}',
+  '.ff-ctl{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:4px}',
   '.ff-b{padding:9px 16px;font-size:14px;font-weight:600;border-radius:8px}',
   '.ff-b:disabled{opacity:1;color:#8A919C;background:var(--flowfig-surface)}',
   '.ff-play{background:var(--flowfig-ink);border-color:var(--flowfig-ink);color:var(--flowfig-surface)}',
@@ -749,9 +749,9 @@ export class FlowfigExplain extends Base {
             g.code,
             g.skip,
             g.list,
-            h('div', 'ff-ctl', this.#ctl.back, this.#ctl.play, this.#ctl.next, g.more),
+            h('div', 'ff-ctl', this.#ctl.back, this.#ctl.play, this.#ctl.next, g.more, full),
             g.key,
-            h('div', 'ff-ft', g.tog, full),
+            h('div', 'ff-ft', g.tog),
           ),
         );
         guide.querySelector('.ff-chips')!.addEventListener('scroll', (e) => cut(e.currentTarget as El));
