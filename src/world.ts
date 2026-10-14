@@ -696,6 +696,7 @@ function planOf(sc: Scene, story: number, m: number) {
           row = g.rows.find((r) => r.box === h.from) ?? g.rows[g.rows.push({ box: h.from, q: fb.check, a: '', fail: false }) - 1];
         Object.assign(row, { a: answer(h), fail: h.fail });
         g.on = m;
+        st.ever[fa].fail = h.fail || /^(no|false)$/i.test(h.label);
       });
       if (h.fail) {
         for (const u of Object.values(s.units)) if (u.where === 'gate' && u.at === fa) s.frame.push(u.p);

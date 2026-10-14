@@ -295,7 +295,7 @@ function audit(sc: Scene, s: State, p: Placed, st: Stage): string[] {
       s.summary &&
       sc.boxes[sc.stories[s.story].end]?.actor !== a &&
       onStageShare(a === sc.truck && p.truck ? p.truck : p.hulls[a], st.region);
-    if (cut === false || cut >= 0.62 || cut < 0.01) shown(`tag ${sc.actors[a].name}`, p.tags.find((x) => x.actor === a)?.r);
+    if (cut === false || cut >= 0.6 || cut < 0.01) shown(`tag ${sc.actors[a].name}`, p.tags.find((x) => x.actor === a)?.r);
   }
   for (const a of s.dev) if (!(a === sc.truck && p.truck)) shown(`device ${a}`, p.devices.find((x) => x.actor === a)?.r);
   for (const a of s.arcs) {
@@ -308,8 +308,7 @@ function audit(sc: Scene, s: State, p: Placed, st: Stage): string[] {
   for (const c of p.chips) if (c.mark === '✗') out.push(`chip ${c.text} has a red mark`);
   for (const o of p.tags) {
     const share = onStageShare(o.actor === sc.truck && p.truck ? p.truck : p.hulls[o.actor], st.region);
-    if (share < 0.58 && !(o.pin && (share < 0.01 || !s.summary)))
-      out.push(`tag ${o.name} on an actor ${Math.round(share * 100)}% on stage`);
+    if (share < 0.6 && !(o.pin && (share < 0.01 || !s.summary))) out.push(`tag ${o.name} on an actor ${Math.round(share * 100)}% on stage`);
   }
   sc.actors.forEach((_, i) => {
     if (!s.gates[i].fail) return;
@@ -594,6 +593,37 @@ test('no ending tag asks a question: a passed check shows its question as a stat
       (t) => t.name === 'Office',
     )!;
   assert.deepEqual([office.mark, office.status], ['✓', 'Paid in cash']);
+});
+
+test('an ending tag of a check takes its mark from the answer of its last hop', () => {
+  const ending = (label: string) => {
+    const sc = scene({
+      layout: {
+        children: [
+          {
+            label: 'Office',
+            children: [
+              { id: 'a', label: 'Ask' },
+              { id: 'q', label: 'Paid in cash?', shape: 'decision' },
+            ],
+          },
+          { label: 'Bank', children: [{ id: 'v', label: 'Settle' }] },
+        ],
+      },
+      edges: [
+        { from: 'a', to: 'q' },
+        { from: 'q', to: 'v', label },
+      ],
+      steps: [{ label: 'Pay', flow: ['a->q', 'q->v'] }],
+    });
+    const t = place(sc, stateAt(sc, 0, sc.stories[0].moments.length - 1, Infinity), stageFor(1440, 900)).tags.find(
+      (x) => x.name === 'Office',
+    )!;
+    return `${t.mark} ${t.status}`;
+  };
+  assert.equal(ending('no'), '✗ Paid in cash');
+  assert.equal(ending('false'), '✗ Paid in cash');
+  assert.equal(ending('yes'), '✓ Paid in cash');
 });
 
 test('an unlabeled refusal into another actor names the check on the failed tag', () => {
