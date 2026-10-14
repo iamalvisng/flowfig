@@ -1,8 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { keyFrames, sheetGrid } from './frames.ts';
-import { beatTimes, toBeat, type FlowProps } from './model.ts';
+import { beatTimes, toBeat, tourPlan, type FlowProps } from './model.ts';
 import { toSvg } from './svg.ts';
+import shop from '../figures/inside-shop.ts';
 
 const ONE: FlowProps = {
   layout: {
@@ -65,6 +66,19 @@ test('the beat times equal the keyTimes and the dur that the SVG writes', () => 
     const { tiles, frames } = keyFrames(f, o);
     tiles.forEach((t) => assert.ok(t.frame < frames, `tile ${t.frame} of ${frames} wraps`));
   }
+});
+
+test('a figure with parts gives the frames of the tour loop that the SVG writes', () => {
+  const fig = shop.props as FlowProps;
+  const loop = Number(/animation: \S+ ([\d.]+)s infinite linear/.exec(toSvg(fig))![1]);
+  const { tiles, frames } = keyFrames(fig, { fps: 20 });
+  assert.equal(frames, Math.round(loop * 20));
+  const last = tourPlan(fig).times.beats.flat().at(-1)!;
+  assert.ok(
+    tiles.some((t) => t.kinds.includes('read') && t.frame === Math.floor(last.tEnd * 20 - 0.5)),
+    'the last read tile follows the tour',
+  );
+  tiles.forEach((t) => assert.ok(t.frame < frames, `tile ${t.frame} of ${frames} wraps`));
 });
 
 test('two kinds on one frame give one tile with both kinds in the label', () => {
