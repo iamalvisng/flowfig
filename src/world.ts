@@ -994,7 +994,7 @@ export function polyHit(poly: Pt[], r: Rect, pad = 0): boolean {
   return true;
 }
 
-export function stageFor(w: number, h: number): Stage {
+export function stageFor(w: number, h: number, sheet: number = HUD.sheet): Stage {
   const side = w >= HUD.wide || (h < HUD.short && w >= HUD.slim * 2);
   return {
     w,
@@ -1003,7 +1003,7 @@ export function stageFor(w: number, h: number): Stage {
     form: w >= HUD.slim * 2 ? (w < HUD.roomy ? 'narrow' : 'wide') : h < 740 || h > 780 ? 'spread' : 'stack',
     region: side
       ? { l: HUD.pad * 2 + (w >= HUD.wide ? HUD.panel : HUD.slim), t: HUD.chips + HUD.pad, r: w - HUD.pad, b: h - HUD.pad }
-      : { l: 8, t: HUD.chips + 8, r: w - 8, b: h - HUD.sheet - 8 },
+      : { l: 8, t: HUD.chips + 8, r: w - 8, b: h - sheet - 8 },
   };
 }
 
@@ -1587,7 +1587,7 @@ const same = (e: Node, text: string) => {
 
 let sheet: CSSStyleSheet | undefined;
 
-export function mountWorld(stage: HTMLElement, fig: FlowProps, resized: () => void): World {
+export function mountWorld(stage: HTMLElement, fig: FlowProps, resized: () => void, hud: (story: number) => number): World {
   const root = stage.getRootNode() as ShadowRoot;
   if (!sheet) {
     sheet = new CSSStyleSheet();
@@ -1643,7 +1643,8 @@ export function mountWorld(stage: HTMLElement, fig: FlowProps, resized: () => vo
     signs: { el: HTMLElement; actor: number; rows: { q: HTMLElement; a: HTMLElement; m: boolean }[] }[] = [],
     chips: { el: HTMLElement; text: string }[] = [];
 
-  const viewFor = (story: number) => lays.get(story) ?? lays.set(story, storyView(get, story, stg)).get(story)!;
+  const stageOf = (story: number) => stageFor(stg.w, stg.h, hud(story));
+  const viewFor = (story: number) => lays.get(story) ?? lays.set(story, storyView(get, story, stageOf(story))).get(story)!;
   const use = (s: Scene) => {
     if (s === sc) return;
     sc = s;
@@ -1897,6 +1898,7 @@ export function mountWorld(stage: HTMLElement, fig: FlowProps, resized: () => vo
       said = say;
       cur = { story, moment };
       if (!stg.w || !stg.h) return 0;
+      stg = stageOf(story);
       const to = layoutFor(story, moment).cam;
       const from = cam ?? to;
       if (!motion) {

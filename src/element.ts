@@ -41,6 +41,7 @@ type Guide = {
   last: number;
   lastStep: string;
   drawn: string;
+  sheets: Map<string, number>;
 };
 
 const KEYS = { data: 'Data through the air', thing: 'Things on the road or by hand', check: 'A check' };
@@ -129,7 +130,7 @@ const CSS = [
   '.ff-key{margin:0;padding:12px 0 0;list-style:none;display:flex;flex-direction:column;gap:4px;border-top:1px solid var(--flowfig-border);font-size:13px;color:var(--flowfig-muted)}',
   '.ff-key li{display:flex;align-items:center;gap:10px}',
   '.ff-skip li::before{content:"\\2717";margin-right:8px;color:var(--flowfig-bad)}',
-  `@container ff-host (width < ${HUD.wide}px){.ff-g{aspect-ratio:auto;height:min(100svh,${HUD.tall}px);max-height:none}.ff-chips{top:8px;left:8px;max-width:calc(100% - 16px)}.ff-hud{top:auto;left:0;right:0;bottom:0;width:auto;height:${HUD.sheet}px;max-height:none;gap:8px;padding:12px 16px;border-radius:12px 12px 0 0;font-size:13px}.ff-say{font-size:16px}.ff-note{font-size:13px}.ff-kick,.ff-moments button,.ff-key{font-size:11px}.ff-ht,.ff-code,.ff-tog,.ff-key,.ff-moments:not(.ff-open),.ff-skip:not(.ff-open){display:none}.ff-hd{order:-3}.ff-say{order:-2}.ff-ctl{order:-1}.ff-more{display:inline-block}}`,
+  `@container ff-host (width < ${HUD.wide}px){.ff-g{aspect-ratio:auto;height:min(100svh,${HUD.tall}px);max-height:none}.ff-chips{top:8px;left:8px;max-width:calc(100% - 16px)}.ff-hud{top:auto;left:0;right:0;bottom:0;width:auto;height:${HUD.sheet}px;max-height:none;gap:8px;padding:12px 16px;border-radius:12px 12px 0 0;font-size:13px}.ff-say{font-size:16px}.ff-note{font-size:13px}.ff-moments button,.ff-key{font-size:11px}.ff-ht,.ff-kick,.ff-code,.ff-ft,.ff-key,.ff-moments:not(.ff-open),.ff-skip:not(.ff-open){display:none}.ff-hd{order:-3}.ff-say,.ff-note{order:-2}.ff-ctl{order:-1}.ff-more{display:inline-block}}`,
   `@container ff-guide (${HUD.slim * 2}px <= width < ${HUD.wide}px) and (height < ${HUD.short}px){.ff-chips{top:${HUD.pad}px;left:${HUD.pad * 2 + HUD.slim}px;max-width:calc(100% - ${HUD.pad * 3 + HUD.slim}px)}.ff-hud{top:${HUD.pad}px;left:${HUD.pad}px;right:auto;bottom:auto;width:${HUD.slim}px;height:auto;max-height:calc(100% - ${HUD.pad * 2}px);border-radius:8px}}`,
   '.ff-verdict{padding:12px 16px;background:var(--flowfig-surface);border:1px solid var(--flowfig-border);border-radius:10px;font-size:16px;font-weight:500}',
   '.ff-list{margin:6px 0 0;padding-left:20px;font-size:15px;font-weight:400}',
@@ -679,6 +680,7 @@ export class FlowfigExplain extends Base {
           last: -1,
           lastStep: '',
           drawn: '',
+          sheets: new Map(),
         };
         g.ht.hidden = !this.#title;
         g.tog.className = 'ff-btn ff-txt ff-tog';
@@ -706,12 +708,17 @@ export class FlowfigExplain extends Base {
                   return li;
                 }),
               );
-              this.#world = w.mountWorld(g.stage, spec, () => {
-                const m = this.#all[this.#at];
-                if (this.#g !== g || !m) return;
-                g.drawn = '';
-                this.#guide(g, m);
-              });
+              this.#world = w.mountWorld(
+                g.stage,
+                spec,
+                () => {
+                  const m = this.#all[this.#at];
+                  if (this.#g !== g || !m) return;
+                  g.drawn = '';
+                  this.#guide(g, m);
+                },
+                (story) => this.#sheet(g, this.#labels()[story]),
+              );
               g.drawn = '';
               this.#update();
             })
@@ -827,7 +834,38 @@ export class FlowfigExplain extends Base {
       if (i === k) b.setAttribute('aria-current', 'true');
       else b.removeAttribute('aria-current');
     });
+    this.#sheet(g, m.step);
     this.#stage(g, m, k);
+  }
+
+  #sheet(g: Guide, step: string) {
+    const hud = g.say.parentElement!,
+      { width: w, height: h } = hud.parentElement!.getBoundingClientRect();
+    if (w >= HUD.wide || (h < HUD.short && w >= HUD.slim * 2)) {
+      hud.style.height = '';
+      return HUD.sheet;
+    }
+    const key = `${step}/${w}x${h}`;
+    let px = g.sheets.get(key);
+    if (px === undefined) {
+      const was = [g.say.textContent, g.note.textContent],
+        open = g.list.classList.contains('ff-open');
+      g.list.classList.remove('ff-open');
+      g.skip.classList.remove('ff-open');
+      hud.style.height = 'auto';
+      px = HUD.sheet;
+      for (const m of this.#all.filter((x) => x.step === step)) {
+        g.say.textContent = m.say;
+        g.note.textContent = m.note;
+        px = Math.max(px, hud.offsetHeight);
+      }
+      [g.say.textContent, g.note.textContent] = was;
+      g.list.classList.toggle('ff-open', open);
+      g.skip.classList.toggle('ff-open', open);
+      g.sheets.set(key, (px = Math.max(HUD.sheet, Math.min(px, Math.round(h * 0.42)))));
+    }
+    hud.style.height = `${px}px`;
+    return px;
   }
 
   #stage(g: Guide, m: Spot, k: number) {

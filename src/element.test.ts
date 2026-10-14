@@ -268,15 +268,15 @@ test('the drawn overlays sit where the layout put them', { skip: !browser.path }
       'the refusal frame shows',
     );
     type Drawn = { actor: string; x: number; y: number; w: number; h: number; fits: boolean };
-    const got: { w: number; h: number; tags: Drawn[] } = await page.ev(`(() => {
+    const got: { w: number; h: number; sheet: number; tags: Drawn[] } = await page.ev(`(() => {
       const g = ${sr}.querySelector('.ff-guide').getBoundingClientRect();
-      return { w: g.width, h: g.height, tags: [...${sr}.querySelectorAll('[data-actor]')].map((t) => {
+      return { w: g.width, h: g.height, sheet: ${sr}.querySelector('.ff-hud').getBoundingClientRect().height, tags: [...${sr}.querySelectorAll('[data-actor]')].map((t) => {
         const r = t.getBoundingClientRect();
         return { actor: t.dataset.actor, x: r.x - g.x, y: r.y - g.y, w: r.width, h: r.height, fits: t.scrollWidth <= t.clientWidth && t.scrollHeight <= t.clientHeight };
       }) };
     })()`);
     const s = scene(oil.props).stories.findIndex((x) => x.name === 'Expired certification');
-    const want = storyView((f) => scene(oil.props, f), s, stageFor(got.w, got.h)).cams[2];
+    const want = storyView((f) => scene(oil.props, f), s, stageFor(got.w, got.h, got.sheet)).cams[2];
     assert.equal(got.tags.length, want.tags.length);
     for (const t of want.tags) {
       const drawn = got.tags.find((x) => x.actor === t.name);
@@ -326,10 +326,10 @@ test('a story with a faulty frame shows the diagram, and a clean story shows the
         await page.ev(`${button(story.name)}.click()`);
         await page.until(`${live}.length > 0 && ${el}.moment >= 0`, 'the story opens');
         await page.ev(`new Promise((r) => setTimeout(r, 300))`);
-        const box: { w: number; h: number } = await page.ev(
-          `(() => { const g = ${sr}.querySelector('.ff-stage').getBoundingClientRect(); return { w: g.width, h: g.height }; })()`,
+        const box: { w: number; h: number; sheet: number } = await page.ev(
+          `(() => { const g = ${sr}.querySelector('.ff-stage').getBoundingClientRect(); return { w: g.width, h: g.height, sheet: ${sr}.querySelector('.ff-hud').getBoundingClientRect().height }; })()`,
         );
-        const st = stageFor(box.w, box.h);
+        const st = stageFor(box.w, box.h, box.sheet);
         const bad = storyView((f) => scene(oil.props, f), s, st).cams.some((p) => p.faults > 0);
         faulty += bad ? 1 : 0;
         assert.equal(await page.ev(shown), bad, `${story.name} at ${w}x${h}`);
@@ -342,7 +342,7 @@ test('a story with a faulty frame shows the diagram, and a clean story shows the
 });
 
 test(
-  'on a phone the world gets 600 px above the sheet, and the sheet shows Back, Play and Next in a moment and at a refused outcome',
+  'on a phone the world keeps 58% of the element above the sheet, and the sheet shows Back, Play and Next in a moment and at a refused outcome',
   { skip: !browser.path },
   async () => {
     const page = await open(guide('oil'), `${live}.length > 0 && !!${sr}?.querySelector('[data-stage="world"] svg[role="img"]')`);
@@ -364,7 +364,7 @@ test(
         return { host: host.height, stage: stage.height, world: hud.top - host.top, key: r(${sr}.querySelector('.ff-key')).height, cut };
       })()`);
         assert.equal(got.stage, got.host, 'the stage fills the element');
-        assert.ok(got.world >= 600, `the world above the sheet: ${got.world} px`);
+        assert.ok(got.world >= got.host * 0.58 - 1, `the world above the sheet: ${got.world} of ${got.host} px`);
         assert.equal(got.key, 0, 'the key is hidden');
         assert.deepEqual(got.cut, [], `moment ${k + 1}`);
       }
@@ -404,6 +404,34 @@ test('the world stage and the moments list read a refused check as failed', { sk
   } finally {
     await page.done();
   }
+});
+
+test('on a phone, every line of every moment ends above the bottom padding of the sheet', { skip: !browser.path }, async () => {
+  const cut: string[] = [];
+  for (const fig of ['oil', 'returns'])
+    for (const [w, h] of [
+      [390, 844],
+      [360, 600],
+    ]) {
+      const page = await open(guide(fig), `${live}.length > 0`);
+      try {
+        await page.send('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: 1, mobile: false });
+        await page.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
+        await page.ev(`new Promise((r) => setTimeout(r, 300))`);
+        for (let i = 0; ; i++) {
+          await page.ev(`${el}.moment = ${i}`);
+          if ((await page.ev(`${el}.moment`)) !== i) break;
+          const low: string[] = await page.ev(`(() => {
+            const hud = ${sr}.querySelector('.ff-hud'), end = hud.getBoundingClientRect().bottom - 8;
+            return [...hud.querySelectorAll('h3, p, button')].filter((e) => { const r = e.getBoundingClientRect(); return r.height > 0 && r.bottom > end + 0.5; }).map((e) => e.textContent.trim());
+          })()`);
+          if (low.length) cut.push(`${fig} ${w}x${h} moment ${i}: ${low.join(' | ')}`);
+        }
+      } finally {
+        await page.done();
+      }
+    }
+  assert.deepEqual(cut, []);
 });
 
 test(

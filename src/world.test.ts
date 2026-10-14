@@ -286,6 +286,10 @@ const SIZES = [
   [344, 565],
   [390, 600],
   [412, 640],
+  [390, 844, 179],
+  [390, 600, 179],
+  [412, 640, 179],
+  [360, 600, 229],
 ];
 const STACKED = ['390x844', '390x600', '412x640'];
 
@@ -294,8 +298,8 @@ test('every needed tag, sign, chip and device is on stage, none overlaps, and th
   for (const fig of FIXTURES) {
     const scenes = new Map<Form, Scene>(),
       get = (f: Form) => scenes.get(f) ?? scenes.set(f, scene(fig.props, f)).get(f)!;
-    for (const [w, h] of worldReady(fig.props) ? SIZES : SIZES.slice(0, 3)) {
-      const st = stageFor(w, w >= HUD.wide ? Math.min(h, (w * 10) / 16) : Math.min(h, HUD.tall));
+    for (const [w, h, sheet] of worldReady(fig.props) ? SIZES : SIZES.slice(0, 3)) {
+      const st = stageFor(w, w >= HUD.wide ? Math.min(h, (w * 10) / 16) : Math.min(h, HUD.tall), sheet);
       get(st.form).stories.forEach((story, s) => {
         const { sc, cams } = storyView(get, s, st);
         if (worldReady(fig.props) && STACKED.includes(`${w}x${h}`) && !sc.bends.length)
