@@ -65,7 +65,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - uses: iamalvisng/flowfig@v0.11.0
+      - uses: iamalvisng/flowfig@v0.12.0
         with:
           figures: 'docs/**/*.svg' # default **/*.svg
           # coverage: true # also fail the job if a figure is stale
@@ -593,7 +593,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - uses: iamalvisng/flowfig@v0.11.0
+      - uses: iamalvisng/flowfig@v0.12.0
         with:
           figures: 'docs/**/*.svg' # default **/*.svg
 ```
