@@ -1206,11 +1206,12 @@ export function layout(sc: Scene, s: State, stage: Stage, cam: Cam, full = false
       () => (s.dev.includes(a) && !k.inCab(a) ? ring(pr(k.devTop(a)), w, h, ds) : []),
     ];
     const must = s.hi.includes(a) || (s.summary && story.path.includes(a));
-    const part = share((onTruck ? truckHull! : A[a].lot.hull).map(pr), stage.region) < 0.6;
-    if (part && !must) return;
+    const seen = share((onTruck ? truckHull! : A[a].lot.hull).map(pr), stage.region),
+      part = seen < 0.6;
+    if (part && (!must || (full && stage.narrow && s.summary && !end && seen >= 0.01))) return;
     const base = { actor: a, name, status, mark, quiet: !story.path.includes(a), end, cargo };
     const out = ax < l || ax > r || ay < t || ay > b;
-    if (must && stage.narrow && (out || part)) {
+    if (must && stage.narrow && (out || part) && !(s.summary && end && part)) {
       const tag = pin(base, w, h, [ax, ay]);
       tags.push(tag);
       taken.push(tag.r);

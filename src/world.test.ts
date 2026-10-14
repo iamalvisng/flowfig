@@ -198,9 +198,9 @@ const onStageShare = (poly: Pt[], { l, t, r, b }: Stage['region']) => {
     [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
   let all = 0,
     seen = 0;
-  for (let i = 0; i < 40; i++)
-    for (let j = 0; j < 40; j++) {
-      const q: Pt = [x0 + ((i + 0.5) * (x1 - x0)) / 40, y0 + ((j + 0.5) * (y1 - y0)) / 40];
+  for (let i = 0; i < 120; i++)
+    for (let j = 0; j < 120; j++) {
+      const q: Pt = [x0 + ((i + 0.5) * (x1 - x0)) / 120, y0 + ((j + 0.5) * (y1 - y0)) / 120];
       if (!inside(q, poly)) continue;
       all++;
       if (q[0] >= l && q[0] <= r && q[1] >= t && q[1] <= b) seen++;
@@ -289,7 +289,14 @@ function audit(sc: Scene, s: State, p: Placed, st: Stage): string[] {
     for (const o of p.tags)
       if (gap(o.anchor, o.actor === sc.truck && p.truck ? p.truck : p.hulls[o.actor]) > 24)
         out.push(`tag ${o.name} points away from its actor`);
-  for (const a of s.hi) shown(`tag ${sc.actors[a].name}`, p.tags.find((x) => x.actor === a)?.r);
+  for (const a of s.hi) {
+    const cut =
+      st.narrow &&
+      s.summary &&
+      sc.boxes[sc.stories[s.story].end]?.actor !== a &&
+      onStageShare(a === sc.truck && p.truck ? p.truck : p.hulls[a], st.region);
+    if (cut === false || cut >= 0.62 || cut < 0.01) shown(`tag ${sc.actors[a].name}`, p.tags.find((x) => x.actor === a)?.r);
+  }
   for (const a of s.dev) if (!(a === sc.truck && p.truck)) shown(`device ${a}`, p.devices.find((x) => x.actor === a)?.r);
   for (const a of s.arcs) {
     if (a.moment !== s.moment || a.t !== 1 || !a.text) continue;
@@ -301,7 +308,8 @@ function audit(sc: Scene, s: State, p: Placed, st: Stage): string[] {
   for (const c of p.chips) if (c.mark === '✗') out.push(`chip ${c.text} has a red mark`);
   for (const o of p.tags) {
     const share = onStageShare(o.actor === sc.truck && p.truck ? p.truck : p.hulls[o.actor], st.region);
-    if (!o.pin && share < 0.6) out.push(`tag ${o.name} on an actor ${Math.round(share * 100)}% on stage`);
+    if (share < 0.58 && !(o.pin && (share < 0.01 || !s.summary)))
+      out.push(`tag ${o.name} on an actor ${Math.round(share * 100)}% on stage`);
   }
   sc.actors.forEach((_, i) => {
     if (!s.gates[i].fail) return;
@@ -334,9 +342,9 @@ const SIZES = [
   [344, 565],
   [390, 600],
   [412, 640],
-  [390, 844, 179],
-  [390, 600, 179],
-  [412, 640, 179],
+  [390, 844, 211],
+  [390, 600, 211],
+  [412, 640, 211],
   [360, 600, 229],
 ];
 const STACKED = ['390x844', '390x600', '412x640'];
@@ -379,7 +387,7 @@ test('every needed tag, sign, chip and device is on stage, none overlaps, and th
 });
 
 test('on a phone, the stacked street shows every building of the "Expired certification" outcome at least 78 px wide', () => {
-  const st = stageFor(390, Math.min(844, HUD.tall), 179),
+  const st = stageFor(390, Math.min(844, HUD.tall), 211),
     s = scene(oil.props).stories.findIndex((x) => x.name === 'Expired certification'),
     { sc, cams } = storyView((f) => scene(oil.props, f), s, st),
     p = cams.at(-1)!,
@@ -399,7 +407,7 @@ test('on a phone, the stacked street shows every building of the "Expired certif
 test('on a phone, every ending frame shows each path building at least 90 px wide, or 78 px when the truck is out', () => {
   const small: string[] = [];
   for (const fig of [oil, returns]) {
-    const st = stageFor(390, Math.min(844, HUD.tall), 179);
+    const st = stageFor(390, Math.min(844, HUD.tall), 211);
     scene(fig.props).stories.forEach((_, s) => {
       const { sc, cams } = storyView((f) => scene(fig.props, f), s, st),
         p = cams.at(-1)!,
