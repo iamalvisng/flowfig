@@ -6,6 +6,7 @@ export const PLAIN_EXAMPLES = [
     good: 'Rate limiter',
   },
   { field: 'sub', rule: 'A `sub` line holds a short plain detail.', bad: 'redis.incr()', good: '5 tries a minute' },
+  { field: 'sub', rule: 'A table, queue or topic name in code style is a code name.', bad: 'order_items', good: 'Order items' },
   { field: 'edge', rule: 'An edge label names the action or the data.', bad: 'validateCredentials()', good: 'check password' },
   {
     field: 'say',
@@ -75,6 +76,8 @@ A topic gives the detail for one kind of figure. Before you write that kind of s
 - \`timeline\`: a roadmap, a plan with dates or a Mermaid \`gantt\`.
 - \`lanes\`: a process that several roles do (a ticket, an order, a refund), or an SOP.
 - \`verify\`: a verify finding in the render output, or a check in CI.
+- \`inside\`: the parts inside a box, down to functions.
+- \`explain\`: a web page that explains a flow one moment at a time (\`<flowfig-explain>\`).
 
 ## Workflow
 
@@ -187,6 +190,23 @@ beat is an edge id or an array of edge ids that run at the same time. A beat can
 - \`say\`: the caption for the beat. \`light\`: boxes to highlight. \`ms\`: the beat length.
 - \`show\`: \`{ boxId: [{ tag?, tone?, text, meta?, mark?, mono? }] }\`. The rows fill the content card of each box until the
   step ends.
+
+## Inside a box
+
+- Add \`inside\` to a box if the user asks what happens in that box.
+- If the user asks what box X does "call by call", "inside" or "step by step", put those calls as parts in the
+  \`inside\` of X, in the order that the code runs them. Do not draw a second, flat figure.
+- A helper is a part inside the part that calls it, not one level up. The \`inside\` of a box holds only the calls that the
+  box makes itself. Example: \`placeOrder\` calls \`checkCart\`, and \`checkCart\` calls \`priceItem\`. The part "Check the cart"
+  then gets its own \`inside\` with the part "Price an item".
+- Add \`inside\` if the root needs more than 12 boxes to be faithful. Move the inner calls into the box that owns them.
+- Give each part one \`source\`. Find the parts with \`npx flowfig trace <source>\`.
+- An inside edge can start at an outer neighbor X only if the root has the edge X -> box. It can end at an outer neighbor Y
+  only if the root has the edge box -> Y. The open box shows X and Y as ports.
+- An inside edge shows the order of the flow, not a call. Draw an edge from each in-port to the first part that runs, and
+  from the last part that runs to each out-port.
+- The limits: 3 levels, 16 parts in one box, 60 parts in the figure. Ids are unique in the whole figure.
+- For the full example, print \`npx flowfig docs inside\`.
 
 ## Content rules
 
@@ -348,6 +368,118 @@ Copy the count line into the reply as printed.
 
 For CI, \`npx flowfig verify <svg>...\` runs the same check on SVG files. \`--root <folder>\` sets the repo root. \`--json\` prints
 JSON. \`--strict\` makes warnings errors.
+`,
+  inside: `# flowfig topic: inside
+
+Read this topic when the user asks what happens inside a box, or when the root needs more than 12 boxes.
+
+A box with \`inside\` opens in the figure. \`inside\` has \`layout\` (required), \`edges\` and \`steps\`. These work as in \`props\`.
+A part is a box. A part can have its own \`inside\`.
+
+\`\`\`json
+{
+  "layout": { "direction": "row", "children": [
+    { "id": "gateway", "label": "Gateway" },
+    { "id": "orders", "label": "Orders", "source": "src/orders/index.ts#createOrder",
+      "inside": {
+        "layout": { "direction": "row", "children": [
+          { "id": "validate", "label": "Check the cart", "source": "src/orders/validate.ts#validateCart",
+            "inside": {
+              "layout": { "direction": "row", "children": [
+                { "id": "stock", "label": "Check stock", "source": "src/orders/stock.ts#checkStock" },
+                { "id": "price", "label": "Add up the price", "source": "src/orders/price.ts#totalPrice" } ] },
+              "edges": [
+                { "from": "gateway", "to": "stock" },
+                { "from": "stock", "to": "price" },
+                { "from": "price", "to": "save" } ] } },
+          { "id": "save", "label": "Save the order", "source": "src/orders/repo.ts#insertOrder" },
+          { "id": "notify", "label": "Tell the shop", "source": "src/orders/notify.ts#notifyShop" } ] },
+        "edges": [
+          { "from": "gateway", "to": "validate" },
+          { "from": "validate", "to": "save" },
+          { "from": "save", "to": "notify" },
+          { "from": "notify", "to": "payments" } ],
+        "steps": [ { "label": "Place an order", "flow": ["gateway->validate", "validate->save", "save->notify", "notify->payments"] } ] } },
+    { "id": "payments", "label": "Payments" } ] },
+  "edges": [ { "from": "gateway", "to": "orders" }, { "from": "orders", "to": "payments" } ],
+  "steps": [ { "label": "Place an order", "flow": ["gateway->orders", "orders->payments"] } ]
+}
+\`\`\`
+
+Rules:
+
+- An inside edge can start at an outer neighbor X only if the scene above has the edge X -> box. The edge \`gateway->validate\`
+  needs \`gateway->orders\`. The box shows X as an in-port.
+- An inside edge can end at an outer neighbor Y only if the scene above has the edge box -> Y. The edge \`notify->payments\`
+  needs \`orders->payments\`. The box shows Y as an out-port.
+- An inside edge with no part at either end is an error.
+- An inside edge shows the order of the flow, not a call. \`price->save\` says that the flow leaves the box after
+  \`price\`. \`totalPrice\` does not call \`insertOrder\`. Each in-port needs an edge to the first part that runs, and each
+  out-port needs an edge from the last part that runs.
+- Inside steps name parts, ports and inside edges. An outer step cannot name a part.
+- Give each part one \`source\`. Find the parts with \`npx flowfig trace <source>\`.
+- The limits: 3 levels, 16 parts in one box, 60 parts in the figure. Ids are unique in the whole figure, at all levels.
+- \`inside\` has no effect in a \`lanes\`, \`timeline\` or \`rail: "only"\` figure.
+
+The check rules:
+
+- \`part-edge-mismatch\`: an inside edge names an outer box with no outer edge in that direction, or an outer edge has no
+  inside edge to continue it. The message starts with the path, for example \`[Orders]\`.
+- \`part-no-source\`: a part has no \`source\`. Add one.
+
+\`npx flowfig --scene <id> ...\` renders only the scene of the box \`<id>\`, as a plain figure. The default render adds no script.
+\`--script\` adds the script that opens the boxes.
+`,
+  explain: `# flowfig topic: explain
+
+Read this topic when the user wants a web page that explains a flow one moment at a time, to a reader who does not know the
+code.
+
+Write the spec and render the SVG as usual. The SVG carries the spec. Then add the element to the page:
+
+\`\`\`html
+<script type="module" src="https://cdn.jsdelivr.net/npm/flowfig/dist/element.js"></script>
+<flowfig-explain src="returns.svg" form="guide"></flowfig-explain>
+\`\`\`
+
+The element takes its actors from the lanes, else from the labeled groups. Use \`lanes: true\` or one labeled group per actor.
+The fields below change only the element. The SVG does not show them.
+
+- \`look\` (box, group or lane): the picture of the actor. Use one of: \`person\`, \`shop\`, \`desk\`, \`truck\`, \`phone\`, \`server\`,
+  \`cabinet\`, \`team\`, \`tower\`, \`queue\`, \`gear\`, \`cloud\`.
+- \`note\` (beat): one line under the \`say\`, 15 words or fewer. Give the reason for the beat.
+- \`carries\` (edge): what moves on the edge. Leave it out for data: a message, a request, a record, a file, an email, a
+  payment. The default is data.
+- Write \`carries\` only when a physical thing moves: goods, a vehicle, paper, cash. Example:
+  \`{ "thing": "paint", "form": "barrel", "count": 4 }\`.
+- A thing edge starts at an actor that holds the thing. A decision moves no thing. Example: a bank approves a loan, and a
+  branch then hands over the cash. The approval edge carries no thing. The branch edge carries the cash.
+- \`form\` is \`box\` (the default), \`barrel\` or \`notes\` (cash). \`count\` is 1 to 4. The default is 1.
+- If the thing starts at a box that is not the edge \`from\`, set \`carries.from\` to the id of that box.
+- \`check\` (box): the question that a box asks before the flow goes on, when the box is not a \`decision\`. The labels of the
+  edges out of the box are the answers. A \`decision\` box shows its label as the question.
+- \`outcome\` (step): one sentence of 15 words or fewer that says how the story ends.
+- \`done\` (box): the state after the box, in a short phrase, such as "Paint in stock". The ending tag of each actor shows the
+  \`done\` of the last box that the actor reached. Without \`done\`, the tag shows the box label.
+- Write only a state that the code or the document gives. If a box only asks for a refund, the state is "Refund asked", not
+  "Refunded".
+- \`done\` states only what the source says did happen. "Can", "may" or "should" is not "did". If you are not sure, leave
+  \`done\` out.
+- An action that the source says an actor "can" do is an option, not a step. Do not draw it as a box in a story, and do
+  not end a story on it. Put it in the \`outcome\`: "The shop refuses the coupon. The buyer can ask again."
+- Put a refusal box in the lane of the actor that refuses, with the tone \`red\`. The tag of that actor then shows the refusal.
+
+The element shows a small world if an edge carries a thing, or if an actor has the look \`person\`, \`shop\` or \`truck\`. Else it
+shows the diagram. If only data moves, the diagram is the better form. Then give a user on a browser or an app the look
+\`phone\`, not \`person\`. Never add a thing or a look only to get the world.
+
+The check rules:
+
+- \`bad-carries\`: \`thing\` is empty, \`form\` is not \`box\`, \`barrel\` or \`notes\`, or \`count\` is not 1 to 4.
+- \`thing-no-road\`: both ends of a thing edge are at one actor. Set \`carries.from\` to the box where the thing starts.
+
+In the reply, give one command line that serves the page locally, such as \`python3 -m http.server\`, and the page URL.
+If no edge carries a thing, also say that the page shows the diagram because only data moves.
 `,
 };
 
