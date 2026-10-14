@@ -1,6 +1,7 @@
 import {
   DARK,
   LIGHT,
+  LOOKS,
   ON_ACCENT,
   TONES,
   edgeId,
@@ -27,6 +28,7 @@ import { layoutRail } from './rail.ts';
 import type { Level, SvgOptions } from './svg.ts';
 import { crosses, samples, type Pt, type Rect } from './geometry.ts';
 import { textWidth } from './text.ts';
+import { cast } from './explain.ts';
 import { owners, parseSource } from './source.ts';
 
 const err = (rule: string, ids: string[], message: string): Finding => ({ rule, severity: 'error', ids, message });
@@ -76,17 +78,23 @@ function plainText(fig: FlowProps): Finding[] {
   for (const n of nodes(fig.layout)) {
     check(`box "${n.id}"`, 'label', n.label, { source: n.source, command: true });
     check(`box "${n.id}"`, 'sub', n.sub);
+    check(`box "${n.id}"`, 'check', n.check);
+    check(`box "${n.id}"`, 'done', n.done);
   }
   const groupLabels = (g: FigGroup): void => {
     if (g.label != null) check(`group "${g.id ?? str(g.label)}"`, 'label', g.label);
     for (const c of g.children) if (isGroup(c)) groupLabels(c);
   };
   groupLabels(fig.layout);
-  fig.edges.forEach((e) => check(`edge "${edgeId(e)}"`, 'label', e.label, { source: e.source, command: true }));
+  fig.edges.forEach((e) => {
+    check(`edge "${edgeId(e)}"`, 'label', e.label, { source: e.source, command: true });
+    if (e.carries && typeof e.carries === 'object') check(`edge "${edgeId(e)}"`, 'carries.thing', e.carries.thing);
+  });
   for (const s of fig.steps ?? []) {
     const name = str(s.label);
     check(`step "${name}"`, 'label', s.label);
     check(`step "${name}"`, 'caption', s.caption, { words: true });
+    check(`step "${name}"`, 'outcome', s.outcome, { words: true });
     s.flow.map(toBeat).forEach((b, i) => {
       check(`step "${name}"`, `say ${i + 1}`, b.say, { words: true });
       b.hops.forEach((h) => check(`step "${name}"`, `data ${i + 1}`, h.data, { code: false }));
@@ -225,12 +233,25 @@ function specRules(fig: FlowProps): Finding[] {
   const known = new Set([...boxIds, ...groups]);
   const knownEdges = new Set(edges);
   const empty = new Set<string>();
+  const firstBox = new Map<string, string>();
   const walk = (g: FigGroup): void => {
-    for (const c of g.children)
+    for (const c of g.children) {
+      if (c.look != null && !(LOOKS as readonly string[]).includes(c.look)) {
+        const who = isGroup(c) ? `group "${c.id ?? str(c.label)}"` : `box "${c.id}"`;
+        out.push(
+          warn(
+            'unknown-look',
+            isGroup(c) ? (c.id == null ? [] : [c.id]) : [c.id],
+            `${who} has look "${c.look}"; use one of: ${LOOKS.join(', ')}`,
+          ),
+        );
+      }
       if (isGroup(c)) {
         if (c.id != null && !nodes(c).length) empty.add(c.id);
+        if (c.id != null && nodes(c).length) firstBox.set(c.id, nodes(c)[0].id);
         walk(c);
       }
+    }
   };
   walk(fig.layout);
   fig.edges.forEach((e, i) => {
@@ -238,6 +259,40 @@ function specRules(fig: FlowProps): Finding[] {
       if (!known.has(end)) out.push(err('unknown-id', [edges[i], end], `edge "${edges[i]}" names box "${end}", which does not exist`));
       else if (empty.has(end))
         out.push(err('unknown-id', [edges[i], end], `edge "${edges[i]}" ends at group "${end}", which has no boxes`));
+  });
+  const actorOf = new Map(cast(fig).flatMap((a) => a.boxes.map((b) => [b, a.name] as const)));
+  fig.edges.forEach((e, i) => {
+    const c = e.carries;
+    if (!c || typeof c !== 'object') return;
+    const id = edges[i];
+    const thing = str(c.thing).trim();
+    if (c.count != null && !(Number.isInteger(c.count) && c.count >= 1 && c.count <= 4))
+      out.push(warn('bad-carries', [id], `edge "${id}" has carries.count ${c.count}; use 1 to 4`));
+    if (!thing) out.push(warn('bad-carries', [id], `edge "${id}" has an empty carries.thing; name the thing in plain words`));
+    if (c.form != null && !['box', 'barrel', 'notes'].includes(c.form))
+      out.push(warn('bad-carries', [id], `edge "${id}" has carries.form "${c.form}"; use box, barrel or notes`));
+    if (c.from != null && !known.has(c.from)) {
+      out.push(err('unknown-id', [id, c.from], `edge "${id}" has carries.from "${c.from}", which names no box and no group`));
+      return;
+    }
+    const start = c.from == null ? e.from : (firstBox.get(c.from) ?? c.from);
+    const [a, b] = [actorOf.get(start), actorOf.get(e.to)];
+    if (a == null || b == null)
+      out.push(
+        warn(
+          'thing-no-road',
+          [id],
+          `edge "${id}" carries "${thing}", but box "${a == null ? start : e.to}" has no actor; put it in a lane or a labeled group`,
+        ),
+      );
+    else if (a === b)
+      out.push(
+        warn(
+          'thing-no-road',
+          [id],
+          `edge "${id}" carries "${thing}", but both ends are at actor "${a}"; set carries.from to the box where the thing starts`,
+        ),
+      );
   });
   (fig.steps ?? []).forEach((s, si) => {
     const where = `step ${si + 1} ("${str(s.label)}")`;

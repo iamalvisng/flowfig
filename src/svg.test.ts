@@ -24,6 +24,12 @@ import { checkScene } from './check.ts';
 import { readdirSync, readFileSync } from 'node:fs';
 import { svgWithSpec, specOf } from './load.ts';
 import shop from '../figures/inside-shop.ts';
+import oil from '../figures/explain-oil.ts';
+import returns from '../figures/returns-process.ts';
+import checkout from '../figures/checkout.ts';
+import sync from '../figures/explain-sync.ts';
+import deliveryBefore from '../figures/explain-delivery-before.ts';
+import deliveryAfter from '../figures/explain-delivery-after.ts';
 
 const fig: FlowProps = {
   speed: 1000,
@@ -1662,4 +1668,62 @@ test('two renders of a figure with parts give the same bytes', () => {
   const first = toSvg(shopFig, { script: true });
   assert.match(first, /<g class="scene" id="s-orders"/);
   assert.equal(toSvg(shopFig, { script: true }), first);
+});
+
+test('two scoped renders of a figure with parts on one page share no animation name and no linked id', () => {
+  const names = (svg: string) => {
+    const refs = [...svg.matchAll(/(?:href="#|url\(#)([^")]+)/g)].map((m) => m[1]);
+    const ids = new Set([...svg.matchAll(/ id="([^"]+)"/g)].map((m) => m[1]));
+    for (const r of refs) assert.ok(ids.has(r), `#${r} has no target`);
+    return new Set([...refs, ...[...svg.matchAll(/@keyframes (\S+)/g)].map((m) => m[1])]);
+  };
+  const a = names(toSvg(shopFig, { scope: 'a' }));
+  const shared = [...names(toSvg(shopFig, { scope: 'b' }))].filter((n) => a.has(n));
+  assert.deepEqual(shared, []);
+});
+
+test('marks: the step caption sits above the diff legend, not on it', () => {
+  const fig: FlowProps = {
+    layout: {
+      direction: 'column',
+      children: [
+        { id: 'a', label: 'A' },
+        { id: 'b', label: 'B' },
+      ],
+    },
+    edges: [{ from: 'a', to: 'b' }],
+    steps: [{ label: 'one', caption: 'A sends the job to B.', flow: [{ edges: 'a->b' }] }],
+  };
+  const svg = toSvg(fig, { marks: { boxes: { a: 'added' }, edges: {}, steps: 0 } });
+  const caption = Number(/y="([\d.]+)" class="caption"/.exec(svg)![1]);
+  const legend = Number(/<rect x="[\d.]+" y="([\d.]+)"[^>]*data-diff/.exec(svg)![1]);
+  assert.ok(caption < legend, `caption ${caption}, legend ${legend}`);
+});
+
+test('a scoped figure points its arrows at its own marker, so two figures on one page keep their arrows', () => {
+  const fig: FlowProps = {
+    layout: {
+      children: [
+        { id: 'a', label: 'A' },
+        { id: 'b', label: 'B' },
+      ],
+    },
+    edges: [{ from: 'a', to: 'b' }],
+    steps: [{ label: 'Go', flow: ['a->b'] }],
+  };
+  for (const f of [fig, { ...fig, rail: true }]) {
+    const svg = toSvg(f, { scope: 'x-' });
+    assert.match(svg, /<marker id="x-arrow"/);
+    assert.match(svg, /marker-end="url\(#x-arrow\)"/);
+    assert.doesNotMatch(svg, /url\(#arrow\)/);
+  }
+});
+
+test('the explain fields change no diagram', () => {
+  const strip = (p: FlowProps): FlowProps =>
+    JSON.parse(JSON.stringify(p, (k, v) => (['carries', 'check', 'done', 'outcome', 'look'].includes(k) ? undefined : v)));
+  for (const f of [oil, returns, checkout, sync, deliveryBefore, deliveryAfter])
+    assert.equal(toSvg(f.props), toSvg(strip(f.props)), f.title);
+  assert.notDeepEqual(strip(oil.props), oil.props);
+  assert.notDeepEqual(strip(returns.props), returns.props);
 });

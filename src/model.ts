@@ -2,6 +2,9 @@ import type { ReactNode } from 'react';
 import { textWidth, wrap } from './text.ts';
 import type { Rect } from './geometry.ts';
 
+export const LOOKS = ['person', 'shop', 'desk', 'truck', 'phone', 'server', 'cabinet', 'team', 'tower', 'queue', 'gear', 'cloud'] as const;
+export type FigLook = (typeof LOOKS)[number];
+
 /** A box. A box with `show` in a step becomes a content card. */
 export type FigNode = {
   /** Name that edges, steps and beats use for this box. Unique in the figure. */
@@ -32,6 +35,12 @@ export type FigNode = {
   detail?: string;
   /** The parts inside the box, down to 3 levels. */
   inside?: FigInside;
+  /** The picture of this box or group in <flowfig-explain>. The diagram ignores it. */
+  look?: FigLook;
+  /** The question on the gate in <flowfig-explain>. Default: the label of a `decision` box. */
+  check?: string;
+  /** The state after this box, such as "Oil in stock". The <flowfig-explain> ending shows it. */
+  done?: string;
 };
 /** A frame that lays out its children in a row or a column. */
 export type FigGroup = {
@@ -49,6 +58,19 @@ export type FigGroup = {
   children: (FigNode | FigGroup)[];
   /** On the root layout: flowfig places the boxes. A labeled group is a frame. */
   auto?: true;
+  /** The picture of this box or group in <flowfig-explain>. The diagram ignores it. */
+  look?: FigLook;
+};
+/** A physical thing that moves on an edge in <flowfig-explain>. */
+export type FigCarry = {
+  /** The name of the thing, in plain words. */
+  thing: string;
+  /** The picture of one unit. Default: `box`. */
+  form?: 'box' | 'barrel' | 'notes';
+  /** How many units move, 1 to 4. Default: 1. */
+  count?: number;
+  /** The id of the box or group where the thing starts. Default: the edge `from`. */
+  from?: string;
 };
 /** The parts inside a box. A reader opens the box to see them. */
 export type FigInside = {
@@ -77,6 +99,8 @@ export type FigEdge = {
   source?: string;
   /** The route, queue, topic or table that carries this edge. Checked by `flowfig verify`. */
   via?: string;
+  /** What moves on this edge in <flowfig-explain>: `data`, or a thing. Default: `data`. */
+  carries?: 'data' | FigCarry;
 };
 /** One packet on one edge. A string is the edge `id`. */
 export type FigHop =
@@ -103,6 +127,8 @@ export type FigBeat = {
   edges?: FigHop | FigHop[];
   /** The line of narration for this beat. */
   say?: ReactNode;
+  /** One line under the say in <flowfig-explain>, 15 words or fewer. */
+  note?: ReactNode;
   /** Fills the content card of each named box until the step ends. */
   show?: Record<string, FigContent>;
   /** Ids of boxes to highlight for this beat, without a packet or a content card. */
@@ -141,6 +167,8 @@ export type FigStep = {
   flow: (FigHop | FigHop[] | FigBeat)[];
   /** Ids of boxes to highlight for the whole step. */
   nodes?: string[];
+  /** One sentence, 15 words or fewer, on how the story ends in <flowfig-explain>. */
+  outcome?: string;
 };
 /** Colors for the figure. A key you leave out keeps the built-in color. */
 export type FigTheme = Partial<Record<'accent' | 'fg' | 'muted' | 'bg' | 'surface' | 'border' | 'font', string>>;

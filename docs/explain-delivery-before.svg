@@ -1,0 +1,271 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="911.6" height="1279" viewBox="0 0 911.6 1279" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" role="img">
+<metadata id="figure-spec"><![CDATA[{"props":{"layout":{"direction":"column","children":[{"label":"Driver app","look":"phone","children":[{"id":"driver","label":"Complete the delivery","sub":"after the hand-over"}]},{"label":"Job orders API","look":"server","direction":"column","children":[{"direction":"row","children":[{"id":"type","label":"Is it a delivery job?","shape":"decision"},{"id":"refused","label":"Refused","tone":"gray"}]},{"direction":"row","children":[{"id":"owner","label":"May this user complete it?","shape":"decision"},{"id":"repeat","label":"Already completed?","shape":"decision"},{"id":"noop","label":"Nothing written","sub":"no second announce","tone":"gray"}]},{"direction":"row","children":[{"id":"save","label":"Save in one transaction","sub":"job and history row"},{"id":"announce","label":"Announce the delivery","sub":"in-memory event"}]}]},{"direction":"row","children":[{"label":"Order listener","look":"gear","direction":"column","children":[{"id":"mark","label":"Mark the order delivered"},{"id":"ocatch","label":"On error: log it, stop","sub":"no retry","tone":"red"}]},{"label":"Pack ledger listener","look":"gear","direction":"column","children":[{"id":"posted","label":"Already posted?","shape":"decision"},{"id":"out","label":"Write the packs out"},{"id":"pcatch","label":"Ledger miss logged","sub":"no retry, no record","tone":"red"}]}]},{"direction":"row","children":[{"id":"jobs","label":"Job orders","shape":"store"},{"id":"events","label":"Job order events","shape":"store"},{"id":"orders","label":"Sales orders","shape":"store"},{"id":"packs","label":"Pack movements","shape":"store"}]}]},"edges":[{"from":"driver","to":"type","label":"complete"},{"from":"type","to":"refused","label":"no"},{"from":"type","to":"owner","label":"yes"},{"from":"owner","to":"repeat","label":"yes"},{"from":"repeat","to":"noop","label":"yes"},{"from":"repeat","to":"save","label":"no"},{"from":"save","to":"jobs","label":"completed"},{"from":"save","to":"events","label":"history row"},{"from":"save","to":"announce"},{"from":"announce","to":"mark","label":"event"},{"from":"announce","to":"posted","label":"event"},{"from":"mark","to":"orders","label":"delivered"},{"from":"mark","to":"ocatch","label":"error"},{"from":"posted","to":"out","label":"no"},{"from":"out","to":"packs","label":"packs out"},{"from":"out","to":"pcatch","label":"error"}],"steps":[{"label":"Delivered","flow":[{"edges":["driver->type","type->owner","owner->repeat"],"say":"The driver taps complete. The API checks the job and the user."},{"edges":["repeat->save","save->jobs","save->events"],"say":"The API saves the job and a history row together."},{"edges":"save->announce","say":"After the commit, the API announces the delivery in memory."},{"edges":["announce->mark","mark->orders"],"say":"The order listener marks the order delivered."},{"edges":["announce->posted","posted->out","out->packs"],"say":"The pack ledger listener writes the packs out."}]},{"label":"Not a delivery job","flow":[{"edges":["driver->type","type->refused"],"say":"The job is not a delivery job. The API refuses."}]},{"label":"Ledger write fails","flow":[{"edges":["driver->type","type->owner","owner->repeat","repeat->save","save->jobs","save->events"],"say":"The API saves the completed job."},{"edges":["save->announce","announce->posted","posted->out"],"say":"The pack ledger listener tries to write the packs out."},{"edges":"out->pcatch","say":"The write fails. The listener logs the error and stops.","note":"Nothing runs the write again."}]}]}}]]></metadata>
+<title>Flow figure: Complete the delivery, Is it a delivery job?, Refused, May this user complete it?, Already completed?, Nothing written, Save in one transaction, Announce the delivery, Mark the order delivered, On error: log it, stop, Already posted?, Write the packs out, Ledger miss logged, Job orders, Job order events, Sales orders, Pack movements. Steps: Delivered, Not a delivery job, Ledger write fails.</title>
+<desc>The figure has these boxes: Complete the delivery, Is it a delivery job?, Refused, May this user complete it?, Already completed?, Nothing written, Save in one transaction, Announce the delivery, Mark the order delivered, On error: log it, stop, Already posted?, Write the packs out, Ledger miss logged, Job orders, Job order events, Sales orders, Pack movements.
+Delivered.
+The driver taps complete. The API checks the job and the user.
+The API saves the job and a history row together.
+After the commit, the API announces the delivery in memory.
+The order listener marks the order delivered.
+The pack ledger listener writes the packs out.
+Not a delivery job.
+The job is not a delivery job. The API refuses.
+Ledger write fails.
+The API saves the completed job.
+The pack ledger listener tries to write the packs out.
+The write fails. The listener logs the error and stops.</desc>
+<style>
+svg { --accent:#0074d9; --fg:#1c1e21; --muted:#606770; --bg:#ffffff; --surface:#f5f7fa; --border:#d0d7de; --card-on:#eef5fd; --tint:color-mix(in srgb, var(--accent) 10%, var(--surface)); }
+@media (prefers-color-scheme: dark) { svg { --accent:#1f78c8; --fg:#e3e3e3; --muted:#9aa0a6; --bg:#1b1b1d; --surface:#242526; --border:#3a3b3c; --card-on:#1d2733; --tint:color-mix(in srgb, var(--accent) 10%, var(--surface)); } }
+.label { fill: var(--fg); font-size: 14px; font-weight: 500; text-anchor: middle; }
+.sub { fill: var(--muted); font-size: 12px; text-anchor: middle; }
+.frame { fill: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: .04em; }
+.edgelabel { fill: var(--muted); font-size: 11px; text-anchor: middle; font-family: ui-monospace, Menlo, monospace; }
+.row { fill: var(--fg); font-size: 11px; }
+.row.mono { font-size: 10.5px; font-family: ui-monospace, Menlo, monospace; }
+.muted { fill: var(--muted); }
+.bar { fill: var(--fg); font-size: 13px; font-weight: 500; }
+.tick { fill: var(--muted); font-size: 11px; }
+.today { fill: var(--accent); font-size: 11px; font-weight: 600; }
+.tag { font-size: 9px; font-weight: 600; letter-spacing: .03em; text-anchor: middle; }
+.mark { fill: var(--accent); font-size: 11px; font-weight: 600; text-anchor: end; }
+.chip { fill: #ffffff; font-size: 11.5px; text-anchor: middle; }
+.steplabel { fill: var(--fg); font-size: 13px; font-weight: 600; text-anchor: middle; font-family: ui-monospace, Menlo, monospace; }
+.caption { fill: var(--muted); font-size: 13.5px; text-anchor: middle; }
+.railcol { fill: var(--fg); font-size: 12px; font-weight: 500; text-anchor: middle; }
+.railphase { fill: var(--fg); font-size: 13px; font-weight: 600; font-family: ui-monospace, Menlo, monospace; }
+.railphase.muted { fill: var(--muted); }
+.end { text-anchor: end; }
+@keyframes a0 { 0%,99.99% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } }
+.a0 { animation: a0 30.1s infinite linear; }
+@keyframes a1 { 0%,2.38% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 2.39%,11.1% { fill: var(--tint); stroke: var(--accent); stroke-width: 2; filter: drop-shadow(0 0 4px var(--accent)) } 12.44%,54.96% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 54.97%,67.72% { fill: var(--tint); stroke: var(--accent); stroke-width: 2; filter: drop-shadow(0 0 4px var(--accent)) } 68.93%,70.11% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 70.12%,75% { fill: var(--tint); stroke: var(--accent); stroke-width: 2; filter: drop-shadow(0 0 4px var(--accent)) } 76.34%,99.99% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } }
+.a1 { animation: a1 30.1s infinite linear; }
+@keyframes a2 { 0%,54.96% { fill: color-mix(in srgb, #8b949e 8%, var(--bg)); stroke: #8b949e; stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 54.97%,67.72% { fill: color-mix(in srgb, #8b949e 10%, var(--surface)); stroke: #8b949e; stroke-width: 2; filter: drop-shadow(0 0 4px #8b949e) } 69.06%,99.99% { fill: color-mix(in srgb, #8b949e 8%, var(--bg)); stroke: #8b949e; stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } }
+.a2 { animation: a2 30.1s infinite linear; }
+@keyframes a3 { 0%,2.38% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 2.39%,11.1% { fill: var(--tint); stroke: var(--accent); stroke-width: 2; filter: drop-shadow(0 0 4px var(--accent)) } 12.44%,52.57% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 52.58%,67.72% { fill: var(--bg); stroke: var(--border); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 67.73%,70.11% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 70.12%,75% { fill: var(--tint); stroke: var(--accent); stroke-width: 2; filter: drop-shadow(0 0 4px var(--accent)) } 76.34%,99.99% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } }
+.a3 { animation: a3 30.1s infinite linear; }
+@keyframes a4 { 0%,11.1% { fill: var(--bg); stroke: var(--border); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 11.11%,13.49% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 13.5%,20.94% { fill: var(--tint); stroke: var(--accent); stroke-width: 2; filter: drop-shadow(0 0 4px var(--accent)) } 22.28%,52.57% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 52.58%,67.72% { fill: var(--bg); stroke: var(--border); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 67.73%,70.11% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 70.12%,75% { fill: var(--tint); stroke: var(--accent); stroke-width: 2; filter: drop-shadow(0 0 4px var(--accent)) } 76.34%,99.99% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } }
+.a4 { animation: a4 30.1s infinite linear; }
+@keyframes a5 { 0%,20.94% { fill: var(--bg); stroke: var(--border); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 20.95%,23.33% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 23.34%,30.77% { fill: var(--tint); stroke: var(--accent); stroke-width: 2; filter: drop-shadow(0 0 4px var(--accent)) } 32.11%,52.57% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 52.58%,75% { fill: var(--bg); stroke: var(--border); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 75.01%,77.4% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 77.41%,84.84% { fill: var(--tint); stroke: var(--accent); stroke-width: 2; filter: drop-shadow(0 0 4px var(--accent)) } 86.18%,99.99% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } }
+.a5 { animation: a5 30.1s infinite linear; }
+@keyframes a6 { 0%,30.77% { fill: var(--bg); stroke: var(--border); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 30.78%,33.16% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 33.17%,38.69% { fill: var(--tint); stroke: var(--accent); stroke-width: 2; filter: drop-shadow(0 0 4px var(--accent)) } 40.03%,52.57% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 52.58%,99.99% { fill: var(--bg); stroke: var(--border); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } }
+.a6 { animation: a6 30.1s infinite linear; }
+@keyframes a7 { 0%,38.69% { fill: var(--bg); stroke: var(--border); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 38.7%,41.09% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 41.1%,52.57% { fill: var(--tint); stroke: var(--accent); stroke-width: 2; filter: drop-shadow(0 0 4px var(--accent)) } 53.91%,75% { fill: var(--bg); stroke: var(--border); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 75.01%,77.4% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 77.41%,84.84% { fill: var(--tint); stroke: var(--accent); stroke-width: 2; filter: drop-shadow(0 0 4px var(--accent)) } 86.18%,99.99% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } }
+.a7 { animation: a7 30.1s infinite linear; }
+@keyframes a8 { 0%,87.23% { fill: color-mix(in srgb, #ef4444 8%, var(--bg)); stroke: #ef4444; stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 87.24%,98.66% { fill: color-mix(in srgb, #ef4444 10%, var(--surface)); stroke: #ef4444; stroke-width: 2; filter: drop-shadow(0 0 4px #ef4444) } 99.98%,99.99% { fill: color-mix(in srgb, #ef4444 8%, var(--bg)); stroke: #ef4444; stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } }
+.a8 { animation: a8 30.1s infinite linear; }
+@keyframes a9 { 0%,11.1% { stroke: var(--border); stroke-width: 1 } 11.11%,13.49% { stroke: var(--accent); stroke-width: 1 } 13.5%,20.94% { stroke: var(--accent); stroke-width: 2 } 22.28%,52.57% { stroke: var(--accent); stroke-width: 1 } 52.58%,67.72% { stroke: var(--border); stroke-width: 1 } 67.73%,70.11% { stroke: var(--accent); stroke-width: 1 } 70.12%,75% { stroke: var(--accent); stroke-width: 2 } 76.34%,99.99% { stroke: var(--accent); stroke-width: 1 } }
+.a9 { animation: a9 30.1s infinite linear; }
+@keyframes a10 { 0%,30.77% { stroke: var(--border); stroke-width: 1 } 30.78%,33.16% { stroke: var(--accent); stroke-width: 1 } 33.17%,38.69% { stroke: var(--accent); stroke-width: 2 } 40.03%,52.57% { stroke: var(--accent); stroke-width: 1 } 52.58%,99.99% { stroke: var(--border); stroke-width: 1 } }
+.a10 { animation: a10 30.1s infinite linear; }
+@keyframes a11 { 0%,38.69% { fill: var(--bg); stroke: var(--border); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 38.7%,41.09% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 41.1%,52.57% { fill: var(--tint); stroke: var(--accent); stroke-width: 2; filter: drop-shadow(0 0 4px var(--accent)) } 53.91%,99.99% { fill: var(--bg); stroke: var(--border); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } }
+.a11 { animation: a11 30.1s infinite linear; }
+@keyframes a12 { 0%,38.69% { stroke: var(--border); stroke-width: 1 } 38.7%,41.09% { stroke: var(--accent); stroke-width: 1 } 41.1%,52.57% { stroke: var(--accent); stroke-width: 2 } 53.91%,99.99% { stroke: var(--border); stroke-width: 1 } }
+.a12 { animation: a12 30.1s infinite linear; }
+@keyframes a13 { 0%,99.99% { stroke: var(--accent); stroke-width: 2 } }
+.a13 { animation: a13 30.1s infinite step-end; }
+@keyframes a14 { 0%,99.99% { fill: var(--accent); stroke: var(--accent) } }
+.a14 { animation: a14 30.1s infinite step-end; }
+@keyframes a15 { 0%,99.99% { fill: #ffffff } }
+.a15 { animation: a15 30.1s infinite step-end; }
+@keyframes a16 { 0%,52.57% { stroke: var(--muted); stroke-width: 1.25 } 52.58%,67.72% { stroke: var(--accent); stroke-width: 2 } 67.73%,99.99% { stroke: var(--muted); stroke-width: 1.25 } }
+.a16 { animation: a16 30.1s infinite step-end; }
+@keyframes a17 { 0%,52.57% { fill: var(--bg); stroke: var(--border) } 52.58%,67.72% { fill: var(--accent); stroke: var(--accent) } 67.73%,99.99% { fill: var(--bg); stroke: var(--border) } }
+.a17 { animation: a17 30.1s infinite step-end; }
+@keyframes a18 { 0%,52.57% { fill: var(--muted) } 52.58%,67.72% { fill: #ffffff } 67.73%,99.99% { fill: var(--muted) } }
+.a18 { animation: a18 30.1s infinite step-end; }
+@keyframes a19 { 0%,52.57% { stroke: var(--accent); stroke-width: 2 } 52.58%,67.72% { stroke: var(--muted); stroke-width: 1.25 } 67.73%,99.99% { stroke: var(--accent); stroke-width: 2 } }
+.a19 { animation: a19 30.1s infinite step-end; }
+@keyframes a20 { 0%,52.57% { fill: var(--accent); stroke: var(--accent) } 52.58%,67.72% { fill: var(--bg); stroke: var(--border) } 67.73%,99.99% { fill: var(--accent); stroke: var(--accent) } }
+.a20 { animation: a20 30.1s infinite step-end; }
+@keyframes a21 { 0%,52.57% { fill: #ffffff } 52.58%,67.72% { fill: var(--muted) } 67.73%,99.99% { fill: #ffffff } }
+.a21 { animation: a21 30.1s infinite step-end; }
+@keyframes a22 { 0%,11.1% { stroke: var(--muted); stroke-width: 1.25 } 11.11%,52.57% { stroke: var(--accent); stroke-width: 2 } 52.58%,67.72% { stroke: var(--muted); stroke-width: 1.25 } 67.73%,99.99% { stroke: var(--accent); stroke-width: 2 } }
+.a22 { animation: a22 30.1s infinite step-end; }
+@keyframes a23 { 0%,11.1% { fill: var(--bg); stroke: var(--border) } 11.11%,52.57% { fill: var(--accent); stroke: var(--accent) } 52.58%,67.72% { fill: var(--bg); stroke: var(--border) } 67.73%,99.99% { fill: var(--accent); stroke: var(--accent) } }
+.a23 { animation: a23 30.1s infinite step-end; }
+@keyframes a24 { 0%,11.1% { fill: var(--muted) } 11.11%,52.57% { fill: #ffffff } 52.58%,67.72% { fill: var(--muted) } 67.73%,99.99% { fill: #ffffff } }
+.a24 { animation: a24 30.1s infinite step-end; }
+@keyframes a25 { 0%,20.94% { stroke: var(--muted); stroke-width: 1.25 } 20.95%,52.57% { stroke: var(--accent); stroke-width: 2 } 52.58%,75% { stroke: var(--muted); stroke-width: 1.25 } 75.01%,99.99% { stroke: var(--accent); stroke-width: 2 } }
+.a25 { animation: a25 30.1s infinite step-end; }
+@keyframes a26 { 0%,30.77% { stroke: var(--muted); stroke-width: 1.25 } 30.78%,52.57% { stroke: var(--accent); stroke-width: 2 } 52.58%,99.99% { stroke: var(--muted); stroke-width: 1.25 } }
+.a26 { animation: a26 30.1s infinite step-end; }
+@keyframes a27 { 0%,30.77% { fill: var(--bg); stroke: var(--border) } 30.78%,52.57% { fill: var(--accent); stroke: var(--accent) } 52.58%,99.99% { fill: var(--bg); stroke: var(--border) } }
+.a27 { animation: a27 30.1s infinite step-end; }
+@keyframes a28 { 0%,30.77% { fill: var(--muted) } 30.78%,52.57% { fill: #ffffff } 52.58%,99.99% { fill: var(--muted) } }
+.a28 { animation: a28 30.1s infinite step-end; }
+@keyframes a29 { 0%,38.69% { stroke: var(--muted); stroke-width: 1.25 } 38.7%,52.57% { stroke: var(--accent); stroke-width: 2 } 52.58%,75% { stroke: var(--muted); stroke-width: 1.25 } 75.01%,99.99% { stroke: var(--accent); stroke-width: 2 } }
+.a29 { animation: a29 30.1s infinite step-end; }
+@keyframes a30 { 0%,38.69% { fill: var(--bg); stroke: var(--border) } 38.7%,52.57% { fill: var(--accent); stroke: var(--accent) } 52.58%,75% { fill: var(--bg); stroke: var(--border) } 75.01%,99.99% { fill: var(--accent); stroke: var(--accent) } }
+.a30 { animation: a30 30.1s infinite step-end; }
+@keyframes a31 { 0%,38.69% { fill: var(--muted) } 38.7%,52.57% { fill: #ffffff } 52.58%,75% { fill: var(--muted) } 75.01%,99.99% { fill: #ffffff } }
+.a31 { animation: a31 30.1s infinite step-end; }
+@keyframes a32 { 0%,38.69% { stroke: var(--muted); stroke-width: 1.25 } 38.7%,52.57% { stroke: var(--accent); stroke-width: 2 } 52.58%,99.99% { stroke: var(--muted); stroke-width: 1.25 } }
+.a32 { animation: a32 30.1s infinite step-end; }
+@keyframes a33 { 0%,38.69% { fill: var(--bg); stroke: var(--border) } 38.7%,52.57% { fill: var(--accent); stroke: var(--accent) } 52.58%,99.99% { fill: var(--bg); stroke: var(--border) } }
+.a33 { animation: a33 30.1s infinite step-end; }
+@keyframes a34 { 0%,38.69% { fill: var(--muted) } 38.7%,52.57% { fill: #ffffff } 52.58%,99.99% { fill: var(--muted) } }
+.a34 { animation: a34 30.1s infinite step-end; }
+@keyframes a35 { 0%,84.84% { stroke: var(--muted); stroke-width: 1.25 } 84.85%,99.99% { stroke: var(--accent); stroke-width: 2 } }
+.a35 { animation: a35 30.1s infinite step-end; }
+@keyframes a36 { 0%,84.84% { fill: var(--bg); stroke: var(--border) } 84.85%,99.99% { fill: var(--accent); stroke: var(--accent) } }
+.a36 { animation: a36 30.1s infinite step-end; }
+@keyframes a37 { 0%,84.84% { fill: var(--muted) } 84.85%,99.99% { fill: #ffffff } }
+.a37 { animation: a37 30.1s infinite step-end; }
+@keyframes p0 { 0%,0% { opacity: 0 } 0.01%,11.1% { opacity: 1 } 11.11%,100% { opacity: 0 } }
+.p0 { animation: p0 30.1s infinite step-end; }
+@keyframes p1 { 0%,0% { opacity: 0 } 0.01%,11.1% { opacity: 1 } 11.11%,100% { opacity: 0 } }
+.p1 { animation: p1 30.1s infinite step-end; }
+@keyframes p2 { 0%,0% { opacity: 0 } 0.01%,11.1% { opacity: 1 } 11.11%,100% { opacity: 0 } }
+.p2 { animation: p2 30.1s infinite step-end; }
+@keyframes p3 { 0%,11.11% { opacity: 0 } 11.12%,20.94% { opacity: 1 } 20.95%,100% { opacity: 0 } }
+.p3 { animation: p3 30.1s infinite step-end; }
+@keyframes p4 { 0%,11.11% { opacity: 0 } 11.12%,20.94% { opacity: 1 } 20.95%,100% { opacity: 0 } }
+.p4 { animation: p4 30.1s infinite step-end; }
+@keyframes p5 { 0%,11.11% { opacity: 0 } 11.12%,20.94% { opacity: 1 } 20.95%,100% { opacity: 0 } }
+.p5 { animation: p5 30.1s infinite step-end; }
+@keyframes p6 { 0%,20.95% { opacity: 0 } 20.96%,30.77% { opacity: 1 } 30.78%,100% { opacity: 0 } }
+.p6 { animation: p6 30.1s infinite step-end; }
+@keyframes p7 { 0%,30.78% { opacity: 0 } 30.79%,38.69% { opacity: 1 } 38.7%,100% { opacity: 0 } }
+.p7 { animation: p7 30.1s infinite step-end; }
+@keyframes p8 { 0%,30.78% { opacity: 0 } 30.79%,38.69% { opacity: 1 } 38.7%,100% { opacity: 0 } }
+.p8 { animation: p8 30.1s infinite step-end; }
+@keyframes p9 { 0%,38.7% { opacity: 0 } 38.71%,47.25% { opacity: 1 } 47.26%,100% { opacity: 0 } }
+.p9 { animation: p9 30.1s infinite step-end; }
+@keyframes p10 { 0%,38.7% { opacity: 0 } 38.71%,47.25% { opacity: 1 } 47.26%,100% { opacity: 0 } }
+.p10 { animation: p10 30.1s infinite step-end; }
+@keyframes p11 { 0%,38.7% { opacity: 0 } 38.71%,47.25% { opacity: 1 } 47.26%,100% { opacity: 0 } }
+.p11 { animation: p11 30.1s infinite step-end; }
+@keyframes p12 { 0%,52.58% { opacity: 0 } 52.59%,62.4% { opacity: 1 } 62.41%,100% { opacity: 0 } }
+.p12 { animation: p12 30.1s infinite step-end; }
+@keyframes p13 { 0%,52.58% { opacity: 0 } 52.59%,62.4% { opacity: 1 } 62.41%,100% { opacity: 0 } }
+.p13 { animation: p13 30.1s infinite step-end; }
+@keyframes p14 { 0%,67.73% { opacity: 0 } 67.74%,75% { opacity: 1 } 75.01%,100% { opacity: 0 } }
+.p14 { animation: p14 30.1s infinite step-end; }
+@keyframes p15 { 0%,67.73% { opacity: 0 } 67.74%,75% { opacity: 1 } 75.01%,100% { opacity: 0 } }
+.p15 { animation: p15 30.1s infinite step-end; }
+@keyframes p16 { 0%,67.73% { opacity: 0 } 67.74%,75% { opacity: 1 } 75.01%,100% { opacity: 0 } }
+.p16 { animation: p16 30.1s infinite step-end; }
+@keyframes p17 { 0%,67.73% { opacity: 0 } 67.74%,75% { opacity: 1 } 75.01%,100% { opacity: 0 } }
+.p17 { animation: p17 30.1s infinite step-end; }
+@keyframes p18 { 0%,67.73% { opacity: 0 } 67.74%,75% { opacity: 1 } 75.01%,100% { opacity: 0 } }
+.p18 { animation: p18 30.1s infinite step-end; }
+@keyframes p19 { 0%,67.73% { opacity: 0 } 67.74%,75% { opacity: 1 } 75.01%,100% { opacity: 0 } }
+.p19 { animation: p19 30.1s infinite step-end; }
+@keyframes p20 { 0%,75.01% { opacity: 0 } 75.02%,84.84% { opacity: 1 } 84.85%,100% { opacity: 0 } }
+.p20 { animation: p20 30.1s infinite step-end; }
+@keyframes p21 { 0%,75.01% { opacity: 0 } 75.02%,84.84% { opacity: 1 } 84.85%,100% { opacity: 0 } }
+.p21 { animation: p21 30.1s infinite step-end; }
+@keyframes p22 { 0%,75.01% { opacity: 0 } 75.02%,84.84% { opacity: 1 } 84.85%,100% { opacity: 0 } }
+.p22 { animation: p22 30.1s infinite step-end; }
+@keyframes p23 { 0%,84.85% { opacity: 0 } 84.86%,94.67% { opacity: 1 } 94.68%,100% { opacity: 0 } }
+.p23 { animation: p23 30.1s infinite step-end; }
+@keyframes a38 { 0%,52.57% { opacity: 1 } 52.58%,99.99% { opacity: 0 } }
+.a38 { animation: a38 30.1s infinite step-end; }
+@keyframes a39 { 0%,52.57% { opacity: 0 } 52.58%,67.72% { opacity: 1 } 67.73%,99.99% { opacity: 0 } }
+.a39 { animation: a39 30.1s infinite step-end; }
+@keyframes a40 { 0%,67.72% { opacity: 0 } 67.73%,99.99% { opacity: 1 } }
+.a40 { animation: a40 30.1s infinite step-end; }
+@keyframes a41 { 0%,11.1% { opacity: 1 } 11.11%,99.99% { opacity: 0 } }
+.a41 { animation: a41 30.1s infinite step-end; }
+@keyframes a42 { 0%,11.1% { opacity: 0 } 11.11%,20.94% { opacity: 1 } 20.95%,99.99% { opacity: 0 } }
+.a42 { animation: a42 30.1s infinite step-end; }
+@keyframes a43 { 0%,20.94% { opacity: 0 } 20.95%,30.77% { opacity: 1 } 30.78%,99.99% { opacity: 0 } }
+.a43 { animation: a43 30.1s infinite step-end; }
+@keyframes a44 { 0%,30.77% { opacity: 0 } 30.78%,38.69% { opacity: 1 } 38.7%,99.99% { opacity: 0 } }
+.a44 { animation: a44 30.1s infinite step-end; }
+@keyframes a45 { 0%,38.69% { opacity: 0 } 38.7%,52.57% { opacity: 1 } 52.58%,99.99% { opacity: 0 } }
+.a45 { animation: a45 30.1s infinite step-end; }
+@keyframes a46 { 0%,52.57% { opacity: 0 } 52.58%,67.72% { opacity: 1 } 67.73%,99.99% { opacity: 0 } }
+.a46 { animation: a46 30.1s infinite step-end; }
+@keyframes a47 { 0%,67.72% { opacity: 0 } 67.73%,75% { opacity: 1 } 75.01%,99.99% { opacity: 0 } }
+.a47 { animation: a47 30.1s infinite step-end; }
+@keyframes a48 { 0%,75% { opacity: 0 } 75.01%,84.84% { opacity: 1 } 84.85%,99.99% { opacity: 0 } }
+.a48 { animation: a48 30.1s infinite step-end; }
+@keyframes a49 { 0%,84.84% { opacity: 0 } 84.85%,99.99% { opacity: 1 } }
+.a49 { animation: a49 30.1s infinite step-end; }
+@media (prefers-reduced-motion: reduce) { * { animation-play-state: paused !important; animation-delay: -15.7s !important; } }
+</style>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 1 L 9 5 L 0 9 z" fill="context-stroke"/></marker></defs>
+<rect width="100%" height="100%" fill="var(--bg)"/>
+<g transform="translate(44 44)">
+
+
+
+<rect x="309.8" y="24" width="204.1" height="108" rx="14" fill="var(--surface)" stroke="var(--border)"/><text x="327.8" y="44" class="frame">DRIVER APP</text>
+<rect x="327.8" y="61" width="168.1" height="53" rx="10" fill="var(--bg)" stroke="var(--border)" class="a0"/><text x="411.8" y="85.5" class="label">Complete the delivery</text><text x="411.8" y="100.5" class="sub">after the hand-over</text>
+<rect x="24" y="226" width="775.6" height="387" rx="14" fill="var(--surface)" stroke="var(--border)"/><text x="42" y="246" class="frame">JOB ORDERS API</text>
+<polygon points="332.2,263 444.2,294 332.2,325 220.2,294" fill="var(--bg)" stroke="var(--border)" class="a1"/><text x="332.2" y="299" class="label">Is it a delivery job?</text>
+<rect x="503.4" y="275" width="100" height="38" rx="10" fill="color-mix(in srgb, #8b949e 8%, var(--bg))" stroke="#8b949e" class="a2"/><text x="553.4" y="299" class="label">Refused</text>
+<polygon points="162,375 282,415 162,455 42,415" fill="var(--bg)" stroke="var(--border)" class="a3"/><text x="162" y="411" class="label">May this user</text><text x="162" y="429" class="label">complete it?</text>
+<polygon points="461.3,384 574.8,415 461.3,446 347.8,415" fill="var(--bg)" stroke="var(--border)" class="a3"/><text x="461.3" y="420" class="label">Already completed?</text>
+<rect x="640.6" y="388.5" width="141" height="53" rx="10" fill="color-mix(in srgb, #8b949e 8%, var(--bg))" stroke="#8b949e"/><text x="711.1" y="413" class="label">Nothing written</text><text x="711.1" y="428" class="sub">no second announce</text>
+<rect x="209.6" y="505" width="178.4" height="90" rx="10" fill="var(--bg)" stroke="var(--border)" class="a4"/><text x="298.8" y="548" class="label">Save in one transaction</text><text x="298.8" y="563" class="sub">job and history row</text>
+<rect x="444" y="523.5" width="170" height="53" rx="10" fill="var(--bg)" stroke="var(--border)" class="a5"/><text x="529" y="548" class="label">Announce the delivery</text><text x="529" y="563" class="sub">in-memory event</text>
+<rect x="154.9" y="763" width="218.4" height="196" rx="14" fill="var(--surface)" stroke="var(--border)"/><text x="172.9" y="783" class="frame">ORDER LISTENER</text>
+<rect x="172.9" y="800" width="182.4" height="38" rx="10" fill="var(--bg)" stroke="var(--border)" class="a6"/><text x="264" y="824" class="label">Mark the order delivered</text>
+<rect x="186.6" y="888" width="154.9" height="53" rx="10" fill="color-mix(in srgb, #ef4444 8%, var(--bg))" stroke="#ef4444"/><text x="264" y="912.5" class="label">On error: log it, stop</text><text x="264" y="927.5" class="sub">no retry</text>
+<rect x="429.2" y="707" width="239.5" height="308" rx="14" fill="var(--surface)" stroke="var(--border)"/><text x="447.2" y="727" class="frame">PACK LEDGER LISTENER</text>
+<polygon points="549,744 650.7,775 549,806 447.2,775" fill="var(--bg)" stroke="var(--border)" class="a7"/><text x="549" y="780" class="label">Already posted?</text>
+<rect x="473.1" y="856" width="151.7" height="38" rx="10" fill="var(--bg)" stroke="var(--border)" class="a7"/><text x="549" y="880" class="label">Write the packs out</text>
+<rect x="471.2" y="944" width="155.5" height="53" rx="10" fill="color-mix(in srgb, #ef4444 8%, var(--bg))" stroke="#ef4444" class="a8"/><text x="549" y="968.5" class="label">Ledger miss logged</text><text x="549" y="983.5" class="sub">no retry, no record</text>
+<path d="M84.9 1121 a 50 12 0 0 1 100 0 v 28 a 50 12 0 0 1 -100 0 z" fill="var(--bg)" stroke="var(--border)" class="a4"/><path d="M84.9 1121 a 50 12 0 0 0 100 0" fill="none" stroke="var(--border)" class="a9"/><text x="134.9" y="1146" class="label">Job orders</text>
+<path d="M240.9 1121 a 68.1 12 0 0 1 136.2 0 v 28 a 68.1 12 0 0 1 -136.2 0 z" fill="var(--bg)" stroke="var(--border)" class="a4"/><path d="M240.9 1121 a 68.1 12 0 0 0 136.2 0" fill="none" stroke="var(--border)" class="a9"/><text x="309" y="1146" class="label">Job order events</text>
+<path d="M433.1 1121 a 54.9 12 0 0 1 109.7 0 v 28 a 54.9 12 0 0 1 -109.7 0 z" fill="var(--bg)" stroke="var(--border)" class="a6"/><path d="M433.1 1121 a 54.9 12 0 0 0 109.7 0" fill="none" stroke="var(--border)" class="a10"/><text x="487.9" y="1146" class="label">Sales orders</text>
+<path d="M598.8 1121 a 70 12 0 0 1 139.9 0 v 28 a 70 12 0 0 1 -139.9 0 z" fill="var(--bg)" stroke="var(--border)" class="a11"/><path d="M598.8 1121 a 70 12 0 0 0 139.9 0" fill="none" stroke="var(--border)" class="a12"/><text x="668.7" y="1146" class="label">Pack movements</text>
+<path id="p-driver-&gt;type" d="M 411.78999999999996 114 C 411.78999999999996 188.5, 332.19000000000005 188.5, 332.19000000000005 263" fill="none" stroke="var(--muted)" stroke-width="1.25" marker-end="url(#arrow)" class="a13"/><rect x="338.6" y="179.5" width="66.8" height="18" rx="9" fill="var(--bg)" stroke="var(--border)" class="a14"/><text x="372" y="192.5" class="edgelabel a15">complete</text>
+<path id="p-type-&gt;refused" d="M 444.16 294 C 473.76 294, 473.76 294, 503.36 294" fill="none" stroke="var(--muted)" stroke-width="1.25" marker-end="url(#arrow)" class="a16"/><rect x="460.2" y="285" width="27.2" height="18" rx="9" fill="var(--bg)" stroke="var(--border)" class="a17"/><text x="473.8" y="298" class="edgelabel a18">no</text>
+<path id="p-type-&gt;owner" d="M 332.19000000000005 325 C 332.19000000000005 350, 162 350, 162 375" fill="none" stroke="var(--muted)" stroke-width="1.25" marker-end="url(#arrow)" class="a19"/><rect x="230.2" y="341" width="33.8" height="18" rx="9" fill="var(--bg)" stroke="var(--border)" class="a20"/><text x="247.1" y="354" class="edgelabel a21">yes</text>
+<path id="p-owner-&gt;repeat" d="M 282 415 C 314.9 415, 314.9 415, 347.8 415" fill="none" stroke="var(--muted)" stroke-width="1.25" marker-end="url(#arrow)" class="a19"/><rect x="298" y="406" width="33.8" height="18" rx="9" fill="var(--bg)" stroke="var(--border)" class="a20"/><text x="314.9" y="419" class="edgelabel a21">yes</text>
+<path id="p-repeat-&gt;noop" d="M 574.82 415 C 607.72 415, 607.72 415, 640.6200000000001 415" fill="none" stroke="var(--muted)" stroke-width="1.25" marker-end="url(#arrow)"/><rect x="590.8" y="406" width="33.8" height="18" rx="9" fill="var(--bg)" stroke="var(--border)"/><text x="607.7" y="419" class="edgelabel">yes</text>
+<path id="p-repeat-&gt;save" d="M 461.31000000000006 446 C 461.31000000000006 475.5, 328.51 475.5, 328.51 505" fill="none" stroke="var(--muted)" stroke-width="1.25" marker-end="url(#arrow)" class="a22"/><rect x="381.3" y="466.5" width="27.2" height="18" rx="9" fill="var(--bg)" stroke="var(--border)" class="a23"/><text x="394.9" y="479.5" class="edgelabel a24">no</text>
+<path id="p-save-&gt;jobs" d="M 269.03000000000003 505 C 269.03000000000003 391, 134.89000000000004 391, 134.89000000000004 1109" fill="none" stroke="var(--muted)" stroke-width="1.25" marker-end="url(#arrow)" class="a22"/><rect x="175.3" y="466.4" width="73.4" height="18" rx="9" fill="var(--bg)" stroke="var(--border)" class="a23"/><text x="212" y="479.4" class="edgelabel a24">completed</text>
+<path id="p-save-&gt;events" d="M 209.55 550 C 99.1266666666667 550, 99.1266666666667 1135, 240.89000000000004 1135" fill="none" stroke="var(--muted)" stroke-width="1.25" marker-end="url(#arrow)" class="a22"/><rect x="76.4" y="833.8" width="86.6" height="18" rx="9" fill="var(--bg)" stroke="var(--border)" class="a23"/><text x="119.7" y="846.8" class="edgelabel a24">history row</text>
+<path id="p-save-&gt;announce" d="M 387.99 550 C 415.99 550, 415.99 541.1666666666666, 443.99 541.1666666666666" fill="none" stroke="var(--muted)" stroke-width="1.25" marker-end="url(#arrow)" class="a25"/>
+<path id="p-announce-&gt;mark" d="M 443.99 558.8333333333334 C 399.605 558.8333333333334, 399.605 812.6666666666666, 355.22 812.6666666666666" fill="none" stroke="var(--muted)" stroke-width="1.25" marker-end="url(#arrow)" class="a26"/><rect x="376.1" y="676.8" width="47" height="18" rx="9" fill="var(--bg)" stroke="var(--border)" class="a27"/><text x="399.6" y="689.8" class="edgelabel a28">event</text>
+<path id="p-announce-&gt;posted" d="M 529.01 576.5 C 529.01 660.25, 548.97 660.25, 548.97 744" fill="none" stroke="var(--muted)" stroke-width="1.25" marker-end="url(#arrow)" class="a29"/><rect x="515.5" y="651.3" width="47" height="18" rx="9" fill="var(--bg)" stroke="var(--border)" class="a30"/><text x="539" y="664.3" class="edgelabel a31">event</text>
+<path id="p-mark-&gt;orders" d="M 355.22 825.3333333333334 C 394.13500000000005 825.3333333333334, 394.13500000000005 1135, 433.05000000000007 1135" fill="none" stroke="var(--muted)" stroke-width="1.25" marker-end="url(#arrow)" class="a26"/><rect x="357.4" y="971.2" width="73.4" height="18" rx="9" fill="var(--bg)" stroke="var(--border)" class="a27"/><text x="394.1" y="984.2" class="edgelabel a28">delivered</text>
+<path id="p-mark-&gt;ocatch" d="M 264.04 838 C 264.04 863, 264.04 863, 264.04 888" fill="none" stroke="var(--muted)" stroke-width="1.25" marker-end="url(#arrow)"/><rect x="240.5" y="854" width="47" height="18" rx="9" fill="var(--bg)" stroke="var(--border)"/><text x="264" y="867" class="edgelabel">error</text>
+<path id="p-posted-&gt;out" d="M 548.97 806 C 548.97 831, 548.97 831, 548.97 856" fill="none" stroke="var(--muted)" stroke-width="1.25" marker-end="url(#arrow)" class="a29"/><rect x="535.4" y="822" width="27.2" height="18" rx="9" fill="var(--bg)" stroke="var(--border)" class="a30"/><text x="549" y="835" class="edgelabel a31">no</text>
+<path id="p-out-&gt;packs" d="M 624.82 875 C 803.6233333333333 875, 803.6233333333333 1135, 738.69 1135" fill="none" stroke="var(--muted)" stroke-width="1.25" marker-end="url(#arrow)" class="a32"/><rect x="736.5" y="996" width="73.4" height="18" rx="9" fill="var(--bg)" stroke="var(--border)" class="a33"/><text x="773.2" y="1009" class="edgelabel a34">packs out</text>
+<path id="p-out-&gt;pcatch" d="M 548.97 894 C 548.97 919, 548.97 919, 548.97 944" fill="none" stroke="var(--muted)" stroke-width="1.25" marker-end="url(#arrow)" class="a35"/><rect x="525.5" y="910" width="47" height="18" rx="9" fill="var(--bg)" stroke="var(--border)" class="a36"/><text x="549" y="923" class="edgelabel a37">error</text>
+<g class="p0" opacity="0"><circle r="10" fill="var(--accent)" opacity="0.2"/><circle r="4.5" fill="var(--accent)"/><animateMotion dur="30.1s" repeatCount="indefinite" keyTimes="0;0;0.0239;1" keyPoints="0;0;1;1" calcMode="linear"><mpath href="#p-driver-&gt;type" xlink:href="#p-driver-&gt;type"/></animateMotion></g>
+<g class="p1" opacity="0"><circle r="10" fill="var(--accent)" opacity="0.2"/><circle r="4.5" fill="var(--accent)"/><animateMotion dur="30.1s" repeatCount="indefinite" keyTimes="0;0;0.0239;1" keyPoints="0;0;1;1" calcMode="linear"><mpath href="#p-type-&gt;owner" xlink:href="#p-type-&gt;owner"/></animateMotion></g>
+<g class="p2" opacity="0"><circle r="10" fill="var(--accent)" opacity="0.2"/><circle r="4.5" fill="var(--accent)"/><animateMotion dur="30.1s" repeatCount="indefinite" keyTimes="0;0;0.0239;1" keyPoints="0;0;1;1" calcMode="linear"><mpath href="#p-owner-&gt;repeat" xlink:href="#p-owner-&gt;repeat"/></animateMotion></g>
+<g class="p3" opacity="0"><circle r="10" fill="var(--accent)" opacity="0.2"/><circle r="4.5" fill="var(--accent)"/><animateMotion dur="30.1s" repeatCount="indefinite" keyTimes="0;0.1111;0.135;1" keyPoints="0;0;1;1" calcMode="linear"><mpath href="#p-repeat-&gt;save" xlink:href="#p-repeat-&gt;save"/></animateMotion></g>
+<g class="p4" opacity="0"><circle r="10" fill="var(--accent)" opacity="0.2"/><circle r="4.5" fill="var(--accent)"/><animateMotion dur="30.1s" repeatCount="indefinite" keyTimes="0;0.1111;0.135;1" keyPoints="0;0;1;1" calcMode="linear"><mpath href="#p-save-&gt;jobs" xlink:href="#p-save-&gt;jobs"/></animateMotion></g>
+<g class="p5" opacity="0"><circle r="10" fill="var(--accent)" opacity="0.2"/><circle r="4.5" fill="var(--accent)"/><animateMotion dur="30.1s" repeatCount="indefinite" keyTimes="0;0.1111;0.135;1" keyPoints="0;0;1;1" calcMode="linear"><mpath href="#p-save-&gt;events" xlink:href="#p-save-&gt;events"/></animateMotion></g>
+<g class="p6" opacity="0"><circle r="10" fill="var(--accent)" opacity="0.2"/><circle r="4.5" fill="var(--accent)"/><animateMotion dur="30.1s" repeatCount="indefinite" keyTimes="0;0.2095;0.2334;1" keyPoints="0;0;1;1" calcMode="linear"><mpath href="#p-save-&gt;announce" xlink:href="#p-save-&gt;announce"/></animateMotion></g>
+<g class="p7" opacity="0"><circle r="10" fill="var(--accent)" opacity="0.2"/><circle r="4.5" fill="var(--accent)"/><animateMotion dur="30.1s" repeatCount="indefinite" keyTimes="0;0.3078;0.3317;1" keyPoints="0;0;1;1" calcMode="linear"><mpath href="#p-announce-&gt;mark" xlink:href="#p-announce-&gt;mark"/></animateMotion></g>
+<g class="p8" opacity="0"><circle r="10" fill="var(--accent)" opacity="0.2"/><circle r="4.5" fill="var(--accent)"/><animateMotion dur="30.1s" repeatCount="indefinite" keyTimes="0;0.3078;0.3317;1" keyPoints="0;0;1;1" calcMode="linear"><mpath href="#p-mark-&gt;orders" xlink:href="#p-mark-&gt;orders"/></animateMotion></g>
+<g class="p9" opacity="0"><circle r="10" fill="var(--accent)" opacity="0.2"/><circle r="4.5" fill="var(--accent)"/><animateMotion dur="30.1s" repeatCount="indefinite" keyTimes="0;0.387;0.411;1" keyPoints="0;0;1;1" calcMode="linear"><mpath href="#p-announce-&gt;posted" xlink:href="#p-announce-&gt;posted"/></animateMotion></g>
+<g class="p10" opacity="0"><circle r="10" fill="var(--accent)" opacity="0.2"/><circle r="4.5" fill="var(--accent)"/><animateMotion dur="30.1s" repeatCount="indefinite" keyTimes="0;0.387;0.411;1" keyPoints="0;0;1;1" calcMode="linear"><mpath href="#p-posted-&gt;out" xlink:href="#p-posted-&gt;out"/></animateMotion></g>
+<g class="p11" opacity="0"><circle r="10" fill="var(--accent)" opacity="0.2"/><circle r="4.5" fill="var(--accent)"/><animateMotion dur="30.1s" repeatCount="indefinite" keyTimes="0;0.387;0.411;1" keyPoints="0;0;1;1" calcMode="linear"><mpath href="#p-out-&gt;packs" xlink:href="#p-out-&gt;packs"/></animateMotion></g>
+<g class="p12" opacity="0"><circle r="10" fill="var(--accent)" opacity="0.2"/><circle r="4.5" fill="var(--accent)"/><animateMotion dur="30.1s" repeatCount="indefinite" keyTimes="0;0.5258;0.5497;1" keyPoints="0;0;1;1" calcMode="linear"><mpath href="#p-driver-&gt;type" xlink:href="#p-driver-&gt;type"/></animateMotion></g>
+<g class="p13" opacity="0"><circle r="10" fill="var(--accent)" opacity="0.2"/><circle r="4.5" fill="var(--accent)"/><animateMotion dur="30.1s" repeatCount="indefinite" keyTimes="0;0.5258;0.5497;1" keyPoints="0;0;1;1" calcMode="linear"><mpath href="#p-type-&gt;refused" xlink:href="#p-type-&gt;refused"/></animateMotion></g>
+<g class="p14" opacity="0"><circle r="10" fill="var(--accent)" opacity="0.2"/><circle r="4.5" fill="var(--accent)"/><animateMotion dur="30.1s" repeatCount="indefinite" keyTimes="0;0.6773;0.7012;1" keyPoints="0;0;1;1" calcMode="linear"><mpath href="#p-driver-&gt;type" xlink:href="#p-driver-&gt;type"/></animateMotion></g>
+<g class="p15" opacity="0"><circle r="10" fill="var(--accent)" opacity="0.2"/><circle r="4.5" fill="var(--accent)"/><animateMotion dur="30.1s" repeatCount="indefinite" keyTimes="0;0.6773;0.7012;1" keyPoints="0;0;1;1" calcMode="linear"><mpath href="#p-type-&gt;owner" xlink:href="#p-type-&gt;owner"/></animateMotion></g>
+<g class="p16" opacity="0"><circle r="10" fill="var(--accent)" opacity="0.2"/><circle r="4.5" fill="var(--accent)"/><animateMotion dur="30.1s" repeatCount="indefinite" keyTimes="0;0.6773;0.7012;1" keyPoints="0;0;1;1" calcMode="linear"><mpath href="#p-owner-&gt;repeat" xlink:href="#p-owner-&gt;repeat"/></animateMotion></g>
+<g class="p17" opacity="0"><circle r="10" fill="var(--accent)" opacity="0.2"/><circle r="4.5" fill="var(--accent)"/><animateMotion dur="30.1s" repeatCount="indefinite" keyTimes="0;0.6773;0.7012;1" keyPoints="0;0;1;1" calcMode="linear"><mpath href="#p-repeat-&gt;save" xlink:href="#p-repeat-&gt;save"/></animateMotion></g>
+<g class="p18" opacity="0"><circle r="10" fill="var(--accent)" opacity="0.2"/><circle r="4.5" fill="var(--accent)"/><animateMotion dur="30.1s" repeatCount="indefinite" keyTimes="0;0.6773;0.7012;1" keyPoints="0;0;1;1" calcMode="linear"><mpath href="#p-save-&gt;jobs" xlink:href="#p-save-&gt;jobs"/></animateMotion></g>
+<g class="p19" opacity="0"><circle r="10" fill="var(--accent)" opacity="0.2"/><circle r="4.5" fill="var(--accent)"/><animateMotion dur="30.1s" repeatCount="indefinite" keyTimes="0;0.6773;0.7012;1" keyPoints="0;0;1;1" calcMode="linear"><mpath href="#p-save-&gt;events" xlink:href="#p-save-&gt;events"/></animateMotion></g>
+<g class="p20" opacity="0"><circle r="10" fill="var(--accent)" opacity="0.2"/><circle r="4.5" fill="var(--accent)"/><animateMotion dur="30.1s" repeatCount="indefinite" keyTimes="0;0.7501;0.7741;1" keyPoints="0;0;1;1" calcMode="linear"><mpath href="#p-save-&gt;announce" xlink:href="#p-save-&gt;announce"/></animateMotion></g>
+<g class="p21" opacity="0"><circle r="10" fill="var(--accent)" opacity="0.2"/><circle r="4.5" fill="var(--accent)"/><animateMotion dur="30.1s" repeatCount="indefinite" keyTimes="0;0.7501;0.7741;1" keyPoints="0;0;1;1" calcMode="linear"><mpath href="#p-announce-&gt;posted" xlink:href="#p-announce-&gt;posted"/></animateMotion></g>
+<g class="p22" opacity="0"><circle r="10" fill="var(--accent)" opacity="0.2"/><circle r="4.5" fill="var(--accent)"/><animateMotion dur="30.1s" repeatCount="indefinite" keyTimes="0;0.7501;0.7741;1" keyPoints="0;0;1;1" calcMode="linear"><mpath href="#p-posted-&gt;out" xlink:href="#p-posted-&gt;out"/></animateMotion></g>
+<g class="p23" opacity="0"><circle r="10" fill="var(--accent)" opacity="0.2"/><circle r="4.5" fill="var(--accent)"/><animateMotion dur="30.1s" repeatCount="indefinite" keyTimes="0;0.8485;0.8724;1" keyPoints="0;0;1;1" calcMode="linear"><mpath href="#p-out-&gt;pcatch" xlink:href="#p-out-&gt;pcatch"/></animateMotion></g>
+
+</g>
+
+<text x="455.8" y="1245" opacity="0" class="steplabel a38">Delivered</text>
+<text x="455.8" y="1245" opacity="0" class="steplabel a39">Not a delivery job</text>
+<text x="455.8" y="1245" opacity="0" class="steplabel a40">Ledger write fails</text>
+<g opacity="0" class="a41"><text x="455.8" y="1271" class="caption">The driver taps complete. The API checks the job and the user.</text></g>
+<g opacity="0" class="a42"><text x="455.8" y="1271" class="caption">The API saves the job and a history row together.</text></g>
+<g opacity="0" class="a43"><text x="455.8" y="1271" class="caption">After the commit, the API announces the delivery in memory.</text></g>
+<g opacity="0" class="a44"><text x="455.8" y="1271" class="caption">The order listener marks the order delivered.</text></g>
+<g opacity="0" class="a45"><text x="455.8" y="1271" class="caption">The pack ledger listener writes the packs out.</text></g>
+<g opacity="0" class="a46"><text x="455.8" y="1271" class="caption">The job is not a delivery job. The API refuses.</text></g>
+<g opacity="0" class="a47"><text x="455.8" y="1271" class="caption">The API saves the completed job.</text></g>
+<g opacity="0" class="a48"><text x="455.8" y="1271" class="caption">The pack ledger listener tries to write the packs out.</text></g>
+<g opacity="0" class="a49"><text x="455.8" y="1271" class="caption">The write fails. The listener logs the error and stops.</text></g>
+</svg>

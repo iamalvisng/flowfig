@@ -120,13 +120,15 @@ the run.
 
 1. **The agent writes JSON, not pictures.** The agent reads the code and writes a spec of the parts, the calls and their
    order. flowfig does the layout.
-2. **flowfig checks the spec.** `flowfig check` has 26 rules. It finds ids that point nowhere, text wider than its box,
+2. **flowfig checks the spec.** `flowfig check` has 29 rules. It finds ids that point nowhere, text wider than its box,
    edges through boxes, overlapping labels and low contrast. A render runs the same check and writes nothing on an error.
    The agent reads the faults and fixes the spec.
 3. **The output is one animated SVG with no script.** The SVG plays in a GitHub README, PR or issue. It follows the light
    or dark mode of the reader. The SVG carries its spec, so `npx flowfig --spec figure.svg` prints it back.
 
 ## Forms
+
+To explain a flow one moment at a time in a web page, see [Explain a flow in a web page](#explain-a-flow-in-a-web-page).
 
 The map (the default) shows the parts and the messages between them:
 
@@ -174,7 +176,7 @@ The options are in [Open and share a figure](#open-and-share-a-figure).
 | ------------------------------ | --------------------------------- | ------------------------------------ | ---------------- |
 | Made by an agent from the code | Yes, with the `init` instructions | Yes, as Mermaid text                 | No               |
 | Linked to the code             | Yes, `verify` fails in CI         | No                                   | No               |
-| Checked for faults             | Yes, 26 rules in `flowfig check`  | Syntax errors only                   | No               |
+| Checked for faults             | Yes, 29 rules in `flowfig check`  | Syntax errors only                   | No               |
 | Animated                       | Yes, one packet per message       | No                                   | No               |
 | Shows payloads and order       | Yes, on the map and the rail      | Order and text in a sequence diagram | No               |
 | Plays in a GitHub README       | Yes, as an SVG                    | Yes, GitHub renders it               | Yes, as an image |
@@ -197,6 +199,7 @@ The options are in [Open and share a figure](#open-and-share-a-figure).
 - [MCP server](#mcp-server)
 - [Use in React](#use-in-react)
 - [Use from Node](#use-from-node)
+- [Explain a flow in a web page](#explain-a-flow-in-a-web-page)
 - [Use with your coding agent](#use-with-your-coding-agent)
 - [What flowfig does not draw](#what-flowfig-does-not-draw)
 - [License](#license)
@@ -295,6 +298,8 @@ full reference, run `npx flowfig docs`.
 | `label`  | The title in the box.                                                                                     | required                            |
 | `sub`    | A smaller line under the label.                                                                           | none                                |
 | `shape`  | `"box"`, `"decision"` (a diamond) or `"store"` (a data cylinder).                                         | `"box"`                             |
+| `check`  | The question on the gate in the guide world. The labels of the edges out of the box are the answers.      | the label, for a `decision` box     |
+| `done`   | The state after the box, such as "Oil in stock". The ending tags of the guide world show it.              | the label                           |
 | `source` | The code this draws: `path` or `path#symbol`. `flowfig verify` checks it.                                 | none                                |
 | `detail` | A more detailed figure: the SVG path from the repo root. `flowfig atlas` links the box to it.             | none                                |
 | `lines`  | The least number of text lines that a content card keeps.                                                 | none                                |
@@ -303,6 +308,7 @@ full reference, run `npx flowfig docs`.
 | `from`   | In a `timeline` figure: the start date of the item, as YYYY-MM-DD. A box with only `from` is a milestone. | none                                |
 | `to`     | In a `timeline` figure: the last day of the item, as YYYY-MM-DD.                                          | none                                |
 | `mark`   | `"start"` draws a dot before the box. `"end"` draws a ring after the box. Use it on a state lifecycle.    | none                                |
+| `look`   | One of the 12 pictures that the guide world draws for this box.                                           | none                                |
 
 ### Groups
 
@@ -317,6 +323,7 @@ full reference, run `npx flowfig docs`.
 | `gap`       | The smallest space between the children in px. It grows to fit the labels of edges that cross the group. | column: 28; row: fits the widest label, at least 56 |
 | `align`     | `"start"`, `"center"` or `"end"`, across the direction.                                                  | `"center"` (a column stretches)                     |
 | `auto`      | On the root layout: `true` makes flowfig place the boxes. See [Automatic layout](#automatic-layout).     | off                                                 |
+| `look`      | One of the 12 pictures that the guide world draws for this group.                                        | none                                                |
 
 ### Automatic layout
 
@@ -384,26 +391,28 @@ figure. The React player opens a box on a click. `check` and `verify` run on eac
 
 ### Edges
 
-| Field    | Meaning                                                                                             | Default    |
-| -------- | --------------------------------------------------------------------------------------------------- | ---------- |
-| `from`   | The id of the box or group where the edge starts.                                                   | required   |
-| `to`     | The id of the box or group where the edge ends.                                                     | required   |
-| `id`     | The name that beats use.                                                                            | `from->to` |
-| `label`  | The text on the edge.                                                                               | none       |
-| `around` | `"above"`, `"below"`, `"left"` or `"right"` routes the edge around the boxes between, on that side. | none       |
-| `quiet`  | `true` draws the edge only while a step uses it.                                                    | `false`    |
-| `source` | The code this edge draws: `path` or `path#symbol`. `flowfig verify` checks it.                      | none       |
+| Field     | Meaning                                                                                                                                                                                                                            | Default    |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| `from`    | The id of the box or group where the edge starts.                                                                                                                                                                                  | required   |
+| `to`      | The id of the box or group where the edge ends.                                                                                                                                                                                    | required   |
+| `id`      | The name that beats use.                                                                                                                                                                                                           | `from->to` |
+| `label`   | The text on the edge.                                                                                                                                                                                                              | none       |
+| `around`  | `"above"`, `"below"`, `"left"` or `"right"` routes the edge around the boxes between, on that side.                                                                                                                                | none       |
+| `quiet`   | `true` draws the edge only while a step uses it.                                                                                                                                                                                   | `false`    |
+| `carries` | What moves on the edge in the guide world: `"data"`, or `{ thing, form, count, from }` for a physical thing. `form` is `box`, `barrel` or `notes`. `count` is 1 to 4. `from` is the id of the box or group where the thing starts. | `"data"`   |
+| `source`  | The code this edge draws: `path` or `path#symbol`. `flowfig verify` checks it.                                                                                                                                                     | none       |
 
 ### Steps
 
 Each step is one story. The player shows one tab for each step. With no steps, the figure is a still map.
 
-| Field     | Meaning                                               | Default  |
-| --------- | ----------------------------------------------------- | -------- |
-| `label`   | The tab title.                                        | required |
-| `flow`    | The beats, in play order.                             | required |
-| `caption` | The line under the figure while no beat has a `say`.  | none     |
-| `nodes`   | The ids of the boxes to highlight for the whole step. | none     |
+| Field     | Meaning                                                                                                | Default                         |
+| --------- | ------------------------------------------------------------------------------------------------------ | ------------------------------- |
+| `label`   | The tab title.                                                                                         | required                        |
+| `flow`    | The beats, in play order.                                                                              | required                        |
+| `caption` | The line under the figure while no beat has a `say`.                                                   | none                            |
+| `outcome` | One sentence, 15 words or fewer, about how the story ends. The guide shows it at the end of the story. | "Ends at: <the last box label>" |
+| `nodes`   | The ids of the boxes to highlight for the whole step.                                                  | none                            |
 
 ### Beats
 
@@ -415,6 +424,7 @@ A beat is an edge id, an array of edge ids that run at the same time, or an obje
 | `say`   | The line of narration for the beat.                                                        | none           |
 | `show`  | `{ boxId: content }` fills the content card of a box until the step ends.                  | none           |
 | `light` | The ids of the boxes to highlight for this beat only.                                      | none           |
+| `note`  | The reason for the beat, in one line. The guide form shows it under the `say` line.        | none           |
 | `ms`    | The length of the beat in ms.                                                              | `speed` (900)  |
 
 In a hop, `back: true` runs the packet from `to` to `from`. `data` is a small card on the packet. `async: true` marks a message
@@ -453,11 +463,11 @@ figure: 5 boxes, 3 groups, 4 edges, 2 steps, 6 messages
 
 The last line gives the counts of the parts of the figure. Compare the counts with the parts that you planned.
 
-`flowfig check` has 26 rules: 11 errors and 15 warnings.
+`flowfig check` has 29 rules: 11 errors and 18 warnings.
 
 | Rule                        | Severity | What it finds                                                                                                              |
 | --------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `unknown-id`                | error    | An edge, step or beat names a box, group or edge that does not exist.                                                      |
+| `unknown-id`                | error    | An edge, step or beat names a box, group or edge that does not exist, or `carries.from` names no box and no group.         |
 | `duplicate-id`              | error    | Two boxes, two groups or two edges have the same id.                                                                       |
 | `hidden-edge`               | error    | A `quiet` edge that no beat uses, so the figure never shows it.                                                            |
 | `text-overflow`             | error    | Text that needs more width than its box has.                                                                               |
@@ -468,6 +478,8 @@ The last line gives the counts of the parts of the figure. Compare the counts wi
 | `bad-at`                    | error    | An `at` value that is not an integer of 0 or more.                                                                         |
 | `timeline-need-from`        | error    | A box in a timeline has no `from` date.                                                                                    |
 | `bad-date`                  | error    | A `from`, `to` or `today` value is not a real YYYY-MM-DD date, or a `to` is before its `from`.                             |
+| `bad-carries`               | warning  | An edge `carries` has an empty `thing`, a `form` that is not `box`, `barrel` or `notes`, or a `count` that is not 1 to 4.  |
+| `thing-no-road`             | warning  | A thing edge starts and ends at the same actor, or one end has no actor.                                                   |
 | `empty-step`                | warning  | A step with no beats.                                                                                                      |
 | `small-text`                | warning  | At the page width, the smallest text is below the minimum size.                                                            |
 | `bad-source`                | warning  | A `source` that is not `path` or `path#symbol`.                                                                            |
@@ -482,6 +494,7 @@ The last line gives the counts of the parts of the figure. Compare the counts wi
 | `font-estimated`            | warning  | `theme.font` is set. The SVG check estimates text width for the system font.                                               |
 | `color-not-checked`         | warning  | A color that the check cannot read, so its contrast is not checked.                                                        |
 | `plain-text`                | warning  | Text with a code name, a filler word, or a `say` or caption over 20 words.                                                 |
+| `unknown-look`              | warning  | A box or a group has a `look` that is not one of the 12 pictures.                                                          |
 | `auto-ignored`              | warning  | `auto` with `lanes` or `timeline`, `auto` on a nested group, or `around` on an edge with `auto`.                           |
 
 | Option            | Effect                                                                                                     |
@@ -943,6 +956,68 @@ writeFileSync('first.svg', toSvg(spec));
 as `flowfig verify`.
 
 `toSvg` does not put the spec in the SVG. Only the CLI adds the spec, which `--spec` reads back.
+
+## Explain a flow in a web page
+
+`flowfig/element` is a web component. It shows one flow to a reader who does not know the code. Load the script and add the tag:
+
+```html
+<script type="module" src="https://cdn.jsdelivr.net/npm/flowfig/dist/element.js"></script>
+<flowfig-explain src="oil.json" form="guide"></flowfig-explain>
+<flowfig-explain src="after.json" before="before.json" form="change">
+  <p slot="verdict">A failed ledger write now runs again by itself.</p>
+</flowfig-explain>
+```
+
+![The guide form at moment 5 of 6: four actors, and the server acts](docs/explain-guide.png)
+
+The element has three forms:
+
+- `diagram` shows the figure that `toSvg` draws, with the step tabs of the player.
+- `guide` shows one moment at a time. The cast comes from the lanes. Else it comes from the labeled top-level groups.
+  Else it comes from the boxes that the steps visit. A store box adds the actor "Records" at the end. When the cast comes from the boxes, the cast holds at most 6 actors, and "Records" takes one of the 6 places. The actor that acts is outlined. "Next:" names the next different actor. In a figure
+  without lanes, a decision box is not an actor.
+- `change` shows the older and the newer spec side by side, with the differences marked. Below the diagrams, an outcome row
+  compares Before and After: red for an end box with the tone `red` or `gray`, green for the tone `green`. A step that only one
+  side has plays on that side only.
+
+For a good guide, give each role a lane or a labeled group. Give each beat a `say`. Use `note` for the reason and `look` for the picture.
+
+The guide form shows a figure as a small world when an edge `carries` a thing, or when an actor has the look
+`person`, `shop` or `truck`. Other figures show the diagram in the guide. The world loads from
+`element-world.js` next to `element.js`, with a shared chunk (`element-looks.js`). A CDN script tag loads them from the same folder. The world art stays light in
+a dark theme.
+
+| Attribute | Values                                                             | Default                                       |
+| --------- | ------------------------------------------------------------------ | --------------------------------------------- |
+| `src`     | The URL of a spec JSON file, or of an SVG that flowfig wrote.      | required, unless the `spec` property is set   |
+| `form`    | `diagram`, `guide` or `change`.                                    | `guide` if the spec has steps, else `diagram` |
+| `step`    | A step label to start on.                                          | the first step                                |
+| `before`  | The URL of the older spec.                                         | required for `change`                         |
+| `theme`   | `auto`, `light` or `dark`.                                         | `auto`                                        |
+| `code`    | Present: each moment shows its `source` and `via` values.          | absent                                        |
+| `forms`   | The forms that the reader can switch between, separated by spaces. | all forms that the input allows               |
+
+The `theme` key of the spec colors the SVG in the diagram and change forms. It applies only when the `theme` attribute is `auto`. The element keeps a color only if it is plain color syntax. Else it uses the default color.
+
+- Properties: `spec` and `beforeSpec` (objects, instead of the URLs), and `moment` (the index; read and write).
+- Methods: `next()`, `back()`, `play()`, `pause()` and `show(stepLabel)`.
+- Events: `flowfig-moment` (`detail: { step, moment, total }`) and `flowfig-form` (`detail: { form }`).
+- Slots: `verdict` (the change form; it shows above the diagrams), `title` and `caption`. Without a `verdict`, the change form shows a plain list of what changed. The raw diff is behind "Show all changes".
+- Keys: the element takes focus. The arrow keys move between moments (or between steps in the diagram form). Space plays and pauses. The keys 1 to 9 pick a step.
+
+The element has a shadow root. The CSS of the host page does not reach inside it. To change the look, set the `--flowfig-*` tokens
+on the element: `--flowfig-bg`, `--flowfig-surface`, `--flowfig-border`, `--flowfig-ink`, `--flowfig-muted`, `--flowfig-accent`,
+`--flowfig-on-accent`, `--flowfig-good`, `--flowfig-bad`, `--flowfig-play`, `--flowfig-font`. Only these tokens change the look.
+
+```css
+flowfig-explain {
+  --flowfig-accent: #7c3aed;
+  --flowfig-font: Georgia, serif;
+}
+```
+
+The element is `element.js` and the files `element-world.js` and `element-looks.js` next to it. The core loads under 45 kB gzip, and the world loads on demand. There is no React. In a bundler, write `import 'flowfig/element'`.
 
 ## Use with your coding agent
 

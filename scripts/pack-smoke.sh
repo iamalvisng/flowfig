@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Install the packed tarball into a clean project and use it the way a user does: the two entry
-# points and the bin. The tests run from src/, so only this catches a broken dist/ or package.json.
+# Only this script tests the packed package. The unit tests import from src/.
 # REACT=18 checks the low end of the peer range.
 set -euo pipefail
 
@@ -25,6 +24,15 @@ const props = { layout: { children: [{ id: 'a', label: 'A' }, { id: 'b', label: 
 if (!toSvg(props).includes('<svg')) throw new Error('toSvg: no <svg>');
 if (!renderToString(createElement(Flow, props)).length) throw new Error('Flow: empty render');
 "
+
+node --input-type=module -e "await import('flowfig/element')"
+for f in $(cd node_modules/flowfig/dist && ls element.js element-*.js); do
+  for ref in $(grep -oE "(from|import\(?)\s*['\"\`]\.\.?/[^'\"\`]+['\"\`]" "node_modules/flowfig/dist/$f" | grep -oE "[^/'\"]+\.js"); do
+    case "$ref" in element.js | element-*.js) [ -f "node_modules/flowfig/dist/$ref" ] || { echo "$f imports $ref, which is missing"; exit 1; } ;; *) echo "$f imports $ref, not an element file"; exit 1 ;; esac
+  done
+done
+[ -f node_modules/flowfig/dist/element-world.js ] || { echo 'element-world.js is missing'; exit 1; }
+[ -f node_modules/flowfig/dist/element.d.ts ] || { echo 'element.d.ts is missing'; exit 1; }
 
 spec='{"props":{"layout":{"children":[{"id":"a","label":"A"}]},"edges":[],"steps":[]}}'
 echo "$spec" | npx --no-install flowfig - out.svg

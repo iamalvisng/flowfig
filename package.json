@@ -50,6 +50,10 @@
       "types": "./dist/svg.d.ts",
       "default": "./dist/svg.js"
     },
+    "./element": {
+      "types": "./dist/element.d.ts",
+      "default": "./dist/element.js"
+    },
     "./verify": {
       "types": "./dist/verify.d.ts",
       "default": "./dist/verify.js"
@@ -58,9 +62,11 @@
   "bin": {
     "flowfig": "dist/cli.js"
   },
-  "sideEffects": false,
+  "sideEffects": [
+    "./dist/element.js"
+  ],
   "scripts": {
-    "build": "rm -rf dist && tsc -p tsconfig.build.json && chmod +x dist/cli.js",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json && vite build --logLevel warn && chmod +x dist/cli.js",
     "prepack": "npm run build",
     "dev": "vite --open",
     "export": "node scripts/export.mjs",
