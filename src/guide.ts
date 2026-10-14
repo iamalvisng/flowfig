@@ -6,6 +6,7 @@ export const PLAIN_EXAMPLES = [
     good: 'Rate limiter',
   },
   { field: 'sub', rule: 'A `sub` line holds a short plain detail.', bad: 'redis.incr()', good: '5 tries a minute' },
+  { field: 'sub', rule: 'A table, queue or topic name in code style is a code name.', bad: 'order_items', good: 'Order items' },
   { field: 'edge', rule: 'An edge label names the action or the data.', bad: 'validateCredentials()', good: 'check password' },
   {
     field: 'say',
@@ -195,7 +196,9 @@ beat is an edge id or an array of edge ids that run at the same time. A beat can
 - Add \`inside\` to a box if the user asks what happens in that box.
 - If the user asks what box X does "call by call", "inside" or "step by step", put those calls as parts in the
   \`inside\` of X, in the order that the code runs them. Do not draw a second, flat figure.
-- A helper is a part inside the part that calls it, not one level up.
+- A helper is a part inside the part that calls it, not one level up. The \`inside\` of a box holds only the calls that the
+  box makes itself. Example: \`placeOrder\` calls \`checkCart\`, and \`checkCart\` calls \`priceItem\`. The part "Check the cart"
+  then gets its own \`inside\` with the part "Price an item".
 - Add \`inside\` if the root needs more than 12 boxes to be faithful. Move the inner calls into the box that owns them.
 - Give each part one \`source\`. Find the parts with \`npx flowfig trace <source>\`.
 - An inside edge can start at an outer neighbor X only if the root has the edge X -> box. It can end at an outer neighbor Y
@@ -443,13 +446,15 @@ The fields below change only the element. The SVG does not show them.
 - \`carries\` (edge): what moves on the edge. Leave it out for data: a message, a request, a record, a file, an email, a
   payment. The default is data.
 - Write \`carries\` only when a physical thing moves: goods, a vehicle, paper, cash. Example:
-  \`{ "thing": "used oil", "form": "barrel", "count": 4 }\`.
+  \`{ "thing": "paint", "form": "barrel", "count": 4 }\`.
+- A thing edge starts at an actor that holds the thing. A decision moves no thing. Example: a bank approves a loan, and a
+  branch then hands over the cash. The approval edge carries no thing. The branch edge carries the cash.
 - \`form\` is \`box\` (the default), \`barrel\` or \`notes\` (cash). \`count\` is 1 to 4. The default is 1.
 - If the thing starts at a box that is not the edge \`from\`, set \`carries.from\` to the id of that box.
 - \`check\` (box): the question that a box asks before the flow goes on, when the box is not a \`decision\`. The labels of the
   edges out of the box are the answers. A \`decision\` box shows its label as the question.
 - \`outcome\` (step): one sentence of 15 words or fewer that says how the story ends.
-- \`done\` (box): the state after the box, in a short phrase, such as "Oil in stock". The ending tag of each actor shows the
+- \`done\` (box): the state after the box, in a short phrase, such as "Paint in stock". The ending tag of each actor shows the
   \`done\` of the last box that the actor reached. Without \`done\`, the tag shows the box label.
 - Write only a state that the code or the document gives. If a box only asks for a refund, the state is "Refund asked", not
   "Refunded".
