@@ -285,8 +285,10 @@ function topAt(poly: Pt[], x: number) {
   }
   return y;
 }
+const coarse = (n: number) => Array.from({ length: n + 1 }, (_, i) => i).sort((x, y) => (x % 8 ? 1 : 0) - (y % 8 ? 1 : 0));
+const SPOTS = coarse(160);
 function clears(r: Route, hulls: Pt[][], near: number[], cl = CLEAR) {
-  for (let n = 0; n <= 160; n++) {
+  for (const n of SPOTS) {
     const p = bez(r, n / 160);
     if (Math.hypot(p[0] - r.a[0], p[1] - r.a[1]) < 10 || Math.hypot(p[0] - r.b[0], p[1] - r.b[1]) < 10) continue;
     for (let i = 0; i < hulls.length; i++) {
@@ -318,14 +320,22 @@ const edgeGap = (p: Pt, poly: Pt[]) =>
       return Math.hypot(p[0] - a[0] - k * dx, p[1] - a[1] - k * dy);
     }),
   );
+const COARSE = coarse(96);
+const tallOrder = new Map<string, number[][]>();
 function tall(a: Pt, b: Pt, hulls: Pt[][], near: number[], over: number, side: number, mid: number): Route | undefined {
-  const cost = ([r1, r2, p, q]: number[]) =>
-    r1 + r2 + (Math.abs(p) + Math.abs(q)) / 4 + (p * (mid - a[0]) < 0 ? 200 : 0) + (q * (mid - b[0]) < 0 ? 200 : 0);
+  const sa = Math.sign(mid - a[0]),
+    sb = Math.sign(mid - b[0]),
+    key = `${sa}${sb}`;
+  let order = tallOrder.get(key);
+  if (!order) {
+    const cost = ([r1, r2, p, q]: number[]) => r1 + r2 + (Math.abs(p) + Math.abs(q)) / 4 + (p * sa < 0 ? 200 : 0) + (q * sb < 0 ? 200 : 0);
+    tallOrder.set(key, (order = TALL.map((c) => [...c, cost(c)]).sort((x, y) => x[4] - y[4])));
+  }
   const box = hulls.map(bounds),
     lift = Math.min(a[1], b[1]) - 60;
-  next: for (const [r1, r2, p, q] of TALL.map((c) => [...c, cost(c)]).sort((x, y) => x[4] - y[4])) {
+  next: for (const [r1, r2, p, q] of order) {
     const r: Route = { a, b, c1: [a[0] + p, a[1] - r1], c2: [b[0] + q, b[1] - r2] },
-      ps = Array.from({ length: 97 }, (_, n) => bez(r, n / 96));
+      ps = COARSE.map((n) => bez(r, n / 96));
     if (!ps.some((c) => c[1] <= lift)) continue;
     for (const c of ps) {
       if (Math.min(Math.hypot(c[0] - a[0], c[1] - a[1]), Math.hypot(c[0] - b[0], c[1] - b[1])) < 16) continue;
@@ -959,37 +969,48 @@ const width = (text: string, size: number, bold: boolean) => {
 export const hit = (a: Rect, b: Rect, pad = 0) =>
   a.x < b.x + b.w + pad && b.x < a.x + a.w + pad && a.y < b.y + b.h + pad && b.y < a.y + a.h + pad;
 
+const axes = new WeakMap<Pt[], number[]>();
 export function polyHit(poly: Pt[], r: Rect, pad = 0): boolean {
   const x0 = r.x - pad,
     y0 = r.y - pad,
     x1 = r.x + r.w + pad,
     y1 = r.y + r.h + pad;
-  let px0 = Infinity,
-    px1 = -Infinity,
-    py0 = Infinity,
-    py1 = -Infinity;
-  for (const [x, y] of poly) {
-    px0 = Math.min(px0, x);
-    px1 = Math.max(px1, x);
-    py0 = Math.min(py0, y);
-    py1 = Math.max(py1, y);
-  }
-  if (px1 <= x0 || x1 <= px0 || py1 <= y0 || y1 <= py0) return false;
-  for (let i = 0; i < poly.length; i++) {
-    const [ax, ay] = poly[i],
-      [bx, by] = poly[(i + 1) % poly.length],
-      nx = by - ay,
-      ny = ax - bx;
-    let p0 = Infinity,
-      p1 = -Infinity;
+  let ax = axes.get(poly);
+  if (!ax) {
+    let px0 = Infinity,
+      px1 = -Infinity,
+      py0 = Infinity,
+      py1 = -Infinity;
     for (const [x, y] of poly) {
-      const v = x * nx + y * ny;
-      if (v < p0) p0 = v;
-      if (v > p1) p1 = v;
+      px0 = Math.min(px0, x);
+      px1 = Math.max(px1, x);
+      py0 = Math.min(py0, y);
+      py1 = Math.max(py1, y);
     }
-    const lo = Math.min(x0 * nx, x1 * nx) + Math.min(y0 * ny, y1 * ny),
+    ax = [px0, px1, py0, py1];
+    for (let i = 0; i < poly.length; i++) {
+      const [qx, qy] = poly[i],
+        [bx, by] = poly[(i + 1) % poly.length],
+        nx = by - qy,
+        ny = qx - bx;
+      let p0 = Infinity,
+        p1 = -Infinity;
+      for (const [x, y] of poly) {
+        const v = x * nx + y * ny;
+        if (v < p0) p0 = v;
+        if (v > p1) p1 = v;
+      }
+      ax.push(nx, ny, p0, p1);
+    }
+    axes.set(poly, ax);
+  }
+  if (ax[1] <= x0 || x1 <= ax[0] || ax[3] <= y0 || y1 <= ax[2]) return false;
+  for (let i = 4; i < ax.length; i += 4) {
+    const nx = ax[i],
+      ny = ax[i + 1],
+      lo = Math.min(x0 * nx, x1 * nx) + Math.min(y0 * ny, y1 * ny),
       hi = Math.max(x0 * nx, x1 * nx) + Math.max(y0 * ny, y1 * ny);
-    if (p1 <= lo || hi <= p0) return false;
+    if (ax[i + 3] <= lo || hi <= ax[i + 2]) return false;
   }
   return true;
 }
