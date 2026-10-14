@@ -681,18 +681,19 @@ export function street(
   looks: (FigLook | undefined)[],
   withAntenna: boolean[],
   pitch: number,
-  stack = false,
+  step = 0,
 ): { svg: string; lots: Lot[]; bends: Pt[] } {
   const n = looks.length,
     X0 = -40,
     X1 = (n - 1) * pitch + 44;
   const bends: Pt[] = [];
-  for (let i = 0, x = 0, y = 0; stack && i < n; i++) {
+  for (let i = 0, x = 0, y = 0; step && i < n; i++) {
     bends.push([x, y + 7]);
-    if (i % 2) x += 12;
-    else y += 12;
+    if (i % 2) x += step;
+    else y += step;
   }
-  const xs = looks.map((_, i) => (stack ? bends[i][0] - 5.4 : i * pitch)),
+  const stack = step > 0,
+    xs = looks.map((_, i) => (stack ? bends[i][0] - 5.4 : i * pitch)),
     ys = looks.map((_, i) => (stack ? bends[i][1] - 7 : 0));
   let g = '';
   const objs: [number, string][] = [],

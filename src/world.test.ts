@@ -254,7 +254,10 @@ const SIZES = [
   [740, 431],
   [360, 600],
   [344, 565],
+  [390, 600],
+  [412, 640],
 ];
+const STACKED = ['390x844', '390x600', '412x640'];
 
 test('every needed tag, sign, chip and device is on stage, none overlaps, and the camera never jumps and pulls back at the outcome', () => {
   const hits: string[] = [];
@@ -264,8 +267,10 @@ test('every needed tag, sign, chip and device is on stage, none overlaps, and th
     for (const [w, h] of worldReady(fig.props) ? SIZES : SIZES.slice(0, 3)) {
       const st = stageFor(w, w >= HUD.wide ? Math.min(h, (w * 10) / 16) : Math.min(h, HUD.tall));
       get(st.form).stories.forEach((story, s) => {
-        const { sc, cams } = storyView(get, s, st),
-          z = cams.map((p) => p.cam.z),
+        const { sc, cams } = storyView(get, s, st);
+        if (worldReady(fig.props) && STACKED.includes(`${w}x${h}`) && !sc.bends.length)
+          hits.push(`${fig.title} ${w}x${h} ${story.name}: the diagonal street replaces the stacked street`);
+        const z = cams.map((p) => p.cam.z),
           n = z.length;
         const fit = place(sc, stateAt(sc, s, n - 1, Infinity), st).cam.z,
           xs = story.path.flatMap((a) => sc.actors[a].lot.hull.map((p) => p[0])),
@@ -297,11 +302,15 @@ test('on a phone, the stacked street shows every building of the "Expired certif
     { sc, cams } = storyView((f) => scene(oil.props, f), s, st),
     p = cams.at(-1)!,
     { l, t, r, b } = st.region;
-  const shown = p.hulls.filter((h) => h.some(([x, y]) => x >= l && x <= r && y >= t && y <= b));
-  assert.ok(sc.bends.length > 0 && shown.length >= 2);
-  for (const h of shown) {
-    const w = Math.max(...h.map((q) => q[0])) - Math.min(...h.map((q) => q[0]));
-    assert.ok(w >= 90, `${Math.round(w)} px`);
+  assert.ok(sc.bends.length > 0);
+  for (const a of sc.stories[s].path) {
+    const h = p.hulls[a],
+      w = Math.max(...h.map((q) => q[0])) - Math.min(...h.map((q) => q[0]));
+    assert.ok(
+      h.some(([x, y]) => x >= l && x <= r && y >= t && y <= b),
+      `${sc.actors[a].name} is out of frame`,
+    );
+    assert.ok(w >= 90, `${sc.actors[a].name}: ${Math.round(w)} px`);
   }
 });
 

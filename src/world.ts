@@ -14,7 +14,7 @@ export type Box = { label: string; actor: number; dead: boolean; check: string }
 export type Device = 'phone' | 'cab' | 'antenna';
 export type SceneActor = { name: string; look?: FigLook; device: Device; lot: Lot; gate: Gate; port: Pt; checks: boolean };
 export type Story = { name: string; moments: Hop[][]; acting: string[]; path: number[]; end: string };
-export type Form = 'narrow' | 'wide' | 'stack';
+export type Form = 'narrow' | 'wide' | 'stack' | 'spread';
 export type Scene = {
   svg: string;
   bends: Pt[];
@@ -49,7 +49,7 @@ export function scene(fig: FlowProps, form: Form = 'narrow'): Scene {
 
   const truck = cs.findIndex((a) => a.look === 'truck');
   const devices = cs.map((a, i): Device => (i === truck ? 'cab' : a.look === 'person' || a.look === 'phone' ? 'phone' : 'antenna'));
-  const stack = form === 'stack',
+  const stack = form === 'stack' || form === 'spread',
     {
       svg: ground,
       lots,
@@ -58,7 +58,7 @@ export function scene(fig: FlowProps, form: Form = 'narrow'): Scene {
       cs.map((a) => a.look),
       devices.map((d) => d === 'antenna'),
       form === 'wide' ? 9 : 10.5,
-      stack,
+      stack ? (form === 'spread' ? 15 : 12) : 0,
     );
 
   const things: Scene['things'] = new Map();
@@ -318,21 +318,23 @@ const edgeGap = (p: Pt, poly: Pt[]) =>
 function tall(a: Pt, b: Pt, hulls: Pt[][], near: number[], over: number, side: number, mid: number): Route | undefined {
   const cost = ([r1, r2, p, q]: number[]) =>
     r1 + r2 + (Math.abs(p) + Math.abs(q)) / 4 + (p * (mid - a[0]) < 0 ? 200 : 0) + (q * (mid - b[0]) < 0 ? 200 : 0);
+  const box = hulls.map(bounds),
+    lift = Math.min(a[1], b[1]) - 60;
   next: for (const [r1, r2, p, q] of TALL.map((c) => [...c, cost(c)]).sort((x, y) => x[4] - y[4])) {
-    const r: Route = { a, b, c1: [a[0] + p, a[1] - r1], c2: [b[0] + q, b[1] - r2] };
-    let top = Infinity;
-    for (let n = 0; n <= 40; n++) {
-      const c = bez(r, n / 40),
-        end = Math.min(Math.hypot(c[0] - a[0], c[1] - a[1]), Math.hypot(c[0] - b[0], c[1] - b[1]));
-      top = Math.min(top, c[1]);
-      if (end < 16) continue;
+    const r: Route = { a, b, c1: [a[0] + p, a[1] - r1], c2: [b[0] + q, b[1] - r2] },
+      ps = Array.from({ length: 97 }, (_, n) => bez(r, n / 96));
+    if (!ps.some((c) => c[1] <= lift)) continue;
+    for (const c of ps) {
+      if (Math.min(Math.hypot(c[0] - a[0], c[1] - a[1]), Math.hypot(c[0] - b[0], c[1] - b[1])) < 16) continue;
       for (let i = 0; i < hulls.length; i++) {
-        const h = hulls[i];
+        const h = hulls[i],
+          o = box[i];
+        if (near.includes(i) || c[0] < o.x - side || c[0] > o.x + o.w + side || c[1] > o.y + o.h + side || c[1] < o.y - over) continue;
         const y = topAt(h, c[0]);
-        if (!near.includes(i) && (inPoly(c, h) || (c[1] < y ? y - c[1] < over : edgeGap(c, h) < side))) continue next;
+        if (inPoly(c, h) || (c[1] < y ? y - c[1] < over : edgeGap(c, h) < side)) continue next;
       }
     }
-    if (Math.min(a[1], b[1]) - top >= 60) return r;
+    return r;
   }
 }
 
@@ -640,7 +642,7 @@ function planOf(sc: Scene, story: number, m: number) {
         [tx, ty] = dest(k);
       return [[ux, uy], [ux, 6.75 + A[s.units[id].at].lot.y], ...road(s.units[id].at, ta, 0.25), [tx, 6.75 + A[ta].lot.y], [tx, ty]];
     });
-    paths.forEach((p) => s.frame.push(...p.map((q) => P(...q)), P(...p[3], 1.2)));
+    paths.forEach((p) => s.frame.push(...p.map((q) => P(...q)), P(...p.at(-1)!, 1.2)));
     return add(
       'parcel',
       i,
@@ -903,6 +905,7 @@ export type Placed = {
 type Opt = Rect & { anchor: Pt };
 
 export const ZMIN = 0.45;
+const OVER = new Error('over');
 const GAP = 12,
   MARGIN = 32,
   TYPE = {
@@ -941,7 +944,13 @@ const bounds = (ps: Pt[]): Rect => {
   return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y };
 };
 // Measured system-ui widths in Chromium run up to 1.105x the textWidth estimate.
-const width = (text: string, size: number, bold: boolean) => textWidth(text, size) * (bold ? 1.06 : 1) * 1.12;
+const widths = new Map<string, number>();
+const width = (text: string, size: number, bold: boolean) => {
+  const k = `${size}${bold}${text}`;
+  let w = widths.get(k);
+  if (w === undefined) widths.set(k, (w = textWidth(text, size) * (bold ? 1.06 : 1) * 1.12));
+  return w;
+};
 
 export const hit = (a: Rect, b: Rect, pad = 0) =>
   a.x < b.x + b.w + pad && b.x < a.x + a.w + pad && a.y < b.y + b.h + pad && b.y < a.y + a.h + pad;
@@ -971,11 +980,12 @@ export function polyHit(poly: Pt[], r: Rect, pad = 0): boolean {
       p1 = -Infinity;
     for (const [x, y] of poly) {
       const v = x * nx + y * ny;
-      p0 = Math.min(p0, v);
-      p1 = Math.max(p1, v);
+      if (v < p0) p0 = v;
+      if (v > p1) p1 = v;
     }
-    const c = [x0 * nx + y0 * ny, x1 * nx + y0 * ny, x1 * nx + y1 * ny, x0 * nx + y1 * ny];
-    if (p1 <= Math.min(...c) || Math.max(...c) <= p0) return false;
+    const lo = Math.min(x0 * nx, x1 * nx) + Math.min(y0 * ny, y1 * ny),
+      hi = Math.max(x0 * nx, x1 * nx) + Math.max(y0 * ny, y1 * ny);
+    if (p1 <= lo || hi <= p0) return false;
   }
   return true;
 }
@@ -986,7 +996,7 @@ export function stageFor(w: number, h: number): Stage {
     w,
     h,
     narrow: w < HUD.roomy,
-    form: w < HUD.slim * 2 ? 'stack' : w < HUD.roomy ? 'narrow' : 'wide',
+    form: w >= HUD.slim * 2 ? (w < HUD.roomy ? 'narrow' : 'wide') : h < 740 || h > 780 ? 'spread' : 'stack',
     region: side
       ? { l: HUD.pad * 2 + (w >= HUD.wide ? HUD.panel : HUD.slim), t: HUD.chips + HUD.pad, r: w - HUD.pad, b: h - HUD.pad }
       : { l: 8, t: HUD.chips + 8, r: w - 8, b: h - HUD.sheet - 8 },
@@ -994,9 +1004,10 @@ export function stageFor(w: number, h: number): Stage {
 }
 
 const samples = new WeakMap<Arc[], Pt[][]>();
+const chunks = new WeakMap<Pt[][], { ps: Pt[]; box: Rect }[]>();
 const solidsOf = new WeakMap<Scene, { h: Pt[]; box: Rect }[]>();
 
-export function layout(sc: Scene, s: State, stage: Stage, cam: Cam, full = false) {
+export function layout(sc: Scene, s: State, stage: Stage, cam: Cam, full = false, cap = Infinity) {
   const ty = TYPE[stage.w < HUD.slim * 2 ? 'small' : 'big'],
     CHIP_H = ty.chipH;
   const A = sc.actors,
@@ -1032,7 +1043,13 @@ export function layout(sc: Scene, s: State, stage: Stage, cam: Cam, full = false
   if (!arcsW)
     samples.set(
       s.arcs,
-      (arcsW = s.arcs.filter((a) => a.t > 0).map((a) => Array.from({ length: 33 }, (_, i) => bez(a, a.t * (0.05 + (0.9 * i) / 32))))),
+      (arcsW = s.arcs
+        .filter((a) => a.t > 0)
+        .map((a) =>
+          sc.bends.length
+            ? Array.from({ length: 97 }, (_, i) => bez(a, (a.t * i) / 96))
+            : Array.from({ length: 33 }, (_, i) => bez(a, a.t * (0.05 + (0.9 * i) / 32))),
+        )),
     );
   let lots = solidsOf.get(sc);
   if (!lots) solidsOf.set(sc, (lots = A.map((a) => ({ h: a.lot.hull, box: bounds(a.lot.hull) }))));
@@ -1047,10 +1064,27 @@ export function layout(sc: Scene, s: State, stage: Stage, cam: Cam, full = false
       p = 2 / cam.z;
     return !solids.some(({ h, box }) => hit(box, q, p) && polyHit(h, q, p));
   };
+  let parts = chunks.get(arcsW);
+  if (!parts)
+    chunks.set(
+      arcsW,
+      (parts = arcsW.flatMap((arc) =>
+        Array.from({ length: Math.ceil(arc.length / 8) }, (_, k) => {
+          const ps = arc.slice(k * 8, k * 8 + 8);
+          return { ps, box: bounds(ps) };
+        }),
+      )),
+    );
   const offA = (o: Rect) => {
     const q = world(o),
       p = 4 / cam.z;
-    return !arcsW.some((arc) => arc.some(([x, y]) => x > q.x - p && x < q.x + q.w + p && y > q.y - p && y < q.y + q.h + p));
+    const x0 = q.x - p,
+      x1 = q.x + q.w + p,
+      y0 = q.y - p,
+      y1 = q.y + q.h + p;
+    for (const { ps, box } of parts)
+      if (hit(box, q, p)) for (const c of ps) if (c[0] > x0 && c[0] < x1 && c[1] > y0 && c[1] < y1) return false;
+    return true;
   };
   const free = (o: Rect) => !taken.some((x) => hit(x, o, 6));
   const ok = (o: Rect) => inRegion(o) && free(o) && offA(o) && offB(o);
@@ -1061,7 +1095,7 @@ export function layout(sc: Scene, s: State, stage: Stage, cam: Cam, full = false
   const pick = <T extends Rect>(cands: Cands<T>): T => {
     const o = scan(cands, ok);
     if (o) return o;
-    bad++;
+    if (++bad > cap) throw OVER;
     return scan(cands, (o) => inRegion(o) && free(o)) ?? (cands[0] as T[])[0];
   };
 
@@ -1076,7 +1110,7 @@ export function layout(sc: Scene, s: State, stage: Stage, cam: Cam, full = false
     const rs = opts.map(([x, y]) => ({ x, y, w, h: CHIP_H }));
     const fits = (o: Rect) => inRegion(o) && offB(o) && free(o);
     const o = rs.find(fits) ?? around.flatMap((p) => ring(p, w, CHIP_H, stage.narrow ? [20, 30, 44, 58] : [18, 24])).find(fits);
-    if (!o) bad++;
+    if (!o && ++bad > cap) throw OVER;
     chips.push({ text, fail, r: o ?? rs[0], mark });
     taken.push(o ?? rs[0]);
   };
@@ -1363,9 +1397,14 @@ export function place(sc: Scene, s: State, stage: Stage, top = stage.narrow ? 1 
     for (const { c } of cams.sort((p, q) => p.score - q.score)) {
       if (!holds(c)) continue;
       if (++tries > TRIES) return;
-      const lay = layout(sc, s, stage, c);
-      if (!lay.bad) return lay;
-      misses.push({ c, bad: lay.bad });
+      const cap = misses.length < 4 ? Infinity : misses.map((m) => m.bad).sort((p, q) => p - q)[3];
+      try {
+        const lay = layout(sc, s, stage, c, false, cap);
+        if (!lay.bad) return lay;
+        misses.push({ c, bad: lay.bad });
+      } catch (e) {
+        if (e !== OVER) throw e;
+      }
     }
   };
   const grid = (aim: { x: number; y: number }, zs: number[]) =>
@@ -1425,11 +1464,13 @@ export function storyCams(sc: Scene, story: number, stage: Stage): Placed[] {
   return out;
 }
 export function storyView(get: (form: Form) => Scene, story: number, stage: Stage): { sc: Scene; cams: Placed[] } {
-  const sc = get(stage.form),
-    cams = storyCams(sc, story, stage);
-  if (stage.form !== 'stack' || !cams.some((p) => p.faults)) return { sc, cams };
-  const narrow = get('narrow');
-  return { sc: narrow, cams: storyCams(narrow, story, stage) };
+  const forms: Form[] = stage.form === 'stack' || stage.form === 'spread' ? [stage.form, 'narrow'] : [stage.form];
+  let view = { sc: get(forms[0]), cams: [] as Placed[] };
+  for (const f of forms) {
+    view = { sc: get(f), cams: storyCams(get(f), story, stage) };
+    if (!view.cams.some((p) => p.faults)) break;
+  }
+  return view;
 }
 const SHIFT = Array.from({ length: 13 }, (_, i) => (i - 6) * 40),
   NUDGE = [-30, -20, -10, 0, 10, 20, 30],
