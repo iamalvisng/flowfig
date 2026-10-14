@@ -1191,7 +1191,7 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
     const d = draw(spec, rest);
     return { svg: page(d.fig, rest, d.W, d.H, d.css, d.holdAt, d.body), scene: d.scene };
   }
-  const plan = tourPlan(spec);
+  const plan = tourPlan(spec, opts.speed ?? spec.speed);
   const total = plan.ms / 1000,
     eps = plan.ms / 10000;
   const { fade, grow, stagger, hide, shrink } = OPEN_MS;

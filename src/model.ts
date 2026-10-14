@@ -375,10 +375,9 @@ export function flowOrder(s: FigScene): string[] {
   return [...ids.filter((id) => port.has(id)), ...ids.filter((id) => !port.has(id))];
 }
 
-export function tourPlan(fig: FlowProps): Tour {
+export function tourPlan(fig: FlowProps, speed = fig.speed ?? 900): Tour {
   const all = scenes(fig);
   const byKey = new Map(all.map((s) => [s.path.join('>'), s]));
-  const speed = fig.speed ?? 900;
   const opens: TourOpen[] = [];
   const done = new Set<string>();
   const cut = (from: number, to: number, spans: [number, number][]) => {

@@ -106,6 +106,13 @@ const summary = (ids: string[]) => `(() => {
   };
 })()`;
 
+test('the speed option sets the tour loop of a figure with parts, as the spec speed does', () => {
+  const loop = (svg: string) => /animation: \S+ ([\d.]+)s infinite linear/.exec(svg)![1];
+  const slow = loop(toSvg(shopFig, { speed: 1800 }));
+  assert.notEqual(slow, loop(toSvg(shopFig)));
+  assert.equal(slow, loop(toSvg({ ...shopFig, speed: 1800 })));
+});
+
 test(
   'a click on "Orders" shows its parts, the path line "Orders" and the in and out ports, and "Check the cart" adds to the path',
   { skip },
