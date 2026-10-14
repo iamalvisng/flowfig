@@ -14,8 +14,10 @@ export type Box = { label: string; actor: number; dead: boolean; check: string }
 export type Device = 'phone' | 'cab' | 'antenna';
 export type SceneActor = { name: string; look?: FigLook; device: Device; lot: Lot; gate: Gate; port: Pt; checks: boolean };
 export type Story = { name: string; moments: Hop[][]; acting: string[]; path: number[]; end: string };
+export type Form = 'narrow' | 'wide' | 'stack';
 export type Scene = {
   svg: string;
+  bends: Pt[];
   actors: SceneActor[];
   boxes: Record<string, Box>;
   stories: Story[];
@@ -29,7 +31,7 @@ const FORMS: readonly Carry['form'][] = ['box', 'barrel', 'notes'];
 const BED = BED_ROWS.length * 4;
 const units = (n?: number) => Math.min(4, Math.max(1, Math.round(n ?? 1)));
 
-export function scene(fig: FlowProps, wide = false): Scene {
+export function scene(fig: FlowProps, form: Form = 'narrow'): Scene {
   const cs = cast(fig);
   const all = nodes(fig.layout);
   const byId = new Map(all.map((n) => [n.id, n]));
@@ -47,11 +49,17 @@ export function scene(fig: FlowProps, wide = false): Scene {
 
   const truck = cs.findIndex((a) => a.look === 'truck');
   const devices = cs.map((a, i): Device => (i === truck ? 'cab' : a.look === 'person' || a.look === 'phone' ? 'phone' : 'antenna'));
-  const { svg: ground, lots } = street(
-    cs.map((a) => a.look),
-    devices.map((d) => d === 'antenna'),
-    wide ? 9 : 10.5,
-  );
+  const stack = form === 'stack',
+    {
+      svg: ground,
+      lots,
+      bends,
+    } = street(
+      cs.map((a) => a.look),
+      devices.map((d) => d === 'antenna'),
+      form === 'wide' ? 9 : 10.5,
+      stack,
+    );
 
   const things: Scene['things'] = new Map();
   for (const e of fig.edges) {
@@ -64,15 +72,16 @@ export function scene(fig: FlowProps, wide = false): Scene {
     const device = devices[i];
     const xs = (k: number) => lots[k].hull.map((p) => p[0]);
     const left = Math.min(...xs(i));
-    const prev = i > 0 ? Math.max(...xs(i - 1)) : left - 160;
-    const d = (left - Math.min(44, (left - prev) * 0.28)) / C + BAR_Y;
+    const prev = i > 0 && !stack ? Math.max(...xs(i - 1)) : left - 160,
+      dy = lots[i].y;
+    const d = (left - Math.min(44, (left - prev) * 0.28)) / C + BAR_Y + dy;
     return {
       name: a.name,
       look: a.look,
       device,
       lot: lots[i],
-      gate: { px: d - GL / 2, ex: d + GL / 2, y: BAR_Y, z: GZ, L: GL },
-      port: [(left - 28) / C + 4.95, 4.95],
+      gate: { px: d - GL / 2, ex: d + GL / 2, y: BAR_Y + dy, z: GZ, L: GL },
+      port: [(left - 28) / C + 4.95 + dy, 4.95 + dy],
       checks: a.boxes.some((id) => isCheck(byId.get(id))),
     };
   });
@@ -126,6 +135,7 @@ export function scene(fig: FlowProps, wide = false): Scene {
 
   const art = truck >= 0 ? truckArt(lots[truck].depot!) : null;
   return {
+    bends,
     svg:
       ground +
       actors
@@ -167,7 +177,7 @@ export type Unit = {
   fail: boolean;
   moment: number;
 };
-export type Truck = { orient: 'y' | 'L' | 'R'; ty: number; x: number; door: number; load: string[] };
+export type Truck = { orient: 'y' | 'L' | 'R' | 'D' | 'U'; x: number; y: number; lot: number; door: number; load: string[] };
 export type GateState = { rows: { box: string; q: string; a: string; fail: boolean }[]; deg: number; fail: boolean; on: number };
 export type State = {
   story: number;
@@ -237,6 +247,7 @@ const bez = (r: Route, t: number): Pt => {
     k = (i: 0 | 1) => u * u * u * r.a[i] + 3 * u * u * t * r.c1[i] + 3 * u * t * t * r.c2[i] + t * t * t * r.b[i];
   return [k(0), k(1)];
 };
+const upright = (t: Truck) => 'yDU'.includes(t.orient);
 const mean = (ps: Pt[]): Pt | undefined =>
   ps.length ? [ps.reduce((a, p) => a + p[0], 0) / ps.length, ps.reduce((a, p) => a + p[1], 0) / ps.length] : undefined;
 const segLen = (p: Pt[]) => p.slice(1).reduce((l, q, i) => l + Math.hypot(q[0] - p[i][0], q[1] - p[i][1]), 0);
@@ -248,7 +259,10 @@ const along = (p: Pt[], d: number): Pt => {
   }
   return p[p.length - 1];
 };
-const yardSpot = (sc: Scene, a: number, k: number): Pt => [sc.actors[a].lot.x + 2.2 + (k % 2) * 0.42, 4.84 + Math.floor(k / 2) * 0.38];
+const yardSpot = (sc: Scene, a: number, k: number): Pt => [
+  sc.actors[a].lot.x + 2.2 + (k % 2) * 0.42,
+  4.84 + Math.floor(k / 2) * 0.38 + sc.actors[a].lot.y,
+];
 
 function inPoly(p: Pt, poly: Pt[]) {
   let o = false;
@@ -287,6 +301,41 @@ function route(a: Pt, b: Pt, hulls: Pt[][], near: number[]): Route {
   }
 }
 
+const TALL: number[][] = [];
+for (let r1 = 80; r1 <= 480; r1 += 80)
+  for (let r2 = 80; r2 <= 480; r2 += 80)
+    for (let d1 = -240; d1 <= 240; d1 += 120) for (let d2 = -240; d2 <= 240; d2 += 120) TALL.push([r1, r2, d1, d2]);
+const edgeGap = (p: Pt, poly: Pt[]) =>
+  Math.min(
+    ...poly.map((a, i) => {
+      const b = poly[(i + 1) % poly.length],
+        dx = b[0] - a[0],
+        dy = b[1] - a[1],
+        k = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / (dx * dx + dy * dy || 1)));
+      return Math.hypot(p[0] - a[0] - k * dx, p[1] - a[1] - k * dy);
+    }),
+  );
+function tall(a: Pt, b: Pt, hulls: Pt[][], near: number[], over: number, side: number, mid: number): Route | undefined {
+  const cost = ([r1, r2, p, q]: number[]) =>
+    r1 + r2 + (Math.abs(p) + Math.abs(q)) / 4 + (p * (mid - a[0]) < 0 ? 200 : 0) + (q * (mid - b[0]) < 0 ? 200 : 0);
+  next: for (const [r1, r2, p, q] of TALL.map((c) => [...c, cost(c)]).sort((x, y) => x[4] - y[4])) {
+    const r: Route = { a, b, c1: [a[0] + p, a[1] - r1], c2: [b[0] + q, b[1] - r2] };
+    let top = Infinity;
+    for (let n = 0; n <= 40; n++) {
+      const c = bez(r, n / 40),
+        end = Math.min(Math.hypot(c[0] - a[0], c[1] - a[1]), Math.hypot(c[0] - b[0], c[1] - b[1]));
+      top = Math.min(top, c[1]);
+      if (end < 16) continue;
+      for (let i = 0; i < hulls.length; i++) {
+        const h = hulls[i];
+        const y = topAt(h, c[0]);
+        if (!near.includes(i) && (inPoly(c, h) || (c[1] < y ? y - c[1] < over : edgeGap(c, h) < side))) continue next;
+      }
+    }
+    if (Math.min(a[1], b[1]) - top >= 60) return r;
+  }
+}
+
 function fresh(sc: Scene, story: number): State {
   const s: State = {
     story,
@@ -303,7 +352,7 @@ function fresh(sc: Scene, story: number): State {
     frame: [],
   };
   const depot = sc.truck >= 0 ? sc.actors[sc.truck].lot.depot : null;
-  if (depot) s.truck = { orient: 'y', ty: depot.y - 1.62, x: 0, door: 1, load: [] };
+  if (depot) s.truck = { orient: 'y', x: depot.x + 0.66, y: depot.y - 1.62, lot: sc.truck, door: 1, load: [] };
   sc.actors.forEach((_, a) => (s.gates[a] = { rows: [], deg: 0, fail: false, on: -1 }));
   const seen = new Set<string>();
   for (const h of sc.stories[story].moments.flat()) {
@@ -334,10 +383,12 @@ function kit(sc: Scene, s: State) {
     T = sc.truck,
     depot = T >= 0 ? A[T].lot.depot! : { x: 0, y: 0 },
     YX = depot.x + 0.66;
-  const parked = () => !s.truck || (s.truck.orient === 'y' && s.truck.ty + 2.5 <= depot.y + 0.9);
+  const parked = () => !s.truck || (s.truck.orient === 'y' && s.truck.y + 2.5 <= depot.y + 0.9);
   const inCab = (a: number) => a === T && !parked();
   const cabBase = (t: Truck) =>
-    t.orient === 'y' ? P(YX + TD + 0.03, t.ty + 2.17, 0.58) : P(t.orient === 'R' ? t.x + 2.18 : t.x + 0.31, LANE + 0.41, 0.58);
+    upright(t)
+      ? P(t.x + TD + 0.03, t.y + (t.orient === 'U' ? 0.33 : 2.17), 0.58)
+      : P(t.orient === 'R' ? t.x + 2.18 : t.x + 0.31, t.y + TD / 2 + 0.41, 0.58);
   const devBase = (a: number) => (inCab(a) ? cabBase(s.truck!) : P(...A[a].port));
   return {
     YX,
@@ -357,10 +408,10 @@ function kit(sc: Scene, s: State) {
       return [P(g.ex, g.y, g.z - 0.05), P(g.ex, g.y)];
     },
     truckPts: (t: Truck, g = 1): Pt[] => {
-      const w =
-        t.orient === 'y'
-          ? [YX, YX + TD].flatMap((x) => [P(x, t.ty), P(x, t.ty + 2.5), P(x, t.ty, 0.9), P(x, t.ty + 2.5, 1.13)])
-          : [t.x, t.x + 2.5].flatMap((x) => [LANE - 0.4, LANE + 0.4].flatMap((y) => [P(x, y), P(x, y, 1.13)]));
+      const c = t.y + TD / 2,
+        w = upright(t)
+          ? [t.x, t.x + TD].flatMap((x) => [P(x, t.y), P(x, t.y + 2.5), P(x, t.y, t.orient === 'y' ? 0.9 : 1.13), P(x, t.y + 2.5, 1.13)])
+          : [t.x, t.x + 2.5].flatMap((x) => [c - 0.4, c + 0.4].flatMap((y) => [P(x, y), P(x, y, 1.13)]));
       if (s.dev.includes(T)) {
         const b = cabBase(t);
         w.push([b[0] - 11 * g, b[1] - 40 * g], [b[0] + 11 * g, b[1] - 40 * g]);
@@ -403,11 +454,22 @@ function planOf(sc: Scene, story: number, m: number) {
   const set = (hop: number, at: number, apply: (s: State) => void) => add(null, hop, at, 0, apply);
 
   const { YX, gateMid, gateEnds, devBase, devTop, truckPts } = kit(sc, s),
-    hulls = A.map((a) => a.lot.hull);
+    hulls = A.map((a) => a.lot.hull),
+    mid = mean(hulls.flat())![0];
   const bedAt = (t: Truck, i: number) =>
-    P(t.x + sc.truckArt!.slots[t.orient === 'R' ? 'R' : 'L'][i % 4], BED_ROWS[Math.floor(i / 4)], 0.43);
-  const truckRef = (t: Truck) => (t.orient === 'y' ? YX : t.orient === 'R' ? t.x + 2.18 : t.x + 0.31);
-  const front = (t: Truck) => (t.orient === 'y' ? P(YX + TD / 2, t.ty + 2.5, 0.6) : P(t.orient === 'R' ? t.x + 2.5 : t.x, LANE, 0.6));
+    P(t.x + sc.truckArt!.slots[t.orient === 'R' ? 'R' : 'L'][i % 4], BED_ROWS[Math.floor(i / 4)] + t.y + TD / 2 - LANE, 0.43);
+  const truckRef = (t: Truck) => (t.orient === 'y' ? t.x : t.orient === 'R' ? t.x + 2.18 : t.x + 0.31);
+  const front = (t: Truck) =>
+    upright(t) ? P(t.x + TD / 2, t.y + (t.orient === 'U' ? 0 : 2.5), 0.6) : P(t.orient === 'R' ? t.x + 2.5 : t.x, t.y + TD / 2, 0.6);
+  const road = (a: number, b: number, o: number): Pt[] => {
+    const B = sc.bends,
+      out: Pt[] = [];
+    for (let k = a; B.length && a !== b; k += b > a ? 1 : -1) {
+      out.push([B[k][0] - o, B[k][1] - o]);
+      if (k === b) break;
+    }
+    return out;
+  };
   const hl = (...as: number[]) =>
     as.forEach((a) => {
       if (!s.hi.includes(a)) s.hi.push(a);
@@ -461,7 +523,9 @@ function planOf(sc: Scene, story: number, m: number) {
     extra: Pick<Arc, 'gate' | 'hold' | 'fail' | 'text' | 'dashed'>,
     near: number[],
   ) => {
-    const r = route(a, b, hulls, near),
+    const r = sc.bends.length
+        ? (tall(a, b, hulls, near, CLEAR, 14, mid) ?? tall(a, b, hulls, near, 0, 0, mid) ?? route(a, b, hulls, near))
+        : route(a, b, hulls, near),
       ps = Array.from({ length: 9 }, (_, k) => bez(r, k / 8));
     s.frame.push(...ps);
     return add(
@@ -475,12 +539,20 @@ function planOf(sc: Scene, story: number, m: number) {
     );
   };
 
-  const drive = (i: number, at: number, x1: number, orient: 'L' | 'R') => {
+  const drive = (i: number, at: number, a: number) => {
     const t = s.truck!,
-      head = (st: State) => front(st.truck!);
+      head = (st: State) => front(st.truck!),
+      lot = A[a].lot,
+      plan: Pt[] = [[truckRef(t), LANE + A[t.lot].lot.y], ...road(t.lot, a, 0.4), [lot.door, LANE + lot.y]];
+    for (let k = plan.length - 2; k > 0; k--) {
+      const [p, q, r] = plan.slice(k - 1, k + 2);
+      if (Math.abs((q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])) < 1e-6) plan.splice(k, 1);
+    }
+    const orient = plan[1][0] < plan[0][0] ? 'L' : 'R',
+      goL = plan.at(-1)![0] < plan.at(-2)![0];
     s.frame.push(...truckPts(t));
     if (t.orient === 'y') {
-      const y0 = t.ty,
+      const y0 = t.y,
         y1 = A[T].lot.depot!.y + 0.53;
       if (t.door < 1) at = add('door', i, at, 500, (st, p) => void (st.truck!.door = p), ease.inOut, head);
       at = add(
@@ -490,8 +562,8 @@ function planOf(sc: Scene, story: number, m: number) {
         1000,
         (st, p) => {
           const tr = st.truck!;
-          tr.ty = y0 + (y1 - y0) * p;
-          if (p === 1) Object.assign(tr, { orient, x: orient === 'R' ? YX - 1.78 : YX });
+          tr.y = y0 + (y1 - y0) * p;
+          if (p === 1) Object.assign(tr, { orient, x: orient === 'R' ? YX - 1.78 : YX, y: LANE - TD / 2 + A[T].lot.y });
         },
         ease.inOut,
         head,
@@ -500,27 +572,39 @@ function planOf(sc: Scene, story: number, m: number) {
       const x = t.x + (orient === 'R' ? -1.78 : 1.78);
       set(i, at, (st) => Object.assign(st.truck!, { orient, x }));
     }
-    const x0 = t.x;
-    s.frame.push(...truckPts({ ...t, x: x1 }));
+    const x1 = goL ? lot.x + 0.95 : lot.x + 0.2,
+      bends = plan.slice(1, -1),
+      way: Pt[] = [[t.x + 1.25, t.y + TD / 2], ...bends, [x1 + 1.25, LANE + lot.y]];
+    for (const [x, y] of bends) s.frame.push(...truckPts({ ...t, orient: 'D', x: x - TD / 2, y: y - 1.25 }));
+    s.frame.push(...truckPts({ ...t, orient: goL ? 'L' : 'R', x: x1, y: LANE - TD / 2 + lot.y }));
     return add(
       'drive',
       i,
       at,
-      Math.min(2200, 900 + Math.abs(x1 - x0) * 60),
-      (st, p) => void (st.truck!.x = x0 + (x1 - x0) * p),
+      Math.min(2200, 900 + segLen(way) * 60),
+      (st, p) => {
+        const tr = st.truck!,
+          d = segLen(way) * p,
+          [x, y] = along(way, d);
+        let k = 1;
+        while (k < way.length - 1 && segLen(way.slice(0, k + 1)) < d) k++;
+        const dx = way[k][0] - way[k - 1][0],
+          dy = way[k][1] - way[k - 1][1],
+          o = Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? 'R' : 'L') : dy > 0 ? 'D' : 'U';
+        Object.assign(tr, o === 'D' || o === 'U' ? { orient: o, x: x - TD / 2, y: y - 1.25 } : { orient: o, x: x - 1.25, y: y - TD / 2 });
+        if (p === 1) tr.lot = a;
+      },
       ease.inOut,
       head,
     );
   };
   const driveTo = (i: number, at: number, a: number) => {
-    const t = s.truck!,
-      { x, door } = A[a].lot,
-      goL = door < truckRef(t);
-    if (t.orient !== 'y' && Math.abs(truckRef(t) - door) < 1.7) {
+    const t = s.truck!;
+    if (t.orient !== 'y' && t.lot === a) {
       s.frame.push(...truckPts(t));
       return at;
     }
-    return drive(i, at, goL ? x + 0.95 : x + 0.2, goL ? 'L' : 'R');
+    return drive(i, at, a);
   };
 
   const carry = (i: number, at: number, h: Hop, sa: number, ta: number) => {
@@ -528,7 +612,8 @@ function planOf(sc: Scene, story: number, m: number) {
       toGate = !!sc.boxes[h.to].check,
       where = toGate ? 'gate' : 'yard';
     if (!ids.length) return at;
-    const dest = (k: number): Pt => (toGate ? [(A[ta].gate.px + A[ta].gate.ex) / 2 + 0.1 - k * 0.42, 6.45] : yardSpot(sc, ta, k));
+    const dest = (k: number): Pt =>
+      toGate ? [(A[ta].gate.px + A[ta].gate.ex) / 2 + 0.1 - k * 0.42, 6.45 + A[ta].lot.y] : yardSpot(sc, ta, k);
     set(i, at, (st) => ids.forEach((id) => (st.units[id].moment = m)));
     if (toGate) set(i, at, (st) => void (st.gates[ta].on = m));
     const truck = h.carry!.form !== 'notes' && s.truck;
@@ -553,12 +638,7 @@ function planOf(sc: Scene, story: number, m: number) {
         ux = (x / C + y / S) / 2,
         uy = (y / S - x / C) / 2,
         [tx, ty] = dest(k);
-      return [
-        [ux, uy],
-        [ux, 6.75],
-        [tx, 6.75],
-        [tx, ty],
-      ];
+      return [[ux, uy], [ux, 6.75 + A[s.units[id].at].lot.y], ...road(s.units[id].at, ta, 0.25), [tx, 6.75 + A[ta].lot.y], [tx, ty]];
     });
     paths.forEach((p) => s.frame.push(...p.map((q) => P(...q)), P(...p[3], 1.2)));
     return add(
@@ -671,7 +751,7 @@ function planOf(sc: Scene, story: number, m: number) {
       const us = Object.keys(s.units).filter((id) => s.units[id].where === 'gate' && s.units[id].at === fa);
       if (us.length) {
         const from = us.map((id) => s.units[id].p),
-          to = P(A[fa].lot.door, 4.75);
+          to = P(A[fa].lot.door, 4.75 + A[fa].lot.y);
         at = add(
           'release',
           i,
@@ -792,7 +872,7 @@ export function stateAt(sc: Scene, story: number, moment: number, t: number): St
 
 export type Rect = { x: number; y: number; w: number; h: number };
 export type Cam = { x: number; y: number; z: number };
-export type Stage = { w: number; h: number; narrow: boolean; region: { l: number; t: number; r: number; b: number } };
+export type Stage = { w: number; h: number; narrow: boolean; form: Form; region: { l: number; t: number; r: number; b: number } };
 type Mark = '✓' | '✗' | '';
 export type Tag = {
   actor: number;
@@ -906,6 +986,7 @@ export function stageFor(w: number, h: number): Stage {
     w,
     h,
     narrow: w < HUD.roomy,
+    form: w < HUD.slim * 2 ? 'stack' : w < HUD.roomy ? 'narrow' : 'wide',
     region: side
       ? { l: HUD.pad * 2 + (w >= HUD.wide ? HUD.panel : HUD.slim), t: HUD.chips + HUD.pad, r: w - HUD.pad, b: h - HUD.pad }
       : { l: 8, t: HUD.chips + 8, r: w - 8, b: h - HUD.sheet - 8 },
@@ -1343,6 +1424,13 @@ export function storyCams(sc: Scene, story: number, stage: Stage): Placed[] {
   }
   return out;
 }
+export function storyView(get: (form: Form) => Scene, story: number, stage: Stage): { sc: Scene; cams: Placed[] } {
+  const sc = get(stage.form),
+    cams = storyCams(sc, story, stage);
+  if (stage.form !== 'stack' || !cams.some((p) => p.faults)) return { sc, cams };
+  const narrow = get('narrow');
+  return { sc: narrow, cams: storyCams(narrow, story, stage) };
+}
 const SHIFT = Array.from({ length: 13 }, (_, i) => (i - 6) * 40),
   NUDGE = [-30, -20, -10, 0, 10, 20, 30],
   TRIES = 400;
@@ -1438,14 +1526,15 @@ export function mountWorld(stage: HTMLElement, fig: FlowProps, resized: () => vo
   }
   if (!root.adoptedStyleSheets.includes(sheet)) root.adoptedStyleSheets = [...root.adoptedStyleSheets, sheet];
   stage.dataset.stage = 'world';
-  const scenes = [scene(fig), scene(fig, true)];
+  const scenes: Partial<Record<Form, Scene>> = {},
+    get = (form: Form) => (scenes[form] ??= scene(fig, form));
   const svg = document.createElementNS(NS, 'svg');
   svg.setAttribute('role', 'img');
   const ov = el('div', 'fw-ov');
   stage.append(svg, ov);
   const q = (sel: string) => svg.querySelector<SVGGraphicsElement>(sel);
   const unitEls = new Map<string, SVGGElement>();
-  let sc = scenes[0];
+  let sc = get('narrow');
   const mount = () => {
     const art = sc.truckArt;
     svg.innerHTML =
@@ -1480,15 +1569,23 @@ export function mountWorld(stage: HTMLElement, fig: FlowProps, resized: () => vo
     raf = 0,
     built = '',
     said = '';
-  const lays = new Map<number, Placed[]>();
+  const lays = new Map<number, ReturnType<typeof storyView>>();
   let tags: { el: HTMLElement; actor: number; name: string; mk: HTMLElement; st: HTMLElement; end: boolean; w: string }[] = [],
     signs: { el: HTMLElement; actor: number; rows: { q: HTMLElement; a: HTMLElement }[] }[] = [],
     chips: { el: HTMLElement; text: string }[] = [];
 
+  const viewFor = (story: number) => lays.get(story) ?? lays.set(story, storyView(get, story, stg)).get(story)!;
+  const use = (s: Scene) => {
+    if (s === sc) return;
+    sc = s;
+    d = mount();
+    built = '';
+    cam = undefined;
+  };
   const layoutFor = (story: number, moment: number) => {
-    let cams = lays.get(story);
-    if (!cams) lays.set(story, (cams = storyCams(sc, story, stg)));
-    return cams[moment];
+    const v = viewFor(story);
+    use(v.sc);
+    return v.cams[moment];
   };
 
   function draw(s: State, c: Cam) {
@@ -1501,11 +1598,16 @@ export function mountWorld(stage: HTMLElement, fig: FlowProps, resized: () => vo
     const out = !!s.truck && !k.parked();
     if (s.truck && d.depot) {
       const tk = s.truck;
-      show(q('#truck'), tk.orient === 'L');
-      show(q('#truckR'), tk.orient === 'R');
-      show(q('#truckY'), tk.orient === 'y');
-      for (const id of ['#truck', '#truckR']) q(id)?.setAttribute('transform', `translate(${f1(tk.x * C)} ${f1(tk.x * S)})`);
-      move(q('#truckY'), P(k.YX, tk.ty));
+      for (const [id, o] of [
+        ['#truck', 'L'],
+        ['#truckR', 'R'],
+        ['#truckY', 'y'],
+        ['#truckD', 'D'],
+        ['#truckU', 'U'],
+      ]) {
+        show(q(id), tk.orient === o);
+        move(q(id), P(tk.x, tk.y - ('LR'.includes(o) ? LANE - TD / 2 : 0)));
+      }
       const dy = d.depot.y + 0.004,
         x0 = d.depot.x + 0.3,
         x1 = d.depot.x + 1.8,
@@ -1521,7 +1623,7 @@ export function mountWorld(stage: HTMLElement, fig: FlowProps, resized: () => vo
         d.doorPanel.innerHTML = o;
         d.doorPanel.dataset.k = o;
       }
-      for (const side of ['l', 'r'])
+      for (const side of 'lrdu')
         for (let i = 0; i < 8; i++) {
           const e = q(`#t${side}${i}`),
             u = tk.load[i] ? sc.things.get(s.units[tk.load[i]].thing)?.form : undefined;
@@ -1703,11 +1805,7 @@ export function mountWorld(stage: HTMLElement, fig: FlowProps, resized: () => vo
     if (w === stg.w && h === stg.h) return false;
     stg = stageFor(w, h);
     lays.clear();
-    if (sc !== scenes[+!stg.narrow]) {
-      sc = scenes[+!stg.narrow];
-      d = mount();
-      built = '';
-    }
+    use(get(stg.form));
     svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
     return true;
   };
@@ -1751,7 +1849,7 @@ export function mountWorld(stage: HTMLElement, fig: FlowProps, resized: () => vo
     },
     fits(story) {
       try {
-        return !stg.w || sc.stories[story].moments.every((_, m) => !layoutFor(story, m).faults);
+        return !stg.w || viewFor(story).cams.every((p) => !p.faults);
       } catch {
         return false;
       }

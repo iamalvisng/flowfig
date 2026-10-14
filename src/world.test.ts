@@ -5,8 +5,8 @@ import { LOOKS, edgeId, nodes, str } from './model.ts';
 import type { FlowProps } from './model.ts';
 import { cast, worldReady } from './explain.ts';
 import { HUD } from './looks.ts';
-import { CAM, hit, place, polyHit, scene, stageFor, stateAt, storyCams, timeline } from './world.ts';
-import type { Ev, Placed, Pt, Rect, Scene, Stage, State } from './world.ts';
+import { CAM, hit, place, polyHit, scene, stageFor, stateAt, storyCams, storyView, timeline } from './world.ts';
+import type { Ev, Form, Placed, Pt, Rect, Scene, Stage, State } from './world.ts';
 import oil from '../figures/explain-oil.ts';
 import returns from '../figures/returns-process.ts';
 import checkout from '../figures/checkout.ts';
@@ -191,6 +191,21 @@ function audit(sc: Scene, s: State, p: Placed, st: Stage): string[] {
   p.arcs.forEach((arc, k) =>
     p.hulls.forEach((h, a) => !ends[k].includes(a) && arc.some((q) => inside(q, h)) && out.push(`arc x building ${a}`)),
   );
+  if (sc.bends.length) {
+    const cx = (l + r) / 2,
+      cy = (t + b) / 2,
+      { x: X, y: Y, z } = p.cam;
+    for (const a of s.arcs.filter((a) => a.t > 0)) {
+      const pts = Array.from({ length: 241 }, (_, i): Pt => {
+        const u = (a.t * i) / 240,
+          v = 1 - u,
+          k = (j: 0 | 1) => v * v * v * a.a[j] + 3 * v * v * u * a.c1[j] + 3 * v * u * u * a.c2[j] + u * u * u * a.b[j];
+        return [(k(0) - X) * z + cx, (k(1) - Y) * z + cy];
+      });
+      for (const o of p.tags)
+        if (pts.some(([x, y]) => x > o.r.x && x < o.r.x + o.r.w && y > o.r.y && y < o.r.y + o.r.h)) out.push(`tag ${o.name} covers an arc`);
+    }
+  }
   const reach = st.w < HUD.wide && s.summary ? 40.5 : st.narrow ? 64.5 : 24.5;
   for (const o of p.tags) {
     const [x, y] = o.anchor;
@@ -244,12 +259,12 @@ const SIZES = [
 test('every needed tag, sign, chip and device is on stage, none overlaps, and the camera never jumps and pulls back at the outcome', () => {
   const hits: string[] = [];
   for (const fig of FIXTURES) {
-    const scenes = [scene(fig.props), scene(fig.props, true)];
+    const scenes = new Map<Form, Scene>(),
+      get = (f: Form) => scenes.get(f) ?? scenes.set(f, scene(fig.props, f)).get(f)!;
     for (const [w, h] of worldReady(fig.props) ? SIZES : SIZES.slice(0, 3)) {
       const st = stageFor(w, w >= HUD.wide ? Math.min(h, (w * 10) / 16) : Math.min(h, HUD.tall));
-      const sc = scenes[+!st.narrow];
-      sc.stories.forEach((story, s) => {
-        const cams = storyCams(sc, s, st),
+      get(st.form).stories.forEach((story, s) => {
+        const { sc, cams } = storyView(get, s, st),
           z = cams.map((p) => p.cam.z),
           n = z.length;
         const fit = place(sc, stateAt(sc, s, n - 1, Infinity), st).cam.z,
@@ -274,6 +289,20 @@ test('every needed tag, sign, chip and device is on stage, none overlaps, and th
     }
   }
   assert.deepEqual(hits, []);
+});
+
+test('on a phone, the stacked street shows every building of the "Expired certification" outcome at least 90 px wide', () => {
+  const st = stageFor(390, Math.min(844, HUD.tall)),
+    s = scene(oil.props).stories.findIndex((x) => x.name === 'Expired certification'),
+    { sc, cams } = storyView((f) => scene(oil.props, f), s, st),
+    p = cams.at(-1)!,
+    { l, t, r, b } = st.region;
+  const shown = p.hulls.filter((h) => h.some(([x, y]) => x >= l && x <= r && y >= t && y <= b));
+  assert.ok(sc.bends.length > 0 && shown.length >= 2);
+  for (const h of shown) {
+    const w = Math.max(...h.map((q) => q[0])) - Math.min(...h.map((q) => q[0]));
+    assert.ok(w >= 90, `${Math.round(w)} px`);
+  }
 });
 
 test('a stage too small for the overlays gives a frame with faults, not an error', () => {

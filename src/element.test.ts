@@ -15,7 +15,7 @@ import deliveryBefore from '../figures/explain-delivery-before.ts';
 import deliveryAfter from '../figures/explain-delivery-after.ts';
 import returns from '../figures/returns-process.ts';
 import checkout from '../figures/checkout.ts';
-import { scene, stageFor, storyCams } from './world.ts';
+import { scene, stageFor, storyView } from './world.ts';
 
 const dist = fileURLToPath(new URL('../dist/', import.meta.url));
 const specs: Record<string, object> = {
@@ -236,7 +236,7 @@ test('the element core and the world chunk stay in budget', () => {
   const core = reach(entry, false);
   const world = [...reach(join(dist, 'element-world.js'), true)].filter((f) => !core.has(f));
   assert.ok(gz(core) <= 45_000, `core: ${gz(core)} B gzip in ${core.size} files`);
-  assert.ok(gz(world) <= 24_000, `world chunk: ${gz(world)} B gzip in ${world.length} files`);
+  assert.ok(gz(world) <= 28_000, `world chunk: ${gz(world)} B gzip in ${world.length} files`);
 });
 
 test('a qualifying figure loads the world, and other figures do not', { skip: !browser.path }, async () => {
@@ -275,9 +275,8 @@ test('the drawn overlays sit where the layout put them', { skip: !browser.path }
         return { actor: t.dataset.actor, x: r.x - g.x, y: r.y - g.y, w: r.width, h: r.height, fits: t.scrollWidth <= t.clientWidth && t.scrollHeight <= t.clientHeight };
       }) };
     })()`);
-    const sc = scene(oil.props);
-    const s = sc.stories.findIndex((x) => x.name === 'Expired certification');
-    const want = storyCams(sc, s, stageFor(got.w, got.h))[2];
+    const s = scene(oil.props).stories.findIndex((x) => x.name === 'Expired certification');
+    const want = storyView((f) => scene(oil.props, f), s, stageFor(got.w, got.h)).cams[2];
     assert.equal(got.tags.length, want.tags.length);
     for (const t of want.tags) {
       const drawn = got.tags.find((x) => x.actor === t.name);
@@ -331,7 +330,7 @@ test('a story with a faulty frame shows the diagram, and a clean story shows the
           `(() => { const g = ${sr}.querySelector('.ff-stage').getBoundingClientRect(); return { w: g.width, h: g.height }; })()`,
         );
         const st = stageFor(box.w, box.h);
-        const bad = storyCams(sc, s, st).some((p) => p.faults > 0);
+        const bad = storyView((f) => scene(oil.props, f), s, st).cams.some((p) => p.faults > 0);
         faulty += bad ? 1 : 0;
         assert.equal(await page.ev(shown), bad, `${story.name} at ${w}x${h}`);
       }

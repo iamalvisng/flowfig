@@ -675,56 +675,112 @@ export function hull(points: Pt[]): Pt[] {
   }
   return lo.slice(0, -1).concat(up.slice(0, -1));
 }
-export type Lot = { x: number; hull: Pt[]; tag: Pt; door: number; depot: { x: number; y: number } | null; roof: Pt | null };
+export type Lot = { x: number; y: number; hull: Pt[]; tag: Pt; door: number; depot: { x: number; y: number } | null; roof: Pt | null };
 
-export function street(looks: (FigLook | undefined)[], withAntenna: boolean[], pitch: number): { svg: string; lots: Lot[] } {
+export function street(
+  looks: (FigLook | undefined)[],
+  withAntenna: boolean[],
+  pitch: number,
+  stack = false,
+): { svg: string; lots: Lot[]; bends: Pt[] } {
   const n = looks.length,
     X0 = -40,
     X1 = (n - 1) * pitch + 44;
-  const xs = looks.map((_, i) => i * pitch);
-  let g = quadT(X0, X1, -40, FRONT - 0.15, 0, K.lawn) + quadT(X0, X1, WALK1, 60, 0, K.lawn);
-  for (const x of xs)
-    for (const [a, b, c, d] of [
-      [-7.5, -2.5, 10.5, 15],
-      [3, 8, 10.8, 14.6],
-      [-6, -1.5, -6, 0.6],
-    ])
-      g += quadT(x + a, x + b, c, d, 0, K.yard);
-  for (const x of xs) g += quadT(x - 0.3, x + 3.3, FRONT - 0.15, WALK0, 0, K.yard);
+  const bends: Pt[] = [];
+  for (let i = 0, x = 0, y = 0; stack && i < n; i++) {
+    bends.push([x, y + 7]);
+    if (i % 2) x += 12;
+    else y += 12;
+  }
+  const xs = looks.map((_, i) => (stack ? bends[i][0] - 5.4 : i * pitch)),
+    ys = looks.map((_, i) => (stack ? bends[i][1] - 7 : 0));
+  let g = '';
+  const objs: [number, string][] = [],
+    lots: Lot[] = [];
+  if (stack) {
+    const e = bends[n - 1],
+      roads: [number, number, number, number][] = [[e[0], e[0] + (n % 2 ? 0 : 40), e[1], e[1] + (n % 2 ? 40 : 0)]];
+    bends.forEach(([x, y], i) => {
+      const [u, v] = bends[i + 1] ?? [x, y];
+      if (i < n - 1) roads.push([x, u, y, v]);
+      if (!i || i % 2) roads.push([xs[i] - 2, x, y, y]);
+    });
+    const lo = Math.min(...xs) - 40,
+      hi = Math.max(...xs) + 44;
+    g = quadT(lo, hi, -40, Math.max(...ys) + 60, 0, K.lawn);
+    for (const [h, fill] of [
+      [1.6, K.walk],
+      [1.05, K.curb],
+      [1, K.road],
+    ] as const)
+      for (const [x0, x1, y0, y1] of roads) g += quadT(x0 - h, x1 + h, y0 - h, y1 + h, 0, fill);
+    for (const [x0, x1, y0, y1] of roads)
+      for (let u = 1.6; u < Math.max(x1 - x0, y1 - y0) - 1.6; u += 1.2) {
+        const v = Math.min(u + 0.6, Math.max(x1 - x0, y1 - y0) - 1.6);
+        g += y0 === y1 ? quadT(x0 + u, x0 + v, y0 - 0.03, y0 + 0.03, 0, K.dash) : quadT(x0 - 0.03, x0 + 0.03, y0 + u, y0 + v, 0, K.dash);
+      }
+    const clear = (x: number, y: number) =>
+      roads.every(([x0, x1, y0, y1]) => x < x0 - 2.5 || x > x1 + 2.5 || y < y0 - 2.5 || y > y1 + 2.5) &&
+      xs.every((lx, i) => x < lx - 1.4 || x > lx + 4.4 || y < ys[i] + BY - 1.4 || y > ys[i] + FRONT + 1.4);
+    xs.forEach((x, i) => {
+      for (const [dx, dy] of [
+        [-4.6, -1.6],
+        [7.4, -1.6],
+        [4.6, 4],
+        [-3, 9],
+      ])
+        if (clear(x + dx, ys[i] + dy)) objs.push([x + dx + ys[i] + dy, tree(x + dx, ys[i] + dy)]);
+    });
+  } else {
+    g = quadT(X0, X1, -40, FRONT - 0.15, 0, K.lawn) + quadT(X0, X1, WALK1, 60, 0, K.lawn);
+    for (const x of xs)
+      for (const [a, b, c, d] of [
+        [-7.5, -2.5, 10.5, 15],
+        [3, 8, 10.8, 14.6],
+        [-6, -1.5, -6, 0.6],
+      ])
+        g += quadT(x + a, x + b, c, d, 0, K.yard);
+  }
+  xs.forEach((x, i) => (g += quadT(x - 0.3, x + 3.3, FRONT - 0.15 + ys[i], WALK0 + ys[i], 0, K.yard)));
   const seamX = (x0: number, x1: number, y0: number, y1: number) => {
     let o = '';
     for (let x = Math.ceil(x0 * 2) / 2; x < x1; x += 0.5) o += line(P(x, y0), P(x, y1), K.seam, 1);
     return o;
   };
-  g += quadT(X0, X1, WALK0, ROAD0, 0, K.walk) + seamX(X0, X1, WALK0, ROAD0);
-  g += quadT(X0, X1, ROAD1, WALK1, 0, K.walk) + seamX(X0, X1, ROAD1, WALK1);
-  g += quadT(X0, X1, ROAD0, ROAD1, 0, K.road);
-  g += quadT(X0, X1, ROAD0, ROAD0 + 0.05, 0, K.curb) + quadT(X0, X1, ROAD1 - 0.05, ROAD1, 0, K.curb);
-  for (let x = X0; x < X1; x += 1.2) g += quadT(x, x + 0.6, 7.18, 7.24, 0, K.dash);
-  for (const x of xs) g += quadT(x + 1.05, x + 1.95, FRONT, WALK0, 0, K.walk) + seamX(x + 1.05, x + 1.95, FRONT, WALK0);
+  if (!stack) {
+    g += quadT(X0, X1, WALK0, ROAD0, 0, K.walk) + seamX(X0, X1, WALK0, ROAD0);
+    g += quadT(X0, X1, ROAD1, WALK1, 0, K.walk) + seamX(X0, X1, ROAD1, WALK1);
+    g += quadT(X0, X1, ROAD0, ROAD1, 0, K.road);
+    g += quadT(X0, X1, ROAD0, ROAD0 + 0.05, 0, K.curb) + quadT(X0, X1, ROAD1 - 0.05, ROAD1, 0, K.curb);
+    for (let x = X0; x < X1; x += 1.2) g += quadT(x, x + 0.6, 7.18, 7.24, 0, K.dash);
+  }
+  xs.forEach(
+    (x, i) =>
+      (g += quadT(x + 1.05, x + 1.95, FRONT + ys[i], WALK0 + ys[i], 0, K.walk) + seamX(x + 1.05, x + 1.95, FRONT + ys[i], WALK0 + ys[i])),
+  );
 
-  const objs: [number, string][] = [],
-    lots: Lot[] = [];
   looks.forEach((look, i) => {
     const x = xs[i],
-      b = ((look && BUILD[look]) || plain)(x, BY),
+      y = ys[i] + BY,
+      b = ((look && BUILD[look]) || plain)(x, y),
       tip: P3 = [b.ant[0], b.ant[1], b.ant[2] + (b.own ? 0 : 0.8)];
     if (withAntenna[i] && !b.own) b.svg += antenna(b.ant);
     const hl = hull((withAntenna[i] ? [...b.pts, tip] : b.pts).map((p) => P(...p))).map(([u, v]): Pt => [f(u), f(v)]);
     const top = hl.reduce((q, p) => (p[1] < q[1] ? p : q));
-    const v = P(x, BY, 1.5);
+    const v = P(x, y, 1.5);
     const [rx, ry] = P(...tip);
     lots.push({
       x,
+      y: ys[i],
       hull: hl,
       tag: [f(v[0]), f(top[1])],
       door: x + 1.5,
       depot: b.depot ?? null,
       roof: withAntenna[i] ? [f(rx), f(ry)] : null,
     });
-    objs.push([x + 1.5 + BY + 1.5, `<g class="bld" id="b-${i}">${b.svg}</g>`]);
+    objs.push([x + 1.5 + y + 1.5, `<g class="bld" id="b-${i}">${b.svg}</g>`]);
   });
-  for (const x of xs) {
+  for (const x of stack ? [] : xs) {
     for (const [dx, y, s, k] of [
       [-4.6, -1.6, 1, 0],
       [7.4, -1.6, 1, 0],
@@ -738,7 +794,7 @@ export function street(looks: (FigLook | undefined)[], withAntenna: boolean[], p
       objs.push([x + dx + 9.2, shrub(x + dx, 9.15, r)]);
   }
   const pads = xs
-    .map((x, i) => `<g class="pad" id="pad-${i}">${quadT(x - 0.55, x + 3.55, BY - 0.55, BY + 3.5, 0, '#FBFAF3')}</g>`)
+    .map((x, i) => `<g class="pad" id="pad-${i}">${quadT(x - 0.55, x + 3.55, BY - 0.55 + ys[i], BY + 3.5 + ys[i], 0, '#FBFAF3')}</g>`)
     .join('');
   return {
     svg:
@@ -749,6 +805,7 @@ export function street(looks: (FigLook | undefined)[], withAntenna: boolean[], p
         .map((o) => o[1])
         .join(''),
     lots,
+    bends,
   };
 }
 
@@ -877,40 +934,53 @@ export function truckArt(depot: { x: number; y: number }) {
   )
     .map((p) => p.map((v) => f(v)).join(','))
     .join(' ');
-  let yTruck = quadT(-0.05, TD + 0.25, -0.05, 2.6, 0, K.ao) + box(0, 0, 0.2, TD, 2.5, 0.16, '#3a4458', '#2a3142', '#222838', '#11151c');
-  yTruck += rail(0, 0.04, 0.05, 1.78, 0.43, 0.36) + box(0, 0.04, 0.36, TD, 1.78, 0.07, '#8b929d', '#6b7280', '#5a6170', '#2a3142');
-  yTruck += rail(0, 0.04, TD, 0.05, 0.43, 0.2) + rail(TD - 0.05, 0.04, 0.05, 1.78, 0.43, 0.13) + rail(0, 1.75, TD, 0.07, 0.43, 0.5);
-  yTruck +=
+  const wheelY = (wy: number) =>
+    poly(
+      Array.from({ length: 20 }, (_, i): Pt => {
+        const a = (i / 20) * Math.PI * 2;
+        return P(TD + 0.01, wy + 0.17 * Math.cos(a), 0.2 + 0.17 * Math.sin(a));
+      }),
+      '#1b2130',
+    ) +
+    poly(
+      Array.from({ length: 14 }, (_, i): Pt => {
+        const a = (i / 14) * Math.PI * 2;
+        return P(TD + 0.02, wy + 0.07 * Math.cos(a), 0.2 + 0.07 * Math.sin(a));
+      }),
+      '#8b9099',
+    );
+  const chassis = quadT(-0.05, TD + 0.25, -0.05, 2.6, 0, K.ao) + box(0, 0, 0.2, TD, 2.5, 0.16, '#3a4458', '#2a3142', '#222838', '#11151c');
+  const yBack =
+    chassis +
+    rail(0, 0.04, 0.05, 1.78, 0.43, 0.36) +
+    box(0, 0.04, 0.36, TD, 1.78, 0.07, '#8b929d', '#6b7280', '#5a6170', '#2a3142') +
+    rail(0, 0.04, TD, 0.05, 0.43, 0.2);
+  let yFront = rail(TD - 0.05, 0.04, 0.05, 1.78, 0.43, 0.13) + rail(0, 1.75, TD, 0.07, 0.43, 0.5);
+  yFront +=
     box(0, 1.86, 0.36, TD, 0.64, 0.72, '#a9c2a4', m.l, m.r, m.e) +
     box(0.06, 1.92, 1.08, TD - 0.12, 0.52, 0.05, '#c3d2bf', '#8fac8a', '#6f8c6b');
-  yTruck +=
+  yFront +=
     quadL(2.5, 0.1, TD - 0.1, 0.72, 1.0, K.glass) +
     quadR(TD, 1.95, 2.4, 0.72, 0.98, K.glassR) +
     quadL(2.5, 0.08, TD - 0.08, 0.42, 0.48, m.cap);
-  yTruck += quadL(2.5, 0.05, 0.16, 0.52, 0.6, K.light) + quadL(2.5, TD - 0.16, TD - 0.05, 0.52, 0.6, K.light);
-  yTruck += [0.36, 0.86, 2.14]
-    .map(
-      (wy) =>
-        poly(
-          Array.from({ length: 20 }, (_, i): Pt => {
-            const a = (i / 20) * Math.PI * 2;
-            return P(TD + 0.01, wy + 0.17 * Math.cos(a), 0.2 + 0.17 * Math.sin(a));
-          }),
-          '#1b2130',
-        ) +
-        poly(
-          Array.from({ length: 14 }, (_, i): Pt => {
-            const a = (i / 14) * Math.PI * 2;
-            return P(TD + 0.02, wy + 0.07 * Math.cos(a), 0.2 + 0.07 * Math.sin(a));
-          }),
-          '#8b9099',
-        ),
-    )
-    .join('');
+  yFront += quadL(2.5, 0.05, 0.16, 0.52, 0.6, K.light) + quadL(2.5, TD - 0.16, TD - 0.05, 0.52, 0.6, K.light);
+  yFront += [0.36, 0.86, 2.14].map(wheelY).join('');
+  let uBack = chassis + box(0, 0, 0.36, TD, 0.64, 0.72, '#a9c2a4', m.l, m.r, m.e) + quadR(TD, 0.1, 0.5, 0.72, 0.98, K.glassR);
+  uBack +=
+    rail(0, 0.68, 0.05, 1.78, 0.43, 0.36) +
+    box(0, 0.68, 0.36, TD, 1.78, 0.07, '#8b929d', '#6b7280', '#5a6170', '#2a3142') +
+    rail(0, 0.68, TD, 0.07, 0.43, 0.5);
+  let uFront = rail(TD - 0.05, 0.68, 0.05, 1.78, 0.43, 0.13) + rail(0, 2.41, TD, 0.05, 0.43, 0.2);
+  uFront += quadL(2.46, 0.05, 0.16, 0.46, 0.56, INK.fail) + quadL(2.46, TD - 0.16, TD - 0.05, 0.46, 0.56, INK.fail);
+  uFront += [0.36, 1.64, 2.14].map(wheelY).join('');
+  const loadY = (k: string, y0: number) =>
+    [0, 1]
+      .flatMap((r) => [0.27, 0.69, 1.11, 1.53].map((d, i) => at(P(TD / 2 - 0.19 + 0.38 * r, y0 + d, 0.43), '', k + (r * 4 + i))))
+      .join('');
   return {
     door: `<g id="depotDoor">${quadL(depot.y + 0.002, depot.x + 0.3, depot.x + 1.8, 0, 1.03, '#1d222b')}<g id="doorPanel"></g></g>`,
-    yard: `<clipPath id="outDoor"><polygon points="${outDoor}"/></clipPath><g clip-path="url(#outDoor)"><g id="truckY">${yTruck}</g></g>`,
-    road: `<g id="truck" display="none"><g>${tBack}</g><g>${loadL}</g><g>${tFront}</g></g><g id="truckR" display="none"><g>${rBack}</g><g>${loadR}</g><g>${rFront}</g></g>`,
+    yard: `<clipPath id="outDoor"><polygon points="${outDoor}"/></clipPath><g clip-path="url(#outDoor)"><g id="truckY">${yBack + yFront}</g></g>`,
+    road: `<g id="truck" display="none"><g>${tBack}</g><g>${loadL}</g><g>${tFront}</g></g><g id="truckR" display="none"><g>${rBack}</g><g>${loadR}</g><g>${rFront}</g></g><g id="truckD" display="none">${yBack + loadY('td', 0.1) + yFront}</g><g id="truckU" display="none">${uBack + loadY('tu', 0.74) + uFront}</g>`,
     slots: { L: slotsL, R: slotsR },
   };
 }
