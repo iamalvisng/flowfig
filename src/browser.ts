@@ -70,6 +70,8 @@ export function launch(path: string, profile: string, timeoutMs = 30_000): Promi
     '--disable-gpu',
     // A seek can draw a stale transform x under load on the compositor thread.
     '--disable-threaded-animation',
+    // A partial raster of a reused tile depends on the frames before it.
+    '--disable-partial-raster',
   ];
   // Chrome refuses to start as root without it, for example in Docker.
   if (process.getuid?.() === 0) args.push('--no-sandbox');
@@ -190,7 +192,7 @@ export type Capture = { pngs: Buffer[]; width: number; height: number; loopMs: n
 export async function captureFrames(
   cdp: Cdp,
   html: string,
-  o: { width: number; height: number; scale: number; fps: number; dark: boolean },
+  o: { width: number; height: number; scale: number; fps: number; dark: boolean; frames?: number[] },
 ): Promise<Capture> {
   const open = async () => {
     const { targetId } = await cdp.send('Target.createTarget', { url: 'about:blank', newWindow: true });
@@ -209,6 +211,8 @@ export async function captureFrames(
     // The packet moves with SMIL, which only the <svg> element controls.
     const info = await run(`(async () => {
       await document.fonts.ready;
+      // A data URI image decodes after the page parse, so wait for each one.
+      await Promise.all([...document.querySelectorAll('image')].map((i) => i.decode().catch(() => {})));
       const svg = document.querySelector('svg');
       const css = document.getAnimations();
       for (const a of css) a.pause();
@@ -225,16 +229,17 @@ export async function captureFrames(
   const first = await open();
   const { info } = first;
   const n = Math.max(1, Math.round((info.loop * o.fps) / 1000));
+  const want = o.frames ?? Array.from({ length: n }, (_, i) => i);
   const clip = { x: info.x, y: info.y, width: info.width, height: info.height, scale: 1 };
   // availableParallelism arrived in Node 18.14; the package supports Node 18.0.
   const cores = os.availableParallelism?.() ?? os.cpus().length;
-  const count = Math.max(1, Math.min(MAX_TABS, cores, Math.floor(n / MIN_FRAMES_PER_TAB)));
+  const count = Math.max(1, Math.min(MAX_TABS, cores, Math.floor(want.length / MIN_FRAMES_PER_TAB)));
   const tabs = [first, ...(await Promise.all(Array.from({ length: count - 1 }, open)))];
-  const pngs: Buffer[] = Array.from<Buffer>({ length: n });
+  const pngs: Buffer[] = Array.from<Buffer>({ length: want.length });
   await Promise.all(
     tabs.map(async ({ send, run }, k) => {
-      for (let i = k; i < n; i += count) {
-        const t = (i * 1000) / o.fps;
+      for (let i = k; i < want.length; i += count) {
+        const t = (want[i] * 1000) / o.fps;
         await run(`(() => {
           for (const a of document.getAnimations()) a.currentTime = ${t};
           document.querySelector('svg').setCurrentTime(${t / 1000});

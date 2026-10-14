@@ -558,6 +558,47 @@ test('gif exits 2 for bad use, before a browser starts', () => {
   }
 });
 
+const framesRuns = (cases: (files: { one: string; none: string; plain: string }) => [string[], RegExp][]) => {
+  const dir = mkdtempSync(join(tmpdir(), 'figure-svg-'));
+  try {
+    const files = { one: join(dir, 'one.svg'), none: join(dir, 'none.svg'), plain: join(dir, 'plain.svg') };
+    execFileSync('node', [cli, '-', files.one], { input: JSON.stringify(SPEC) });
+    execFileSync('node', [cli, '-', files.none, '--no-check'], { input: JSON.stringify({ props: { ...SPEC.props, steps: [] } }) });
+    writeFileSync(files.plain, '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"></svg>');
+    const env = { ...process.env, CHROME_PATH: join(dir, 'no-such-chrome') };
+    return cases(files).map(([args, message]) => ({
+      args: args.join(' '),
+      message,
+      r: spawnSync('node', [cli, 'frames', ...args], { encoding: 'utf8', env }),
+    }));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+};
+
+test('frames with no browser exits 2 with the Chrome message and the checked paths', () => {
+  for (const { args, message, r } of framesRuns(({ one }) => [
+    [[one], /frames needs Chrome, Edge, Chromium or Brave\. Checked:\n.*no-such-chrome\nSet CHROME_PATH to the browser program\./],
+  ])) {
+    assert.equal(r.status, 2, `${args}: ${r.stderr}`);
+    assert.match(r.stderr, message);
+  }
+});
+
+test('frames usage faults exit 2 with a message: bad --step, 0 steps, no spec, not .svg, --every over 64 tiles', () => {
+  for (const { args, message, r } of framesRuns(({ one, none, plain }) => [
+    [[one, '--step', '9'], /--step needs a whole number from 1 to 1/],
+    [[one, '--step', '1.5'], /--step needs a whole number from 1 to 1/],
+    [[none], /none\.svg: .*this figure has 0/],
+    [[plain], /plain\.svg: no figure spec inside this SVG/],
+    [['x.txt'], /x\.txt: expected a \.svg path/],
+    [[one, '--every', '50'], /72 tiles[^\n]*64[^\n]*--step[^\n]*--every/],
+  ])) {
+    assert.equal(r.status, 2, `${args}: ${r.stderr}`);
+    assert.match(r.stderr, message);
+  }
+});
+
 test('a render prints the edge summary and the verify counts; --no-verify drops the counts', () => {
   const dir = mkdtempSync(join(tmpdir(), 'figure-svg-'));
   try {

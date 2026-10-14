@@ -56,7 +56,8 @@ import {
   TL_ROW_GAP,
   toBeat,
   altText,
-  beatMs,
+  beatTimes,
+  n2,
   STEP_HOLD_MS,
   playheadItem,
   loopStartItem,
@@ -96,7 +97,6 @@ const vars = (t: Palette, cardOn: string) =>
 
 const content = (c: FigContent): FigRow[] | string => (isRows(c) ? c : str(c));
 const esc = (s: string) => s.replace(/[<>&"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' })[c]!);
-const n2 = (v: number) => Math.round(v * 10) / 10;
 // Four decimals: one decimal rounds a 0.7 s hop away and the packet jumps.
 const n4 = (v: number) => Math.round(v * 10000) / 10000;
 const pct = (v: number) => Math.round(v * 10000) / 100 + '%';
@@ -312,7 +312,6 @@ const SYSTEM_FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helv
 /** The SVG string and the scene it drew. The scene shape may change; use `toSvg` for the SVG only. */
 export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; scene: Scene } {
   const fig = autoLayout(spec);
-  const speed = (opts.speed ?? fig.speed ?? 900) / 1000 / BASE_RATE;
   const pad = opts.padding ?? 24;
   const tl = fig.timeline && isLanesLayout(fig.layout) ? timelineLayout(fig, TL_AXIS_W) : null;
   const synthetic = tl != null && !fig.steps?.length && !opts.marks;
@@ -459,12 +458,10 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
     tEnd: number;
   }[] = [];
   const edgeOf = Object.fromEntries(fig.edges.map((e, i) => [ids[i], e]));
-  let t = 0;
+  const times = beatTimes(beats, opts.speed ?? fig.speed ?? 900);
   beats.forEach((stepBeats, si) => {
     stepBeats.forEach((b, bi) => {
-      const last = bi === stepBeats.length - 1;
-      const dur = beatMs(b, opts.speed ?? fig.speed ?? 900) / 1000 / BASE_RATE;
-      const hold = last ? STEP_HOLD_MS / 1000 / BASE_RATE : 0;
+      const { t0, t1, tEnd } = times.beats[si][bi];
       b.hops.forEach((h, lane) => {
         if (byId[h.edge])
           hops.push({
@@ -476,16 +473,15 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
             back: h.back,
             data: h.data,
             tone: h.tone && TONES[h.tone],
-            t0: t,
-            t1: t + speed,
-            tEnd: t + dur,
+            t0,
+            t1,
+            tEnd,
           });
       });
-      segs.push({ t0: t, t1: t + dur + hold, si, bi });
-      t += dur + hold;
+      segs.push({ t0, t1: bi === stepBeats.length - 1 ? times.ends[si] : tEnd, si, bi });
     });
   });
-  const total = t || 1;
+  const total = times.ends.at(-1) || 1;
 
   const shownAt = segs.map(
     ({ si, bi }) => Object.assign({}, ...beats[si].slice(0, bi + 1).map((b) => b.show)) as Record<string, FigContent>,
@@ -791,8 +787,9 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
 
   const packets = hops.map((h, i) => {
     const t0 = h.t0 / total,
-      t1 = h.t1 / total,
-      tEnd = h.tEnd / total;
+      t1 = Math.min(h.t1 / total, 1),
+      tEnd = h.tEnd / total,
+      reach = n4((t1 - t0) / (h.t1 / total - t0));
     const name = `p${i}`;
     css.push(
       `@keyframes ${name} { 0%,${pct(t0)} { opacity: 0 } ${pct(t0 + 0.0001)},${pct(tEnd - 0.0001)} { opacity: 1 } ${pct(tEnd)},100% { opacity: 0 } }\n` +
@@ -812,7 +809,7 @@ export function render(spec: FlowProps, opts: SvgOptions = {}): { svg: string; s
     })();
     return (
       `<g${cls(name)} opacity="0"><circle r="10" fill="${h.tone ?? 'var(--accent)'}" opacity="0.2"/><circle r="4.5" fill="${h.tone ?? 'var(--accent)'}"/>${chip}` +
-      `<animateMotion dur="${n2(total)}s" repeatCount="indefinite" keyTimes="0;${n4(t0)};${n4(t1)};1" keyPoints="${h.back ? '1;1;0;0' : '0;0;1;1'}" calcMode="linear">` +
+      `<animateMotion dur="${n2(total)}s" repeatCount="indefinite" keyTimes="0;${n4(t0)};${n4(t1)};1" keyPoints="${h.back ? `1;1;${n4(1 - reach)};${n4(1 - reach)}` : `0;0;${reach};${reach}`}" calcMode="linear">` +
       `<mpath href="#p-${esc(h.edge)}" xlink:href="#p-${esc(h.edge)}"/></animateMotion></g>`
     );
   });
