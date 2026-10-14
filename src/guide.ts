@@ -203,6 +203,8 @@ beat is an edge id or an array of edge ids that run at the same time. A beat can
 - Give each part one \`source\`. Find the parts with \`npx flowfig trace <source>\`.
 - An inside edge can start at an outer neighbor X only if the root has the edge X -> box. It can end at an outer neighbor Y
   only if the root has the edge box -> Y. The open box shows X and Y as ports.
+- An inside edge shows the order of the flow, not a call. Draw an edge from each in-port to the first part that runs, and
+  from the last part that runs to each out-port.
 - The limits: 3 levels, 16 parts in one box, 60 parts in the figure. Ids are unique in the whole figure.
 - For the full example, print \`npx flowfig docs inside\`.
 
@@ -411,6 +413,9 @@ Rules:
 - An inside edge can end at an outer neighbor Y only if the scene above has the edge box -> Y. The edge \`notify->payments\`
   needs \`orders->payments\`. The box shows Y as an out-port.
 - An inside edge with no part at either end is an error.
+- An inside edge shows the order of the flow, not a call. \`price->save\` says that the flow leaves the box after
+  \`price\`. \`totalPrice\` does not call \`insertOrder\`. Each in-port needs an edge to the first part that runs, and each
+  out-port needs an edge from the last part that runs.
 - Inside steps name parts, ports and inside edges. An outer step cannot name a part.
 - Give each part one \`source\`. Find the parts with \`npx flowfig trace <source>\`.
 - The limits: 3 levels, 16 parts in one box, 60 parts in the figure. Ids are unique in the whole figure, at all levels.
@@ -460,6 +465,8 @@ The fields below change only the element. The SVG does not show them.
   "Refunded".
 - \`done\` states only what the source says did happen. "Can", "may" or "should" is not "did". If you are not sure, leave
   \`done\` out.
+- An action that the source says an actor "can" do is an option, not a step. Do not draw it as a box in a story, and do
+  not end a story on it. Put it in the \`outcome\`: "The shop refuses the coupon. The buyer can ask again."
 - Put a refusal box in the lane of the actor that refuses, with the tone \`red\`. The tag of that actor then shows the refusal.
 
 The element shows a small world if an edge carries a thing, or if an actor has the look \`person\`, \`shop\` or \`truck\`. Else it

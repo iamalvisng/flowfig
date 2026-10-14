@@ -729,7 +729,7 @@ test('each Inside rule fires on its fault and stays quiet on a figure with three
         severity: 'warning',
         scene: 'Mail',
         message:
-          'edge "payments->mail" comes in, but no edge inside "mail" starts at "payments"; the open view cannot show where the flow comes in',
+          'edge "payments->mail" comes in, but no edge inside "mail" starts at "payments"; add an edge from "payments" to the first part that runs',
       },
     ],
     [

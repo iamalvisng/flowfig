@@ -200,7 +200,7 @@ function insideRules(fig: FlowProps): Finding[] {
           warn(
             'part-edge-mismatch',
             [edgeId(o)],
-            `edge "${edgeId(o)}" comes in, but no edge inside "${owner}" starts at "${o.from}"; the open view cannot show where the flow comes in`,
+            `edge "${edgeId(o)}" comes in, but no edge inside "${owner}" starts at "${o.from}"; add an edge from "${o.from}" to the first part that runs`,
           ),
         );
     for (const o of outerOut)
@@ -209,7 +209,7 @@ function insideRules(fig: FlowProps): Finding[] {
           warn(
             'part-edge-mismatch',
             [edgeId(o)],
-            `edge "${edgeId(o)}" goes out, but no edge inside "${owner}" ends at "${o.to}"; the open view cannot show where the flow goes out`,
+            `edge "${edgeId(o)}" goes out, but no edge inside "${owner}" ends at "${o.to}"; add an edge from the last part that runs to "${o.to}"`,
           ),
         );
     out.push(...found.map((f) => ({ ...f, scene: s.line })));
