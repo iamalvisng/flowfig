@@ -72,6 +72,8 @@ export function launch(path: string, profile: string, timeoutMs = 30_000): Promi
     '--disable-threaded-animation',
     // A partial raster of a reused tile depends on the frames before it.
     '--disable-partial-raster',
+    // Media emulation does not reach an SVG in an img; this flag does.
+    '--force-prefers-no-reduced-motion',
   ];
   // Chrome refuses to start as root without it, for example in Docker.
   if (process.getuid?.() === 0) args.push('--no-sandbox');
