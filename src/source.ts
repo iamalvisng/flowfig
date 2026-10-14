@@ -19,7 +19,6 @@ export type Link = { owner: string; source: string; path: string; symbol?: strin
 
 type Owner = [string, string | undefined, string | undefined, string];
 
-/** Every box, edge and hop of every level with its raw `source`, well-formed or not. The one owner list that `links` and `checkSpec` share. */
 export function owners(fig: FlowProps): Owner[] {
   return scenes(fig).flatMap((s) => {
     const ports = new Set(s.ports.map((p) => p.id));
