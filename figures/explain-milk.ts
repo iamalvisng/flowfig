@@ -33,7 +33,7 @@ const props: Figure['props'] = {
         children: [
           { id: 'collect', label: 'Pump and weigh', at: 5 },
           { id: 'sign', label: 'Customer signs', at: 6 },
-          { id: 'sync', label: 'Phone syncs', at: 7, done: 'Oil collected' },
+          { id: 'sync', label: 'Phone syncs', at: 7, done: 'Milk collected' },
           { id: 'refused', label: 'Record refused', at: 9, tone: 'gray' },
         ],
       },
@@ -42,7 +42,7 @@ const props: Figure['props'] = {
         look: 'server',
         children: [
           { id: 'cert', label: 'Allowed to sell?', shape: 'decision', at: 8 },
-          { id: 'save', label: 'Save collection and voucher', sub: 'all or nothing', at: 9, done: 'Records saved' },
+          { id: 'save', label: 'Save pickup and voucher', sub: 'all or nothing', at: 9, done: 'Records saved' },
           { id: 'stock', label: 'Add to stock', at: 10, done: 'Stock updated' },
         ],
       },
@@ -56,7 +56,7 @@ const props: Figure['props'] = {
     { from: 'free', to: 'assign', label: 'yes' },
     { from: 'free', to: 'nofree', label: 'no' },
     { from: 'assign', to: 'collect', label: 'push to phone' },
-    { from: 'collect', to: 'sign', label: 'pump and weigh', carries: { thing: 'used oil', form: 'barrel', count: 4, from: 'ask' } },
+    { from: 'collect', to: 'sign', label: 'pump and weigh', carries: { thing: 'milk', form: 'barrel', count: 4, from: 'ask' } },
     { from: 'sign', to: 'sync' },
     { from: 'sync', to: 'cert' },
     { from: 'cert', to: 'save', label: 'yes' },
@@ -70,16 +70,16 @@ const props: Figure['props'] = {
   steps: [
     {
       label: 'Normal pickup',
-      outcome: 'The worker collects the oil, and the office pays the customer by voucher.',
+      outcome: 'The worker collects the milk, and the office pays the customer by voucher.',
       flow: [
         { edges: 'ask->many', say: 'The customer asks for a pickup in the app.' },
         { edges: ['many->accept', 'accept->free'], say: 'The office accepts it and looks for a free worker.' },
         { edges: ['free->assign', 'assign->collect'], say: 'The office assigns the job. The worker gets a push.' },
-        { edges: ['collect->sign', 'sign->sync'], say: 'The worker weighs the oil. The customer signs.' },
+        { edges: ['collect->sign', 'sign->sync'], say: 'The worker weighs the milk. The customer signs.' },
         { edges: ['sync->cert', 'cert->save'], say: 'The server checks the client and saves both records together.' },
         {
           edges: ['save->stock', 'save->cash', 'cash->settle', 'settle->paid'],
-          say: 'The server adds the oil to the stock record. The office settles the voucher.',
+          say: 'The server adds the milk to the stock record. The office settles the voucher.',
         },
       ],
     },
@@ -88,7 +88,7 @@ const props: Figure['props'] = {
       outcome: 'The worker pays the customer in cash at the pickup.',
       flow: [
         { edges: ['ask->many', 'many->accept', 'accept->free', 'free->assign'], say: 'The office accepts and assigns the job.' },
-        { edges: ['assign->collect', 'collect->sign', 'sign->sync'], say: 'The worker collects the oil and pays cash.' },
+        { edges: ['assign->collect', 'collect->sign', 'sign->sync'], say: 'The worker collects the milk and pays cash.' },
         {
           edges: ['sync->cert', 'cert->save', 'save->cash', 'cash->paid'],
           say: 'The voucher is already settled. Nothing waits for the office.',
@@ -111,19 +111,19 @@ const props: Figure['props'] = {
       ],
     },
     {
-      label: 'Expired certification',
-      outcome: 'The oil is already in the truck when the server says no.',
+      label: 'Expired licence',
+      outcome: 'The milk is already in the truck when the server says no.',
       flow: [
         {
           edges: ['ask->many', 'many->accept', 'accept->free', 'free->assign'],
           say: 'The request passes every office check.',
-          note: 'The office does not see the certification.',
+          note: 'The office does not see the licence.',
         },
-        { edges: ['assign->collect', 'collect->sign', 'sign->sync'], say: 'The worker collects the oil from the customer.' },
+        { edges: ['assign->collect', 'collect->sign', 'sign->sync'], say: 'The worker collects the milk from the customer.' },
         {
           edges: ['sync->cert', 'cert->refused'],
-          say: 'Only now does the server see the expired certification.',
-          note: 'The oil is collected, but no one is paid.',
+          say: 'Only now does the server see the expired licence.',
+          note: 'The milk is collected, but no one is paid.',
         },
       ],
     },
@@ -131,6 +131,6 @@ const props: Figure['props'] = {
 };
 
 export default {
-  title: 'How used oil becomes a payment',
+  title: 'How farm milk becomes a payment',
   props,
 } satisfies Figure;

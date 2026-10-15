@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import { findBrowser, launch, type Cdp } from './browser.ts';
 import { diff, toSvg } from './svg.ts';
-import oil from '../figures/explain-oil.ts';
+import milk from '../figures/explain-milk.ts';
 import sync from '../figures/explain-sync.ts';
 import deliveryBefore from '../figures/explain-delivery-before.ts';
 import deliveryAfter from '../figures/explain-delivery-after.ts';
@@ -19,7 +19,7 @@ import { scene, stageFor, storyView } from './world.ts';
 
 const dist = fileURLToPath(new URL('../dist/', import.meta.url));
 const specs: Record<string, object> = {
-  oil: oil.props,
+  milk: milk.props,
   sync: sync.props,
   'delivery-before': deliveryBefore.props,
   'delivery-after': deliveryAfter.props,
@@ -89,7 +89,7 @@ const guide = (spec: string) => `<flowfig-explain src="/spec/${spec}.json"></flo
 
 test('guide: moment 1 says the first beat, lifts the lane of its target, and Next moves to moment 2', { skip: !browser.path }, async () => {
   const page = await open(
-    guide('oil'),
+    guide('milk'),
     `${live}.includes('The customer asks for a pickup in the app.') && !!${sr}?.querySelector('[data-actor]')`,
   );
   try {
@@ -110,7 +110,7 @@ test(
   'guide: a story chip on a refusal story ends on ✗, the outcome and the boxes it skipped as plain lines',
   { skip: !browser.path },
   async () => {
-    const page = await open(guide('oil'), `${live}.length > 0`);
+    const page = await open(guide('milk'), `${live}.length > 0`);
     try {
       const step = 'Too many requests';
       await page.ev(`window.last = {}; ${el}.addEventListener('flowfig-moment', (e) => (window.last = e.detail))`);
@@ -185,7 +185,7 @@ test(
 
 test('host CSS does not reach the text inside the element', { skip: !browser.path }, async () => {
   const page = await open(
-    `<style>* { color: red !important; font-size: 30px !important }</style>${guide('oil')}`,
+    `<style>* { color: red !important; font-size: 30px !important }</style>${guide('milk')}`,
     `${live}.includes('The customer asks for a pickup in the app.')`,
   );
   try {
@@ -202,7 +202,7 @@ test('host CSS does not reach the text inside the element', { skip: !browser.pat
 });
 
 test('arrow keys move the moment, and the live region reads the new sentence', { skip: !browser.path }, async () => {
-  const page = await open(guide('oil'), `${live}.includes('The customer asks for a pickup in the app.')`);
+  const page = await open(guide('milk'), `${live}.includes('The customer asks for a pickup in the app.')`);
   const key = async (key: string, code: number) => {
     for (const type of ['keyDown', 'keyUp'])
       await page.send('Input.dispatchKeyEvent', { type, key, code: key, windowsVirtualKeyCode: code });
@@ -249,7 +249,7 @@ test('the element core and the world chunk stay in budget', () => {
 
 test('a qualifying figure loads the world, and other figures do not', { skip: !browser.path }, async () => {
   const loaded = `performance.getEntriesByType('resource').some((r) => r.name.endsWith('/dist/element-world.js'))`;
-  const world = await open(guide('oil'), `!!${sr}?.querySelector('[data-stage="world"] svg[role="img"]')`);
+  const world = await open(guide('milk'), `!!${sr}?.querySelector('[data-stage="world"] svg[role="img"]')`);
   try {
     assert.equal(await world.ev(loaded), true);
   } finally {
@@ -265,11 +265,11 @@ test('a qualifying figure loads the world, and other figures do not', { skip: !b
 });
 
 test('the drawn overlays sit where the layout put them', { skip: !browser.path }, async () => {
-  const page = await open(guide('oil'), `${live}.length > 0`);
+  const page = await open(guide('milk'), `${live}.length > 0`);
   try {
     await page.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: false });
     await page.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
-    await page.ev(`${button('Expired certification')}.click()`);
+    await page.ev(`${button('Expired licence')}.click()`);
     await page.ev(`${el}.moment = ${el}.moment + 2`);
     await page.until(
       `(${sr}.querySelector('[data-actor="Worker"]')?.textContent ?? '').includes('Record refused')`,
@@ -283,8 +283,8 @@ test('the drawn overlays sit where the layout put them', { skip: !browser.path }
         return { actor: t.dataset.actor, x: r.x - g.x, y: r.y - g.y, w: r.width, h: r.height, fits: t.scrollWidth <= t.clientWidth && t.scrollHeight <= t.clientHeight };
       }) };
     })()`);
-    const s = scene(oil.props).stories.findIndex((x) => x.name === 'Expired certification');
-    const want = storyView((f) => scene(oil.props, f), s, stageFor(got.w, got.h, got.sheet)).cams[2];
+    const s = scene(milk.props).stories.findIndex((x) => x.name === 'Expired licence');
+    const want = storyView((f) => scene(milk.props, f), s, stageFor(got.w, got.h, got.sheet)).cams[2];
     assert.equal(got.tags.length, want.tags.length);
     for (const t of want.tags) {
       const drawn = got.tags.find((x) => x.actor === t.name);
@@ -299,7 +299,7 @@ test('the drawn overlays sit where the layout put them', { skip: !browser.path }
 });
 
 test('a resize that makes the frame faulty shows the diagram, and a resize back shows the world', { skip: !browser.path }, async () => {
-  const page = await open(guide('oil'), `${live}.length > 0 && !!${sr}?.querySelector('[data-stage="world"] svg[role="img"]')`);
+  const page = await open(guide('milk'), `${live}.length > 0 && !!${sr}?.querySelector('[data-stage="world"] svg[role="img"]')`);
   try {
     await page.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
     const shown = `(() => { const d = ${sr}.querySelector('[data-stage="diagram"]'); return !!d && !d.hidden; })()`;
@@ -318,10 +318,10 @@ test('a resize that makes the frame faulty shows the diagram, and a resize back 
 });
 
 test('a story with a faulty frame shows the diagram, and a clean story shows the world', { skip: !browser.path }, async () => {
-  const page = await open(guide('oil'), `${live}.length > 0 && !!${sr}?.querySelector('[data-stage="world"] svg[role="img"]')`);
+  const page = await open(guide('milk'), `${live}.length > 0 && !!${sr}?.querySelector('[data-stage="world"] svg[role="img"]')`);
   try {
     await page.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
-    const sc = scene(oil.props);
+    const sc = scene(milk.props);
     const shown = `(() => { const d = ${sr}.querySelector('[data-stage="diagram"]'); return !!d && !d.hidden; })()`;
     let faulty = 0;
     for (const [w, h] of [
@@ -338,7 +338,7 @@ test('a story with a faulty frame shows the diagram, and a clean story shows the
           `(() => { const g = ${sr}.querySelector('.ff-stage').getBoundingClientRect(); return { w: g.width, h: g.height, sheet: ${sr}.querySelector('.ff-hud').getBoundingClientRect().height }; })()`,
         );
         const st = stageFor(box.w, box.h, box.sheet);
-        const bad = storyView((f) => scene(oil.props, f), s, st).cams.some((p) => p.faults > 0);
+        const bad = storyView((f) => scene(milk.props, f), s, st).cams.some((p) => p.faults > 0);
         faulty += bad ? 1 : 0;
         assert.equal(await page.ev(shown), bad, `${story.name} at ${w}x${h}`);
       }
@@ -350,7 +350,7 @@ test('a story with a faulty frame shows the diagram, and a clean story shows the
 });
 
 test('on a phone the sheet shows the Full screen button, uncut', { skip: !browser.path }, async () => {
-  const page = await open(guide('oil'), `${live}.length > 0 && !!${sr}?.querySelector('[data-stage="world"] svg[role="img"]')`);
+  const page = await open(guide('milk'), `${live}.length > 0 && !!${sr}?.querySelector('[data-stage="world"] svg[role="img"]')`);
   try {
     await page.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: false });
     await page.ev(sleep);
@@ -370,11 +370,11 @@ test(
   'on a phone the world keeps 58% of the element above the sheet, and the sheet shows Back, Play and Next in a moment and at a refused outcome',
   { skip: !browser.path },
   async () => {
-    const page = await open(guide('oil'), `${live}.length > 0 && !!${sr}?.querySelector('[data-stage="world"] svg[role="img"]')`);
+    const page = await open(guide('milk'), `${live}.length > 0 && !!${sr}?.querySelector('[data-stage="world"] svg[role="img"]')`);
     try {
       await page.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: false });
       await page.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
-      await page.ev(`${button('Expired certification')}.click()`);
+      await page.ev(`${button('Expired licence')}.click()`);
       const base = await page.ev(`${el}.moment`);
       for (const k of [1, 3]) {
         await page.ev(`${el}.moment = ${base + k}`);
@@ -401,7 +401,7 @@ test(
 
 test('a world chunk that fails to load leaves the diagram, not an alert', { skip: !browser.path }, async () => {
   const path = `/page-${pages.size}`;
-  pages.set(path, `<!doctype html><body><script type="module" src="/nochunk/element.js"></script>${guide('oil')}</body>`);
+  pages.set(path, `<!doctype html><body><script type="module" src="/nochunk/element.js"></script>${guide('milk')}</body>`);
   const { targetId } = await cdp.send('Target.createTarget', { url: origin + path });
   const { sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true });
   const ev = async (e: string) => (await cdp.send('Runtime.evaluate', { expression: e, returnByValue: true }, sessionId)).result.value;
@@ -416,9 +416,9 @@ test('a world chunk that fails to load leaves the diagram, not an alert', { skip
 });
 
 test('the world stage and the moments list read a refused check as failed', { skip: !browser.path }, async () => {
-  const page = await open(guide('oil'), `!!${sr}?.querySelector('[data-actor]')`);
+  const page = await open(guide('milk'), `!!${sr}?.querySelector('[data-actor]')`);
   try {
-    await page.ev(`${button('Expired certification')}.click()`);
+    await page.ev(`${button('Expired licence')}.click()`);
     await page.ev(`${el}.moment = ${el}.moment + 2`);
     const label = `(${sr}.querySelector('[data-stage="world"] svg[role="img"]')?.getAttribute('aria-label') ?? '')`;
     await page.until(`${label}.includes('Worker: Record refused, failed.')`, 'the stage names the refusal', 10_000);
@@ -434,7 +434,7 @@ test('the world stage and the moments list read a refused check as failed', { sk
 test('a refusal ending draws red marks only on the tags and the sign', { skip: !browser.path }, async () => {
   const extra: string[] = [];
   for (const [fig, names] of [
-    ['oil', ['Too many requests', 'No worker free', 'Expired certification']],
+    ['milk', ['Too many requests', 'No worker free', 'Expired licence']],
     ['returns', ['rejected: late', 'rejected: damaged']],
   ] as const)
     for (const [w, h] of [
@@ -476,7 +476,7 @@ test('a refusal ending draws red marks only on the tags and the sign', { skip: !
 
 test('on a phone, every line of every moment ends above the bottom padding of the sheet', { skip: !browser.path }, async () => {
   const cut: string[] = [];
-  for (const fig of ['oil', 'returns'])
+  for (const fig of ['milk', 'returns'])
     for (const [w, h] of [
       [390, 844],
       [360, 600],
@@ -506,10 +506,10 @@ test(
   'with reduced motion a step shows the still arcs and the answer of the check in the first frame',
   { skip: !browser.path },
   async () => {
-    const page = await open(guide('oil'), `${live}.length > 0 && !!${sr}?.querySelector('[data-stage="world"] svg[role="img"]')`);
+    const page = await open(guide('milk'), `${live}.length > 0 && !!${sr}?.querySelector('[data-stage="world"] svg[role="img"]')`);
     try {
       await page.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
-      await page.ev(`${button('Expired certification')}.click()`);
+      await page.ev(`${button('Expired licence')}.click()`);
       await page.ev(`${el}.moment = ${el}.moment + 1`);
       await page.ev(`new Promise((r) => setTimeout(r, 300))`);
       const rest = await page.ev(`(() => {

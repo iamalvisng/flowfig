@@ -35,7 +35,7 @@ const props: Figure['props'] = {
               {
                 direction: 'row',
                 children: [
-                  { id: 'txn', label: 'Save in one transaction', sub: 'collection, audit, voucher' },
+                  { id: 'txn', label: 'Save in one transaction', sub: 'pickup, audit, voucher' },
                   {
                     direction: 'column',
                     children: [
@@ -58,8 +58,8 @@ const props: Figure['props'] = {
             look: 'team',
             direction: 'column',
             children: [
-              { id: 'event', label: 'collection.created' },
-              { id: 'jobs', label: 'Job orders' },
+              { id: 'event', label: 'pickup.created' },
+              { id: 'jobs', label: 'Delivery jobs' },
               { id: 'stock', label: 'Stock' },
             ],
           },
@@ -113,10 +113,10 @@ const props: Figure['props'] = {
       ],
     },
     {
-      label: 'Expired certification',
+      label: 'Expired licence',
       flow: [
         { edges: ['app->dup', 'dup->client'], say: 'The record is new.' },
-        { edges: 'client->clientno', say: 'The certification expired. The server refuses the record.' },
+        { edges: 'client->clientno', say: 'The licence expired. The server refuses the record.' },
       ],
     },
     {
@@ -130,6 +130,6 @@ const props: Figure['props'] = {
 };
 
 export default {
-  title: 'The worker app syncs a collection',
+  title: 'The worker app syncs a pickup',
   props,
 } satisfies Figure;

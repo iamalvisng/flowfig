@@ -6,7 +6,7 @@ const props: Figure['props'] = {
     children: [
       { label: 'Driver app', look: 'phone', children: [{ id: 'driver', label: 'Complete the delivery', sub: 'after the hand-over' }] },
       {
-        label: 'Job orders API',
+        label: 'Delivery jobs API',
         look: 'server',
         direction: 'column',
         children: [
@@ -29,7 +29,7 @@ const props: Figure['props'] = {
             direction: 'row',
             children: [
               { id: 'save', label: 'Save in one transaction', sub: 'job and history row' },
-              { id: 'enqueue', label: 'Queue one delivery job', sub: 'Redis, keyed by job order' },
+              { id: 'enqueue', label: 'Queue one delivery job', sub: 'Redis, keyed by delivery job' },
             ],
           },
         ],
@@ -44,7 +44,7 @@ const props: Figure['props'] = {
             children: [
               { id: 'mark', label: 'Mark the order delivered', sub: 'skips a delivered order' },
               { id: 'posted', label: 'Already posted?', shape: 'decision' },
-              { id: 'out', label: 'Write the packs out' },
+              { id: 'out', label: 'Write the parcels out' },
               { id: 'retry', label: 'Wait and try again', sub: '2, 4, 8, 16 s' },
               { id: 'final', label: 'Job kept for a rerun', sub: 'after 5 failed tries', tone: 'red' },
             ],
@@ -55,10 +55,10 @@ const props: Figure['props'] = {
       {
         direction: 'row',
         children: [
-          { id: 'jobs', label: 'Job orders', shape: 'store' },
-          { id: 'events', label: 'Job order events', shape: 'store' },
+          { id: 'jobs', label: 'Delivery jobs', shape: 'store' },
+          { id: 'events', label: 'Delivery job events', shape: 'store' },
           { id: 'orders', label: 'Sales orders', shape: 'store' },
-          { id: 'packs', label: 'Pack movements', shape: 'store' },
+          { id: 'parcels', label: 'Parcel moves', shape: 'store' },
         ],
       },
     ],
@@ -78,10 +78,10 @@ const props: Figure['props'] = {
     { from: 'mark', to: 'orders', label: 'delivered' },
     { from: 'mark', to: 'posted' },
     { from: 'posted', to: 'out', label: 'no' },
-    { from: 'out', to: 'packs', label: 'packs out' },
+    { from: 'out', to: 'parcels', label: 'parcels out' },
     { from: 'out', to: 'retry', label: 'error' },
     { from: 'retry', to: 'final', label: 'after 5 tries' },
-    { from: 'packs', to: 'agree' },
+    { from: 'parcels', to: 'agree' },
   ],
   steps: [
     {
@@ -94,7 +94,7 @@ const props: Figure['props'] = {
           edges: ['enqueue->mark', { edge: 'mark->orders', data: 'status delivered' }],
           say: 'The worker marks the order delivered.',
         },
-        { edges: ['mark->posted', 'posted->out', 'out->packs'], say: 'The same job then writes the packs out.' },
+        { edges: ['mark->posted', 'posted->out', 'out->parcels'], say: 'The same job then writes the parcels out.' },
       ],
     },
     {
@@ -108,10 +108,10 @@ const props: Figure['props'] = {
           edges: ['driver->type', 'type->owner', 'owner->repeat', 'repeat->save', 'save->jobs', 'save->events', 'save->enqueue'],
           say: 'The API saves the completed job and queues the delivery job.',
         },
-        { edges: ['enqueue->mark', 'mark->posted', 'posted->out'], say: 'The worker tries to write the packs out.' },
+        { edges: ['enqueue->mark', 'mark->posted', 'posted->out'], say: 'The worker tries to write the parcels out.' },
         { edges: 'out->retry', say: 'The write fails once. The job waits in the queue.' },
-        { edges: [{ edge: 'out->retry', back: true }, 'out->packs'], say: 'The job runs again, and the packs are written.' },
-        { edges: 'packs->agree', say: 'The pack ledger matches the delivery.' },
+        { edges: [{ edge: 'out->retry', back: true }, 'out->parcels'], say: 'The job runs again, and the parcels are written.' },
+        { edges: 'parcels->agree', say: 'The parcel ledger matches the delivery.' },
       ],
     },
     {
@@ -121,7 +121,7 @@ const props: Figure['props'] = {
           edges: ['driver->type', 'type->owner', 'owner->repeat', 'repeat->save', 'save->enqueue'],
           say: 'The API saves the completed job and queues the delivery job.',
         },
-        { edges: ['enqueue->mark', 'mark->posted', 'posted->out'], say: 'The worker tries to write the packs out.' },
+        { edges: ['enqueue->mark', 'mark->posted', 'posted->out'], say: 'The worker tries to write the parcels out.' },
         {
           edges: ['out->retry', 'retry->final'],
           say: 'Every try fails. After 5 tries, the job stops.',
