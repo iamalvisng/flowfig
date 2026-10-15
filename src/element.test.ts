@@ -15,6 +15,7 @@ import deliveryBefore from '../figures/explain-delivery-before.ts';
 import deliveryAfter from '../figures/explain-delivery-after.ts';
 import returns from '../figures/returns-process.ts';
 import checkout from '../figures/checkout.ts';
+import bakery from '../figures/explain-bakery.ts';
 import { scene, stageFor, storyView } from './world.ts';
 
 const dist = fileURLToPath(new URL('../dist/', import.meta.url));
@@ -25,6 +26,7 @@ const specs: Record<string, object> = {
   'delivery-after': deliveryAfter.props,
   returns: returns.props,
   checkout: checkout.props,
+  bakery: bakery.props,
 };
 const browser = findBrowser({ platform: process.platform, env: process.env, exists: existsSync });
 const pages = new Map<string, string>();
@@ -105,6 +107,41 @@ test('guide: moment 1 says the first beat, lifts the lane of its target, and Nex
     await page.done();
   }
 });
+
+test(
+  'guide: the step list marks a failed moment only once the reader reaches it, and the header counts every row',
+  { skip: !browser.path },
+  async () => {
+    const page = await open(guide('bakery'), `${live}.length > 0`);
+    try {
+      await page.ev(`window.last = {}; ${el}.addEventListener('flowfig-moment', (e) => (window.last = e.detail))`);
+      await page.ev(`${button('Sold out')}.click()`);
+      await page.until(`window.last.step === 'Sold out'`, 'the chip opens the refusal step');
+      const rows = `[...${sr}.querySelectorAll('.ff-moments button')]`;
+      const read = () =>
+        page.ev(
+          `({ kick: ${sr}.querySelector('.ff-kick')?.textContent, marks: ${rows}.map((b) => b.querySelector('.ff-mk').textContent), fail: ${rows}.map((b) => b.classList.contains('ff-fail')), label: ${rows}.map((b) => b.getAttribute('aria-label')) })`,
+        );
+      const start = await read();
+      assert.deepEqual(start.marks, ['1', '2', '3', '4']);
+      assert.deepEqual(start.fail, [false, false, false, false]);
+      assert.ok(start.label.every((l: string | null) => !l?.includes('failed')));
+      assert.equal(start.kick, 'Moment 1 of 4 · Sold out');
+      for (let i = 0; i < 3; i++) {
+        const at = await page.ev('window.last.moment');
+        await page.ev(`${button('Next')}.click()`);
+        await page.until(`window.last.moment === ${at + 1}`, 'Next moves on');
+      }
+      const end = await read();
+      assert.deepEqual(end.marks, ['✓', '✓', '✗', '4']);
+      assert.deepEqual(end.fail, [false, false, true, false]);
+      assert.ok(end.label[2].includes('failed'));
+      assert.equal(end.kick, 'Moment 4 of 4 · Sold out');
+    } finally {
+      await page.done();
+    }
+  },
+);
 
 test(
   'guide: a story chip on a refusal story ends on ✗, the outcome and the boxes it skipped as plain lines',

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import type { FlowProps } from './model.ts';
 import { cast, moments, worldReady } from './explain.ts';
 import milk from '../figures/explain-milk.ts';
+import bakery from '../figures/explain-bakery.ts';
 import returns from '../figures/returns-process.ts';
 import checkout from '../figures/checkout.ts';
 import sync from '../figures/explain-sync.ts';
@@ -99,9 +100,17 @@ test('a failed check is marked even when the story goes on', () => {
 
 test('without a note, the short line names the next actor, and the outcome moment has no extra line', () => {
   const pickup = moments(milk.props, 'Normal pickup');
-  assert.equal(pickup[1].note, 'Worker acts next.');
+  assert.equal(pickup[1].note, '');
+  assert.equal(pickup[2].note, 'Worker acts next.');
   assert.equal(pickup.at(-1)?.note, '');
   assert.equal(moments(milk.props, 'Expired licence')[0].note, 'The office does not see the licence.');
+});
+
+test('the short line names the next actor only when the actor who acts next differs', () => {
+  const notes = moments(bakery.props, 'Delivered')
+    .slice(0, -1)
+    .map((m) => m.note);
+  assert.deepEqual(notes, ['Bakery acts next.', '', '', 'Courier acts next.', '']);
 });
 
 test('a beat with no say reads its edge label and the target box label', () => {
@@ -179,7 +188,7 @@ test('with no lanes and no labeled groups, the cast skips decision boxes, and a 
     save.map((m) => m.actor),
     ['API', 'API', 'Records', 'Records'],
   );
-  assert.equal(save[0].note, 'Records acts next.');
+  assert.equal(save[0].note, 'API acts next.');
   assert.deepEqual(save[2].stamp, { mark: '✓', label: 'yes' });
   assert.equal(moments(plain, 'Recheck')[0].actor, 'API');
 });

@@ -799,7 +799,7 @@ export class FlowfigExplain extends Base {
       .reverse()
       .find((s) => s.stamp);
     const stamp = asked?.stamp;
-    g.kick.textContent = end ? '' : `Moment ${k + 1} of ${mine.length - 1} · ${m.step}`;
+    g.kick.textContent = `Moment ${k + 1} of ${mine.length} · ${m.step}`;
     g.say.textContent = m.say;
     g.note.textContent = m.note;
     g.note.classList.toggle('ff-bad', stamp?.mark === '✗' && (end || m.stamp === stamp));
@@ -818,18 +818,17 @@ export class FlowfigExplain extends Base {
         const b = button('', () => (this.moment = first + i));
         b.className = '';
         b.append(h('span', 'ff-mk'), h('span', '', x.title));
-        if (x.stamp?.mark === '✗') {
-          b.classList.add('ff-fail');
-          b.setAttribute('aria-label', `${x.title}, failed`);
-        }
         return b;
       });
       g.list.replaceChildren(...g.items.map((b) => h('li', '', b)));
     }
     g.items.forEach((b, i) => {
-      const mark = i < k ? mine[i].stamp?.mark : undefined;
-      b.dataset.s = i === k ? 'now' : i > k ? 'next' : mark === '✗' ? 'no' : 'past';
-      b.querySelector('.ff-mk')!.textContent = mark ?? String(i + 1);
+      const bad = i <= k && mine[i].stamp?.mark === '✗';
+      b.classList.toggle('ff-fail', bad);
+      if (bad) b.setAttribute('aria-label', `${mine[i].title}, failed`);
+      else b.removeAttribute('aria-label');
+      b.dataset.s = i === k ? 'now' : i > k ? 'next' : bad ? 'no' : 'past';
+      b.querySelector('.ff-mk')!.textContent = i < k ? (bad ? '✗' : '✓') : String(i + 1);
       if (i === k) b.setAttribute('aria-current', 'true');
       else b.removeAttribute('aria-current');
     });
