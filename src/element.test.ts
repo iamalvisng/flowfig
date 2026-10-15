@@ -127,12 +127,18 @@ test(
       assert.deepEqual(start.fail, [false, false, false, false]);
       assert.ok(start.label.every((l: string | null) => !l?.includes('failed')));
       assert.equal(start.kick, 'Moment 1 of 4 · Sold out');
-      for (let i = 0; i < 3; i++) {
+      const next = async () => {
         const at = await page.ev('window.last.moment');
         await page.ev(`${button('Next')}.click()`);
         await page.until(`window.last.moment === ${at + 1}`, 'Next moves on');
-      }
-      const end = await read();
+        return read();
+      };
+      const before = await next();
+      assert.deepEqual(before.fail, [false, false, false, false]);
+      const at = await next();
+      assert.deepEqual(at.marks, ['✓', '✓', '3', '4']);
+      assert.deepEqual(at.fail, [false, false, true, false]);
+      const end = await next();
       assert.deepEqual(end.marks, ['✓', '✓', '✗', '4']);
       assert.deepEqual(end.fail, [false, false, true, false]);
       assert.ok(end.label[2].includes('failed'));
