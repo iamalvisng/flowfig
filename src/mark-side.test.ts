@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { isDeepStrictEqual } from 'node:util';
 import { browser, withReactPage } from './react-page.ts';
 import { render } from './svg.ts';
 import type { FigGroup, FigNode, FlowProps } from './model.ts';
@@ -57,12 +58,15 @@ test('the player draws each start and end mark on the same box side as the SVG',
     await load(1200);
     const marks = `[...document.querySelectorAll('[data-fig] > span[aria-hidden]')]`;
     await until(`${marks}.length >= 5`, 'the player draws five marks');
-    await new Promise((r) => setTimeout(r, 300));
-    const got = await ev(`Object.fromEntries(${marks}.map((m) => {
+    const read = () =>
+      ev(`Object.fromEntries(${marks}.map((m) => {
       const r = (e) => { const q = e.getBoundingClientRect(); return { x: q.x, y: q.y, w: q.width, h: q.height }; };
       const d = r(m), b = r(m.parentElement);
       return [m.parentElement.dataset.fig, (${side})({ x: d.x + d.w / 2, y: d.y + d.h / 2 }, b)];
     }))`);
+    let got = await read();
+    for (const t = Date.now(); !isDeepStrictEqual(got, want) && Date.now() - t < 4000; got = await read())
+      await new Promise((r) => setTimeout(r, 50));
     assert.deepEqual(got, want);
   });
 });
