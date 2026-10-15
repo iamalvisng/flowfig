@@ -441,6 +441,7 @@ export function checkScene(scene: Scene, { width = 830, minText = 10, auto }: Ch
   }
   for (const e of scene.edges) {
     const pts = path(e);
+    if (pts.length < 2) continue;
     const drawn = pts.slice(1).reduce((s, q, k) => s + Math.hypot(q.x - pts[k].x, q.y - pts[k].y), 0);
     const ratio = drawn / Math.max(1, Math.hypot(pts.at(-1)!.x - pts[0].x, pts.at(-1)!.y - pts[0].y));
     // The README figures have a good edge at ratio 1.77 and 425 px.

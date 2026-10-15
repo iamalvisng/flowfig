@@ -658,8 +658,8 @@ test('an empty group does not break the layout of the other boxes', () => {
   }
 });
 
-test('an edge to a group with no boxes fails check --strict', () => {
-  const spec = {
+test('an edge to a group with no boxes fails check --strict, with or without lanes', () => {
+  const plain = {
     layout: {
       children: [
         { id: 'g', children: [] },
@@ -668,10 +668,22 @@ test('an edge to a group with no boxes fails check --strict', () => {
     },
     edges: [{ from: 'a', to: 'g' }],
   };
+  const lanes = {
+    lanes: true,
+    layout: {
+      children: [
+        { label: 'Buyer', children: [{ id: 'a', label: 'A' }] },
+        { label: 'Shop', children: [{ id: 'g', children: [] }] },
+      ],
+    },
+    edges: [{ from: 'a', to: 'g' }],
+  };
   const cli = join(dirname(dirname(fileURLToPath(import.meta.url))), 'scripts', 'figure-svg.mjs');
-  const r = spawnSync(process.execPath, [cli, 'check', '-', '--strict'], { input: JSON.stringify(spec), encoding: 'utf8' });
-  assert.equal(r.status, 1);
-  assert.match(r.stdout, /edge "a->g" ends at group "g", which has no boxes/);
+  for (const spec of [plain, lanes]) {
+    const r = spawnSync(process.execPath, [cli, 'check', '-', '--strict'], { input: JSON.stringify(spec), encoding: 'utf8' });
+    assert.equal(r.status, 1, r.stderr);
+    assert.match(r.stdout, /edge "a->g" ends at group "g", which has no boxes/);
+  }
 });
 
 const shopFig = shop.props as FlowProps;
