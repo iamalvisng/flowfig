@@ -7,14 +7,14 @@ import { cast, worldReady } from './explain.ts';
 import { HUD } from './looks.ts';
 import { CAM, hit, place, polyHit, scene, stageFor, stateAt, storyCams, storyView, timeline } from './world.ts';
 import type { Ev, Form, Placed, Pt, Rect, Scene, Stage, State, Tag } from './world.ts';
-import oil from '../figures/explain-oil.ts';
+import milk from '../figures/explain-milk.ts';
 import returns from '../figures/returns-process.ts';
 import checkout from '../figures/checkout.ts';
 import sync from '../figures/explain-sync.ts';
 import deliveryBefore from '../figures/explain-delivery-before.ts';
 import deliveryAfter from '../figures/explain-delivery-after.ts';
 
-const FIGURES = [oil, returns, checkout, sync, deliveryBefore, deliveryAfter];
+const FIGURES = [milk, returns, checkout, sync, deliveryBefore, deliveryAfter];
 const FIXTURES: { title: string; props: FlowProps }[] = await Promise.all(
   readdirSync(new URL('../figures/', import.meta.url))
     .filter((f) => f.endsWith('.ts'))
@@ -63,7 +63,7 @@ test('a thing starts at the actor of its carries.from box or group, with 1 to 4 
 test('the device comes from the look, and only an antenna actor has a roof antenna', () => {
   const mark = 'fill="#ffffff" stroke="#3B4252"';
   const expected = [
-    { fig: oil, devices: ['phone', 'antenna', 'cab', 'antenna'], antennas: 2 },
+    { fig: milk, devices: ['phone', 'antenna', 'cab', 'antenna'], antennas: 2 },
     { fig: returns, devices: ['phone', 'antenna', 'antenna', 'antenna'], antennas: 3 },
   ];
   for (const { fig, devices, antennas } of expected) {
@@ -78,12 +78,12 @@ test('the device comes from the look, and only an antenna actor has a roof anten
       else assert.ok(Math.min(...a.lot.hull.map((p) => p[1])) <= a.lot.roof![1], a.name);
     }
   }
-  assert.equal(scene(oil.props).truck, 2);
-  assert.ok(scene(oil.props).truckArt);
+  assert.equal(scene(milk.props).truck, 2);
+  assert.ok(scene(milk.props).truckArt);
 });
 
 test('hops start in cause order, and a gate shows its question, then its answer, then the result', () => {
-  const sc = scene(oil.props);
+  const sc = scene(milk.props);
   const story = (name: string) => sc.stories.findIndex((s) => s.name === name);
   const first = (evs: Ev[], hop: number) => Math.min(...evs.filter((e) => e.hop === hop).map((e) => e.start));
   const last = (evs: Ev[], hop: number) => Math.max(...evs.filter((e) => e.hop === hop).map((e) => e.end));
@@ -109,19 +109,19 @@ test('hops start in cause order, and a gate shows its question, then its answer,
   assert.equal(first(pair, 0), first(pair, 1), 'two hops out of one box start together');
   const passed = timeline(sc, story('Normal pickup'), 4).events;
   assert.ok(one(passed, 'answer', 1).start - one(passed, 'question', 0).start >= 250, 'the answer shows after the question');
-  const refused = timeline(sc, story('Expired certification'), 2).events;
+  const refused = timeline(sc, story('Expired licence'), 2).events;
   const answer = one(refused, 'answer', 1);
   const reply = one(refused, 'reply', 1);
   assert.ok(answer.start - one(refused, 'question', 0).start >= 250, 'the refusal shows after the question');
   assert.equal(one(refused, 'fail', 1).start, answer.start, 'the gate turns red with the answer');
   assert.ok(reply.start - answer.end >= 380, 'the red reply waits after the answer');
   const kick = one(refused, 'fail', 1);
-  const arm = (t: number) => Object.values(stateAt(sc, story('Expired certification'), 2, t).gates).find((g) => g.fail)?.deg ?? -1;
+  const arm = (t: number) => Object.values(stateAt(sc, story('Expired licence'), 2, t).gates).find((g) => g.fail)?.deg ?? -1;
   assert.ok(arm(kick.end) > 6, `the refused arm kicks up: ${arm(kick.end)}`);
   assert.equal(arm(reply.start), 0, 'the refused arm is down again before the reply');
   const next = scene({
-    ...oil.props,
-    edges: [...oil.props.edges, { from: 'refused', to: 'sign' }],
+    ...milk.props,
+    edges: [...milk.props.edges, { from: 'refused', to: 'sign' }],
     steps: [{ label: 'Retry', flow: [{ edges: ['sync->cert', 'cert->refused', 'refused->sign'] }] }],
   });
   const after = timeline(next, 0, 0).events;
@@ -136,7 +136,7 @@ test('hops start in cause order, and a gate shows its question, then its answer,
 });
 
 test('the arm of a raised gate lowers over time, and no two units share a bed slot', () => {
-  const sc = scene(oil.props);
+  const sc = scene(milk.props);
   const story = (name: string) => sc.stories.findIndex((s) => s.name === name);
   const s = story('Normal pickup');
   const lower = timeline(sc, s, 5).events.find((e) => e.kind === 'arm' && e.hop === 1)!;
@@ -385,10 +385,10 @@ test('every needed tag, sign, chip and device is on stage, none overlaps, and th
   assert.deepEqual(hits, []);
 });
 
-test('on a phone, the stacked street shows every building of the "Expired certification" outcome at least 78 px wide', () => {
+test('on a phone, the stacked street shows every building of the "Expired licence" outcome at least 78 px wide', () => {
   const st = stageFor(390, Math.min(844, HUD.tall), 211),
-    s = scene(oil.props).stories.findIndex((x) => x.name === 'Expired certification'),
-    { sc, cams } = storyView((f) => scene(oil.props, f), s, st),
+    s = scene(milk.props).stories.findIndex((x) => x.name === 'Expired licence'),
+    { sc, cams } = storyView((f) => scene(milk.props, f), s, st),
     p = cams.at(-1)!,
     { l, t, r, b } = st.region;
   assert.ok(sc.bends.length > 0);
@@ -405,7 +405,7 @@ test('on a phone, the stacked street shows every building of the "Expired certif
 
 test('on a phone, every ending frame shows each path building at least 90 px wide, or 78 px when the truck is out', () => {
   const small: string[] = [];
-  for (const fig of [oil, returns]) {
+  for (const fig of [milk, returns]) {
     const st = stageFor(390, Math.min(844, HUD.tall), 211);
     scene(fig.props).stories.forEach((_, s) => {
       const { sc, cams } = storyView((f) => scene(fig.props, f), s, st),
@@ -421,7 +421,7 @@ test('on a phone, every ending frame shows each path building at least 90 px wid
 });
 
 test('a stage too small for the overlays gives a frame with faults, not an error', () => {
-  const sc = scene(oil.props);
+  const sc = scene(milk.props);
   const faults = sc.stories.flatMap((story, s) =>
     story.moments.map((_, m) => place(sc, stateAt(sc, s, m, Infinity), stageFor(374, 250)).faults),
   );
@@ -473,11 +473,11 @@ test('an unlabeled edge out of a check answers with a check mark or a cross', ()
   assert.deepEqual(answer(0), ['✓']);
   assert.deepEqual(answer(1), ['✗']);
   assert.equal(stateAt(sc, 1, 1, Infinity).ever[bank].label, 'Refuse', 'a failed check tag shows the result in its own actor');
-  const oils = scene(oil.props),
-    who = (name: string) => oils.actors.findIndex((a) => a.name === name),
+  const milks = scene(milk.props),
+    who = (name: string) => milks.actors.findIndex((a) => a.name === name),
     refused = stateAt(
-      oils,
-      oils.stories.findIndex((s) => s.name === 'Expired certification'),
+      milks,
+      milks.stories.findIndex((s) => s.name === 'Expired licence'),
       2,
       Infinity,
     ).ever;
@@ -587,7 +587,7 @@ test('no ending tag asks a question: a passed check shows its question as a stat
     });
   }
   assert.deepEqual(asks, []);
-  const sc = scene(oil.props),
+  const sc = scene(milk.props),
     s = sc.stories.findIndex((x) => x.name === 'Paid in cash'),
     office = place(sc, stateAt(sc, s, sc.stories[s].moments.length - 1, Infinity), stageFor(1440, 900)).tags.find(
       (t) => t.name === 'Office',

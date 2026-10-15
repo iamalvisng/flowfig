@@ -6,7 +6,7 @@ const props: Figure['props'] = {
     children: [
       { label: 'Driver app', look: 'phone', children: [{ id: 'driver', label: 'Complete the delivery', sub: 'after the hand-over' }] },
       {
-        label: 'Job orders API',
+        label: 'Delivery jobs API',
         look: 'server',
         direction: 'column',
         children: [
@@ -47,12 +47,12 @@ const props: Figure['props'] = {
             ],
           },
           {
-            label: 'Pack ledger listener',
+            label: 'Parcel ledger listener',
             look: 'gear',
             direction: 'column',
             children: [
               { id: 'posted', label: 'Already posted?', shape: 'decision' },
-              { id: 'out', label: 'Write the packs out' },
+              { id: 'out', label: 'Write the parcels out' },
               { id: 'pcatch', label: 'Ledger miss logged', sub: 'no retry, no record', tone: 'red' },
             ],
           },
@@ -61,10 +61,10 @@ const props: Figure['props'] = {
       {
         direction: 'row',
         children: [
-          { id: 'jobs', label: 'Job orders', shape: 'store' },
-          { id: 'events', label: 'Job order events', shape: 'store' },
+          { id: 'jobs', label: 'Delivery jobs', shape: 'store' },
+          { id: 'events', label: 'Delivery job events', shape: 'store' },
           { id: 'orders', label: 'Sales orders', shape: 'store' },
-          { id: 'packs', label: 'Pack movements', shape: 'store' },
+          { id: 'parcels', label: 'Parcel moves', shape: 'store' },
         ],
       },
     ],
@@ -84,7 +84,7 @@ const props: Figure['props'] = {
     { from: 'mark', to: 'orders', label: 'delivered' },
     { from: 'mark', to: 'ocatch', label: 'error' },
     { from: 'posted', to: 'out', label: 'no' },
-    { from: 'out', to: 'packs', label: 'packs out' },
+    { from: 'out', to: 'parcels', label: 'parcels out' },
     { from: 'out', to: 'pcatch', label: 'error' },
   ],
   steps: [
@@ -95,7 +95,7 @@ const props: Figure['props'] = {
         { edges: ['repeat->save', 'save->jobs', 'save->events'], say: 'The API saves the job and a history row together.' },
         { edges: 'save->announce', say: 'After the commit, the API announces the delivery in memory.' },
         { edges: ['announce->mark', 'mark->orders'], say: 'The order listener marks the order delivered.' },
-        { edges: ['announce->posted', 'posted->out', 'out->packs'], say: 'The pack ledger listener writes the packs out.' },
+        { edges: ['announce->posted', 'posted->out', 'out->parcels'], say: 'The parcel ledger listener writes the parcels out.' },
       ],
     },
     {
@@ -109,7 +109,7 @@ const props: Figure['props'] = {
           edges: ['driver->type', 'type->owner', 'owner->repeat', 'repeat->save', 'save->jobs', 'save->events'],
           say: 'The API saves the completed job.',
         },
-        { edges: ['save->announce', 'announce->posted', 'posted->out'], say: 'The pack ledger listener tries to write the packs out.' },
+        { edges: ['save->announce', 'announce->posted', 'posted->out'], say: 'The parcel ledger listener tries to write the parcels out.' },
         {
           edges: 'out->pcatch',
           say: 'The write fails. The listener logs the error and stops.',

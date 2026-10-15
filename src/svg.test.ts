@@ -24,7 +24,7 @@ import { checkScene } from './check.ts';
 import { readdirSync, readFileSync } from 'node:fs';
 import { svgWithSpec, specOf } from './load.ts';
 import shop from '../figures/inside-shop.ts';
-import oil from '../figures/explain-oil.ts';
+import milk from '../figures/explain-milk.ts';
 import returns from '../figures/returns-process.ts';
 import checkout from '../figures/checkout.ts';
 import sync from '../figures/explain-sync.ts';
@@ -1724,8 +1724,8 @@ test('a scoped figure points its arrows at its own marker, so two figures on one
 test('the explain fields change no diagram', () => {
   const strip = (p: FlowProps): FlowProps =>
     JSON.parse(JSON.stringify(p, (k, v) => (['carries', 'check', 'done', 'outcome', 'look'].includes(k) ? undefined : v)));
-  for (const f of [oil, returns, checkout, sync, deliveryBefore, deliveryAfter])
+  for (const f of [milk, returns, checkout, sync, deliveryBefore, deliveryAfter])
     assert.equal(toSvg(f.props), toSvg(strip(f.props)), f.title);
-  assert.notDeepEqual(strip(oil.props), oil.props);
+  assert.notDeepEqual(strip(milk.props), milk.props);
   assert.notDeepEqual(strip(returns.props), returns.props);
 });
