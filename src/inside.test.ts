@@ -203,16 +203,17 @@ test(
         return Math.hypot(cx - x, cy - y);
       };
       assert.ok((await far('gateway')) < (await far('validate')), 'the packet starts at the in-port');
+      await page.ev(
+        `window.captions = []; new MutationObserver(() => window.captions.push(document.querySelector('figcaption')?.innerText ?? '')).observe(document.body, { subtree: true, childList: true, characterData: true })`,
+      );
       await page.ev(`${BACK}.click()`);
       await page.until(ROOT, 'Back shows the root level');
-      assert.ok(
-        !(await page.ev(`document.querySelector('figcaption').innerText`)).includes('The gateway asks Orders to place the order.'),
-        'the step does not restart',
-      );
       await page.until(
         `document.querySelector('figcaption').innerText.includes('Orders asks Payments to charge the card.')`,
         'the outer step goes on at the beat after the arrival',
       );
+      const captions: string[] = await page.ev('window.captions');
+      assert.ok(!captions.some((c) => c.includes('The gateway asks Orders to place the order.')), 'the step does not restart');
     });
   },
 );
