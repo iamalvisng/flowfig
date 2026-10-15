@@ -183,8 +183,11 @@ test(
     await withReactPage(entry, async (page) => {
       await show(page, 1400, { speed: 400, steps });
       await page.ev(`document.querySelectorAll('[role="tab"]')[0].click()`);
-      await page.until(`${box('orders')}?.classList.contains('flowfig-active')`, 'the packet arrives at Orders');
-      await openOrders(page);
+      await page.until(
+        `${box('orders')}?.classList.contains('flowfig-active') && (${box('orders')}.click(), true)`,
+        'the packet arrives at Orders, and a click opens it',
+      );
+      await page.until(allShown(ORDERS), 'the Orders level shows');
       const dot = `(() => {
       const g = [...document.querySelectorAll('circle[r="4.5"]')].map((c) => c.parentElement).find((g) => +getComputedStyle(g).opacity > 0);
       if (!g) return null;
