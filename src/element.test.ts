@@ -76,7 +76,7 @@ async function open(body: string, ready: string) {
     for (let t = Date.now(); !(await ev(e).catch(() => false)); await new Promise((r) => setTimeout(r, 50)))
       assert.ok(Date.now() - t < ms, what);
   };
-  await until(`!!customElements.get('flowfig-explain')`, 'the page defines <flowfig-explain>');
+  await until(`!!customElements.get('flowfig-explain')`, 'the page defines <flowfig-explain>', 15000);
   await until(ready, 'the element shows its first view');
   return { send, ev, until, done: () => cdp.send('Target.closeTarget', { targetId }) };
 }

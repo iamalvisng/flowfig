@@ -773,7 +773,8 @@ function FlowBody({
       last = performance.now(),
       shownBeat = -1;
     const tick = (now: number) => {
-      if (playingRef.current) clock.current.elapsed += (now - last) * rateRef.current * BASE_RATE;
+      // A requestAnimationFrame time can be earlier than the performance.now() read before it.
+      if (playingRef.current) clock.current.elapsed += Math.max(0, now - last) * rateRef.current * BASE_RATE;
       last = now;
       if (clock.current.elapsed >= total) {
         if (steps.length > 1) return setActive((a) => ((a ?? 0) + 1) % steps.length);
