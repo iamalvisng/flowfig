@@ -403,6 +403,19 @@ test('on a phone, the stacked street shows every building of the "Expired licenc
   }
 });
 
+test('an actor the story has not reached reads Not yet during the story and Not reached at the ending', () => {
+  const st = stageFor(390, 844, 211),
+    get = (f: Form) => scene(milk.props, f),
+    status = (name: string, moment: number) => {
+      const s = get(st.form).stories.findIndex((x) => x.name === name),
+        { sc } = storyView(get, s, st),
+        worker = sc.actors.findIndex((a) => a.name === 'Worker');
+      return place(sc, stateAt(sc, s, moment, Infinity), st).tags.find((t) => t.actor === worker)?.status;
+    };
+  assert.equal(status('Too many requests', 0), 'Not yet');
+  assert.equal(status('Too many requests', 1), 'Not reached');
+});
+
 test('on a phone, every ending frame shows each path building at least 90 px wide, or 78 px when the truck is out', () => {
   const small: string[] = [];
   for (const fig of [milk, returns]) {

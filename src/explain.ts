@@ -152,9 +152,12 @@ export function moments(fig: FlowProps, step: string): Moment[] {
     .filter((id) => !mine.has(id))
     .map(labelOf);
 
+  const starter = out.map((m, i) => {
+    const source = beats[i].hops[0]?.source;
+    return (source && actorOf.get(source)) || m.actor;
+  });
   out.forEach((m, i) => {
-    const next = out.slice(i + 1).find((o) => o.actor !== m.actor);
-    if (!m.note && next) m.note = `${next.actor} acts next.`;
+    if (!m.note && i + 1 < out.length && starter[i + 1] !== starter[i]) m.note = `${starter[i + 1]} acts next.`;
   });
   out.push({
     actor: out.at(-1)!.actor,

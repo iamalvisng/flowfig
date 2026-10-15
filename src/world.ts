@@ -1155,7 +1155,7 @@ export function layout(sc: Scene, s: State, stage: Stage, cam: Cam, full = false
   const tagOf = (a: number) => {
     const ev = s.ever[a],
       name = A[a].name,
-      status = ev ? named(ev, s.summary) : 'Not reached',
+      status = ev ? named(ev, s.summary) : s.summary ? 'Not reached' : 'Not yet',
       mark: Mark = ev ? (ev.fail ? '✗' : '✓') : '',
       end = s.summary && sc.boxes[story.end]?.actor === a,
       bed = !stage.narrow && s.summary && a === sc.truck ? Object.values(s.units).filter((u) => u.where === 'bed' && u.moment >= 0) : [],
@@ -1885,7 +1885,7 @@ export function mountWorld(stage: HTMLElement, fig: FlowProps, resized: () => vo
       const ev = s.ever[t.actor];
       t.mk.hidden = !ev;
       same(t.mk, ev ? (ev.fail ? '✗' : '✓') : '');
-      same(t.st.lastChild!, ev ? named(ev, s.summary) : 'Not reached');
+      same(t.st.lastChild!, ev ? named(ev, s.summary) : s.summary ? 'Not reached' : 'Not yet');
       t.st.classList.toggle('fw-no', !!ev?.fail);
       t.el.classList.toggle('fw-end', s.summary && rest && t.end);
       t.el.style.width = rest ? t.w : 'max-content';
