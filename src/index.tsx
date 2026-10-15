@@ -1699,7 +1699,10 @@ function FlowBody({
       {rail && (
         <div
           ref={railPane}
-          onWheel={() => (user.current = true)}
+          onWheel={(e) => {
+            user.current = true;
+            if (e.deltaX || e.shiftKey) follow.current = false;
+          }}
           onPointerDown={() => (user.current = true)}
           onTouchStart={() => (user.current = true)}
           onScroll={(e) => {
