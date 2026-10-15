@@ -13,6 +13,7 @@ import checkout from '../figures/checkout.ts';
 import sync from '../figures/explain-sync.ts';
 import deliveryBefore from '../figures/explain-delivery-before.ts';
 import deliveryAfter from '../figures/explain-delivery-after.ts';
+import bakery from '../figures/explain-bakery.ts';
 
 const FIGURES = [milk, returns, checkout, sync, deliveryBefore, deliveryAfter];
 const FIXTURES: { title: string; props: FlowProps }[] = await Promise.all(
@@ -441,19 +442,38 @@ test('a stage too small for the overlays gives a frame with faults, not an error
   assert.ok(faults.every((n) => n > 0));
 });
 
-test('a check at the rest of a moment always has an answer', () => {
-  const empty: string[] = [];
-  for (const { title, props } of FIGURES) {
+test('a check shows its answer only from the moment of the hop that leaves it', () => {
+  const wrong: string[] = [];
+  for (const { title, props } of [...FIGURES, bakery]) {
     const sc = scene(props);
     sc.stories.forEach((story, s) =>
       story.moments.forEach((_, m) => {
         const st = stateAt(sc, s, m, Infinity);
         for (const g of Object.values(st.gates))
-          if (g.on === m) for (const row of g.rows) if (!row.a) empty.push(`${title} ${story.name} ${m + 1}: ${row.q}`);
+          if (g.on === m)
+            for (const row of g.rows) {
+              const left = story.moments.slice(0, m + 1).some((hs) => hs.some((h) => h.from === row.box));
+              if (!!row.a !== left) wrong.push(`${title} ${story.name} ${m + 1}: ${row.q} "${row.a}"`);
+            }
       }),
     );
   }
-  assert.deepEqual(empty, []);
+  assert.deepEqual(wrong, []);
+});
+
+test('an actor at a check with no answer yet waits, and the answer hop ends the wait', () => {
+  const sc = scene(bakery.props),
+    bake = sc.actors.findIndex((a) => a.name === 'Bakery'),
+    at = (m: number) => stateAt(sc, 0, m, Infinity),
+    sign = (m: number) => at(m).gates[bake].rows.map((r) => [r.q, r.a]);
+  assert.deepEqual(sign(0), [['Delivery zone?', '']]);
+  assert.equal(at(0).ever[bake].wait, true);
+  assert.deepEqual(sign(1), [
+    ['Delivery zone?', 'Yes'],
+    ['In stock?', ''],
+  ]);
+  assert.deepEqual([at(1).ever[bake].label, at(1).ever[bake].wait], ['In stock?', true]);
+  assert.deepEqual([at(2).ever[bake].label, !!at(2).ever[bake].wait], ['Bake', false]);
 });
 
 test('an unlabeled edge out of a check answers with a check mark or a cross', () => {

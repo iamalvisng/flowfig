@@ -155,7 +155,7 @@ export function scene(fig: FlowProps, form: Form = 'narrow'): Scene {
   };
 }
 
-export type Status = { label: string; fail: boolean; done?: string };
+export type Status = { label: string; fail: boolean; done?: string; wait?: boolean };
 const named = (ev: Status, summary: boolean) => (summary && ev.done) || ev.label;
 export type Arc = {
   a: Pt;
@@ -685,7 +685,12 @@ function planOf(sc: Scene, story: number, m: number) {
       ta = tb.actor,
       sa = (h.carry && Object.values(s.units).find((u) => u.thing === h.carry!.thing)?.at) ?? fa;
     const reach = (a: number, b: Box) => (st: State) =>
-      void (st.ever[a] = { label: b.label, fail: b.dead, done: b.done ?? (b.check ? b.label.replace(/\?$/, '') : undefined) });
+      void (st.ever[a] = {
+        label: b.label,
+        fail: b.dead,
+        done: b.done ?? (b.check ? b.label.replace(/\?$/, '') : undefined),
+        wait: !!b.check,
+      });
     set(i, at, reach(fa, fb));
     hl(sa, ta);
     if (fb.check) {
@@ -696,7 +701,7 @@ function planOf(sc: Scene, story: number, m: number) {
           row = g.rows.find((r) => r.box === h.from) ?? g.rows[g.rows.push({ box: h.from, q: fb.check, a: '', fail: false }) - 1];
         Object.assign(row, { a: answer(h), fail: h.fail });
         g.on = m;
-        st.ever[fa].fail = h.fail || /^(no|false)$/i.test(h.label);
+        Object.assign(st.ever[fa], { fail: h.fail || /^(no|false)$/i.test(h.label), wait: false });
       });
       if (h.fail) {
         for (const u of Object.values(s.units)) if (u.where === 'gate' && u.at === fa) s.frame.push(u.p);
@@ -818,17 +823,6 @@ function planOf(sc: Scene, story: number, m: number) {
         g.on = m;
       });
       at += 250;
-      const out = hops.some((x) => x.from === h.to)
-        ? undefined
-        : st.moments
-            .slice(m + 1)
-            .flat()
-            .find((x) => x.from === h.to);
-      if (out)
-        add('answer', i, at, 0, (x) => {
-          const row = x.gates[ta].rows.find((r) => r.box === h.to);
-          if (row) Object.assign(row, { a: answer(out), fail: out.fail });
-        });
     }
     set(i, at, reach(ta, tb));
     return at;
@@ -1883,7 +1877,7 @@ export function mountWorld(stage: HTMLElement, fig: FlowProps, resized: () => vo
     svg.setAttribute('aria-label', spoken.join(' ') || said);
     for (const t of tags) {
       const ev = s.ever[t.actor];
-      t.mk.hidden = !ev;
+      t.mk.hidden = !ev || !!ev.wait;
       same(t.mk, ev ? (ev.fail ? '✗' : '✓') : '');
       same(t.st.lastChild!, ev ? named(ev, s.summary) : s.summary ? 'Not reached' : 'Not yet');
       t.st.classList.toggle('fw-no', !!ev?.fail);
