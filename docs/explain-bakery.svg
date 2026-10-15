@@ -1,0 +1,190 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="890.1" height="498" viewBox="0 0 890.1 498" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" role="img">
+<metadata id="figure-spec"><![CDATA[{"props":{"layout":{"direction":"column","children":[{"label":"Customer","look":"person","direction":"row","children":[{"id":"order","label":"Order a cake","sub":"in the app","done":"Cake ordered"},{"id":"receive","label":"Get the cake","done":"Cake delivered"}]},{"direction":"row","gap":24,"children":[{"label":"Bakery","look":"shop","direction":"row","gap":28,"children":[{"direction":"column","children":[{"id":"zone","label":"Delivery zone?","shape":"decision"},{"id":"far","label":"Too far","sub":"order refused","tone":"red"}]},{"direction":"column","children":[{"id":"stock","label":"In stock?","shape":"decision"},{"id":"soldout","label":"Sold out","sub":"order refused","tone":"red"}]},{"id":"bake","label":"Bake","sub":"the cake","done":"Cake baked"}]},{"label":"Courier","look":"truck","children":[{"id":"drive","label":"Drive","sub":"to the door","done":"At the door"}]}]}]},"edges":[{"from":"order","to":"zone","label":"order"},{"from":"zone","to":"far","label":"no"},{"from":"zone","to":"stock","label":"yes"},{"from":"stock","to":"soldout","label":"no"},{"from":"stock","to":"bake","label":"yes"},{"from":"bake","to":"drive","label":"cake","carries":{"thing":"cake","form":"box"}},{"from":"drive","to":"receive","label":"deliver","carries":{"thing":"cake","form":"box"}}],"steps":[{"label":"Delivered","outcome":"The courier hands the cake to the customer at the door.","flow":[{"edges":"order->zone","say":"The customer orders a cake in the app."},{"edges":"zone->stock","say":"The address is in the delivery zone."},{"edges":"stock->bake","say":"The cake is in stock, so the bakery bakes it."},{"edges":"bake->drive","say":"The bakery hands the boxed cake to the courier."},{"edges":"drive->receive","say":"The courier drives the cake to the door."}]},{"label":"Sold out","outcome":"The bakery refuses the order. The customer gets no cake.","flow":[{"edges":"order->zone","say":"The customer orders a cake in the app."},{"edges":"zone->stock","say":"The address is in the delivery zone."},{"edges":"stock->soldout","say":"The cake is sold out, so the bakery refuses the order."}]},{"label":"Too far","outcome":"The bakery refuses the order before it checks the stock.","flow":[{"edges":"order->zone","say":"The customer orders a cake for an address far away."},{"edges":"zone->far","say":"The address is outside the delivery zone, so the bakery refuses."}]}]}}]]></metadata>
+<title>Flow figure: Order a cake, Get the cake, Delivery zone?, Too far, In stock?, Sold out, Bake, Drive. Steps: Delivered, Sold out, Too far.</title>
+<desc>The figure has these boxes: Order a cake, Get the cake, Delivery zone?, Too far, In stock?, Sold out, Bake, Drive.
+Delivered.
+The customer orders a cake in the app.
+The address is in the delivery zone.
+The cake is in stock, so the bakery bakes it.
+The bakery hands the boxed cake to the courier.
+The courier drives the cake to the door.
+Sold out.
+The customer orders a cake in the app.
+The address is in the delivery zone.
+The cake is sold out, so the bakery refuses the order.
+Too far.
+The customer orders a cake for an address far away.
+The address is outside the delivery zone, so the bakery refuses.</desc>
+<style>
+svg { --accent:#0074d9; --fg:#1c1e21; --muted:#606770; --bg:#ffffff; --surface:#f5f7fa; --border:#d0d7de; --card-on:#eef5fd; --tint:color-mix(in srgb, var(--accent) 10%, var(--surface)); }
+@media (prefers-color-scheme: dark) { svg { --accent:#1f78c8; --fg:#e3e3e3; --muted:#9aa0a6; --bg:#1b1b1d; --surface:#242526; --border:#3a3b3c; --card-on:#1d2733; --tint:color-mix(in srgb, var(--accent) 10%, var(--surface)); } }
+.label { fill: var(--fg); font-size: 14px; font-weight: 500; text-anchor: middle; }
+.sub { fill: var(--muted); font-size: 12px; text-anchor: middle; }
+.frame { fill: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: .04em; }
+.edgelabel { fill: var(--muted); font-size: 11px; text-anchor: middle; font-family: ui-monospace, Menlo, monospace; }
+.row { fill: var(--fg); font-size: 11px; }
+.row.mono { font-size: 10.5px; font-family: ui-monospace, Menlo, monospace; }
+.muted { fill: var(--muted); }
+.bar { fill: var(--fg); font-size: 13px; font-weight: 500; }
+.tick { fill: var(--muted); font-size: 11px; }
+.today { fill: var(--accent); font-size: 11px; font-weight: 600; }
+.tag { font-size: 9px; font-weight: 600; letter-spacing: .03em; text-anchor: middle; }
+.mark { fill: var(--accent); font-size: 11px; font-weight: 600; text-anchor: end; }
+.chip { fill: #ffffff; font-size: 11.5px; text-anchor: middle; }
+.steplabel { fill: var(--fg); font-size: 13px; font-weight: 600; text-anchor: middle; font-family: ui-monospace, Menlo, monospace; }
+.caption { fill: var(--muted); font-size: 13.5px; text-anchor: middle; }
+.railcol { fill: var(--fg); font-size: 12px; font-weight: 500; text-anchor: middle; }
+.railphase { fill: var(--fg); font-size: 13px; font-weight: 600; font-family: ui-monospace, Menlo, monospace; }
+.railphase.muted { fill: var(--muted); }
+.end { text-anchor: end; }
+@keyframes a0 { 0%,99.99% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } }
+.a0 { animation: a0 32.3s infinite linear; }
+@keyframes a1 { 0%,33.09% { fill: var(--bg); stroke: var(--border); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 33.1%,35.32% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 35.33%,46.03% { fill: var(--tint); stroke: var(--accent); stroke-width: 2; filter: drop-shadow(0 0 4px var(--accent)) } 47.27%,99.99% { fill: var(--bg); stroke: var(--border); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } }
+.a1 { animation: a1 32.3s infinite linear; }
+@keyframes a2 { 0%,2.22% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 2.23%,7.97% { fill: var(--tint); stroke: var(--accent); stroke-width: 2; filter: drop-shadow(0 0 4px var(--accent)) } 9.22%,48.26% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 48.27%,54% { fill: var(--tint); stroke: var(--accent); stroke-width: 2; filter: drop-shadow(0 0 4px var(--accent)) } 55.25%,78.33% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 78.34%,85.27% { fill: var(--tint); stroke: var(--accent); stroke-width: 2; filter: drop-shadow(0 0 4px var(--accent)) } 86.52%,99.99% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } }
+.a2 { animation: a2 32.3s infinite linear; }
+@keyframes a3 { 0%,87.5% { fill: color-mix(in srgb, #ef4444 8%, var(--bg)); stroke: #ef4444; stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 87.51%,98.75% { fill: color-mix(in srgb, #ef4444 10%, var(--surface)); stroke: #ef4444; stroke-width: 2; filter: drop-shadow(0 0 4px #ef4444) } 99.98%,99.99% { fill: color-mix(in srgb, #ef4444 8%, var(--bg)); stroke: #ef4444; stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } }
+.a3 { animation: a3 32.3s infinite linear; }
+@keyframes a4 { 0%,7.97% { fill: var(--bg); stroke: var(--border); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 7.98%,10.2% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 10.21%,15.35% { fill: var(--tint); stroke: var(--accent); stroke-width: 2; filter: drop-shadow(0 0 4px var(--accent)) } 16.6%,46.03% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 46.04%,54% { fill: var(--bg); stroke: var(--border); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 54.01%,56.23% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 56.24%,61.39% { fill: var(--tint); stroke: var(--accent); stroke-width: 2; filter: drop-shadow(0 0 4px var(--accent)) } 62.64%,76.1% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 76.11%,99.99% { fill: var(--bg); stroke: var(--border); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } }
+.a4 { animation: a4 32.3s infinite linear; }
+@keyframes a5 { 0%,63.62% { fill: color-mix(in srgb, #ef4444 8%, var(--bg)); stroke: #ef4444; stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 63.63%,76.1% { fill: color-mix(in srgb, #ef4444 10%, var(--surface)); stroke: #ef4444; stroke-width: 2; filter: drop-shadow(0 0 4px #ef4444) } 77.35%,99.99% { fill: color-mix(in srgb, #ef4444 8%, var(--bg)); stroke: #ef4444; stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } }
+.a5 { animation: a5 32.3s infinite linear; }
+@keyframes a6 { 0%,15.35% { fill: var(--bg); stroke: var(--border); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 15.36%,17.58% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 17.59%,24.52% { fill: var(--tint); stroke: var(--accent); stroke-width: 2; filter: drop-shadow(0 0 4px var(--accent)) } 25.77%,46.03% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 46.04%,99.99% { fill: var(--bg); stroke: var(--border); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } }
+.a6 { animation: a6 32.3s infinite linear; }
+@keyframes a7 { 0%,24.52% { fill: var(--bg); stroke: var(--border); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 24.53%,26.75% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 26.76%,33.09% { fill: var(--tint); stroke: var(--accent); stroke-width: 2; filter: drop-shadow(0 0 4px var(--accent)) } 34.34%,46.03% { fill: var(--bg); stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } 46.04%,99.99% { fill: var(--bg); stroke: var(--border); stroke-width: 1; filter: drop-shadow(0 0 0 transparent) } }
+.a7 { animation: a7 32.3s infinite linear; }
+@keyframes a8 { 0%,99.99% { stroke: var(--accent); stroke-width: 2 } }
+.a8 { animation: a8 32.3s infinite step-end; }
+@keyframes a9 { 0%,99.99% { fill: var(--accent); stroke: var(--accent) } }
+.a9 { animation: a9 32.3s infinite step-end; }
+@keyframes a10 { 0%,99.99% { fill: #ffffff } }
+.a10 { animation: a10 32.3s infinite step-end; }
+@keyframes a11 { 0%,85.27% { stroke: var(--muted); stroke-width: 1.25 } 85.28%,99.99% { stroke: var(--accent); stroke-width: 2 } }
+.a11 { animation: a11 32.3s infinite step-end; }
+@keyframes a12 { 0%,85.27% { fill: var(--bg); stroke: var(--border) } 85.28%,99.99% { fill: var(--accent); stroke: var(--accent) } }
+.a12 { animation: a12 32.3s infinite step-end; }
+@keyframes a13 { 0%,85.27% { fill: var(--muted) } 85.28%,99.99% { fill: #ffffff } }
+.a13 { animation: a13 32.3s infinite step-end; }
+@keyframes a14 { 0%,7.97% { stroke: var(--muted); stroke-width: 1.25 } 7.98%,46.03% { stroke: var(--accent); stroke-width: 2 } 46.04%,54% { stroke: var(--muted); stroke-width: 1.25 } 54.01%,76.1% { stroke: var(--accent); stroke-width: 2 } 76.11%,99.99% { stroke: var(--muted); stroke-width: 1.25 } }
+.a14 { animation: a14 32.3s infinite step-end; }
+@keyframes a15 { 0%,7.97% { fill: var(--bg); stroke: var(--border) } 7.98%,46.03% { fill: var(--accent); stroke: var(--accent) } 46.04%,54% { fill: var(--bg); stroke: var(--border) } 54.01%,76.1% { fill: var(--accent); stroke: var(--accent) } 76.11%,99.99% { fill: var(--bg); stroke: var(--border) } }
+.a15 { animation: a15 32.3s infinite step-end; }
+@keyframes a16 { 0%,7.97% { fill: var(--muted) } 7.98%,46.03% { fill: #ffffff } 46.04%,54% { fill: var(--muted) } 54.01%,76.1% { fill: #ffffff } 76.11%,99.99% { fill: var(--muted) } }
+.a16 { animation: a16 32.3s infinite step-end; }
+@keyframes a17 { 0%,61.39% { stroke: var(--muted); stroke-width: 1.25 } 61.4%,76.1% { stroke: var(--accent); stroke-width: 2 } 76.11%,99.99% { stroke: var(--muted); stroke-width: 1.25 } }
+.a17 { animation: a17 32.3s infinite step-end; }
+@keyframes a18 { 0%,61.39% { fill: var(--bg); stroke: var(--border) } 61.4%,76.1% { fill: var(--accent); stroke: var(--accent) } 76.11%,99.99% { fill: var(--bg); stroke: var(--border) } }
+.a18 { animation: a18 32.3s infinite step-end; }
+@keyframes a19 { 0%,61.39% { fill: var(--muted) } 61.4%,76.1% { fill: #ffffff } 76.11%,99.99% { fill: var(--muted) } }
+.a19 { animation: a19 32.3s infinite step-end; }
+@keyframes a20 { 0%,15.35% { stroke: var(--muted); stroke-width: 1.25 } 15.36%,46.03% { stroke: var(--accent); stroke-width: 2 } 46.04%,99.99% { stroke: var(--muted); stroke-width: 1.25 } }
+.a20 { animation: a20 32.3s infinite step-end; }
+@keyframes a21 { 0%,15.35% { fill: var(--bg); stroke: var(--border) } 15.36%,46.03% { fill: var(--accent); stroke: var(--accent) } 46.04%,99.99% { fill: var(--bg); stroke: var(--border) } }
+.a21 { animation: a21 32.3s infinite step-end; }
+@keyframes a22 { 0%,15.35% { fill: var(--muted) } 15.36%,46.03% { fill: #ffffff } 46.04%,99.99% { fill: var(--muted) } }
+.a22 { animation: a22 32.3s infinite step-end; }
+@keyframes a23 { 0%,24.52% { stroke: var(--muted); stroke-width: 1.25 } 24.53%,46.03% { stroke: var(--accent); stroke-width: 2 } 46.04%,99.99% { stroke: var(--muted); stroke-width: 1.25 } }
+.a23 { animation: a23 32.3s infinite step-end; }
+@keyframes a24 { 0%,24.52% { fill: var(--bg); stroke: var(--border) } 24.53%,46.03% { fill: var(--accent); stroke: var(--accent) } 46.04%,99.99% { fill: var(--bg); stroke: var(--border) } }
+.a24 { animation: a24 32.3s infinite step-end; }
+@keyframes a25 { 0%,24.52% { fill: var(--muted) } 24.53%,46.03% { fill: #ffffff } 46.04%,99.99% { fill: var(--muted) } }
+.a25 { animation: a25 32.3s infinite step-end; }
+@keyframes a26 { 0%,33.09% { stroke: var(--muted); stroke-width: 1.25 } 33.1%,46.03% { stroke: var(--accent); stroke-width: 2 } 46.04%,99.99% { stroke: var(--muted); stroke-width: 1.25 } }
+.a26 { animation: a26 32.3s infinite step-end; }
+@keyframes a27 { 0%,33.09% { fill: var(--bg); stroke: var(--border) } 33.1%,46.03% { fill: var(--accent); stroke: var(--accent) } 46.04%,99.99% { fill: var(--bg); stroke: var(--border) } }
+.a27 { animation: a27 32.3s infinite step-end; }
+@keyframes a28 { 0%,33.09% { fill: var(--muted) } 33.1%,46.03% { fill: #ffffff } 46.04%,99.99% { fill: var(--muted) } }
+.a28 { animation: a28 32.3s infinite step-end; }
+@keyframes p0 { 0%,0% { opacity: 0 } 0.01%,7.97% { opacity: 1 } 7.98%,100% { opacity: 0 } }
+.p0 { animation: p0 32.3s infinite step-end; }
+@keyframes p1 { 0%,7.98% { opacity: 0 } 7.99%,15.35% { opacity: 1 } 15.36%,100% { opacity: 0 } }
+.p1 { animation: p1 32.3s infinite step-end; }
+@keyframes p2 { 0%,15.36% { opacity: 0 } 15.37%,24.52% { opacity: 1 } 24.53%,100% { opacity: 0 } }
+.p2 { animation: p2 32.3s infinite step-end; }
+@keyframes p3 { 0%,24.53% { opacity: 0 } 24.54%,33.09% { opacity: 1 } 33.1%,100% { opacity: 0 } }
+.p3 { animation: p3 32.3s infinite step-end; }
+@keyframes p4 { 0%,33.1% { opacity: 0 } 33.11%,41.07% { opacity: 1 } 41.08%,100% { opacity: 0 } }
+.p4 { animation: p4 32.3s infinite step-end; }
+@keyframes p5 { 0%,46.04% { opacity: 0 } 46.05%,54% { opacity: 1 } 54.01%,100% { opacity: 0 } }
+.p5 { animation: p5 32.3s infinite step-end; }
+@keyframes p6 { 0%,54.01% { opacity: 0 } 54.02%,61.39% { opacity: 1 } 61.4%,100% { opacity: 0 } }
+.p6 { animation: p6 32.3s infinite step-end; }
+@keyframes p7 { 0%,61.4% { opacity: 0 } 61.41%,71.15% { opacity: 1 } 71.16%,100% { opacity: 0 } }
+.p7 { animation: p7 32.3s infinite step-end; }
+@keyframes p8 { 0%,76.11% { opacity: 0 } 76.12%,85.27% { opacity: 1 } 85.28%,100% { opacity: 0 } }
+.p8 { animation: p8 32.3s infinite step-end; }
+@keyframes p9 { 0%,85.28% { opacity: 0 } 85.29%,95.03% { opacity: 1 } 95.04%,100% { opacity: 0 } }
+.p9 { animation: p9 32.3s infinite step-end; }
+@keyframes a29 { 0%,46.03% { opacity: 1 } 46.04%,99.99% { opacity: 0 } }
+.a29 { animation: a29 32.3s infinite step-end; }
+@keyframes a30 { 0%,46.03% { opacity: 0 } 46.04%,76.1% { opacity: 1 } 76.11%,99.99% { opacity: 0 } }
+.a30 { animation: a30 32.3s infinite step-end; }
+@keyframes a31 { 0%,76.1% { opacity: 0 } 76.11%,99.99% { opacity: 1 } }
+.a31 { animation: a31 32.3s infinite step-end; }
+@keyframes a32 { 0%,7.97% { opacity: 1 } 7.98%,46.03% { opacity: 0 } 46.04%,54% { opacity: 1 } 54.01%,99.99% { opacity: 0 } }
+.a32 { animation: a32 32.3s infinite step-end; }
+@keyframes a33 { 0%,7.97% { opacity: 0 } 7.98%,15.35% { opacity: 1 } 15.36%,54% { opacity: 0 } 54.01%,61.39% { opacity: 1 } 61.4%,99.99% { opacity: 0 } }
+.a33 { animation: a33 32.3s infinite step-end; }
+@keyframes a34 { 0%,15.35% { opacity: 0 } 15.36%,24.52% { opacity: 1 } 24.53%,99.99% { opacity: 0 } }
+.a34 { animation: a34 32.3s infinite step-end; }
+@keyframes a35 { 0%,24.52% { opacity: 0 } 24.53%,33.09% { opacity: 1 } 33.1%,99.99% { opacity: 0 } }
+.a35 { animation: a35 32.3s infinite step-end; }
+@keyframes a36 { 0%,33.09% { opacity: 0 } 33.1%,46.03% { opacity: 1 } 46.04%,99.99% { opacity: 0 } }
+.a36 { animation: a36 32.3s infinite step-end; }
+@keyframes a37 { 0%,61.39% { opacity: 0 } 61.4%,76.1% { opacity: 1 } 76.11%,99.99% { opacity: 0 } }
+.a37 { animation: a37 32.3s infinite step-end; }
+@keyframes a38 { 0%,76.1% { opacity: 0 } 76.11%,85.27% { opacity: 1 } 85.28%,99.99% { opacity: 0 } }
+.a38 { animation: a38 32.3s infinite step-end; }
+@keyframes a39 { 0%,85.27% { opacity: 0 } 85.28%,99.99% { opacity: 1 } }
+.a39 { animation: a39 32.3s infinite step-end; }
+@media (prefers-reduced-motion: reduce) { * { animation-play-state: paused !important; animation-delay: -14.8s !important; } }
+</style>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 1 L 9 5 L 0 9 z" fill="context-stroke"/></marker></defs>
+<rect width="100%" height="100%" fill="var(--bg)"/>
+<g transform="translate(0 0)">
+
+
+
+<rect x="289.3" y="24" width="311.4" height="108" rx="14" fill="var(--surface)" stroke="var(--border)"/><text x="307.3" y="44" class="frame">CUSTOMER</text>
+<rect x="307.3" y="61" width="109.7" height="53" rx="10" fill="var(--bg)" stroke="var(--border)" class="a0"/><text x="362.2" y="85.5" class="label">Order a cake</text><text x="362.2" y="100.5" class="sub">in the app</text>
+<rect x="473" y="68.5" width="109.7" height="38" rx="10" fill="var(--bg)" stroke="var(--border)" class="a1"/><text x="527.9" y="92.5" class="label">Get the cake</text>
+<rect x="24" y="204" width="633.7" height="220" rx="14" fill="var(--surface)" stroke="var(--border)"/><text x="42" y="224" class="frame">BAKERY</text>
+<polygon points="140,241 238.1,272 140,303 42,272" fill="var(--bg)" stroke="var(--border)" class="a2"/><text x="140" y="277" class="label">Delivery zone?</text>
+<rect x="89.6" y="353" width="100.9" height="53" rx="10" fill="color-mix(in srgb, #ef4444 8%, var(--bg))" stroke="#ef4444" class="a3"/><text x="140" y="377.5" class="label">Too far</text><text x="140" y="392.5" class="sub">order refused</text>
+<polygon points="388.9,241 473.9,272 388.9,303 303.9,272" fill="var(--bg)" stroke="var(--border)" class="a4"/><text x="388.9" y="277" class="label">In stock?</text>
+<rect x="338.4" y="353" width="100.9" height="53" rx="10" fill="color-mix(in srgb, #ef4444 8%, var(--bg))" stroke="#ef4444" class="a5"/><text x="388.9" y="377.5" class="label">Sold out</text><text x="388.9" y="392.5" class="sub">order refused</text>
+<rect x="539.7" y="297" width="100" height="53" rx="10" fill="var(--bg)" stroke="var(--border)" class="a6"/><text x="589.7" y="321.5" class="label">Bake</text><text x="589.7" y="336.5" class="sub">the cake</text>
+<rect x="730.1" y="260" width="136" height="108" rx="14" fill="var(--surface)" stroke="var(--border)"/><text x="748.1" y="280" class="frame">COURIER</text>
+<rect x="748.1" y="297" width="100" height="53" rx="10" fill="var(--bg)" stroke="var(--border)" class="a7"/><text x="798.1" y="321.5" class="label">Drive</text><text x="798.1" y="336.5" class="sub">to the door</text>
+<path id="p-order-&gt;zone" d="M 307.34000000000003 87.5 C 272.71000000000004 87.5, 272.71000000000004 272, 238.08 272" fill="none" stroke="var(--muted)" stroke-width="1.25" marker-end="url(#arrow)" class="a8"/><rect x="249.2" y="170.8" width="47" height="18" rx="9" fill="var(--bg)" stroke="var(--border)" class="a9"/><text x="272.7" y="183.8" class="edgelabel a10">order</text>
+<path id="p-zone-&gt;far" d="M 140.04000000000002 303 C 140.04000000000002 328, 140.04000000000002 328, 140.04000000000002 353" fill="none" stroke="var(--muted)" stroke-width="1.25" marker-end="url(#arrow)" class="a11"/><rect x="126.4" y="319" width="27.2" height="18" rx="9" fill="var(--bg)" stroke="var(--border)" class="a12"/><text x="140" y="332" class="edgelabel a13">no</text>
+<path id="p-zone-&gt;stock" d="M 238.08 272 C 270.98 272, 270.98 272, 303.88 272" fill="none" stroke="var(--muted)" stroke-width="1.25" marker-end="url(#arrow)" class="a14"/><rect x="254.1" y="263" width="33.8" height="18" rx="9" fill="var(--bg)" stroke="var(--border)" class="a15"/><text x="271" y="276" class="edgelabel a16">yes</text>
+<path id="p-stock-&gt;soldout" d="M 388.88 303 C 388.88 328, 388.88 328, 388.88 353" fill="none" stroke="var(--muted)" stroke-width="1.25" marker-end="url(#arrow)" class="a17"/><rect x="375.3" y="319" width="27.2" height="18" rx="9" fill="var(--bg)" stroke="var(--border)" class="a18"/><text x="388.9" y="332" class="edgelabel a19">no</text>
+<path id="p-stock-&gt;bake" d="M 473.88 272 C 506.78000000000003 272, 506.78000000000003 323.5, 539.6800000000001 323.5" fill="none" stroke="var(--muted)" stroke-width="1.25" marker-end="url(#arrow)" class="a20"/><rect x="489.9" y="288.8" width="33.8" height="18" rx="9" fill="var(--bg)" stroke="var(--border)" class="a21"/><text x="506.8" y="301.8" class="edgelabel a22">yes</text>
+<path id="p-bake-&gt;drive" d="M 639.6800000000001 323.5 C 693.8800000000001 323.5, 693.8800000000001 332.3333333333333, 748.08 332.3333333333333" fill="none" stroke="var(--muted)" stroke-width="1.25" marker-end="url(#arrow)" class="a23"/><rect x="673.7" y="318.9" width="40.4" height="18" rx="9" fill="var(--bg)" stroke="var(--border)" class="a24"/><text x="693.9" y="331.9" class="edgelabel a25">cake</text>
+<path id="p-drive-&gt;receive" d="M 748.08 314.6666666666667 C 665.4100000000001 314.6666666666667, 665.4100000000001 87.5, 582.7400000000001 87.5" fill="none" stroke="var(--muted)" stroke-width="1.25" marker-end="url(#arrow)" class="a26"/><rect x="635.3" y="192.1" width="60.2" height="18" rx="9" fill="var(--bg)" stroke="var(--border)" class="a27"/><text x="665.4" y="205.1" class="edgelabel a28">deliver</text>
+<g class="p0" opacity="0"><circle r="10" fill="var(--accent)" opacity="0.2"/><circle r="4.5" fill="var(--accent)"/><animateMotion dur="32.3s" repeatCount="indefinite" keyTimes="0;0;0.0223;1" keyPoints="0;0;1;1" calcMode="linear"><mpath href="#p-order-&gt;zone" xlink:href="#p-order-&gt;zone"/></animateMotion></g>
+<g class="p1" opacity="0"><circle r="10" fill="var(--accent)" opacity="0.2"/><circle r="4.5" fill="var(--accent)"/><animateMotion dur="32.3s" repeatCount="indefinite" keyTimes="0;0.0798;0.1021;1" keyPoints="0;0;1;1" calcMode="linear"><mpath href="#p-zone-&gt;stock" xlink:href="#p-zone-&gt;stock"/></animateMotion></g>
+<g class="p2" opacity="0"><circle r="10" fill="var(--accent)" opacity="0.2"/><circle r="4.5" fill="var(--accent)"/><animateMotion dur="32.3s" repeatCount="indefinite" keyTimes="0;0.1536;0.1759;1" keyPoints="0;0;1;1" calcMode="linear"><mpath href="#p-stock-&gt;bake" xlink:href="#p-stock-&gt;bake"/></animateMotion></g>
+<g class="p3" opacity="0"><circle r="10" fill="var(--accent)" opacity="0.2"/><circle r="4.5" fill="var(--accent)"/><animateMotion dur="32.3s" repeatCount="indefinite" keyTimes="0;0.2453;0.2676;1" keyPoints="0;0;1;1" calcMode="linear"><mpath href="#p-bake-&gt;drive" xlink:href="#p-bake-&gt;drive"/></animateMotion></g>
+<g class="p4" opacity="0"><circle r="10" fill="var(--accent)" opacity="0.2"/><circle r="4.5" fill="var(--accent)"/><animateMotion dur="32.3s" repeatCount="indefinite" keyTimes="0;0.331;0.3533;1" keyPoints="0;0;1;1" calcMode="linear"><mpath href="#p-drive-&gt;receive" xlink:href="#p-drive-&gt;receive"/></animateMotion></g>
+<g class="p5" opacity="0"><circle r="10" fill="var(--accent)" opacity="0.2"/><circle r="4.5" fill="var(--accent)"/><animateMotion dur="32.3s" repeatCount="indefinite" keyTimes="0;0.4604;0.4827;1" keyPoints="0;0;1;1" calcMode="linear"><mpath href="#p-order-&gt;zone" xlink:href="#p-order-&gt;zone"/></animateMotion></g>
+<g class="p6" opacity="0"><circle r="10" fill="var(--accent)" opacity="0.2"/><circle r="4.5" fill="var(--accent)"/><animateMotion dur="32.3s" repeatCount="indefinite" keyTimes="0;0.5401;0.5624;1" keyPoints="0;0;1;1" calcMode="linear"><mpath href="#p-zone-&gt;stock" xlink:href="#p-zone-&gt;stock"/></animateMotion></g>
+<g class="p7" opacity="0"><circle r="10" fill="var(--accent)" opacity="0.2"/><circle r="4.5" fill="var(--accent)"/><animateMotion dur="32.3s" repeatCount="indefinite" keyTimes="0;0.614;0.6363;1" keyPoints="0;0;1;1" calcMode="linear"><mpath href="#p-stock-&gt;soldout" xlink:href="#p-stock-&gt;soldout"/></animateMotion></g>
+<g class="p8" opacity="0"><circle r="10" fill="var(--accent)" opacity="0.2"/><circle r="4.5" fill="var(--accent)"/><animateMotion dur="32.3s" repeatCount="indefinite" keyTimes="0;0.7611;0.7834;1" keyPoints="0;0;1;1" calcMode="linear"><mpath href="#p-order-&gt;zone" xlink:href="#p-order-&gt;zone"/></animateMotion></g>
+<g class="p9" opacity="0"><circle r="10" fill="var(--accent)" opacity="0.2"/><circle r="4.5" fill="var(--accent)"/><animateMotion dur="32.3s" repeatCount="indefinite" keyTimes="0;0.8528;0.8751;1" keyPoints="0;0;1;1" calcMode="linear"><mpath href="#p-zone-&gt;far" xlink:href="#p-zone-&gt;far"/></animateMotion></g>
+
+</g>
+
+<text x="445" y="464" opacity="0" class="steplabel a29">Delivered</text>
+<text x="445" y="464" opacity="0" class="steplabel a30">Sold out</text>
+<text x="445" y="464" opacity="0" class="steplabel a31">Too far</text>
+<g opacity="0" class="a32"><text x="445" y="490" class="caption">The customer orders a cake in the app.</text></g>
+<g opacity="0" class="a33"><text x="445" y="490" class="caption">The address is in the delivery zone.</text></g>
+<g opacity="0" class="a34"><text x="445" y="490" class="caption">The cake is in stock, so the bakery bakes it.</text></g>
+<g opacity="0" class="a35"><text x="445" y="490" class="caption">The bakery hands the boxed cake to the courier.</text></g>
+<g opacity="0" class="a36"><text x="445" y="490" class="caption">The courier drives the cake to the door.</text></g>
+<g opacity="0" class="a37"><text x="445" y="490" class="caption">The cake is sold out, so the bakery refuses the order.</text></g>
+<g opacity="0" class="a38"><text x="445" y="490" class="caption">The customer orders a cake for an address far away.</text></g>
+<g opacity="0" class="a39"><text x="445" y="490" class="caption">The address is outside the delivery zone, so the bakery refuses.</text></g>
+</svg>
